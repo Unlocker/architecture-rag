@@ -4,11 +4,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.github.unlocker.archrag</groupId>
-  <artifactId>architecture-rag-parent</artifactId>
+  <groupId>io.github.unlocker.akp</groupId>
+  <artifactId>akp-parent</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <name>architecture-rag-parent</name>
+  <name>akp-parent</name>
 
   <modules>
     <module>contracts</module>
@@ -28,8 +28,6 @@
     <spring-boot.version>4.1.1</spring-boot.version>
     <spring-ai.version>2.0.1</spring-ai.version>
     <testcontainers.version>2.0.5</testcontainers.version>
-    <!-- Совпадает с версией, которую управляет Spring Boot 4.1.1: не уходим вперёд, чтобы не разойтись с Boot autoconfig. -->
-    <neo4j-java-driver.version>6.1.0</neo4j-java-driver.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
@@ -39,13 +37,14 @@
 
   <dependencyManagement>
     <dependencies>
-      <!-- Явная запись побеждает любые импортированные BOM'ы; между импортами побеждает первый объявленный. -->
+      <!-- Между импортами побеждает первый объявленный, поэтому testcontainers-bom стоит раньше spring-boot-dependencies — иначе testcontainers.version не действует, версию задал бы Boot. -->
       <dependency>
-        <groupId>org.neo4j.driver</groupId>
-        <artifactId>neo4j-java-driver</artifactId>
-        <version>${neo4j-java-driver.version}</version>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
-
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
@@ -60,33 +59,66 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      <dependency>
-        <groupId>org.testcontainers</groupId>
-        <artifactId>testcontainers-bom</artifactId>
-        <version>${testcontainers.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
 
       <!-- Внутренние модули: версия одна на весь reactor. -->
       <dependency>
-        <groupId>io.github.unlocker.archrag</groupId>
+        <groupId>io.github.unlocker.akp</groupId>
         <artifactId>canonical-model</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.github.unlocker.archrag</groupId>
+        <groupId>io.github.unlocker.akp</groupId>
         <artifactId>event-schemas</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.github.unlocker.archrag</groupId>
+        <groupId>io.github.unlocker.akp</groupId>
         <artifactId>source-spi</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.github.unlocker.archrag</groupId>
+        <groupId>io.github.unlocker.akp</groupId>
         <artifactId>graph-query-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>eam-adapter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>scm-adapter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>asset-adapter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>deploymap-adapter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>normalizer</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>identity-resolution</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>graph-projector</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.akp</groupId>
+        <artifactId>mcp-server</artifactId>
         <version>${project.version}</version>
       </dependency>
     </dependencies>
@@ -153,6 +185,7 @@
                 <requireMavenVersion>
                   <version>[3.9,)</version>
                 </requireMavenVersion>
+                <banDuplicatePomDependencyVersions/>
               </rules>
             </configuration>
           </execution>
