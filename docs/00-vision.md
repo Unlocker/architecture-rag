@@ -628,14 +628,133 @@ Neo4j официально поддерживает standalone и cluster deploy
 
 ### PoC topology
 
-- 1 Neo4j standalone StatefulSet + PVC;
-- 1 MCP/Query Deployment, 2 replicas;
-- по одному adapter Deployment или CronJob на источник;
-- Kafka-compatible broker **или** PostgreSQL inbox;
-- object storage для raw payloads;
-- Keycloak/корпоративный IdP;
-- Prometheus/OpenTelemetry/Grafana;
-- NetworkPolicies и External
+Для PoC рекомендуется развернуть изолированный namespace `architecture-kg`, а stateful-компоненты при возможности вынести в отдельные namespaces. Neo4j standalone устанавливается официальным Helm chart; конкретные CPU/RAM следует определять нагрузочным тестом, поскольку требования зависят от размера графа и профиля запросов.[^49][^50]
+
+```mermaid
+flowchart TB
+    AG[AI agent / MCP client] -->|HTTPS + OIDC| ING[Ingress / API gateway]
+    ING --> MCP[MCP + Query service\nDeployment, 2 replicas]
+    MCP -->|Bolt TLS, read-only user| NEO[(Neo4j standalone\nStateful workload + PVC)]
+
+    EAM[EAM REST/Webhooks] --> ADP[Source adapters\nDeployments]
+    SCM[SCM REST/Webhooks] --> ADP
+    CMDB[Asset DB REST/Webhooks] --> ADP
+    CRON[Reconciliation CronJobs] --> ADP
+    ADP --> INBOX[(PostgreSQL inbox)]
+    INBOX --> PROJ[Normalizer / Identity / Projector\nDeployment, 1–2 replicas]
+    PROJ -->|Bolt TLS, writer user| NEO
+    ADP --> RAW[(S3-compatible raw storage)]
+
+    MCP --> OTEL[OpenTelemetry Collector]
+    ADP --> OTEL
+    PROJ --> OTEL
+    NEO --> MON[Prometheus / Grafana]
+    OTEL --> MON
+```
+
+#### Компоненты
+
+| Компонент | Kubernetes workload | Реплики PoC | Хранилище | Назначение |
+|---|---|---:|---|---|
+| Neo4j | Официальный Helm release, standalone | 1 | RWO PVC на быстром StorageClass | Канонический граф и индексы |
+| MCP + Query service | `Deployment` | 2 | Stateless | Streamable HTTP, tools/resources, retrieval |
+| Source adapters | `Deployment` для webhook + `CronJob` для polling | 1 на источник | Stateless | REST/webhook ingestion, cursor management |
+| Normalizer/Projector | `Deployment` | 1–2 | Stateless | Mapping, identity resolution, транзакции Neo4j |
+| PostgreSQL inbox | Managed DB либо operator/StatefulSet | 1 | PVC | Durable inbox, deduplication, checkpoints, DLQ metadata |
+| Raw storage | S3-compatible managed/on-prem service | n/a | Object storage | Исходные payloads, snapshots и replay |
+| IdP | Существующий Keycloak/корпоративный OIDC | Внешний | Внешнее | Authentication и scopes |
+| Observability | OTel Collector + существующие Prometheus/Grafana | 1+ | По платформенному стандарту | Метрики, traces, логи и alerting |
+
+#### Выбор event backbone
+
+Для первого PoC предпочтителен **PostgreSQL inbox + workers**, если нет готового корпоративного Kafka. Это уменьшает инфраструктурный объем и при этом позволяет проверить идемпотентность, replay, checkpoints и DLQ. Граница задается интерфейсами `EventJournal` и `CanonicalEventPublisher`, чтобы позднее заменить PostgreSQL на Kafka без изменения адаптеров и graph projector.
+
+Если Kafka/Strimzi уже является платформенным стандартом, его следует использовать сразу: Strimzi управляет Kafka, topics и users через Kubernetes Custom Resources и поддерживает KRaft-развертывания. Одноузловой Kafka допустим только для проверки интеграции; production-топология требует HA и отдельного расчета ресурсов.[^51][^52]
+
+```text
+Вариант A — облегченный PoC:
+Adapter -> PostgreSQL inbox/outbox -> worker -> Neo4j
+
+Вариант B — PoC на целевой платформе:
+Adapter -> Kafka raw topic -> normalizer -> canonical topic -> projector -> Neo4j
+```
+
+Рекомендуемые Kafka topics при выборе варианта B:
+
+```text
+architecture.raw.eam.v1
+architecture.raw.scm.v1
+architecture.raw.cmdb.v1
+architecture.canonical.commands.v1
+architecture.projection.results.v1
+architecture.dlq.v1
+```
+
+#### Namespace и сетевые границы
+
+```text
+architecture-kg       MCP, adapters, normalizer, projector, CronJobs
+architecture-data     Neo4j, PostgreSQL — если не managed
+architecture-events   Strimzi/Kafka — только для варианта B
+observability         OTel/Prometheus/Grafana либо существующий platform namespace
+```
+
+- Внешний ingress публикует только `/mcp` и webhook endpoints; Neo4j Browser/Bolt наружу не выставляются.
+- `mcp-reader` имеет только чтение; `graph-projector` — минимальные write privileges; adapters не получают Neo4j credentials.
+- `NetworkPolicy` разрешает MCP → Neo4j, projector → Neo4j, adapters → inbox/broker/object storage и необходимые egress-вызовы к мастер-системам.
+- `Secrets` поступают из External Secrets/Vault; пароли не хранятся в Helm values и Git.
+- TLS применяется на ingress и для Bolt; webhook endpoints проверяют подпись, timestamp и replay window.
+
+#### Ресурсные ориентиры
+
+Числа ниже — стартовые гипотезы для функционального PoC, а не production sizing:
+
+| Workload | Requests | Limits | Примечание |
+|---|---|---|---|
+| Neo4j | 2 CPU, 8 GiB RAM | 4 CPU, 12–16 GiB RAM | Page cache и heap задаются после оценки store/индексов |
+| MCP/Query, на pod | 250m CPU, 512 MiB | 1 CPU, 1–2 GiB | Два pod для проверки rolling update и балансировки |
+| Projector | 500m CPU, 1 GiB | 2 CPU, 2–4 GiB | Batch size ограничить; контролировать Bolt pool |
+| Adapter, на источник | 100m CPU, 256 MiB | 500m CPU, 512 MiB | Основное ограничение обычно source API rate limit |
+| PostgreSQL | 500m CPU, 1 GiB | 2 CPU, 4 GiB | Для inbox/checkpoints, не для raw payload archive |
+
+Neo4j sizing необходимо уточнить после загрузки репрезентативного объема и выполнения целевых traversal/vector queries; официальная документация также указывает, что требования зависят от workload.[^49]
+
+#### Надежность PoC
+
+- Neo4j: daily online backup в S3-compatible storage, еженедельный restore test. Официальный Kubernetes-процесс backup/restore использует `neo4j-admin` Helm chart.[^46]
+- PostgreSQL: backup/PITR по возможностям платформы; inbox нельзя считать восстанавливаемым только из Neo4j.
+- Адаптеры: checkpoint после успешно подтвержденной страницы; `concurrencyPolicy: Forbid` для reconciliation одного источника.
+- MCP и projector: readiness/liveness/startup probes, graceful shutdown, PodDisruptionBudget для MCP.
+- Raw events: retention не меньше времени, необходимого для расследования и полного rebuild графа.
+- Neo4j standalone остается единой точкой отказа, что приемлемо для PoC, но должно быть явно зафиксировано как ограничение.
+
+#### Production delta
+
+| Область | PoC | Production target |
+|---|---|---|
+| Neo4j | 1 standalone | Enterprise cluster минимум из трех servers; Neo4j указывает минимум три instance для рабочего кластера[^53][^48] |
+| Event backbone | PostgreSQL inbox или single-node Kafka | Корпоративный Kafka HA/KRaft, partitions, replication, schema governance |
+| PostgreSQL | Single/managed basic | HA managed/operator, PITR |
+| MCP | 2 replicas | HPA, disruption budgets, multi-zone placement |
+| Backup | Daily, ручная проверка restore | Формальные RPO/RTO, регулярные автоматизированные restore drills |
+| DR | Не входит | Репликация backup в отдельный failure domain, runbook восстановления |
+| Security | OIDC, namespace policies | Fine-grained domain authorization, SIEM, periodic access review |
+| Delivery | Helm вручную/CI | GitOps, signed images, policy-as-code, SBOM |
+
+#### Критерии готовности PoC
+
+PoC считается завершенным, если:
+
+1. Загружен репрезентативный вертикальный срез из трех мастер-систем: минимум `ITSystem -> Service -> Deployment -> Environment -> ComputeInstance`.
+2. Webhook-изменение появляется в Neo4j в пределах согласованного SLA, а reconciliation исправляет искусственно созданный пропуск.
+3. Повторное и out-of-order событие не меняет корректное состояние графа.
+4. Полный rebuild из raw storage дает эквивалентный канонический граф.
+5. MCP выполняет `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies` и `explain_provenance` через Streamable HTTP.
+6. MCP principal не может выполнить write query; projector credentials недоступны MCP pod.
+7. Impact query возвращает не только список активов, но и объяснимые paths с provenance/freshness.
+8. Проверены backup и restore Neo4j, а также replay после восстановления.
+9. Зафиксированы p95 latency, sync lag, error/DLQ rate, throughput projection и ограничения глубины traversal.
+10. Сформирован production gap list с оценкой HA, лицензирования Neo4j Enterprise, Kafka и эксплуатационной поддержки.
 
 ---
 
@@ -736,4 +855,14 @@ Neo4j официально поддерживает standalone и cluster deploy
 47. [Introduction - Operations Manual - Neo4j](https://neo4j.com/docs/operations-manual/current/kubernetes/introduction/) - Introduction to running Neo4j on a Kubernetes cluster using the Neo4j Helm chart.
 
 48. [Install Neo4j cluster servers - Operations Manual](https://neo4j.com/docs/operations-manual/current/kubernetes/quickstart-cluster/install-servers/) - Install cluster primaries.
+
+49. [Prerequisites - Operations Manual - Neo4j](https://neo4j.com/docs/operations-manual/current/kubernetes/quickstart-standalone/prerequisites/) - Prerequisites for deploying a Neo4j standalone instance to a cloud or a local Kubernetes cluster usi...
+
+50. [Install a Neo4j standalone instance - Operations Manual](https://neo4j.com/docs/operations-manual/current/kubernetes/quickstart-standalone/install-neo4j/) - Install a Neo4j standalone instance.
+
+51. [Strimzi - Apache Kafka on Kubernetes](https://strimzi.io/) - Strimzi provides a way to run an Apache Kafka cluster on Kubernetes in various deployment configurat...
+
+52. [strimzi.io · docs · operatorsStrimzi Overview](https://strimzi.io/docs/operators/latest/full/overview)
+
+53. [Deploy a Cluster](https://neo4j.com/docs/operations-manual/current/kubernetes/quickstart-cluster/) - How to deploy a Neo4j cluster to a cloud or a local Kubernetes cluster using Neo4j Helm chart.
 
