@@ -447,7 +447,7 @@ Neo4j Kafka Connector умеет применять сообщения из Kafk
 
 ### Java-модули
 
-Сборка — Maven multi-module, CI — GitHub Actions (каркас репозитория из PR #1).
+Сборка — Maven multi-module, CI — GitHub Actions (планируется; workflows в каркасе пока нет). Каркас репозитория — PR #2 в `epic/UNLOCKER-155`.
 
 ```text
 architecture-knowledge-platform/
@@ -558,7 +558,7 @@ Spring AI предоставляет Java MCP SDK integration, Boot starters, an
 |---|---|---|
 | `search_assets` | `query`, `types`, `environment`, `limit` | Кандидаты с `gid`, типом, score и provenance |
 | `get_asset` | `gid`, `includeRelations` | Карточка актива и разрешенные связи |
-| `trace_dependencies` | `gid`, `mode` (`trace` \| `impact`), `direction`, `depth`, `relationTypes`, `environment` | `trace` — ограниченный subgraph/path; `impact` — зависимые системы/сервисы и объяснимые пути (ранее отдельный tool `analyze_impact`) |
+| `trace_dependencies` | `gid`, `mode` (`trace` \| `impact`), `direction`, `maxDepth`, `relationTypes`, `environment` | `trace` — ограниченный subgraph/path; `impact` — зависимые системы/сервисы и объяснимые пути (ранее отдельный tool `analyze_impact`) |
 | `find_runtime_footprint` | `systemGid`, `environment` | Deployments, VM, clusters, namespaces |
 | `compare_environments` | `systemGid`, `left`, `right` | Различия версий и инфраструктуры |
 | `explain_provenance` | `gid`, `property` | Источник, версия, fetchedAt, conflict state |
@@ -711,15 +711,15 @@ flowchart TB
 
 #### Выбор event backbone
 
-Для первого PoC предпочтителен **PostgreSQL inbox + workers**, если нет готового корпоративного Kafka. Это уменьшает инфраструктурный объем и при этом позволяет проверить идемпотентность, replay, checkpoints и DLQ. Граница задается интерфейсами `EventJournal` и `CanonicalEventPublisher`, чтобы позднее заменить PostgreSQL на Kafka без изменения адаптеров и graph projector.
+**Для PoC выбран вариант A: PostgreSQL inbox + workers**; Kafka — production. Это уменьшает инфраструктурный объем и при этом позволяет проверить идемпотентность, replay, checkpoints и DLQ. Граница задается интерфейсами `EventJournal` и `CanonicalEventPublisher`, чтобы позднее заменить PostgreSQL на Kafka без изменения адаптеров и graph projector.
 
-Если Kafka/Strimzi уже является платформенным стандартом, его следует использовать сразу: Strimzi управляет Kafka, topics и users через Kubernetes Custom Resources и поддерживает KRaft-развертывания. Одноузловой Kafka допустим только для проверки интеграции; production-топология требует HA и отдельного расчета ресурсов.[^51][^52]
+Для production, если Kafka/Strimzi является платформенным стандартом (вариант B вне PoC): Strimzi управляет Kafka, topics и users через Kubernetes Custom Resources и поддерживает KRaft-развертывания. Одноузловой Kafka допустим только для проверки интеграции; production-топология требует HA и отдельного расчета ресурсов.[^51][^52]
 
 ```text
 Вариант A — облегченный PoC:
 Adapter -> PostgreSQL inbox/outbox -> worker -> Neo4j
 
-Вариант B — PoC на целевой платформе:
+Вариант B — production / целевая платформа (вне PoC):
 Adapter -> Kafka raw topic -> normalizer -> canonical topic -> projector -> Neo4j
 ```
 
@@ -765,7 +765,7 @@ Neo4j sizing необходимо уточнить после загрузки �
 
 #### Надежность PoC
 
-- Neo4j: daily online backup в S3-compatible storage, еженедельный restore test. Официальный Kubernetes-процесс backup/restore использует `neo4j-admin` Helm chart.[^46]
+- Neo4j: PoC (Community, compose) — daily `neo4j-admin database dump` в S3-compatible storage, еженедельный restore test через `load`. Online backup — production / Enterprise; официальный Kubernetes-процесс backup/restore использует `neo4j-admin` Helm chart.[^46]
 - PostgreSQL: backup/PITR по возможностям платформы; inbox нельзя считать восстанавливаемым только из Neo4j.
 - Адаптеры: checkpoint после успешно подтвержденной страницы; `concurrencyPolicy: Forbid` для reconciliation одного источника.
 - MCP и projector: readiness/liveness/startup probes, graceful shutdown, PodDisruptionBudget для MCP.
@@ -776,14 +776,15 @@ Neo4j sizing необходимо уточнить после загрузки �
 
 | Область | PoC | Production target |
 |---|---|---|
-| Neo4j | 1 standalone | Enterprise cluster минимум из трех servers; Neo4j указывает минимум три instance для рабочего кластера[^53][^48] |
-| Event backbone | PostgreSQL inbox или single-node Kafka | Корпоративный Kafka HA/KRaft, partitions, replication, schema governance |
-| PostgreSQL | Single/managed basic | HA managed/operator, PITR |
-| MCP | 2 replicas | HPA, disruption budgets, multi-zone placement |
-| Backup | Daily, ручная проверка restore | Формальные RPO/RTO, регулярные автоматизированные restore drills |
+| Платформа | Docker Compose (демо-стенд) | Kubernetes + Helm |
+| Neo4j | 1 standalone (Community) в compose | Enterprise cluster минимум из трех servers; Neo4j указывает минимум три instance для рабочего кластера[^53][^48] |
+| Event backbone | Только PostgreSQL inbox (вариант A) | Корпоративный Kafka HA/KRaft, partitions, replication, schema governance |
+| PostgreSQL | Один контейнер compose | HA managed/operator, PITR |
+| MCP | 1–2 контейнера compose | Kubernetes `Deployment`, HPA, disruption budgets, multi-zone placement |
+| Backup | `neo4j-admin database dump/load`, ручная проверка restore | Online backup (Enterprise), формальные RPO/RTO, регулярные автоматизированные restore drills |
 | DR | Не входит | Репликация backup в отдельный failure domain, runbook восстановления |
-| Security | OIDC, namespace policies | Fine-grained domain authorization, SIEM, periodic access review |
-| Delivery | Helm вручную/CI | GitOps, signed images, policy-as-code, SBOM |
+| Security | OIDC, раздельные сети compose, Docker secrets | `NetworkPolicy`, External Secrets/Vault, fine-grained domain authorization, SIEM, periodic access review |
+| Delivery | `docker compose up` вручную/CI | Helm, GitOps, signed images, policy-as-code, SBOM |
 
 #### Критерии готовности PoC
 
