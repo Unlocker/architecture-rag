@@ -1,5 +1,22 @@
 # AI-native витрина архитектурных активов: GraphRAG, Neo4j, Java и MCP
 
+## Решения владельца для PoC (2026-10-03)
+
+Ниже — решения владельца, внесенные в документ по месту. Где раздел ниже описывает целевой/production-вариант, а для PoC выбран иной, это помечено явно.
+
+1. `DEPENDS_ON` — master EAM ([Provenance и авторитетность](#provenance-и-авторитетность)).
+2. `Deployment` — master: deploy map + Helm charts, отдельный `deploymap-adapter` ([Provenance и авторитетность](#provenance-и-авторитетность), [Java-модули](#java-модули)).
+3. Мастер-системы в PoC — заглушки.
+4. В Neo4j Community нет ролей: `mcp-reader` и `graph-projector` — раздельные учетные записи и Secrets, read-only и domain-фильтрацию обеспечивает приложение ([Безопасность](#безопасность), [Критерии готовности PoC](#критерии-готовности-poc)).
+5. В `SourceRecord` вместо `key` используется поле `source` ([Идентичность узлов](#идентичность-узлов)).
+6. `Namespace` и `KubernetesCluster` моделируются, но в PoC не наполняются ([Основные узлы](#основные-узлы)).
+7. Вместо `analyze_impact` — `trace_dependencies(mode=trace|impact)` ([Tools первого релиза](#tools-первого-релиза)).
+8. Replay/rebuild/reconcile/crosswalk выполняются через админский эндпоинт ingestion-сервиса, а не через MCP и не через внешний ingress ([Сценарии адаптеров](#сценарии-адаптеров)).
+9. Критерий готовности 2: p95 ≤ 30 с на заглушках ([Критерии готовности PoC](#критерии-готовности-poc)).
+10. Сборка — Maven multi-module, CI — GitHub Actions ([Java-модули](#java-модули)).
+
+Дополнительно: event backbone для PoC — PostgreSQL inbox (вариант A), Kafka — production ([Варианты исполнения](#варианты-исполнения)); демо-стенд PoC разворачивается на Docker Compose, а не в Kubernetes ([PoC topology](#poc-topology)).
+
 ## Резюме решения
 
 Для данного сценария целесообразно строить не «классический GraphRAG из документов», а **операционный knowledge graph архитектуры предприятия**: мастер-системы остаются владельцами данных, Neo4j становится производной read-only витриной, адаптеры поддерживают ее актуальность, а MCP-сервер предоставляет агентам ограниченный набор предметных операций.
@@ -27,7 +44,7 @@ flowchart LR
         WH[Webhook endpoints]
         POLL[Reconciliation pollers]
         RAW[Raw event journal]
-        BUS[(Kafka-compatible broker)]
+        BUS[(Kafka-compatible broker<br/>целевой вариант; PoC: PostgreSQL inbox)]
         NORM[Normalizer + validator]
         IDR[Identity resolution]
         PROJ[Neo4j projector]
@@ -137,7 +154,7 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 (:SourceSystem {code: 'EAM'})
   -[:OWNS_RECORD]->
 (:SourceRecord {
-  key: 'EAM|IT_SYSTEM|1042',
+  source: 'EAM',
   sourceType: 'IT_SYSTEM',
   sourceId: '1042',
   sourceVersion: '184',
@@ -148,6 +165,8 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
   -[:ASSERTS {confidence: 1.0, authority: 'MASTER'}]->
 (:ITSystem {gid: '...', name: 'Payments'})
 ```
+
+> **Открытый вопрос:** формат `sourceId` не зафиксирован: здесь `'1042'`, а в каноническом событии ниже — `'EAM-1042'`. Решение владельца не принято; до него оба примера остаются как есть.
 
 Такой паттерн позволяет нескольким системам подтверждать один canonical node, не смешивает источник с бизнес-сущностью и дает точку для tombstone, версии и hash. Узлы должны иметь уникальное свойство или набор свойств; специфические relationship types уменьшают лишние обходы.[^15][^16]
 
@@ -166,8 +185,8 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 | `ComputeInstance` | Общий тип вычислительного ресурса | `gid`, `hostname`, `ip`, `os`, `state` |
 | `VirtualMachine` | Виртуальная машина | свойства `ComputeInstance` + `hypervisorRef` |
 | `PhysicalServer` | Физический сервер | свойства `ComputeInstance` + `serialNumber` |
-| `KubernetesCluster` | Кластер Kubernetes | `gid`, `name`, `version` |
-| `Namespace` | Namespace кластера | `gid`, `name` |
+| `KubernetesCluster` | Кластер Kubernetes (моделируется, в PoC не наполняется) | `gid`, `name`, `version` |
+| `Namespace` | Namespace кластера (моделируется, в PoC не наполняется) | `gid`, `name` |
 | `Database` | Логическая/физическая БД | `gid`, `name`, `engine`, `version` |
 | `API` | Предоставляемый интерфейс | `gid`, `name`, `protocol`, `specUrl` |
 | `Team` | Владелец/эксплуатант | `gid`, `name`, `type` |
@@ -188,8 +207,8 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 (Repository)-[:BUILDS]->(Artifact)
 (Service)-[:HAS_DEPLOYMENT]->(Deployment)
 (Deployment)-[:IN_ENVIRONMENT]->(Environment)
-(Deployment)-[:RUNS_ON]->(ComputeInstance|Namespace)
-(Namespace)-[:PART_OF]->(KubernetesCluster)
+(Deployment)-[:RUNS_ON]->(ComputeInstance|Namespace)   // Namespace — моделируется, в PoC не наполняется
+(Namespace)-[:PART_OF]->(KubernetesCluster)             // моделируется, в PoC не наполняется
 (VirtualMachine)-[:HOSTED_ON]->(PhysicalServer)
 (Service)-[:DEPENDS_ON {kind, protocol, criticality}]->(Service)
 (Service)-[:USES_DATABASE]->(Database)
@@ -213,8 +232,11 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 | ИТ-система, критичность, владелец | EAM | Ручная модерация |
 | Сервис, репозиторий, язык | SCM/catalog | EAM alias |
 | VM, physical host, serial number | CMDB/asset DB | Runtime discovery |
-| Deployment на стенде | CD/Kubernetes или CMDB | SCM metadata |
+| Deployment на стенде | Deploy map + Helm charts (отдельный `deploymap-adapter`) | SCM metadata |
+| Связь `DEPENDS_ON` между сервисами | EAM | SCM metadata |
 | Описания и документы | EAM/docs | Репозиторий |
+
+Было: master для `Deployment` — «CD/Kubernetes или CMDB». Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
 
 `SourceRecord` сохраняет источник конкретного утверждения, время извлечения, версию и hash. Такая модель проще для аудита конфликтов, чем массив `sourceIds` на бизнес-узле, и концептуально согласуется с W3C PROV, где `Entity`, `Activity` и `Agent` позволяют описывать происхождение и цепочки преобразований.[^17]
 
@@ -240,7 +262,7 @@ FOR (n:Service) REQUIRE n.gid IS UNIQUE;
 
 CREATE CONSTRAINT source_record_key IF NOT EXISTS
 FOR (n:SourceRecord)
-REQUIRE (n.source, n.sourceType, n.sourceId) IS NODE KEY;
+REQUIRE (n.source, n.sourceType, n.sourceId) IS UNIQUE;
 
 CREATE RANGE INDEX deployment_env IF NOT EXISTS
 FOR (n:Deployment) ON (n.environmentKey);
@@ -256,6 +278,10 @@ OPTIONS {indexConfig: {
   `vector.similarity_function`: 'cosine'
 }};
 ```
+
+> **Открытый вопрос:** индекс `deployment_env` построен по `environmentKey`, которого нет в модели `Deployment` (см. «Основные узлы»: окружение задается связью `IN_ENVIRONMENT`). Нужно решить: добавить свойство в модель или перестроить индекс. Не решено.
+
+Для `source_record_key` в Community Edition используется `IS UNIQUE`: ранее здесь стоял `IS NODE KEY`, который доступен только в Enterprise. `UNIQUE` не требует существования свойств, поэтому обязательность `source`, `sourceType`, `sourceId` проверяет приложение (Community), см. E2.
 
 Уникальные constraints предотвращают дубликаты, а node key требует одновременно существования и уникальности составного ключа; key constraints относятся к Enterprise Edition. Размерность vector index обязана совпадать с размерностью embedding-модели. Конкретные `1024` и модель должны быть зафиксированы ADR и не меняться без контролируемой переиндексации.[^19][^20][^9]
 
@@ -293,6 +319,8 @@ LLM или embedding similarity могут предлагать соответс
 | Replay/backfill | Оператор задает диапазон/cursor | Повторно публикует raw events с новым replay ID | Дедупликация по business event ID/version; результат детерминирован |
 | Merge identities | Подтверждено, что два узла — один актив | Создает approved crosswalk command | Переносит связи контролируемой миграцией, оставляет redirect/audit record |
 | Split identity | Ошибочный merge | Оператор задает mapping source records | Перестраивает проекцию из raw events/snapshots, а не редактирует граф вручную |
+
+Операции replay, rebuild, reconcile и crosswalk в PoC выполняются через **админский эндпоинт ingestion-сервиса**: он не входит в MCP и не публикуется на внешнем ingress. Оформление этих операций как Kubernetes `Job` — позже, после PoC.
 
 ### Поток webhook
 
@@ -411,13 +439,15 @@ CloudEvents задает vendor-neutral envelope; комбинация `source +
 | Вариант | Плюсы | Минусы | Решение |
 |---|---|---|---|
 | Каждый адаптер напрямую пишет в Neo4j | Минимум компонентов | Сильная связанность, разные правила merge, сложный replay | Только временный PoC |
-| REST/webhook → Kafka → normalizer/projector | Replay, backpressure, независимое масштабирование, наблюдаемость | Дополнительная инфраструктура | **Целевой вариант** |
-| REST/webhook → PostgreSQL inbox → worker | Проще Kafka, транзакционная очередь | Ниже throughput, сложнее fan-out | Хороший облегченный PoC |
+| REST/webhook → Kafka → normalizer/projector | Replay, backpressure, независимое масштабирование, наблюдаемость | Дополнительная инфраструктура | **Целевой вариант** (PoC: PostgreSQL inbox, Kafka — production) |
+| REST/webhook → PostgreSQL inbox → worker | Проще Kafka, транзакционная очередь | Ниже throughput, сложнее fan-out | **PoC: выбран** (вариант A) |
 | Kafka Connect Neo4j sink | Меньше кода для простых отображений | Сложная identity resolution и authority rules плохо помещаются в конфиг | Использовать выборочно |
 
 Neo4j Kafka Connector умеет применять сообщения из Kafka в Neo4j, но его CDC sink ориентирован прежде всего на события, произведенные другой Neo4j, а не на произвольные hand-written domain events. Для трех гетерогенных мастер-систем предпочтителен собственный Java projector. Neo4j CDC нужен для распространения изменений **из** графовой витрины в downstream-системы, а не как основной механизм загрузки в нее.[^25][^26]
 
 ### Java-модули
+
+Сборка — Maven multi-module, CI — GitHub Actions (каркас репозитория из PR #1).
 
 ```text
 architecture-knowledge-platform/
@@ -428,18 +458,19 @@ architecture-knowledge-platform/
 ├── adapters/
 │   ├── eam-adapter
 │   ├── scm-adapter
-│   └── asset-adapter
+│   ├── asset-adapter
+│   └── deploymap-adapter      # Deployment: deploy map + Helm charts
 ├── ingestion/
 │   ├── normalizer
 │   ├── identity-resolution
 │   └── graph-projector
 ├── access/
 │   ├── graph-query-core
-│   ├── retrieval-service
+│   ├── retrieval-service      # вне PoC
 │   └── mcp-server
 └── platform/
-    ├── helm
-    ├── observability
+    ├── helm                   # E5
+    ├── observability          # E5
     └── integration-tests
 ```
 
@@ -492,9 +523,10 @@ MCP-Protocol-Version: 2026-07-28
   "id": "req-42",
   "method": "tools/call",
   "params": {
-    "name": "analyze_impact",
+    "name": "trace_dependencies",
     "arguments": {
       "gid": "7db...",
+      "mode": "impact",
       "environment": "PROD",
       "maxDepth": 3
     }
@@ -502,7 +534,7 @@ MCP-Protocol-Version: 2026-07-28
 }
 ```
 
-Простой вызов возвращает `application/json`; длительная операция может вернуть request-scoped `text/event-stream`. При этом сам `analyze_impact` лучше удерживать в синхронном бюджете 5–15 секунд; тяжелые пересчеты оформлять отдельной job/task-моделью, а не держать поток минутами.
+Простой вызов возвращает `application/json`; длительная операция может вернуть request-scoped `text/event-stream`. При этом сам `trace_dependencies` в режиме `impact` лучше удерживать в синхронном бюджете 5–15 секунд; тяжелые пересчеты оформлять отдельной job/task-моделью, а не держать поток минутами.
 
 ### Совместимость Spring AI
 
@@ -518,7 +550,7 @@ Spring AI предоставляет Java MCP SDK integration, Boot starters, an
 - `spring.ai.mcp.server.protocol=STREAMABLE`;
 - stateless deployment из двух и более реплик;
 - OAuth/OIDC на gateway и проверка JWT/scopes в приложении;
-- отдельный read-only Neo4j principal.
+- отдельная read-only учетная запись Neo4j (в Community read-only обеспечивается приложением, см. «Безопасность»).
 
 ### Tools первого релиза
 
@@ -526,8 +558,7 @@ Spring AI предоставляет Java MCP SDK integration, Boot starters, an
 |---|---|---|
 | `search_assets` | `query`, `types`, `environment`, `limit` | Кандидаты с `gid`, типом, score и provenance |
 | `get_asset` | `gid`, `includeRelations` | Карточка актива и разрешенные связи |
-| `trace_dependencies` | `gid`, `direction`, `depth`, `relationTypes` | Ограниченный subgraph/path |
-| `analyze_impact` | `gid`, `environment`, `maxDepth` | Зависимые системы/сервисы и объяснимые пути |
+| `trace_dependencies` | `gid`, `mode` (`trace` \| `impact`), `direction`, `depth`, `relationTypes`, `environment` | `trace` — ограниченный subgraph/path; `impact` — зависимые системы/сервисы и объяснимые пути (ранее отдельный tool `analyze_impact`) |
 | `find_runtime_footprint` | `systemGid`, `environment` | Deployments, VM, clusters, namespaces |
 | `compare_environments` | `systemGid`, `left`, `right` | Различия версий и инфраструктуры |
 | `explain_provenance` | `gid`, `property` | Источник, версия, fetchedAt, conflict state |
@@ -562,7 +593,7 @@ MCP различает tools, resources и prompts; resources адресуютс
 - устойчивость к prompt injection и schema drift;
 - стабильную телеметрию по use case.
 
-Отдельный admin/developer endpoint может оставить `read_cypher`, но только с read-only DB role, timeout, `EXPLAIN`, allowlist procedures, запретом `LOAD CSV`, APOC write procedures и жестким row/result limit.
+Отдельный admin/developer endpoint может оставить `read_cypher`, но только с read-only DB role (production / Enterprise; в PoC на Community роли нет, поэтому `read_cypher` не включается), timeout, `EXPLAIN`, allowlist procedures, запретом `LOAD CSV`, APOC write procedures и жестким row/result limit.
 
 ## Retrieval pipeline
 
@@ -605,11 +636,12 @@ HTTP-вариант MCP должен использовать OAuth 2.1/OIDC-п�
 | Gateway | TLS, OIDC, token validation, rate limit, request size |
 | MCP | scopes по tools, input schema validation, max depth/limit, audit |
 | Query layer | Только параметризованные query templates, timeout, result budget |
-| Neo4j | Отдельные roles: projector-writer, mcp-reader, operator |
+| Neo4j | PoC (Community, ролей и RBAC/PBAC нет): раздельные учетные записи и Secrets `graph-projector` (запись) и `mcp-reader`; read-only обеспечивает приложение. Production / Enterprise: roles projector-writer, mcp-reader, operator |
+| Query layer (PoC) | Read-only и domain-фильтрация обеспечиваются приложением (query layer), см. E4 |
 | Data | Classification, domain/tenant filter, redaction |
 | LLM | Полученный текст считается недоверенным data, а не инструкцией |
 
-Neo4j RBAC позволяет `GRANT`/`DENY` на граф и его элементы. Если доступ зависит от свойства узла, доступен property-based access control, но свойство политики нельзя разрешать изменять пользователю; документация также предупреждает о fail-open поведении некоторых `DENY`-условий. Поэтому критичную tenant/domain-фильтрацию желательно дублировать в query mediation layer и проверять негативными тестами.[^44][^45]
+*Production / Enterprise* (в Community RBAC и PBAC отсутствуют): Neo4j RBAC позволяет `GRANT`/`DENY` на граф и его элементы. Если доступ зависит от свойства узла, доступен property-based access control, но свойство политики нельзя разрешать изменять пользователю; документация также предупреждает о fail-open поведении некоторых `DENY`-условий. Поэтому критичную tenant/domain-фильтрацию желательно дублировать в query mediation layer и проверять негативными тестами.[^44][^45]
 
 Минимальные меры:
 
@@ -628,7 +660,19 @@ Neo4j официально поддерживает standalone и cluster deploy
 
 ### PoC topology
 
-Для PoC рекомендуется развернуть изолированный namespace `architecture-kg`, а stateful-компоненты при возможности вынести в отдельные namespaces. Neo4j standalone устанавливается официальным Helm chart; конкретные CPU/RAM следует определять нагрузочным тестом, поскольку требования зависят от размера графа и профиля запросов.[^49][^50]
+**Решение владельца: демо-стенд PoC разворачивается на Docker Compose, а не в Kubernetes.** Kubernetes/Helm-описание ниже — целевая (production) топология и входит в «Production delta»; для демо-стенда действует следующее соответствие:
+
+| Kubernetes-вариант ниже | Docker Compose (PoC) |
+|---|---|
+| `CronJob` для reconciliation | Планировщик внутри адаптера |
+| `NetworkPolicy` | Раздельные сети compose |
+| External Secrets / Vault | Docker secrets |
+| Online backup через `neo4j-admin` Helm chart | `neo4j-admin database dump` / `load` |
+| Helm release Neo4j, `Deployment`, PVC | Сервисы compose и именованные volumes |
+
+Далее в этом разделе описана целевая Kubernetes-топология; к демо-стенду она применяется через таблицу выше.
+
+Для production-варианта рекомендуется развернуть изолированный namespace `architecture-kg`, а stateful-компоненты при возможности вынести в отдельные namespaces. Neo4j standalone устанавливается официальным Helm chart; конкретные CPU/RAM следует определять нагрузочным тестом, поскольку требования зависят от размера графа и профиля запросов.[^49][^50]
 
 ```mermaid
 flowchart TB
@@ -700,7 +744,7 @@ observability         OTel/Prometheus/Grafana либо существующий 
 ```
 
 - Внешний ingress публикует только `/mcp` и webhook endpoints; Neo4j Browser/Bolt наружу не выставляются.
-- `mcp-reader` имеет только чтение; `graph-projector` — минимальные write privileges; adapters не получают Neo4j credentials.
+- В Neo4j Community нет ролей: `mcp-reader` и `graph-projector` — раздельные учетные записи и отдельные Secrets (Kubernetes Secrets в production, Docker secrets в PoC); read-only для `mcp-reader` обеспечивает приложение (query layer, см. E4). Adapters не получают Neo4j credentials. Модель «только чтение / минимальные write privileges» на уровне БД — production / Enterprise.
 - `NetworkPolicy` разрешает MCP → Neo4j, projector → Neo4j, adapters → inbox/broker/object storage и необходимые egress-вызовы к мастер-системам.
 - `Secrets` поступают из External Secrets/Vault; пароли не хранятся в Helm values и Git.
 - TLS применяется на ingress и для Bolt; webhook endpoints проверяют подпись, timestamp и replay window.
@@ -746,11 +790,11 @@ Neo4j sizing необходимо уточнить после загрузки �
 PoC считается завершенным, если:
 
 1. Загружен репрезентативный вертикальный срез из трех мастер-систем: минимум `ITSystem -> Service -> Deployment -> Environment -> ComputeInstance`.
-2. Webhook-изменение появляется в Neo4j в пределах согласованного SLA, а reconciliation исправляет искусственно созданный пропуск.
+2. Webhook-изменение появляется в Neo4j в пределах **p95 ≤ 30 с** на заглушках, а reconciliation исправляет искусственно созданный пропуск.
 3. Повторное и out-of-order событие не меняет корректное состояние графа.
 4. Полный rebuild из raw storage дает эквивалентный канонический граф.
 5. MCP выполняет `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies` и `explain_provenance` через Streamable HTTP.
-6. MCP principal не может выполнить write query; projector credentials недоступны MCP pod.
+6. MCP не может выполнить write query: запрет записи обеспечивается приложением и раздельными учетными записями; projector credentials недоступны MCP-сервису.
 7. Impact query возвращает не только список активов, но и объяснимые paths с provenance/freshness.
 8. Проверены backup и restore Neo4j, а также replay после восстановления.
 9. Зафиксированы p95 latency, sync lag, error/DLQ rate, throughput projection и ограничения глубины traversal.
