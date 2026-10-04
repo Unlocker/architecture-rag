@@ -16,10 +16,11 @@ import java.util.UUID;
 /**
  * Одно изменение объекта источника для проекции: команды нормализатора плюс разрешённые {@code gid}.
  *
- * <p>Инварианты (нарушение — {@link IllegalArgumentException}): не более одного {@code UpsertNode} или не более одного
- * {@code TombstoneSourceRecord} (не оба; запись только со связями и пустой список допустимы), его ключ равен {@code key}, а версия {@code SourceRecord} равна
- * {@code version}; все связи и закрытия утверждаются этой же записью; для узла записи и обоих концов каждой
- * связи есть {@code gid}. {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
+ * <p>Инварианты (нарушение — {@link IllegalArgumentException}): не более одного узла-команды суммарно
+ * ({@code UpsertNode} либо {@code TombstoneSourceRecord}); запись только со связями и пустой список
+ * допустимы; ключ узла-команды равен {@code key}, а версия {@code SourceRecord} равна {@code version};
+ * все связи и закрытия утверждаются этой же записью; для узла записи и обоих концов каждой связи есть
+ * {@code gid}. {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
  *
  * @param key запись источника, к которой относится изменение
  * @param version версия объекта в источнике
@@ -43,7 +44,7 @@ public record ProjectionRequest(
     commands = List.copyOf(commands);
     long upserts = commands.stream().filter(UpsertNode.class::isInstance).count();
     long tombstones = commands.stream().filter(TombstoneSourceRecord.class::isInstance).count();
-    if (upserts > 1 || tombstones > 1 || upserts + tombstones > 1) {
+    if (upserts + tombstones > 1) {
       throw new IllegalArgumentException("at most one UpsertNode or TombstoneSourceRecord is allowed");
     }
     for (GraphCommand command : commands) {
