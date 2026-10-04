@@ -33,7 +33,7 @@ class PollerTest {
   void setUp() {
     eam = StubSources.eam(clock);
     AdapterConfig config = new AdapterConfig(SourceSystem.EAM, URI.create("http://unused"), "s",
-        Duration.ofMinutes(5), 2, Duration.ofSeconds(1),
+        Duration.ofMinutes(5), 2, Duration.ofSeconds(1), Duration.ofHours(1),
         new RetryPolicy(3, Duration.ofSeconds(1), Duration.ofSeconds(4)));
     poller = new Poller(config, eam, journal, raw, clock, sleeps::add, new Random(5),
         () -> "run-" + runCounter.incrementAndGet());
@@ -242,9 +242,80 @@ class PollerTest {
     }
   }
 
+  @Test
+  void snapshotOnceRunsFullSnapshotWithNewRunIdEvenWhenCursorExists() {
+    poller.pollOnce();
+    eam.delete("TEAM", "TEAM-PAY");
+
+    PollResult r = poller.snapshotOnce();
+
+    assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(r.syncRunId()).isEqualTo("run-2");
+    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+    // Удалённый в источнике объект в прогоне отсутствует: именно это и есть основа missing set.
+    assertThat(journal.snapshotContents(SOURCE, "run-2").objects())
+        .doesNotContain(new io.github.unlocker.archrag.eventschemas.ObjectRef("TEAM", "TEAM-PAY"));
+    assertThat(journal.snapshotContents(SOURCE, "run-1").objects())
+        .contains(new io.github.unlocker.archrag.eventschemas.ObjectRef("TEAM", "TEAM-PAY"));
+  }
+
+  @Test
+  void interruptedReconciliationSnapshotWritesNoMarkerAndResumesSameRun() {
+    poller.pollOnce();
+    PollResult failed = pollerOver(new FailingConnector(eam, 1)).snapshotOnce();
+    assertThat(failed.outcome()).isEqualTo(PollResult.Outcome.GAVE_UP);
+    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(1);
+
+    PollResult resumed = poller.snapshotOnce();
+
+    assertThat(resumed.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(resumed.syncRunId()).isEqualTo(failed.syncRunId());
+    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+  }
+
+  @Test
+  void concurrentCycleOfTheSameSourceIsRejected() {
+    poller.pollOnce();
+    var holder = new Poller[1];
+    var inner = new java.util.concurrent.atomic.AtomicReference<PollResult>();
+    var connector = new io.github.unlocker.archrag.sourcespi.SourceConnector() {
+      @Override
+      public io.github.unlocker.archrag.sourcespi.SourceSystem system() {
+        return SourceSystem.EAM;
+      }
+
+      @Override
+      public io.github.unlocker.archrag.sourcespi.ChangePage fetchChanges(String cursor, int limit) {
+        // Пока первый цикл читает источник, другой поток получает отказ, а не второй цикл чтения.
+        Thread t = new Thread(() -> inner.set(holder[0].snapshotOnce()));
+        t.start();
+        try {
+          t.join();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+        return eam.fetchChanges(cursor, limit);
+      }
+
+      @Override
+      public java.util.Optional<io.github.unlocker.archrag.sourcespi.SourceChange> fetchById(String t, String i) {
+        return eam.fetchById(t, i);
+      }
+    };
+    holder[0] = pollerOver(connector);
+
+    PollResult outer = holder[0].snapshotOnce();
+
+    assertThat(outer.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(inner.get().outcome()).isEqualTo(PollResult.Outcome.ALREADY_RUNNING);
+    assertThat(inner.get().appended()).isZero();
+    // Отказавший цикл ничего не записал: маркеров ровно два (первый snapshot и внешний).
+    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+  }
+
   private Poller pollerOver(io.github.unlocker.archrag.sourcespi.SourceConnector connector) {
     AdapterConfig config = new AdapterConfig(SourceSystem.EAM, URI.create("http://unused"), "s",
-        Duration.ofMinutes(5), 2, Duration.ofSeconds(1),
+        Duration.ofMinutes(5), 2, Duration.ofSeconds(1), Duration.ofHours(1),
         new RetryPolicy(2, Duration.ofSeconds(1), Duration.ofSeconds(4)));
     return new Poller(config, connector, journal, raw, clock, sleeps::add, new Random(5),
         () -> "run-" + runCounter.incrementAndGet());

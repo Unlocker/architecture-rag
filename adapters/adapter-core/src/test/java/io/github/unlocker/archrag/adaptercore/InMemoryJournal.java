@@ -4,14 +4,19 @@ import io.github.unlocker.archrag.eventschemas.Checkpoint;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.ObjectRef;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Журнал в памяти с тем же контрактом дедупликации, что и PostgreSQL; для unit-тестов. */
 final class InMemoryJournal implements EventJournal {
@@ -61,6 +66,24 @@ final class InMemoryJournal implements EventJournal {
   @Override
   public JournalEntry toDlq(String s, String id, String c, String r) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public SnapshotContents snapshotContents(String source, String syncRunId) {
+    var runRows = rows.values().stream()
+        .filter(r -> r.source().equals(source) && r.eventId().startsWith("snap:" + syncRunId + ":")).toList();
+    return new SnapshotContents(
+        runRows.stream().map(r -> new ObjectRef(r.sourceType(), r.sourceId())).collect(Collectors.toSet()),
+        runRows.size(),
+        runRows.stream().map(JournalEntry::receivedAt).min(Comparator.naturalOrder()).orElse(null));
+  }
+
+  @Override
+  public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
+    return rows.values().stream()
+        .filter(r -> r.source().equals(source) && !r.receivedAt().isBefore(since))
+        .map(r -> new ObjectRef(r.sourceType(), r.sourceId()))
+        .collect(Collectors.toSet());
   }
 
   @Override

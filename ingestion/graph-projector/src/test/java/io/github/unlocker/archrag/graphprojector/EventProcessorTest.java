@@ -10,8 +10,10 @@ import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.Checkpoint;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.ObjectRef;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +53,7 @@ class EventProcessorTest {
             Normalizer.standard(key -> true),
             new FakeIdentity(),
             projection,
-            (source, run, eventId) -> snapshots.add(source + "/" + run + "/" + eventId));
+            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId));
   }
 
   private static CanonicalEvent upsert(String id, String version, Map<String, Object> payload) {
@@ -283,6 +286,16 @@ class EventProcessorTest {
     }
 
     @Override
+    public SnapshotContents snapshotContents(String source, String syncRunId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
       return Optional.empty();
     }
@@ -341,6 +354,11 @@ class EventProcessorTest {
     @Override
     public boolean isActive(SourceKey key) {
       return true;
+    }
+
+    @Override
+    public List<ActiveRecord> activeRecords(SourceSystemCode source) {
+      return List.of();
     }
   }
 }

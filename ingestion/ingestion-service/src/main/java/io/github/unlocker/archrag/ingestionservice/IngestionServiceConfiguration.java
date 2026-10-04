@@ -7,18 +7,17 @@ import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
-import io.github.unlocker.archrag.graphprojector.ReconciliationTrigger;
+import io.github.unlocker.archrag.graphprojector.Reconciler;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.net.URI;
+import java.time.Clock;
 import javax.sql.DataSource;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,8 +27,6 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration(proxyBeanMethods = false)
 public class IngestionServiceConfiguration {
-
-  private static final Logger LOG = LoggerFactory.getLogger(IngestionServiceConfiguration.class);
 
   /** Применяет миграции до создания бинов, которым нужна схема. */
   @Bean
@@ -64,11 +61,10 @@ public class IngestionServiceConfiguration {
     return new GraphProjector(driver, AuthorityMatrix.defaults());
   }
 
-  /** До влива reconciliation (UNLOCKER-169) маркер {@code snapshot-complete} никуда не передаётся. */
+  /** Reconciliation после маркера {@code snapshot-complete} (E1.6): missing set получает tombstone. */
   @Bean
-  ReconciliationTrigger reconciliationTrigger() {
-    return (source, syncRunId, eventId) ->
-        LOG.warn("snapshot-complete is not forwarded: reconciliation is not wired (source={}, syncRunId={})", source, syncRunId);
+  Reconciler reconciler(EventJournal journal, GraphProjector projector) {
+    return new Reconciler(journal, projector, Clock.systemUTC());
   }
 
   @Bean
@@ -76,7 +72,7 @@ public class IngestionServiceConfiguration {
       EventJournal journal,
       GraphProjector projector,
       IdentityMapping identity,
-      ReconciliationTrigger reconciliation) {
+      Reconciler reconciliation) {
     return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation);
   }
 }
