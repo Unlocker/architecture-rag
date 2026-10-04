@@ -48,10 +48,8 @@ class Neo4jSchemaIT {
   void applyTwiceCreatesEveryObjectExactlyOnce() {
     List<String> constraints = names("SHOW CONSTRAINTS YIELD name RETURN name");
     List<String> indexes = names("SHOW INDEXES YIELD name RETURN name");
-    List<String> expectedConstraints = new ArrayList<>(
-        NodeLabel.canonical().stream().map(l -> Neo4jSchema.statements().stream()
-            .filter(s -> s.contains("(n:" + l.label() + ")") && s.contains("n.gid")).findFirst().orElseThrow())
-            .map(s -> s.split(" ")[2]).toList());
+    List<String> expectedConstraints = new ArrayList<>(List.of(
+        "it_system_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid"));
     expectedConstraints.addAll(List.of("source_record_key", "source_system_code", "sync_run_id", "environment_code"));
     assertThat(constraints).containsExactlyInAnyOrderElementsOf(expectedConstraints);
     assertThat(indexes.stream().filter("asset_text"::equals)).hasSize(1);

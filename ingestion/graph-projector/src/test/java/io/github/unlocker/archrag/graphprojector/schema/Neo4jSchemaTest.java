@@ -23,6 +23,13 @@ class Neo4jSchemaTest {
   }
 
   @Test
+  void gidConstraintNamesMatchFixedList() {
+    assertThat(NodeLabel.canonical().stream().sorted(java.util.Comparator.comparingInt(NodeLabel::ordinal))
+        .map(Neo4jSchema::gidConstraintName).toList())
+        .containsExactly("it_system_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid");
+  }
+
+  @Test
   void gidConstraintNamesAreSnakeCase() {
     assertThat(Neo4jSchema.gidConstraintName(NodeLabel.IT_SYSTEM)).isEqualTo("it_system_gid");
     assertThat(Neo4jSchema.gidConstraintName(NodeLabel.VIRTUAL_MACHINE)).isEqualTo("virtual_machine_gid");
