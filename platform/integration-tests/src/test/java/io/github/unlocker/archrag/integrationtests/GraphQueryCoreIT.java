@@ -9,6 +9,7 @@ import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
 import io.github.unlocker.archrag.graphquerycore.QueryTimeoutException;
+import io.github.unlocker.archrag.graphquerycore.ResultKind;
 import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
+import org.neo4j.driver.SessionConfig;
 import org.neo4j.driver.exceptions.ClientException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,11 +39,19 @@ class GraphQueryCoreIT {
 
   static final QueryLimits LIMITS = new QueryLimits(6, 500, 50, Duration.ofSeconds(5), 512 * 1024);
 
+  /** Админский драйвер: только засев и проверки. */
   static Driver driver;
+
+  /** Драйвер пользователя mcp-reader: на нём работает исполнитель. */
+  static Driver readerDriver;
 
   @BeforeAll
   static void connect() {
     driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.basic("neo4j", NEO4J.getAdminPassword()));
+    try (var system = driver.session(SessionConfig.forDatabase("system"))) {
+      system.run("CREATE USER `mcp-reader` SET PASSWORD 'reader-pass' CHANGE NOT REQUIRED").consume();
+    }
+    readerDriver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.basic("mcp-reader", "reader-pass"));
   }
 
   @BeforeEach
@@ -50,11 +60,11 @@ class GraphQueryCoreIT {
   }
 
   static QueryTemplate template(String id, String cypher, String... params) {
-    return new QueryTemplate(id, cypher, Set.of(params), null);
+    return new QueryTemplate(id, cypher, Set.of(params), ResultKind.NODES);
   }
 
   static GraphQueryExecutor executor(QueryTemplate... templates) {
-    return new GraphQueryExecutor(driver, QueryTemplateRegistry.of(List.of(templates), LIMITS));
+    return new GraphQueryExecutor(readerDriver, QueryTemplateRegistry.of(List.of(templates), LIMITS));
   }
 
   static long nodeCount() {
@@ -66,28 +76,61 @@ class GraphQueryCoreIT {
   }
 
   @Test
-  void writingTemplatesAreNotRegistered() {
+  void writingTemplatesFailExplainCheckOnFirstExecuteAndStayClosed() {
+    driver.executableQuery("CREATE (:Keep {gid: 'k', x: 0})").execute();
     for (String cypher :
         List.of(
-            "CREATE (n:X) RETURN n LIMIT $limit",
-            "MERGE (n:X {gid: 'a'}) SET n.v = 1 RETURN n LIMIT $limit",
-            "MATCH (n) DETACH DELETE n RETURN 1 AS ok LIMIT $limit")) {
-      assertThatThrownBy(() -> executor(template("w", cypher)))
+            "CREATE (n:X) RETURN n.gid AS gid LIMIT $limit",
+            "MATCH (n:Keep) SET n.x = 1 RETURN n.gid AS gid LIMIT $limit",
+            "MATCH (n:Keep) DETACH DELETE n RETURN 1 AS ok LIMIT $limit")) {
+      // Конструктор в БД не ходит: исполнитель создаётся, отказ приходит на execute.
+      GraphQueryExecutor executor = executor(template("w", cypher));
+      assertThatThrownBy(() -> executor.execute("w", Map.of(), null))
           .as(cypher)
           .isInstanceOf(IllegalStateException.class)
-          .hasMessageContaining("w");
+          .hasMessageContaining("not read-only");
+      assertThatThrownBy(() -> executor.execute("w", Map.of(), null))
+          .as("closed forever: " + cypher)
+          .isInstanceOf(IllegalStateException.class);
+    }
+    assertThat(nodeCount()).isEqualTo(1);
+    assertThat(
+            driver.executableQuery("MATCH (n:Keep) RETURN n.x AS x").execute().records().get(0).get("x").asLong())
+        .isZero();
+  }
+
+  @Test
+  void executorConstructionDoesNotTouchDatabase() {
+    Driver unreachable = GraphDatabase.driver("bolt://localhost:1", AuthTokens.basic("a", "b"));
+    new GraphQueryExecutor(
+        unreachable,
+        QueryTemplateRegistry.of(List.of(template("t", "MATCH (n) RETURN n.gid AS gid LIMIT $limit")), LIMITS));
+    unreachable.close();
+  }
+
+  @Test
+  void readSessionConfigRejectsWritesAtDatabaseLevel() {
+    try (var session = readerDriver.session(GraphQueryExecutor.READ_SESSION_CONFIG)) {
+      assertThatThrownBy(() -> session.executeRead(tx -> tx.run("CREATE (n:X)").consume()))
+          .isInstanceOfSatisfying(
+              ClientException.class,
+              e -> assertThat(e.code()).isEqualTo("Neo.ClientError.Statement.AccessMode"));
     }
     assertThat(nodeCount()).isZero();
   }
 
   @Test
-  void readSessionConfigRejectsWritesAtDatabaseLevel() {
-    try (var session = driver.session(GraphQueryExecutor.READ_SESSION_CONFIG)) {
-      assertThatThrownBy(() -> session.executeRead(tx -> tx.run("CREATE (n:X)").consume()))
-          .isInstanceOf(ClientException.class)
-          .hasMessageContaining("read access mode");
+  void nodesRelationshipsAndPathsInResultAreForbidden() {
+    driver.executableQuery("CREATE (:N {gid: 'a'})-[:R]->(:N {gid: 'b'})").execute();
+    for (String ret :
+        List.of("n AS v", "[n] AS v", "{k: n} AS v", "[(n)-[r:R]->() | r] AS v", "[p = (n)-[:R]->() | p] AS v")) {
+      GraphQueryExecutor executor =
+          executor(template("raw", "MATCH (n:N {gid: 'a'}) RETURN " + ret + " LIMIT $limit"));
+      assertThatThrownBy(() -> executor.execute("raw", Map.of(), null))
+          .as(ret)
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("forbidden");
     }
-    assertThat(nodeCount()).isZero();
   }
 
   @Test
@@ -133,9 +176,9 @@ class GraphQueryCoreIT {
   @Test
   void byteBudgetTruncates() {
     driver.executableQuery("UNWIND range(1, 20) AS i CREATE (:Item {gid: toString(i)})").execute();
-    GraphQueryExecutor executor = executor(template("items", "MATCH (n:Item) RETURN n AS n LIMIT $limit"));
+    GraphQueryExecutor executor = executor(template("items", "MATCH (n:Item) RETURN n {.gid} AS n LIMIT $limit"));
 
-    QueryResult result = executor.execute("items", Map.of(), budget(2, 50, Duration.ofSeconds(5), 150));
+    QueryResult result = executor.execute("items", Map.of(), budget(2, 50, Duration.ofSeconds(5), 100));
     assertThat(result.truncated()).isTrue();
     assertThat(result.rows()).isNotEmpty().hasSizeLessThan(20);
   }
@@ -146,7 +189,7 @@ class GraphQueryCoreIT {
     QueryLimits tight = new QueryLimits(6, 3, 50, Duration.ofSeconds(5), 512 * 1024);
     GraphQueryExecutor executor =
         new GraphQueryExecutor(
-            driver,
+            readerDriver,
             QueryTemplateRegistry.of(
                 List.of(template("items", "MATCH (n:Item) RETURN n.gid AS gid LIMIT $limit")), tight));
     QueryResult result = executor.execute("items", Map.of(), budget(6, 1000, Duration.ofSeconds(5), 100_000));

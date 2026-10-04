@@ -31,9 +31,9 @@ archrag:
   neo4j:
     reader:
       # Отдельно от writer-свойств projector; пароль только из env/Docker secret.
-      uri: ${ARCHRAG_NEO4J_READER_URI:bolt://localhost:7687}
-      username: ${ARCHRAG_NEO4J_READER_USERNAME:reader}
-      password: ${ARCHRAG_NEO4J_READER_PASSWORD:}
+      uri: ${ARCHRAG_NEO4J_READER_URI}
+      username: ${ARCHRAG_NEO4J_READER_USERNAME}
+      password: ${ARCHRAG_NEO4J_READER_PASSWORD}
   query:
     limits:
       max-depth: 6

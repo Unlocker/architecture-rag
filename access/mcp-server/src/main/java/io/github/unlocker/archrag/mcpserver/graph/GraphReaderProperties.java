@@ -14,10 +14,6 @@ import org.springframework.util.unit.DataSize;
 @ConfigurationProperties("archrag.neo4j.reader")
 public record GraphReaderProperties(String uri, String username, String password) {
 
-  public GraphReaderProperties {
-    password = password == null ? "" : password;
-  }
-
   /** Не печатает пароль в логах и исключениях. */
   @Override
   public String toString() {

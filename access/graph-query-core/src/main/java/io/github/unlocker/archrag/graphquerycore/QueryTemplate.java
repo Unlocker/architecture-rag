@@ -16,10 +16,10 @@ import java.util.regex.Pattern;
  * @param id уникальный ID шаблона
  * @param cypher текст запроса без подстановки строк
  * @param parameters имена параметров, которые обязан передать вызывающий (без {@code limit})
- * @param defaults бюджет по умолчанию; {@code null} — потолки конфигурации
+ * @param kind что возвращает шаблон: определяет потолок строк
  */
 public record QueryTemplate(
-    String id, String cypher, Set<String> parameters, ResultBudget defaults) {
+    String id, String cypher, Set<String> parameters, ResultKind kind) {
 
   /** Имя параметра лимита строк: его задаёт исполнитель, вызывающий передать его не может. */
   public static final String LIMIT_PARAMETER = "limit";
@@ -31,6 +31,9 @@ public record QueryTemplate(
   private static final Pattern PARAM = Pattern.compile("\\$([A-Za-z_][A-Za-z0-9_]*)");
   private static final Pattern ENDS_WITH_LIMIT =
       Pattern.compile("(?is).*\\bLIMIT\\s+\\$limit\\s*;?\\s*");
+  // Регулярные выражения разбирают только типичные формы; экзотические (комментарии или переносы
+  // внутри скобок) могут не распознаться, и тогда обход не будет проверен статически. Эту дыру
+  // закрывают границы транзакции (timeout, лимит строк) и EXPLAIN перед первым исполнением.
   // Квантификатор «*» внутри квадратных скобок связи: [r:TYPE*..], [*1..3].
   private static final Pattern VAR_LENGTH =
       Pattern.compile("\\[\\s*[A-Za-z_0-9]*\\s*(?::[^\\]*]*)?\\*([^\\]]*)]");
@@ -42,6 +45,9 @@ public record QueryTemplate(
     }
     if (cypher == null || cypher.isBlank()) {
       throw new IllegalArgumentException("Template '" + id + "': cypher must not be blank");
+    }
+    if (kind == null) {
+      throw new IllegalArgumentException("Template '" + id + "': kind must not be null");
     }
     parameters = Set.copyOf(parameters);
     if (parameters.contains(LIMIT_PARAMETER)) {
@@ -96,6 +102,19 @@ public record QueryTemplate(
           "Template '" + id + "': " + MAX_DEPTH_PLACEHOLDER
               + " is allowed only as the upper bound of a variable-length path");
     }
+  }
+
+  /** Наибольшая литеральная верхняя граница variable-length путей шаблона; 0, если литералов нет. */
+  public int maxLiteralDepth() {
+    int max = 0;
+    Matcher varLength = VAR_LENGTH.matcher(cypher);
+    while (varLength.find()) {
+      Matcher bound = BOUNDED.matcher(varLength.group(1));
+      if (bound.matches() && !bound.group(1).equals(MAX_DEPTH_PLACEHOLDER)) {
+        max = Math.max(max, Integer.parseInt(bound.group(1)));
+      }
+    }
+    return max;
   }
 
   /** Есть ли в шаблоне плейсхолдер глубины. */

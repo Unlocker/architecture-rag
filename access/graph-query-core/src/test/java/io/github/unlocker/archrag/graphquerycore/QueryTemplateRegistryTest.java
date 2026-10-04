@@ -13,7 +13,7 @@ class QueryTemplateRegistryTest {
   static final QueryLimits LIMITS = new QueryLimits(6, 500, 50, Duration.ofSeconds(5), 512 * 1024);
 
   static QueryTemplate template(String id, String cypher, String... params) {
-    return new QueryTemplate(id, cypher, Set.of(params), null);
+    return new QueryTemplate(id, cypher, Set.of(params), ResultKind.NODES);
   }
 
   @Test
@@ -67,7 +67,7 @@ class QueryTemplateRegistryTest {
 
   @Test
   void unboundedTraversalIsRejected() {
-    for (String pattern : List.of("[*]", "[*1..]", "[r:DEPENDS_ON*]", "[:A|B*2..]")) {
+    for (String pattern : List.of("[*]", "[*1..]", "[r:DEPENDS_ON*]", "[:A|B*2..]", "[*  ..]")) {
       assertThatThrownBy(
               () -> template("t", "MATCH (a)-" + pattern + "->(b) RETURN b LIMIT $limit"))
           .as(pattern)
@@ -83,6 +83,23 @@ class QueryTemplateRegistryTest {
     assertThat(template("t", "MATCH (a)-[:DEPENDS_ON*1..3]->(b) RETURN b LIMIT $limit")
             .hasDepthPlaceholder())
         .isFalse();
+  }
+
+  @Test
+  void literalDepthAboveLimitIsRejected() {
+    QueryTemplate deep = template("t", "MATCH (a)-[:R*1..1000]->(b) RETURN b LIMIT $limit");
+    assertThat(deep.maxLiteralDepth()).isEqualTo(1000);
+    assertThatThrownBy(() -> QueryTemplateRegistry.of(List.of(deep), LIMITS))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("depth");
+    QueryTemplate ok = template("t", "MATCH (a)-[:R*1..6]->(b) RETURN b LIMIT $limit");
+    assertThat(QueryTemplateRegistry.of(List.of(ok), LIMITS).find("t")).isPresent();
+  }
+
+  @Test
+  void nullKindIsRejected() {
+    assertThatThrownBy(() -> new QueryTemplate("t", "MATCH (n) RETURN n LIMIT $limit", Set.of(), null))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

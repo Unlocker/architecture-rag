@@ -6,14 +6,13 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.summary.QueryType;
 
 /**
  * Неизменяемый реестр шаблонов.
  *
- * <p>Инварианты: ID уникальны; глубина литеральных границ не превышает потолок. Проверка, что
- * каждый шаблон только читает, выполняется {@link #verifyReadOnly(Driver)}.
+ * <p>Инварианты: ID уникальны; литеральная глубина обхода не превышает потолок. Конструктор делает
+ * только статические проверки, без обращения к БД; read-only проверка идёт в {@link
+ * GraphQueryExecutor} перед первым исполнением шаблона.
  */
 public final class QueryTemplateRegistry {
 
@@ -28,11 +27,16 @@ public final class QueryTemplateRegistry {
   /**
    * Создаёт реестр.
    *
-   * @throws IllegalArgumentException при дубликате ID
+   * @throws IllegalArgumentException при дубликате ID или литеральной глубине выше потолка
    */
   public static QueryTemplateRegistry of(Collection<QueryTemplate> templates, QueryLimits limits) {
     Map<String, QueryTemplate> byId = new HashMap<>();
     for (QueryTemplate template : templates) {
+      if (template.maxLiteralDepth() > limits.maxDepth()) {
+        throw new IllegalArgumentException(
+            "Template '" + template.id() + "': literal depth " + template.maxLiteralDepth()
+                + " exceeds limit " + limits.maxDepth());
+      }
       if (byId.putIfAbsent(template.id(), template) != null) {
         throw new IllegalArgumentException("Duplicate template id: " + template.id());
       }
@@ -53,32 +57,5 @@ public final class QueryTemplateRegistry {
   /** Потолки, с которыми создан реестр. */
   public QueryLimits limits() {
     return limits;
-  }
-
-  /**
-   * Проверяет через {@code EXPLAIN}, что каждый шаблон имеет тип {@code READ_ONLY}.
-   *
-   * <p>EXPLAIN запрос не исполняет. Без шаблонов обращения к БД нет.
-   *
-   * @throws IllegalStateException если шаблон не только читает или не удалось его проверить
-   */
-  public void verifyReadOnly(Driver driver) {
-    for (QueryTemplate template : templates.values()) {
-      QueryType type;
-      try (var session = driver.session(GraphQueryExecutor.READ_SESSION_CONFIG)) {
-        Map<String, Object> params = new HashMap<>();
-        template.parameters().forEach(p -> params.put(p, null));
-        params.put(QueryTemplate.LIMIT_PARAMETER, 1);
-        String cypher = template.render(limits.maxDepth(), limits.maxDepth());
-        type = session.run("EXPLAIN " + cypher, params).consume().queryType();
-      } catch (RuntimeException e) {
-        throw new IllegalStateException(
-            "Template '" + template.id() + "' failed EXPLAIN check: " + e.getMessage(), e);
-      }
-      if (type != QueryType.READ_ONLY) {
-        throw new IllegalStateException(
-            "Template '" + template.id() + "' is not read-only: " + type);
-      }
-    }
   }
 }

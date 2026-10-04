@@ -3,28 +3,31 @@ package io.github.unlocker.archrag.graphquerycore;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.neo4j.driver.AccessMode;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
 import org.neo4j.driver.SessionConfig;
 import org.neo4j.driver.TransactionConfig;
-import org.neo4j.driver.Value;
 import org.neo4j.driver.exceptions.Neo4jException;
+import org.neo4j.driver.summary.QueryType;
 import org.neo4j.driver.types.Node;
 import org.neo4j.driver.types.Path;
 import org.neo4j.driver.types.Relationship;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Единственный путь чтения графа: исполняет зарегистрированные шаблоны по ID.
  *
  * <p>Инварианты: принимает только ID шаблона, а не текст Cypher; исполняет только через
- * {@code executeRead} в сессии {@link AccessMode#READ}; значения передаются параметрами; бюджет
- * режется до потолков; результат ограничен по строкам и байтам.
+ * {@code executeRead} в сессии {@link AccessMode#READ}; значения передаются параметрами; перед
+ * первым исполнением шаблона {@code EXPLAIN} обязан дать {@code READ_ONLY}, иначе шаблон закрыт
+ * навсегда; бюджет режется до потолков, из результата читается не больше {@code maxRows + 1}
+ * строк; узлы, связи и пути в результате запрещены. Конструктор в БД не ходит.
  */
 public final class GraphQueryExecutor {
 
@@ -36,17 +39,12 @@ public final class GraphQueryExecutor {
 
   private final Driver driver;
   private final QueryTemplateRegistry registry;
-  private final JsonMapper mapper = JsonMapper.builder().build();
+  // true — проверка пройдена, false — провалена (шаблон закрыт навсегда).
+  private final Map<String, Boolean> readOnlyVerdicts = new ConcurrentHashMap<>();
 
-  /**
-   * Создаёт исполнитель и проверяет, что все шаблоны реестра read-only.
-   *
-   * @throws IllegalStateException если какой-то шаблон не прошёл проверку {@code EXPLAIN}
-   */
   public GraphQueryExecutor(Driver driver, QueryTemplateRegistry registry) {
     this.driver = driver;
     this.registry = registry;
-    registry.verifyReadOnly(driver);
   }
 
   /**
@@ -54,8 +52,9 @@ public final class GraphQueryExecutor {
    *
    * @param templateId ID зарегистрированного шаблона
    * @param params значения параметров шаблона; набор ключей должен совпасть с объявленным
-   * @param budget запрошенный бюджет или {@code null} (тогда бюджет шаблона/потолки)
+   * @param budget запрошенный бюджет или {@code null} (тогда потолки конфигурации)
    * @throws IllegalArgumentException неизвестный шаблон, неизвестный или недостающий параметр
+   * @throws IllegalStateException шаблон не read-only или вернул узел, связь либо путь
    * @throws QueryTimeoutException истёк таймаут транзакции
    */
   public QueryResult execute(String templateId, Map<String, Object> params, ResultBudget budget) {
@@ -65,34 +64,70 @@ public final class GraphQueryExecutor {
             .orElseThrow(() -> new IllegalArgumentException("Unknown template: " + templateId));
     checkParameters(template, params);
     QueryLimits limits = registry.limits();
-    ResultBudget requested =
-        budget != null ? budget : template.defaults() != null ? template.defaults() : limits.asBudget();
-    ResultBudget effective = requested.clampTo(limits);
+    ResultBudget effective = (budget != null ? budget : limits.asBudget()).clampTo(limits);
     String cypher = template.render(effective.maxDepth(), limits.maxDepth());
+    int maxRows = template.kind().maxRows(effective);
 
     Map<String, Object> queryParams = new LinkedHashMap<>(params);
-    queryParams.put(QueryTemplate.LIMIT_PARAMETER, effective.maxNodes() + 1);
+    queryParams.put(QueryTemplate.LIMIT_PARAMETER, maxRows + 1);
     TransactionConfig txConfig = TransactionConfig.builder().withTimeout(effective.timeout()).build();
+    BudgetedCollector collector = new BudgetedCollector(maxRows, effective.maxResponseBytes());
 
+    verifyReadOnly(template, cypher);
     Instant start = Instant.now();
     try (var session = driver.session(READ_SESSION_CONFIG)) {
       // Тело транзакции повторяется при транзиентных ошибках: внутри только чтение Neo4j и
-      // построение нового списка, внешних побочных эффектов нет.
-      List<Map<String, Object>> fetched =
+      // построение нового результата, внешних побочных эффектов нет.
+      BudgetedCollector.Collected collected =
           session.executeRead(
               tx -> {
-                List<Map<String, Object>> rows = new ArrayList<>();
-                tx.run(cypher, queryParams).forEachRemaining(r -> rows.add(toRow(r)));
-                return rows;
+                Result result = tx.run(cypher, queryParams);
+                return collector.collect(new RowIterator(result));
               },
               txConfig);
-      return applyBudget(templateId, fetched, effective, Duration.between(start, Instant.now()));
+      return new QueryResult(
+          templateId,
+          collected.rows(),
+          collected.truncated(),
+          collected.rows().size(),
+          Duration.between(start, Instant.now()));
     } catch (Neo4jException e) {
-      if (e.code() != null && e.code().contains(TIMEOUT_CODE)) {
-        throw new QueryTimeoutException(templateId, e);
-      }
-      throw e;
+      throw translate(templateId, e);
     }
+  }
+
+  /** EXPLAIN перед первым исполнением; вердикт кэшируется по ID, провал необратим. */
+  private void verifyReadOnly(QueryTemplate template, String cypher) {
+    Boolean verdict = readOnlyVerdicts.get(template.id());
+    if (verdict == null) {
+      verdict = explainIsReadOnly(template, cypher);
+      readOnlyVerdicts.put(template.id(), verdict);
+    }
+    if (!verdict) {
+      throw new IllegalStateException("Template '" + template.id() + "' is not read-only");
+    }
+  }
+
+  private boolean explainIsReadOnly(QueryTemplate template, String cypher) {
+    Map<String, Object> params = new LinkedHashMap<>();
+    template.parameters().forEach(p -> params.put(p, null));
+    params.put(QueryTemplate.LIMIT_PARAMETER, 1);
+    try (var session = driver.session(READ_SESSION_CONFIG)) {
+      // Только EXPLAIN: запрос не исполняется и данных не меняет.
+      QueryType type =
+          session.executeRead(tx -> tx.run("EXPLAIN " + cypher, params).consume().queryType());
+      return type == QueryType.READ_ONLY;
+    } catch (Neo4jException e) {
+      // Ошибка планирования не вердикт: шаблон не закрываем, пусть повторится.
+      throw translate(template.id(), e);
+    }
+  }
+
+  private static RuntimeException translate(String templateId, Neo4jException e) {
+    if (e.code() != null && e.code().contains(TIMEOUT_CODE)) {
+      return new QueryTimeoutException(templateId, e);
+    }
+    return e;
   }
 
   private static void checkParameters(QueryTemplate template, Map<String, Object> params) {
@@ -110,77 +145,45 @@ public final class GraphQueryExecutor {
     }
   }
 
-  private QueryResult applyBudget(
-      String templateId, List<Map<String, Object>> fetched, ResultBudget budget, Duration elapsed) {
-    boolean truncated = fetched.size() > budget.maxNodes();
-    List<Map<String, Object>> rows = new ArrayList<>();
-    long bytes = 0;
-    for (Map<String, Object> row : fetched.subList(0, Math.min(fetched.size(), budget.maxNodes()))) {
-      bytes += serializedSize(row);
-      if (bytes > budget.maxResponseBytes()) {
-        truncated = true;
-        break;
-      }
-      rows.add(row);
+  /** Лениво превращает записи драйвера в строки; читает ровно столько, сколько запросит сборщик. */
+  private static final class RowIterator implements Iterator<Map<String, Object>> {
+    private final Result result;
+
+    RowIterator(Result result) {
+      this.result = result;
     }
-    return new QueryResult(templateId, rows, truncated, rows.size(), elapsed);
-  }
 
-  private long serializedSize(Map<String, Object> row) {
-    try {
-      return mapper.writeValueAsBytes(row).length;
-    } catch (JacksonException e) {
-      throw new IllegalStateException("Cannot serialize result row", e);
+    @Override
+    public boolean hasNext() {
+      return result.hasNext();
+    }
+
+    @Override
+    public Map<String, Object> next() {
+      Record record = result.next();
+      Map<String, Object> row = new LinkedHashMap<>();
+      for (String key : record.keys()) {
+        row.put(key, check(record.get(key).asObject()));
+      }
+      return row;
     }
   }
 
-  private static Map<String, Object> toRow(Record record) {
-    Map<String, Object> row = new LinkedHashMap<>();
-    for (String key : record.keys()) {
-      row.put(key, convert(record.get(key)));
+  /** Отвергает узлы, связи и пути, в том числе внутри списков и map. */
+  private static Object check(Object o) {
+    switch (o) {
+      case Node n -> throw forbidden("Node");
+      case Relationship r -> throw forbidden("Relationship");
+      case Path p -> throw forbidden("Path");
+      case Map<?, ?> map -> map.values().forEach(GraphQueryExecutor::check);
+      case List<?> list -> new ArrayList<>(list).forEach(GraphQueryExecutor::check);
+      case null, default -> {}
     }
-    return row;
+    return o;
   }
 
-  /** Приводит значения драйвера к простым структурам, пригодным для JSON. */
-  private static Object convert(Value value) {
-    return convert(value.asObject());
-  }
-
-  private static Object convert(Object o) {
-    return switch (o) {
-      case null -> null;
-      case Node n -> {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("labels", n.labels());
-        m.put("properties", convert(n.asMap()));
-        yield m;
-      }
-      case Relationship r -> {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("type", r.type());
-        m.put("properties", convert(r.asMap()));
-        yield m;
-      }
-      case Path p -> {
-        List<Object> nodes = new ArrayList<>();
-        p.nodes().forEach(n -> nodes.add(convert(n)));
-        yield nodes;
-      }
-      case Map<?, ?> map -> {
-        Map<String, Object> m = new LinkedHashMap<>();
-        map.forEach((k, v) -> m.put(String.valueOf(k), convert(v)));
-        yield m;
-      }
-      case Iterable<?> it -> {
-        List<Object> list = new ArrayList<>();
-        it.forEach(v -> list.add(convert(v)));
-        yield list;
-      }
-      case String s -> s;
-      case Number n -> n;
-      case Boolean b -> b;
-      default -> o.toString();
-    };
+  private static IllegalStateException forbidden(String type) {
+    return new IllegalStateException(
+        type + " in result is forbidden: return projections like n {.gid, .name}");
   }
 }
