@@ -16,6 +16,7 @@
   <name>ingestion</name>
 
   <modules>
+    <module>event-journal</module>
     <module>normalizer</module>
     <module>identity-resolution</module>
     <module>graph-projector</module>

@@ -22,7 +22,7 @@ public record CanonicalEvent(
     Instant time,
     String dataschema,
     String correlationid,
-    AssetUpsertedData data) {
+    AssetEventData data) {
 
   /** Версия спецификации CloudEvents. */
   public static final String SPEC_VERSION = "1.0";

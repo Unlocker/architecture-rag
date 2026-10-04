@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 
 class CanonicalEventTest {
 
-  private static AssetUpsertedData data() {
-    return new AssetUpsertedData("IT_SYSTEM", "EAM-1042", new SourceVersion("184"), Map.of("name", "x"));
+  private static AssetEventData data() {
+    return new AssetEventData("IT_SYSTEM", "EAM-1042", new SourceVersion("184"), Map.of("name", "x"));
   }
 
   @Test
@@ -29,7 +29,7 @@ class CanonicalEventTest {
 
   @Test
   void dataRequiresSourceId() {
-    assertThatThrownBy(() -> new AssetUpsertedData("IT_SYSTEM", "", new SourceVersion("1"), null))
+    assertThatThrownBy(() -> new AssetEventData("IT_SYSTEM", "", new SourceVersion("1"), null))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

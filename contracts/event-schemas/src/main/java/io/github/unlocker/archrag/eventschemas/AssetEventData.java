@@ -8,9 +8,9 @@ import java.util.Map;
  * <p>{@code payload} — нормализованное или source-специфичное содержимое; для лога и проверок оно
  * недоверенное. Инварианты: {@code sourceType}, {@code sourceId} и {@code sourceVersion} заданы.
  */
-public record AssetUpsertedData(String sourceType, String sourceId, SourceVersion sourceVersion, Map<String, Object> payload) {
+public record AssetEventData(String sourceType, String sourceId, SourceVersion sourceVersion, Map<String, Object> payload) {
 
-  public AssetUpsertedData {
+  public AssetEventData {
     requireText(sourceType, "sourceType");
     requireText(sourceId, "sourceId");
     if (sourceVersion == null) {
