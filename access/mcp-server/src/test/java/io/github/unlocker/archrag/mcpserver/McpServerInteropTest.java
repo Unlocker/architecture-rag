@@ -33,7 +33,9 @@ class McpServerInteropTest {
     return McpClient.sync(
             HttpClientStreamableHttpTransport.builder("http://localhost:" + port)
                 .endpoint("/mcp")
-                .httpRequestCustomizer((builder, method, endpoint, body, context) -> builder.header("Authorization", "Bearer " + TOKEN))
+                .httpRequestCustomizer(
+                    (builder, method, endpoint, body, context) ->
+                        builder.header("Authorization", "Bearer " + TOKEN))
                 .build())
         .build();
   }
@@ -58,7 +60,8 @@ class McpServerInteropTest {
       McpSchema.CallToolResult result =
           client.callTool(new McpSchema.CallToolRequest("ping", Map.of()));
       assertThat(result.isError()).isFalse();
-      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("\"status\":\"ok\"");
+      assertThat(((McpSchema.TextContent) result.content().get(0)).text())
+          .contains("\"status\":\"ok\"");
     }
   }
 
@@ -85,7 +88,8 @@ class McpServerInteropTest {
                     + "\"params\":{\"name\":\"ping\",\"arguments\":{}}}")
             .retrieve()
             .toEntity(String.class);
-    assertThat(res.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_JSON)).isTrue();
+    assertThat(res.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_JSON))
+        .isTrue();
     assertThat(res.getHeaders().containsHeader("Mcp-Session-Id")).isFalse();
     assertThat(res.getStatusCode().value()).isEqualTo(200);
     var json = new JsonMapper().readTree(res.getBody());

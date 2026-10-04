@@ -6,9 +6,9 @@ import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
-import com.sun.net.httpserver.HttpServer;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -24,7 +24,10 @@ import java.util.Date;
 import java.util.List;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
-/** Подписанные тестовые JWT: RSA-ключ создаётся один раз на JVM, на диск не пишется; публичный ключ отдаётся локальным JWKS. */
+/**
+ * Подписанные тестовые JWT: RSA-ключ создаётся один раз на JVM, на диск не пишется; публичный ключ
+ * отдаётся локальным JWKS.
+ */
 final class TestJwt {
 
   static final String ISSUER = "https://idp.test/realms/archrag";
@@ -78,7 +81,10 @@ final class TestJwt {
     }
   }
 
-  /** Локальный JWKS endpoint: issuer-uri в Boot включает discovery, поэтому ключ отдаётся по jwk-set-uri. */
+  /**
+   * Локальный JWKS endpoint: issuer-uri в Boot включает discovery, поэтому ключ отдаётся по
+   * jwk-set-uri.
+   */
   private static HttpServer startJwksServer() {
     try {
       byte[] body =

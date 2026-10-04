@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +29,8 @@ import tools.jackson.databind.json.JsonMapper;
  * Проверяет scope на {@code tools/call} до диспетчеризации в MCP.
  *
  * <p>Работает только на {@code POST /mcp}. Тело читается не более {@code max-request-bytes} и
- * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется (fail-closed).
- * Остальные методы MCP требуют только валидный токен.
+ * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется
+ * (fail-closed). Остальные методы MCP требуют только валидный токен.
  */
 final class ToolScopeFilter extends OncePerRequestFilter {
 
@@ -52,8 +53,13 @@ final class ToolScopeFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
+    if (!isSupportedCharset(request.getCharacterEncoding())) {
+      response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+      return;
+    }
     long limit = properties.maxRequestBytes().toBytes();
-    byte[] body = request.getInputStream().readNBytes((int) Math.min(limit, Integer.MAX_VALUE - 1) + 1);
+    byte[] body =
+        request.getInputStream().readNBytes((int) Math.min(limit, Integer.MAX_VALUE - 1) + 1);
     if (body.length > limit) {
       response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
       return;
@@ -83,6 +89,17 @@ final class ToolScopeFilter extends OncePerRequestFilter {
       }
     }
     chain.doFilter(new BufferedRequest(request, body), response);
+  }
+
+  private static boolean isSupportedCharset(String name) {
+    if (name == null) {
+      return true;
+    }
+    try {
+      return Charset.isSupported(name);
+    } catch (IllegalCharsetNameException e) {
+      return false;
+    }
   }
 
   private static boolean hasAuthority(String authority) {
@@ -115,7 +132,9 @@ final class ToolScopeFilter extends OncePerRequestFilter {
         .toUriString();
   }
 
-  /** Запрос с уже прочитанным телом: поддерживает и {@code getInputStream()}, и {@code getReader()}. */
+  /**
+   * Запрос с уже прочитанным телом: поддерживает и {@code getInputStream()}, и {@code getReader()}.
+   */
   private static final class BufferedRequest extends HttpServletRequestWrapper {
     private final byte[] body;
 

@@ -2,6 +2,10 @@ package io.github.unlocker.archrag.mcpserver;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -39,7 +43,10 @@ class McpSecurityTest {
         .uri("/mcp")
         .header("Accept", "application/json, text/event-stream")
         .header("Content-Type", "application/json")
-        .headers(h -> { if (token != null) h.setBearerAuth(token); })
+        .headers(
+            h -> {
+              if (token != null) h.setBearerAuth(token);
+            })
         .body(body)
         .retrieve()
         .toEntity(String.class);
@@ -60,9 +67,29 @@ class McpSecurityTest {
   void foreignAudienceIssuerAndExpiredTokensAreUnauthorized() {
     var now = Instant.now();
     var scopes = List.of("architecture.read");
-    assertThat(post(TestJwt.token(scopes, "https://other/mcp", TestJwt.ISSUER, now.plusSeconds(300)), CALL_PING).getStatusCode().value()).isEqualTo(401);
-    assertThat(post(TestJwt.token(scopes, TestJwt.RESOURCE, "https://evil/realms/x", now.plusSeconds(300)), CALL_PING).getStatusCode().value()).isEqualTo(401);
-    assertThat(post(TestJwt.token(scopes, TestJwt.RESOURCE, TestJwt.ISSUER, now.minusSeconds(3600)), CALL_PING).getStatusCode().value()).isEqualTo(401);
+    assertThat(
+            post(
+                    TestJwt.token(
+                        scopes, "https://other/mcp", TestJwt.ISSUER, now.plusSeconds(300)),
+                    CALL_PING)
+                .getStatusCode()
+                .value())
+        .isEqualTo(401);
+    assertThat(
+            post(
+                    TestJwt.token(
+                        scopes, TestJwt.RESOURCE, "https://evil/realms/x", now.plusSeconds(300)),
+                    CALL_PING)
+                .getStatusCode()
+                .value())
+        .isEqualTo(401);
+    assertThat(
+            post(
+                    TestJwt.token(scopes, TestJwt.RESOURCE, TestJwt.ISSUER, now.minusSeconds(3600)),
+                    CALL_PING)
+                .getStatusCode()
+                .value())
+        .isEqualTo(401);
   }
 
   @Test
@@ -89,6 +116,27 @@ class McpSecurityTest {
         .contains("scope=\"architecture.read\"")
         .contains("resource_metadata=");
     assertThat(res.getBody()).isNullOrEmpty();
+  }
+
+  @Test
+  void toolCallWithOtherScopeIsForbidden() {
+    var res = post(TestJwt.token("other.scope"), CALL_PING);
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+    assertThat(challenge(res)).contains("scope=\"architecture.read\"");
+  }
+
+  @Test
+  void unknownCharsetIsBadRequest() throws Exception {
+    // RestClient сам отвергает неизвестную кодировку в Content-Type, поэтому — java.net.http.
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/mcp"))
+            .header("Accept", "application/json, text/event-stream")
+            .header("Content-Type", "application/json;charset=bogus")
+            .header("Authorization", "Bearer " + TestJwt.token("architecture.read"))
+            .POST(HttpRequest.BodyPublishers.ofString(CALL_PING))
+            .build();
+    var res = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    assertThat(res.statusCode()).isEqualTo(400);
   }
 
   @Test

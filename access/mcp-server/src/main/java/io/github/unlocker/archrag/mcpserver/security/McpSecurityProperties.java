@@ -7,8 +7,8 @@ import org.springframework.util.unit.DataSize;
 /**
  * Настройки защиты MCP resource.
  *
- * @param resourceUri канонический URI MCP resource: он же audience токена и поле {@code resource}
- *     в Protected Resource Metadata
+ * @param resourceUri канонический URI MCP resource: он же audience токена и поле {@code resource} в
+ *     Protected Resource Metadata
  * @param toolScopes соответствие «имя tool → требуемый scope»; tool без записи отклоняется
  * @param maxRequestBytes максимальный размер тела {@code POST /mcp}, читаемого для проверки scope
  */

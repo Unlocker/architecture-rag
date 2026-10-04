@@ -39,7 +39,13 @@ class ActuatorProbesTest {
 
   @Test
   void envEndpointIsNotExposed() {
-    var res = http().get().uri("/actuator/env").headers(h -> h.setBearerAuth(TestJwt.token())).retrieve().toEntity(String.class);
+    var res =
+        http()
+            .get()
+            .uri("/actuator/env")
+            .headers(h -> h.setBearerAuth(TestJwt.token()))
+            .retrieve()
+            .toEntity(String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
   }
 }

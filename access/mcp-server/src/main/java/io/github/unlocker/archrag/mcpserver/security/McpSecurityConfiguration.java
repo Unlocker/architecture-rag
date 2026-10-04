@@ -2,8 +2,8 @@ package io.github.unlocker.archrag.mcpserver.security;
 
 import jakarta.servlet.DispatcherType;
 import java.util.List;
-import org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -29,7 +29,8 @@ public class McpSecurityConfiguration {
       throws Exception {
     String issuer = resourceServer.getJwt().getIssuerUri();
     List<String> scopes = properties.toolScopes().values().stream().distinct().sorted().toList();
-    // Фильтр создаётся через new, а не бином: иначе Boot зарегистрирует его ещё и как servlet-фильтр.
+    // Фильтр создаётся через new, а не бином: иначе Boot зарегистрирует его ещё и как
+    // servlet-фильтр.
     var toolScopeFilter = new ToolScopeFilter(properties);
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -37,7 +38,8 @@ public class McpSecurityConfiguration {
             a ->
                 a.dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
-                    .requestMatchers("/actuator/health/**", "/.well-known/oauth-protected-resource/**")
+                    .requestMatchers(
+                        "/actuator/health/**", "/.well-known/oauth-protected-resource/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
@@ -51,7 +53,8 @@ public class McpSecurityConfiguration {
                                     b.resource(properties.resourceUri())
                                         .authorizationServer(issuer)
                                         .scopes(c -> c.addAll(scopes))
-                                        // bearer_methods_supported = ["header"] выставляется по умолчанию
+                                        // bearer_methods_supported = ["header"] выставляется по
+                                        // умолчанию
                                         .resourceName("arch-rag"))))
         .addFilterAfter(toolScopeFilter, AuthorizationFilter.class);
     return http.build();
