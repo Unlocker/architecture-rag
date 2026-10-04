@@ -1,7 +1,6 @@
 package io.github.unlocker.archrag.eventschemas;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Чтение журнала страницами для replay и rebuild. Только чтение: состояние строк не меняет.
@@ -13,10 +12,4 @@ public interface JournalReader {
 
   /** Возвращает не более {@link JournalQuery#limit()} строк, подходящих под запрос. */
   List<StoredEvent> read(JournalQuery query);
-
-  /**
-   * Последнее по {@code (receivedAt, source, eventId)} событие источника заданного типа среди исходных строк
-   * (строки replay не учитываются).
-   */
-  Optional<StoredEvent> latest(String source, String type);
 }

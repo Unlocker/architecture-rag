@@ -48,7 +48,7 @@ public final class SourceAdapter implements AutoCloseable {
   /** Запускает webhook endpoint на {@code address}. */
   public synchronized WebhookServer startWebhook(InetSocketAddress address) {
     if (server == null) {
-      server = new WebhookServer(webhook, address);
+      server = new WebhookServer(webhook, address, poller::snapshotOnce);
     }
     return server;
   }

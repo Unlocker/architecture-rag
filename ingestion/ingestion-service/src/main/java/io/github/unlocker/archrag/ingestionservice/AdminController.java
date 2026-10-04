@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -34,19 +35,19 @@ public class AdminController {
   private final ReplayService replay;
   private final RebuildService rebuild;
   private final CrosswalkService crosswalk;
-  private final ReconcileService reconcile;
+  private final AdapterControlClient adapters;
 
   public AdminController(
       AdminOperations operations,
       ReplayService replay,
       RebuildService rebuild,
       CrosswalkService crosswalk,
-      ReconcileService reconcile) {
+      AdapterControlClient adapters) {
     this.operations = operations;
     this.replay = replay;
     this.rebuild = rebuild;
     this.crosswalk = crosswalk;
-    this.reconcile = reconcile;
+    this.adapters = adapters;
   }
 
   /**
@@ -91,32 +92,26 @@ public class AdminController {
   }
 
   /**
-   * Повторно применяет missing set последнего завершённого snapshot источника; новый snapshot не запускается.
-   * {@code 404} — завершённых snapshot нет, {@code 409 SNAPSHOT_NOT_COMPLETE} — последний маркер ещё не обработан.
+   * Запускает полный snapshot источника в его adapter-сервисе ({@code POST /control/snapshot}); удаления после него
+   * делает {@code Reconciler} по маркеру. Ответ адаптера отдаётся как есть: {@code 202} или {@code 409}
+   * ({@code ALREADY_RUNNING}); неизвестный источник — {@code 404}, адаптер недоступен — {@code 502}.
    *
    * @param source {@code urn:corp:<код>} или короткий код ({@code eam}, {@code scm}, {@code cmdb}, {@code deploymap})
    */
   @PostMapping("/reconcile/{source}")
-  public ReconcileResult reconcile(@PathVariable String source, @AuthenticationPrincipal Jwt jwt) {
-    String urn = source.startsWith("urn:corp:") ? source : "urn:corp:" + source;
-    if (!SOURCE.matcher(urn).matches()) {
+  public ResponseEntity<String> reconcile(@PathVariable String source, @AuthenticationPrincipal Jwt jwt) {
+    String code = AdapterControlClient.code(source);
+    if (!SOURCE.matcher(code).matches()) {
       throw new BadRequestException("source is invalid");
     }
-    return operations.run(
-        "RECONCILE",
-        jwt.getSubject(),
-        Map.of("source", urn),
-        null,
-        () -> reconcile.reconcile(urn),
-        r -> {
-          Map<String, Object> m = new LinkedHashMap<>();
-          m.put("syncRunId", r.syncRunId());
-          m.put("tombstoned", r.report().tombstoned());
-          m.put("ignoredOldVersion", r.report().ignoredOldVersion());
-          m.put("keptRecentlyTouched", r.report().keptRecentlyTouched());
-          m.put("keptInSnapshot", r.report().keptInSnapshot());
-          return m;
-        });
+    if (!adapters.knows(code)) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
+          .body("{\"error\":\"unknown source\"}");
+    }
+    AdapterControlClient.Response r = operations.run(
+        "RECONCILE", jwt.getSubject(), Map.of("source", code), null, () -> adapters.snapshot(code),
+        resp -> Map.of("adapterStatus", resp.status()));
+    return ResponseEntity.status(r.status()).contentType(MediaType.APPLICATION_JSON).body(r.body());
   }
 
   @PostMapping("/crosswalks")
@@ -132,14 +127,9 @@ public class AdminController {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
   }
 
-  @ExceptionHandler(SnapshotNotFoundException.class)
-  ResponseEntity<Map<String, String>> noSnapshot(SnapshotNotFoundException e) {
-    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
-  }
-
-  @ExceptionHandler(SnapshotNotCompleteException.class)
-  ResponseEntity<Map<String, String>> snapshotNotComplete(SnapshotNotCompleteException e) {
-    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", SnapshotNotCompleteException.CODE));
+  @ExceptionHandler(AdapterUnavailableException.class)
+  ResponseEntity<Map<String, String>> adapterUnavailable(AdapterUnavailableException e) {
+    return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", e.getMessage()));
   }
 
   @ExceptionHandler(AdminBusyException.class)
