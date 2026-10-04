@@ -20,14 +20,18 @@ import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-/** Проверяет, что Neo4j Community, PostgreSQL и S3-совместимое хранилище (SeaweedFS) поднимаются и отвечают. */
+/**
+ * Проверяет, что Neo4j Community, PostgreSQL и S3-совместимое хранилище (SeaweedFS) поднимаются и
+ * отвечают.
+ */
 @Testcontainers
 class ContainersSmokeIT {
 
   /**
    * Образ S3-совместимого хранилища для тестов и стенда. MinIO больше не публикует образы, а
-   * {@code chainguard/minio} по digest хрупок (у бесплатного образа только плавающий {@code latest}),
-   * поэтому используем SeaweedFS (Apache 2.0), закреплённый тегом. E1.1 и E5.1 берут образ отсюда.
+   * {@code chainguard/minio} по digest хрупок (у бесплатного образа только плавающий
+   * {@code latest}), поэтому используем SeaweedFS (Apache 2.0), закреплённый тегом.
+   * E1.1 и E5.1 берут образ отсюда.
    */
   static final DockerImageName S3_IMAGE = DockerImageName.parse("chrislusf/seaweedfs:4.48");
 
@@ -62,10 +66,11 @@ class ContainersSmokeIT {
 
   @Test
   void s3StorageAnswers() throws Exception {
-    var request = HttpRequest.newBuilder(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333) + "/smoke-bucket"))
-        .PUT(HttpRequest.BodyPublishers.noBody())
-        .build();
-    var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-    assertThat(response.statusCode()).isBetween(200, 299);
+    var uri = URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333) + "/smoke-bucket");
+    var request = HttpRequest.newBuilder(uri).PUT(HttpRequest.BodyPublishers.noBody()).build();
+    try (var client = HttpClient.newHttpClient()) {
+      var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+      assertThat(response.statusCode()).isBetween(200, 299);
+    }
   }
 }
