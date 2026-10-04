@@ -8,9 +8,10 @@ import java.util.Objects;
 
 /**
  * Подтверждённое соответствие двух source-записей одной канонической сущности, например
- * {@code EAM/IT_SYSTEM/PAY ↔ SCM/CATALOG_SYSTEM/42}. Ключи различны; пара неупорядоченная.
+ * {@code EAM/IT_SYSTEM/PAY ↔ SCM/CATALOG_SYSTEM/42}. Ключи различны; пара неупорядоченная;
+ * {@code approvedBy}, {@code reason} и {@code approvedAt} — обязательный аудит утверждения.
  */
-public record Crosswalk(SourceKey left, SourceKey right, String approvedBy, Instant approvedAt) {
+public record Crosswalk(SourceKey left, SourceKey right, String approvedBy, String reason, Instant approvedAt) {
 
   public Crosswalk {
     Objects.requireNonNull(left, "left");
@@ -19,6 +20,7 @@ public record Crosswalk(SourceKey left, SourceKey right, String approvedBy, Inst
       throw new IllegalArgumentException("crosswalk must link two different source keys");
     }
     requireText(approvedBy, "approvedBy");
+    requireText(reason, "reason");
     Objects.requireNonNull(approvedAt, "approvedAt");
   }
 }

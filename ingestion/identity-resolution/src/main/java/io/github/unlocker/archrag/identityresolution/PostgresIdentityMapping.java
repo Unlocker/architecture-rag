@@ -133,11 +133,12 @@ public final class PostgresIdentityMapping implements IdentityMapping {
 
   private static void insertCrosswalk(Connection c, SourceKey lo, SourceKey hi, Crosswalk cw) throws SQLException {
     try (PreparedStatement ps = c.prepareStatement("INSERT INTO approved_crosswalk (left_source, left_type, left_id,"
-        + " right_source, right_type, right_id, approved_by, approved_at) VALUES (?,?,?,?,?,?,?,?)"
+        + " right_source, right_type, right_id, approved_by, reason, approved_at) VALUES (?,?,?,?,?,?,?,?,?)"
         + " ON CONFLICT DO NOTHING")) {
       int i = bindKey(ps, 1, lo);
       i = bindKey(ps, i, hi);
       ps.setString(i++, cw.approvedBy());
+      ps.setString(i++, cw.reason());
       ps.setTimestamp(i, Timestamp.from(cw.approvedAt()));
       ps.executeUpdate();
     }
@@ -159,7 +160,7 @@ public final class PostgresIdentityMapping implements IdentityMapping {
     return index;
   }
 
-  /** Порядок как в CHECK таблицы: по (source, sourceType, sourceId) в лексикографическом порядке строк. */
+  /** Нормализованный порядок пары (его держит только приложение): по (source, sourceType, sourceId) в лексикографическом порядке строк. */
   private static int compare(SourceKey a, SourceKey b) {
     int r = a.source().name().compareTo(b.source().name());
     if (r == 0) {

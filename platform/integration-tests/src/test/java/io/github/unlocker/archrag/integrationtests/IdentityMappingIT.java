@@ -48,7 +48,7 @@ class IdentityMappingIT {
   }
 
   private static Crosswalk crosswalk(SourceKey a, SourceKey b) {
-    return new Crosswalk(a, b, "admin", Instant.parse("2026-10-04T12:00:00Z"));
+    return new Crosswalk(a, b, "admin", "same system", Instant.parse("2026-10-04T12:00:00Z"));
   }
 
   @Test
@@ -138,6 +138,48 @@ class IdentityMappingIT {
 
     assertThat(mapping.find(eam)).contains(gidEam);
     assertThat(mapping.find(scm)).contains(gidScm);
+  }
+
+  @Test
+  void concurrentResolveAndApproveEndWithSharedGidOrCleanConflict() throws Exception {
+    for (int round = 0; round < 10; round++) {
+      var eam = key(SourceSystemCode.EAM, "IT_SYSTEM");
+      var scm = key(SourceSystemCode.SCM, "CATALOG_SYSTEM");
+      try (var pool = Executors.newFixedThreadPool(2)) {
+        var resolve = pool.submit(() -> mapping.resolve(scm));
+        var approve = pool.submit(() -> {
+          try {
+            return mapping.approve(crosswalk(eam, scm));
+          } catch (CrosswalkConflictException e) {
+            return null;
+          }
+        });
+        UUID resolved = resolve.get();
+        UUID approved = approve.get();
+        if (approved != null) {
+          assertThat(approved).isEqualTo(resolved);
+          assertThat(mapping.find(eam)).contains(approved);
+          assertThat(crosswalkRows(eam)).isEqualTo(1);
+        } else {
+          // Откат: ни mapping для eam, ни строки crosswalk не остались.
+          assertThat(mapping.find(eam)).isEmpty();
+          assertThat(crosswalkRows(eam)).isZero();
+          assertThat(mapping.find(scm)).contains(resolved);
+        }
+      }
+    }
+  }
+
+  private static int crosswalkRows(SourceKey key) throws Exception {
+    try (var c = dataSource().getConnection();
+        var ps = c.prepareStatement("select count(*) from approved_crosswalk where left_id = ? or right_id = ?")) {
+      ps.setString(1, key.sourceId());
+      ps.setString(2, key.sourceId());
+      try (var rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getInt(1);
+      }
+    }
   }
 
   private static DataSource dataSource() {

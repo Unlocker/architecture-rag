@@ -15,7 +15,7 @@ class CrosswalkTest {
 
   @Test
   void keepsBothKeys() {
-    var cw = new Crosswalk(EAM, SCM, "admin", Instant.parse("2026-10-04T00:00:00Z"));
+    var cw = new Crosswalk(EAM, SCM, "admin", "same system", Instant.parse("2026-10-04T00:00:00Z"));
 
     assertThat(cw.left()).isEqualTo(EAM);
     assertThat(cw.right()).isEqualTo(SCM);
@@ -23,13 +23,19 @@ class CrosswalkTest {
 
   @Test
   void rejectsLinkToItself() {
-    assertThatThrownBy(() -> new Crosswalk(EAM, EAM, "admin", Instant.now()))
+    assertThatThrownBy(() -> new Crosswalk(EAM, EAM, "admin", "same system", Instant.now()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
   void rejectsBlankApprover() {
-    assertThatThrownBy(() -> new Crosswalk(EAM, SCM, " ", Instant.now()))
+    assertThatThrownBy(() -> new Crosswalk(EAM, SCM, " ", "r", Instant.now()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void rejectsBlankReason() {
+    assertThatThrownBy(() -> new Crosswalk(EAM, SCM, "admin", " ", Instant.now()))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

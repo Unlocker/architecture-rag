@@ -11,7 +11,7 @@ CREATE TABLE identity_mapping (
 
 CREATE INDEX ix_identity_mapping_gid ON identity_mapping (gid);
 
--- Подтверждённые соответствия. Пара хранится в нормализованном порядке (left < right, порядок задаёт приложение), повторное утверждение идемпотентно.
+-- Подтверждённые соответствия. Пара хранится в нормализованном порядке (left < right, порядок задаёт приложение, CHECK нет: он зависел бы от коллации), повторное утверждение идемпотентно.
 CREATE TABLE approved_crosswalk (
     left_source  text        NOT NULL,
     left_type    text        NOT NULL,
@@ -20,6 +20,7 @@ CREATE TABLE approved_crosswalk (
     right_type   text        NOT NULL,
     right_id     text        NOT NULL,
     approved_by  text        NOT NULL,
+    reason       text        NOT NULL,
     approved_at  timestamptz NOT NULL,
     PRIMARY KEY (left_source, left_type, left_id, right_source, right_type, right_id)
 );
