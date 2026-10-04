@@ -5,6 +5,7 @@ import io.github.unlocker.archrag.eventjournal.JournalMigrations;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
+import io.github.unlocker.archrag.eventschemas.JournalReader;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
@@ -19,6 +20,7 @@ import javax.sql.DataSource;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -75,5 +77,19 @@ public class IngestionServiceConfiguration {
       IdentityMapping identity,
       Reconciler reconciliation) {
     return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation);
+  }
+
+  @Bean
+  @ConditionalOnProperty(name = "archrag.dispatcher.enabled", havingValue = "true", matchIfMissing = true)
+  JournalDispatcher journalDispatcher(
+      JournalReader reader,
+      EventJournal journal,
+      RawPayloadStore rawStore,
+      StoredEventReader events,
+      EventProcessor processor,
+      AdminLock lock,
+      DispatcherProperties props) {
+    return new JournalDispatcher(
+        reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay());
   }
 }

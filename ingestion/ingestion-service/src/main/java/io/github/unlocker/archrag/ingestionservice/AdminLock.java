@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Optional;
 import javax.sql.DataSource;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,11 @@ public class AdminLock {
    * @throws AdminBusyException если замок занят
    */
   public Lease acquire() {
+    return tryAcquire().orElseThrow(AdminBusyException::new);
+  }
+
+  /** Берёт замок без ожидания; {@code empty}, если он занят. */
+  public Optional<Lease> tryAcquire() {
     Connection c = null;
     try {
       c = dataSource.getConnection();
@@ -38,11 +44,11 @@ public class AdminLock {
           rs.next();
           if (!rs.getBoolean(1)) {
             c.close();
-            throw new AdminBusyException();
+            return Optional.empty();
           }
         }
       }
-      return new Lease(c);
+      return Optional.of(new Lease(c));
     } catch (SQLException e) {
       closeQuietly(c);
       throw new IllegalStateException("admin lock failed", e);

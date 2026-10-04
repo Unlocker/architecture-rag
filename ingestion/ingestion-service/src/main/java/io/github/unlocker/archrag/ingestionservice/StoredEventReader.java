@@ -22,13 +22,16 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Правила те же, что у {@code EventMapper.toEvent} адаптеров: для {@code UPSERT} поля {@code null} отбрасываются,
  * {@code _completeness} кладётся в payload; для {@code DELETE} payload пустой. Целые числа читаются как
- * {@code Long}, как в адаптерах. Raw недоверенный: ошибки разбора — {@link IllegalArgumentException} без его
+ * {@code Long}, как в адаптерах. У маркера {@code snapshot-complete} raw другой: {@code {syncRunId, objectCount,
+ * updatedAt}}; payload события — {@code syncRunId} и {@code objectCount} ({@code Long}), {@code completeness} не нужен.
+ * Raw недоверенный: ошибки разбора — {@link IllegalArgumentException} без его
  * содержимого.
  */
 @Component
 public class StoredEventReader {
 
   static final String COMPLETENESS_KEY = "_completeness";
+  static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   private static final String OPERATION_DELETE = "DELETE";
 
   private final JsonMapper json;
@@ -48,6 +51,9 @@ public class StoredEventReader {
     }
     if (!root.isObject()) {
       throw new IllegalArgumentException("raw payload is not a JSON object");
+    }
+    if (TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
+      return marker(stored, root);
     }
     boolean delete = OPERATION_DELETE.equals(text(root, "operation"));
     Instant time = time(root);
@@ -74,6 +80,26 @@ public class StoredEventReader {
         stored.type(),
         stored.subject(),
         time,
+        entry.schemaVersion(),
+        entry.correlationId(),
+        new AssetEventData(entry.sourceType(), entry.sourceId(), new SourceVersion(entry.sourceVersion().value()), payload));
+  }
+
+  private static CanonicalEvent marker(StoredEvent stored, JsonNode root) {
+    JournalEntry entry = stored.entry();
+    JsonNode count = root.get("objectCount");
+    if (count == null || !count.isIntegralNumber() || count.asLong() < 0) {
+      throw new IllegalArgumentException("marker raw payload has no valid objectCount");
+    }
+    Map<String, Object> payload = new LinkedHashMap<>();
+    payload.put("syncRunId", entry.sourceId());
+    payload.put("objectCount", count.asLong());
+    return new CanonicalEvent(
+        entry.eventId(),
+        entry.source(),
+        stored.type(),
+        stored.subject(),
+        time(root),
         entry.schemaVersion(),
         entry.correlationId(),
         new AssetEventData(entry.sourceType(), entry.sourceId(), new SourceVersion(entry.sourceVersion().value()), payload));

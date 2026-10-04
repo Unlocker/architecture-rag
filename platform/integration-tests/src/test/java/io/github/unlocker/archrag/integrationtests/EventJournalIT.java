@@ -93,6 +93,54 @@ class EventJournalIT {
     }
   }
 
+  /** Статус и updated_at выставляются напрямую: проверяется только выборка, а не переходы. */
+  private static void setState(String source, String eventId, String status, Instant updatedAt) throws Exception {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var ps = c.prepareStatement("update inbox_event set status = ?, updated_at = ? where source = ? and event_id = ?")) {
+      ps.setString(1, status);
+      ps.setTimestamp(2, java.sql.Timestamp.from(updatedAt));
+      ps.setString(3, source);
+      ps.setString(4, eventId);
+      ps.executeUpdate();
+    }
+  }
+
+  @Test
+  void pendingReturnsReceivedAndMaturedRetryingInJournalOrderWithKeyset() throws Exception {
+    var journal = new PostgresEventJournal(dataSource());
+    String src = "urn:corp:pending-" + uid();
+    Instant now = Instant.now();
+    for (String id : new String[] {"a", "b", "c", "d", "e"}) {
+      journal.append(event(src, id, "1"), null, null);
+    }
+    journal.transition(src, "a", ProcessingStatus.VALIDATED, null, null);
+    journal.transition(src, "a", ProcessingStatus.NORMALIZED, null, null);
+    journal.transition(src, "a", ProcessingStatus.RESOLVED, null, null);
+    journal.transition(src, "a", ProcessingStatus.PROJECTED, null, null);
+    // b: свежий RETRYING (не берётся), c: созревший RETRYING (берётся), d: давно прерванный VALIDATED (берётся)
+    setState(src, "b", "RETRYING", now);
+    setState(src, "c", "RETRYING", now.minusSeconds(120));
+    setState(src, "d", "VALIDATED", now.minusSeconds(120));
+    Instant retryNotAfter = now.minusSeconds(60);
+
+    var all = journal.pending(null, retryNotAfter, 1000).stream()
+        .filter(s -> s.entry().source().equals(src)).map(s -> s.entry().eventId()).toList();
+    assertThat(all).containsExactly("c", "d", "e");
+
+    // keyset со страницей 1: каждая строка ровно один раз, без повторов и пропусков
+    var seen = new java.util.ArrayList<String>();
+    JournalKey after = null;
+    for (var page = journal.pending(after, retryNotAfter, 1); !page.isEmpty(); page = journal.pending(after, retryNotAfter, 1)) {
+      var entry = page.get(0).entry();
+      after = JournalKey.of(entry);
+      if (entry.source().equals(src)) {
+        seen.add(entry.eventId());
+      }
+    }
+    assertThat(seen).containsExactly("c", "d", "e");
+    assertThatThrownBy(() -> journal.pending(null, retryNotAfter, 0)).isInstanceOf(IllegalArgumentException.class);
+  }
+
   @Test
   void duplicateEventIsNotInsertedTwice() throws Exception {
     var journal = new PostgresEventJournal(dataSource());
