@@ -16,6 +16,7 @@
   <name>adapters</name>
 
   <modules>
+    <module>adapter-core</module>
     <module>eam-adapter</module>
     <module>scm-adapter</module>
     <module>asset-adapter</module>

@@ -11,14 +11,10 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>deploymap-adapter</artifactId>
-  <name>deploymap-adapter</name>
+  <artifactId>adapter-core</artifactId>
+  <name>adapter-core</name>
 
   <dependencies>
-    <dependency>
-      <groupId>io.github.unlocker.archrag</groupId>
-      <artifactId>adapter-core</artifactId>
-    </dependency>
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>source-spi</artifactId>
@@ -27,7 +23,7 @@
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>event-schemas</artifactId>
     </dependency>
-    <!-- Заглушка источника нужна только contract-тестам. -->
+    <!-- Заглушки источников нужны только тестам. -->
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>source-stubs</artifactId>
