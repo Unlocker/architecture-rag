@@ -6,6 +6,7 @@ import java.net.URI;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.regex.Pattern;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
@@ -27,6 +28,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
  * чтение проверяет hash. Клиент создаётся с path-style и регионом-заглушкой {@code us-east-1}.
  */
 public final class S3RawPayloadStore implements RawPayloadStore, AutoCloseable {
+
+  /** Источник попадает в ключ объекта, а может прийти извне: допускаем только безопасный набор. */
+  private static final Pattern SOURCE_PATTERN = Pattern.compile("[A-Za-z0-9:._-]{1,200}");
 
   private final S3Client s3;
   private final String bucket;
@@ -63,6 +67,9 @@ public final class S3RawPayloadStore implements RawPayloadStore, AutoCloseable {
 
   @Override
   public RawPayloadRef put(String source, byte[] content) {
+    if (!SOURCE_PATTERN.matcher(source).matches() || source.chars().allMatch(ch -> ch == '.')) {
+      throw new IllegalArgumentException("source contains characters not allowed in an object key");
+    }
     String hash = sha256(content);
     String key = "raw/" + source + "/" + hash;
     if (!exists(key)) {

@@ -71,6 +71,24 @@ class EventJournalIT {
     }
   }
 
+  private static java.util.List<String> dlqRows(String source, String eventId) {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var ps = c.prepareStatement(
+            "select reason, error_code, payload_key from dlq_entry where source = ? and event_id = ?")) {
+      ps.setString(1, source);
+      ps.setString(2, eventId);
+      var rows = new java.util.ArrayList<String>();
+      try (var rs = ps.executeQuery()) {
+        while (rs.next()) {
+          rows.add(rs.getString(1) + "|" + rs.getString(2) + "|" + rs.getString(3));
+        }
+      }
+      return rows;
+    } catch (java.sql.SQLException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
   @Test
   void duplicateEventIsNotInsertedTwice() throws Exception {
     var journal = new PostgresEventJournal(dataSource());
@@ -108,8 +126,48 @@ class EventJournalIT {
     assertThat(dlq.status()).isEqualTo(ProcessingStatus.QUARANTINED);
     assertThat(dlq.errorCode()).isEqualTo("SCHEMA_UNKNOWN");
     assertThat(dlq.payloadRef().key()).isEqualTo("raw/k");
+    assertThat(dlqRows("urn:corp:eam", id)).containsExactly("unknown schema|SCHEMA_UNKNOWN|raw/k");
     assertThatThrownBy(() -> journal.transition("urn:corp:eam", "missing", ProcessingStatus.PROJECTED, null, null))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void repeatedDlqKeepsSingleRecord() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+
+    journal.toDlq("urn:corp:eam", id, "SCHEMA_UNKNOWN", "first");
+    journal.toDlq("urn:corp:eam", id, "SCHEMA_UNKNOWN", "second");
+
+    assertThat(dlqRows("urn:corp:eam", id)).hasSize(1);
+  }
+
+  @Test
+  void dlqRejectsBlankCodeAndUnknownEvent() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+
+    assertThatThrownBy(() -> journal.toDlq("urn:corp:eam", id, " ", "r")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> journal.toDlq("urn:corp:eam", "missing", "CODE", "r"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(dlqRows("urn:corp:eam", id)).isEmpty();
+  }
+
+  @Test
+  void finalStateCannotBeRolledBack() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+    journal.transition("urn:corp:eam", id, ProcessingStatus.VALIDATED, null, null);
+    journal.transition("urn:corp:eam", id, ProcessingStatus.NORMALIZED, null, null);
+    journal.transition("urn:corp:eam", id, ProcessingStatus.RESOLVED, null, null);
+    journal.transition("urn:corp:eam", id, ProcessingStatus.PROJECTED, null, null);
+
+    assertThatThrownBy(() -> journal.transition("urn:corp:eam", id, ProcessingStatus.RETRYING, "LATE", "late worker"))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.PROJECTED);
   }
 
   @Test

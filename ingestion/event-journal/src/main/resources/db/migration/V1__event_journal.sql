@@ -43,3 +43,6 @@ CREATE TABLE dlq_entry (
     replayed_at timestamptz,
     FOREIGN KEY (source, event_id) REFERENCES inbox_event (source, event_id)
 );
+
+-- Одна необработанная запись DLQ на событие: повторный toDlq не плодит дубли.
+CREATE UNIQUE INDEX uq_dlq_entry_open ON dlq_entry (source, event_id) WHERE replayed_at IS NULL;

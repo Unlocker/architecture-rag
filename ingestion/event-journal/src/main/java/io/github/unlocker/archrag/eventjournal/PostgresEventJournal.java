@@ -8,6 +8,7 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -127,7 +128,8 @@ public final class PostgresEventJournal implements EventJournal, CanonicalEventP
       try {
         JournalEntry entry = update(c, source, eventId, ProcessingStatus.QUARANTINED, errorCode, reason);
         try (PreparedStatement ps = c.prepareStatement("INSERT INTO dlq_entry (source, event_id, reason,"
-            + " error_code, payload_key, created_at) VALUES (?,?,?,?,?,?)")) {
+            + " error_code, payload_key, created_at) VALUES (?,?,?,?,?,?)"
+            + " ON CONFLICT (source, event_id) WHERE replayed_at IS NULL DO NOTHING")) {
           ps.setString(1, source);
           ps.setString(2, eventId);
           ps.setString(3, truncate(reason == null ? errorCode : reason));
@@ -184,6 +186,23 @@ public final class PostgresEventJournal implements EventJournal, CanonicalEventP
 
   private static JournalEntry update(Connection c, String source, String eventId, ProcessingStatus status,
       String errorCode, String errorReason) throws SQLException {
+    // Блокируем строку, чтобы проверка перехода и запись шли без гонки с другим воркером.
+    JournalEntry current;
+    try (PreparedStatement ps = c.prepareStatement(
+        "SELECT " + COLUMNS + " FROM inbox_event WHERE source = ? AND event_id = ? FOR UPDATE")) {
+      ps.setString(1, source);
+      ps.setString(2, eventId);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (!rs.next()) {
+          throw new IllegalArgumentException("unknown event " + fingerprint(source, eventId));
+        }
+        current = map(rs);
+      }
+    }
+    if (!current.status().canTransitionTo(status)) {
+      throw new IllegalStateException("transition " + current.status() + " -> " + status + " is not allowed for event "
+          + fingerprint(source, eventId));
+    }
     String sql = "UPDATE inbox_event SET status = ?, error_code = ?, error_reason = ?,"
         + " attempts = attempts + ?, updated_at = ? WHERE source = ? AND event_id = ? RETURNING " + COLUMNS;
     try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -195,12 +214,15 @@ public final class PostgresEventJournal implements EventJournal, CanonicalEventP
       ps.setString(6, source);
       ps.setString(7, eventId);
       try (ResultSet rs = ps.executeQuery()) {
-        if (!rs.next()) {
-          throw new IllegalArgumentException("unknown event " + source + "/" + eventId);
-        }
+        rs.next();
         return map(rs);
       }
     }
+  }
+
+  /** source и eventId приходят извне: в сообщения об ошибках идёт только короткий отпечаток. */
+  private static String fingerprint(String source, String eventId) {
+    return S3RawPayloadStore.sha256((source + "\0" + eventId).getBytes(StandardCharsets.UTF_8)).substring(0, 12);
   }
 
   private static Optional<JournalEntry> select(Connection c, String source, String eventId) throws SQLException {
