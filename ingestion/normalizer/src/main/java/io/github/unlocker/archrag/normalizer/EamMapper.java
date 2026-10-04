@@ -15,8 +15,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * EAM: {@code TEAM}, {@code SERVICE_DEPENDENCY}, {@code IT_SYSTEM} (поля {@code name}, {@code status}, {@code criticality},
- * {@code description}, {@code ownerTeam}, {@code ownerSince}, {@code dependsOn}).
+ * EAM: {@code TEAM}, {@code SERVICE_DEPENDENCY}, {@code IT_SYSTEM} (поля {@code name},
+ * {@code status}, {@code criticality}, {@code description}, {@code ownerTeam}, {@code ownerSince},
+ * {@code dependsOn}).
  *
  * <p>{@code dependsOn} между IT-системами в модели не представим ({@code DEPENDS_ON} допустим
  * только {@code Service -> Service}); такие ссылки не выдаются, а попадают в предупреждение
