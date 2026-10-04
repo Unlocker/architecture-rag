@@ -24,6 +24,7 @@ public final class SourceAdapter implements AutoCloseable {
   private final Poller poller;
   private WebhookServer server;
   private ScheduledExecutorService scheduler;
+  private ScheduledExecutorService reconciler;
 
   public SourceAdapter(AdapterConfig config, EventJournal journal, RawPayloadStore rawStore) {
     this.config = config;
@@ -76,8 +77,36 @@ public final class SourceAdapter implements AutoCloseable {
         TimeUnit.MILLISECONDS);
   }
 
+  /**
+   * Запускает периодический полный snapshot (reconciliation) с паузой {@code reconcileInterval}. Идёт под тем
+   * же замком {@link Poller}, что и polling, поэтому не пересекается ни с ним, ни с ручным запуском.
+   * Первый запуск откладывается на один интервал.
+   */
+  public synchronized void startReconciliation() {
+    if (reconciler != null) {
+      return;
+    }
+    reconciler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
+    reconciler.scheduleWithFixedDelay(
+        () -> {
+          try {
+            PollResult r = poller.snapshotOnce();
+            LOG.log(System.Logger.Level.INFO, config.system().code() + " reconcile " + r.outcome());
+          } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR,
+                config.system().code() + " reconcile failed: " + e.getClass().getName());
+          }
+        },
+        config.reconcileInterval().toMillis(),
+        config.reconcileInterval().toMillis(),
+        TimeUnit.MILLISECONDS);
+  }
+
   @Override
   public synchronized void close() {
+    if (reconciler != null) {
+      reconciler.shutdownNow();
+    }
     if (scheduler != null) {
       scheduler.shutdownNow();
     }

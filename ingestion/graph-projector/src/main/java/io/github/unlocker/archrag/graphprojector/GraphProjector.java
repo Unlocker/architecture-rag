@@ -9,6 +9,7 @@ import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeData;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
@@ -98,6 +99,23 @@ public final class GraphProjector implements GraphProjection {
                   .get("c")
                   .asLong()
                   > 0);
+    }
+  }
+
+  @Override
+  public List<ActiveRecord> activeRecords(SourceSystemCode source) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (r:SourceRecord {source: $source}) WHERE r.active = true AND r.sourceVersion IS NOT NULL "
+                          + "RETURN r.sourceType AS sourceType, r.sourceId AS sourceId, r.sourceVersion AS version",
+                      Map.of("source", source.name()))
+                  .list(
+                      row ->
+                          new ActiveRecord(
+                              new SourceKey(source, row.get("sourceType").asString(), row.get("sourceId").asString()),
+                              new SourceVersion(row.get("version").asString()))));
     }
   }
 

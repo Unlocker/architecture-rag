@@ -6,7 +6,9 @@ import io.github.unlocker.archrag.eventschemas.Checkpoint;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.eventschemas.ObjectRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -15,7 +17,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import javax.sql.DataSource;
 
 /**
@@ -181,6 +185,52 @@ public final class PostgresEventJournal implements EventJournal, CanonicalEventP
       return new Checkpoint(consumer, source, cursor, now);
     } catch (SQLException e) {
       throw new JournalException("saveCheckpoint failed", e);
+    }
+  }
+
+  @Override
+  public SnapshotContents snapshotContents(String source, String syncRunId) {
+    // starts_with, а не LIKE: syncRunId приходит снаружи и может содержать % и _.
+    String sql = "SELECT source_type, source_id, received_at FROM inbox_event"
+        + " WHERE source = ? AND starts_with(event_id, ?)";
+    Set<ObjectRef> objects = new HashSet<>();
+    long events = 0;
+    Instant first = null;
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, "snap:" + syncRunId + ":");
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          objects.add(new ObjectRef(rs.getString(1), rs.getString(2)));
+          events++;
+          Instant at = rs.getTimestamp(3).toInstant();
+          if (first == null || at.isBefore(first)) {
+            first = at;
+          }
+        }
+      }
+    } catch (SQLException e) {
+      throw new JournalException("snapshotContents failed", e);
+    }
+    return new SnapshotContents(objects, events, first);
+  }
+
+  @Override
+  public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
+    try (Connection c = dataSource.getConnection();
+        PreparedStatement ps = c.prepareStatement(
+            "SELECT DISTINCT source_type, source_id FROM inbox_event WHERE source = ? AND received_at >= ?")) {
+      ps.setString(1, source);
+      ps.setTimestamp(2, Timestamp.from(since));
+      Set<ObjectRef> objects = new HashSet<>();
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          objects.add(new ObjectRef(rs.getString(1), rs.getString(2)));
+        }
+      }
+      return objects;
+    } catch (SQLException e) {
+      throw new JournalException("objectsReceivedSince failed", e);
     }
   }
 
