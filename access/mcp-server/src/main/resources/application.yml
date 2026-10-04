@@ -28,6 +28,20 @@ archrag:
       tool-scopes:
         ping: architecture.read
 
+  neo4j:
+    reader:
+      # Отдельно от writer-свойств projector; пароль только из env/Docker secret.
+      uri: ${ARCHRAG_NEO4J_READER_URI}
+      username: ${ARCHRAG_NEO4J_READER_USERNAME}
+      password: ${ARCHRAG_NEO4J_READER_PASSWORD}
+  query:
+    limits:
+      max-depth: 6
+      max-nodes: 500
+      max-paths: 50
+      timeout: 5s
+      max-response-bytes: 512KB
+
 server:
   shutdown: graceful
 
