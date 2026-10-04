@@ -95,7 +95,7 @@ class GraphProjectorIT {
   }
 
   private static EventProcessor processor(GraphProjection projection) {
-    ReconciliationTrigger trigger = (source, run, id) -> snapshots.add(run);
+    ReconciliationTrigger trigger = (source, run, id, count) -> snapshots.add(run);
     return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projection, trigger);
   }
 
@@ -534,6 +534,11 @@ class GraphProjectorIT {
       @Override
       public boolean isActive(SourceKey key) {
         return projector.isActive(key);
+      }
+
+      @Override
+      public List<ActiveRecord> activeRecords(SourceSystemCode source) {
+        return projector.activeRecords(source);
       }
     };
     var event = upsertEvent("e-" + uid(), "eam", "TEAM", id, "1", T1, Map.of("name", "Core"));

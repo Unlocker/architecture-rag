@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
@@ -26,6 +27,12 @@ import java.util.function.Supplier;
  * DUPLICATE} и остаются в том же прогоне. Недоступность источника повторяется по {@link
  * RetryPolicy}; если попытки исчерпаны, цикл завершается {@link PollResult.Outcome#GAVE_UP} без
  * изменения checkpoint. Ошибки журнала и S3 пробрасываются.
+ *
+ * <p>{@link #snapshotOnce()} запускает тот же snapshot при уже существующем курсоре (reconciliation); после
+ * его маркера reconciliation удаляет то, чего источник не отдал. Циклы одного источника не пересекаются:
+ * пока идёт один, другой вернёт {@link PollResult.Outcome#ALREADY_RUNNING}.
+ * Замок внутрипроцессный: PoC рассчитан ровно на один экземпляр adapter-сервиса, а ручной запуск E1.7
+ * идёт через тот же {@code Poller} внутри него. Для нескольких экземпляров нужен advisory lock в журнале.
  */
 public final class Poller {
 
@@ -40,6 +47,7 @@ public final class Poller {
   private final Sleeper sleeper;
   private final Random random;
   private final Supplier<String> runIds;
+  private final ReentrantLock running = new ReentrantLock();
 
   public Poller(
       AdapterConfig config,
@@ -80,11 +88,32 @@ public final class Poller {
   /** Один цикл: snapshot, если курсора ещё нет, иначе дочитывание изменений после курсора. */
   public PollResult pollOnce() {
     String source = config.sourceUrn();
-    Optional<Checkpoint> cp = journal.loadCheckpoint(pollerConsumer(), source);
+    return exclusive(
+        () -> {
+          Optional<Checkpoint> cp = journal.loadCheckpoint(pollerConsumer(), source);
+          return cp.isEmpty() ? snapshot(source) : incremental(source, cp.get().cursor());
+        });
+  }
+
+  /**
+   * Полный snapshot независимо от курсора: основа reconciliation. Незавершённый прогон (checkpoint
+   * {@code <code>-snapshot} = {@code run:<id>}) продолжается под тем же {@code syncRunId}; без маркера
+   * удалений нет. Второго цикла чтения источника нет: это тот же {@code snapshot}, что и при первом запуске.
+   */
+  public PollResult snapshotOnce() {
+    return exclusive(() -> snapshot(config.sourceUrn()));
+  }
+
+  private PollResult exclusive(Supplier<PollResult> cycle) {
+    if (!running.tryLock()) {
+      return new PollResult(PollResult.Outcome.ALREADY_RUNNING, 0, null);
+    }
     try {
-      return cp.isEmpty() ? snapshot(source) : incremental(source, cp.get().cursor());
+      return cycle.get();
     } catch (GaveUp e) {
       return new PollResult(PollResult.Outcome.GAVE_UP, e.appended, e.syncRunId);
+    } finally {
+      running.unlock();
     }
   }
 

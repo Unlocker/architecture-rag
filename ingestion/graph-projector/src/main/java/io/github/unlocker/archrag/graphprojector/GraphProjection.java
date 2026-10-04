@@ -1,7 +1,9 @@
 package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import java.util.List;
 import java.util.Optional;
 
 /** Порт записи в граф для {@link EventProcessor}; единственная реализация — {@link GraphProjector}. */
@@ -15,6 +17,19 @@ public interface GraphProjection {
 
   /** {@code true}, если в графе есть активная запись с таким ключом (для {@code ReferenceResolver}). */
   boolean isActive(SourceKey key);
+
+  /**
+   * Активные записи источника с применённой версией: основа missing set. Только чтение; записи, у которых
+   * ещё нет версии (только заблокированные {@code MERGE}), не возвращаются.
+   */
+  List<ActiveRecord> activeRecords(SourceSystemCode source);
+
+  /**
+   * Активная запись источника.
+   *
+   * @param version применённая версия
+   */
+  record ActiveRecord(SourceKey key, SourceVersion version) {}
 
   /**
    * Применённая запись источника.

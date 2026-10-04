@@ -1,6 +1,8 @@
 package io.github.unlocker.archrag.eventschemas;
 
+import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Журнал событий (граница варианта A: PostgreSQL inbox; позднее может быть заменён Kafka).
@@ -46,4 +48,14 @@ public interface EventJournal {
    * журнал не проверяет (курсор непрозрачный): за порядком записи следит вызывающий.
    */
   Checkpoint saveCheckpoint(String consumer, String source, String cursor);
+
+  /**
+   * Объекты прогона полного snapshot {@code syncRunId}: события с id {@code snap:<syncRunId>:...}.
+   * Основа missing set (reconciliation); читает журнал, а не граф, потому что проекция объекта могла
+   * не состояться ({@code DUPLICATE}, {@code QUARANTINED}).
+   */
+  SnapshotContents snapshotContents(String source, String syncRunId);
+
+  /** Объекты источника, по которым в журнал попало любое событие не раньше {@code since}. */
+  Set<ObjectRef> objectsReceivedSince(String source, Instant since);
 }

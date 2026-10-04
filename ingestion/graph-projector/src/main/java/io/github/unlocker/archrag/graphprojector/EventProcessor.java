@@ -170,7 +170,8 @@ public final class EventProcessor {
     advance(event, ProcessingStatus.NORMALIZED);
     advance(event, ProcessingStatus.RESOLVED);
     try {
-      reconciliation.snapshotComplete(event.source(), event.data().sourceId(), event.id());
+      reconciliation.snapshotComplete(
+          event.source(), event.data().sourceId(), event.id(), objectCount(event));
     } catch (RuntimeException e) {
       return retry(event, "RECONCILIATION_TRIGGER_FAILED", e.getClass().getSimpleName());
     }
@@ -292,7 +293,12 @@ public final class EventProcessor {
     return new ProcessingResult(ProcessingStatus.QUARANTINED, code, null);
   }
 
-  private static SourceSystemCode sourceCode(String urn) {
+  private static long objectCount(CanonicalEvent event) {
+    return event.data().payload().get("objectCount") instanceof Number n ? n.longValue() : 0;
+  }
+
+  /** Код системы по {@code source} события ({@code urn:corp:eam} → {@code EAM}); {@code null} для неизвестного. */
+  static SourceSystemCode sourceCode(String urn) {
     if (!urn.startsWith(SOURCE_PREFIX)) {
       return null;
     }

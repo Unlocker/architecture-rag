@@ -18,6 +18,8 @@ public record PollResult(Outcome outcome, long appended, String syncRunId) {
     /** Полный snapshot завершён: маркер записан, checkpoint переведён на инкрементальный курсор. */
     SNAPSHOT_COMPLETED,
     /** Источник остался недоступен после всех попыток; checkpoint не менялся. */
-    GAVE_UP
+    GAVE_UP,
+    /** Другой цикл этого источника ещё идёт; ничего не читалось. */
+    ALREADY_RUNNING
   }
 }
