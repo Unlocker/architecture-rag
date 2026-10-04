@@ -1,7 +1,7 @@
 package io.github.unlocker.archrag.canonicalmodel;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,7 +43,7 @@ public final class Invariants {
 
     /**
      * Validates and copies a property map. Allowed values: {@link String}, {@link Boolean},
-     * {@link Long}, {@link Integer}, {@link Double}, {@link Instant} and {@link List} of those.
+     * {@link Long}, {@link Integer}, {@link Double} (finite only), {@link Instant} and {@link List} of those.
      * The result is immutable.
      */
     public static Map<String, Object> copyProperties(Map<String, Object> properties) {
@@ -52,19 +52,22 @@ public final class Invariants {
             requireText(key, "property key");
             checkValue(key, value, true);
         });
-        var copy = new java.util.HashMap<String, Object>();
+        var copy = new HashMap<String, Object>();
         properties.forEach((key, value) -> copy.put(key, value instanceof List<?> list ? List.copyOf(list) : value));
         return Map.copyOf(copy);
     }
 
     private static void checkValue(String key, Object value, boolean listAllowed) {
         Objects.requireNonNull(value, "property " + key);
+        if (value instanceof Double d && (d.isNaN() || d.isInfinite())) {
+            throw new IllegalArgumentException("property " + key + " must be a finite number");
+        }
         if (value instanceof String || value instanceof Boolean || value instanceof Long
                 || value instanceof Integer || value instanceof Double || value instanceof Instant) {
             return;
         }
         if (listAllowed && value instanceof List<?> list) {
-            for (Object element : new ArrayList<>(list)) {
+            for (Object element : list) {
                 checkValue(key, element, false);
             }
             return;

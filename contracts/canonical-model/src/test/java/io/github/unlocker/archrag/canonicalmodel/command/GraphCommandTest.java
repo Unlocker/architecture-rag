@@ -46,6 +46,16 @@ class GraphCommandTest {
     }
 
     @Test
+    void nonFiniteDoublesRejected() {
+        for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            assertThatThrownBy(() -> relation(RelationType.DEPENDS_ON, NodeLabel.SERVICE, NodeLabel.SERVICE,
+                    Map.of("weight", bad), null)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> relation(RelationType.DEPENDS_ON, NodeLabel.SERVICE, NodeLabel.SERVICE,
+                    Map.of("weights", List.of(bad)), null)).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void propertiesValidatedAndImmutable() {
         assertThatThrownBy(() -> relation(RelationType.DEPENDS_ON, NodeLabel.SERVICE, NodeLabel.SERVICE,
                 Map.of("kind", new Object()), null)).isInstanceOf(IllegalArgumentException.class);
