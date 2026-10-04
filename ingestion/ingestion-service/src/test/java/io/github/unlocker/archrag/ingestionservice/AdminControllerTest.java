@@ -31,7 +31,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /** Контроллер: scope {@code architecture.admin} (401/403/200), проверка параметров, 409 при занятом замке. */
-@WebMvcTest(AdminController.class)
+// issuer-uri нужен только чтобы разрешился плейсхолдер application.yml; декодер токенов подменён моком.
+@WebMvcTest(value = AdminController.class,
+    properties = "spring.security.oauth2.resourceserver.jwt.issuer-uri=http://unused.invalid")
 @Import(SecurityConfiguration.class)
 class AdminControllerTest {
 

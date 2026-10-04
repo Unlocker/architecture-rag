@@ -112,6 +112,8 @@ class AdminEndpointIT {
     r.add("archrag.s3.access-key", () -> ContainersSmokeIT.S3_ACCESS_KEY);
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
     r.add("archrag.s3.bucket", () -> "admin-it-bucket");
+    // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
+    r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
     r.add("archrag.adapters.eam.control-url", () -> "http://127.0.0.1:" + EAM_CONTROL_PORT + "/control/snapshot");
     // Порт 1 никто не слушает: адаптер scm «недоступен».
     r.add("archrag.adapters.scm.control-url", () -> "http://127.0.0.1:1/control/snapshot");

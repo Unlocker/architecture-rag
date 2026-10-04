@@ -1,0 +1,36 @@
+# Обязательные значения без умолчаний: без них приложение не стартует. Секреты приходят из env/Docker secrets.
+server:
+  # Админский порт; наружу не публикуется (compose-сеть, E5.2).
+  port: ${ARCHRAG_ADMIN_PORT:8081}
+
+spring:
+  datasource:
+    url: ${ARCHRAG_PG_URL}
+    username: ${ARCHRAG_PG_USER}
+    password: ${ARCHRAG_PG_PASSWORD}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ARCHRAG_OIDC_ISSUER_URI}
+
+archrag:
+  neo4j:
+    uri: ${ARCHRAG_NEO4J_URI}
+    username: ${ARCHRAG_NEO4J_USER}
+    password: ${ARCHRAG_NEO4J_PASSWORD}
+  s3:
+    endpoint: ${ARCHRAG_S3_ENDPOINT}
+    access-key: ${ARCHRAG_S3_ACCESS_KEY}
+    secret-key: ${ARCHRAG_S3_SECRET_KEY}
+    bucket: ${ARCHRAG_S3_BUCKET}
+  # Управляющие адреса adapter-сервисов для POST /admin/reconcile/{source}; пусто — источник не настроен (404).
+  adapters:
+    eam:
+      control-url: ${ARCHRAG_EAM_CONTROL_URL:}
+    scm:
+      control-url: ${ARCHRAG_SCM_CONTROL_URL:}
+    cmdb:
+      control-url: ${ARCHRAG_CMDB_CONTROL_URL:}
+    deploymap:
+      control-url: ${ARCHRAG_DEPLOYMAP_CONTROL_URL:}

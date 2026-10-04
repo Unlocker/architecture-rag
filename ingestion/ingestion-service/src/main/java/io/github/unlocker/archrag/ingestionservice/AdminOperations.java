@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * Единый путь админской операции: замок, запись {@code STARTED} в аудит, выполнение, итог в аудит.
  *
  * <p>Инварианты: параллельно идёт одна операция ({@link AdminBusyException}); без записи в аудит операция не
- * начинается; сбой операции фиксируется как {@code FAILED} с классом исключения (текст исключения может содержать
+ * начинается; сбой операции (в том числе {@link Error}) фиксируется как {@code FAILED}; сбой записи итога после успешной операции только логируется; с классом исключения (текст исключения может содержать
  * значения из источника, поэтому в аудит и лог не идёт) и пробрасывается дальше.
  */
 @Component
@@ -47,14 +47,23 @@ public class AdminOperations {
       T result;
       try {
         result = body.get();
-      } catch (RuntimeException e) {
-        audit.finish(id, false, null, e.getClass().getSimpleName());
+      } catch (Throwable e) {
+        finishQuietly(id, false, null, e.getClass().getSimpleName());
         LOG.warn("admin operation failed: operation={} replayId={} error={}", operation, replayId, e.getClass().getSimpleName());
         throw e;
       }
-      audit.finish(id, true, summary.apply(result), null);
+      // Результат уже достигнут: сбой записи итога клиенту ошибкой не отдаётся (запись останется STARTED).
+      finishQuietly(id, true, summary.apply(result), null);
       LOG.info("admin operation finished: operation={} replayId={}", operation, replayId);
       return result;
+    }
+  }
+
+  private void finishQuietly(long id, boolean succeeded, Map<String, ?> result, String error) {
+    try {
+      audit.finish(id, succeeded, result, error);
+    } catch (RuntimeException e) {
+      LOG.error("admin audit finish failed: auditId={} error={}", id, e.getClass().getSimpleName());
     }
   }
 
