@@ -14,6 +14,7 @@
 8. Replay/rebuild/reconcile/crosswalk выполняются через админский эндпоинт ingestion-сервиса, а не через MCP и не через внешний ingress ([Сценарии адаптеров](#сценарии-адаптеров)).
 9. Критерий готовности 2: p95 ≤ 30 с на заглушках ([Критерии готовности PoC](#критерии-готовности-poc)).
 10. Сборка — Maven multi-module, CI — GitHub Actions ([Java-модули](#java-модули)).
+11. S3-совместимое хранилище в тестах и на стенде — SeaweedFS (2026-10-04): MinIO больше не публикует образы.
 
 Дополнительно: event backbone для PoC — PostgreSQL inbox (вариант A), Kafka — production ([Варианты исполнения](#варианты-исполнения)); демо-стенд PoC разворачивается на Docker Compose, а не в Kubernetes ([PoC topology](#poc-topology)).
 
