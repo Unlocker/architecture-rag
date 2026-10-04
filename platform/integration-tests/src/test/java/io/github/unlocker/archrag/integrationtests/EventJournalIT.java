@@ -8,7 +8,11 @@ import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
+import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.JournalKey;
+import io.github.unlocker.archrag.eventschemas.JournalQuery;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import java.net.URI;
@@ -203,5 +207,46 @@ class EventJournalIT {
       assertThatThrownBy(() -> store.get(new RawPayloadRef(ref.key(), "0".repeat(64))))
           .isInstanceOf(IllegalStateException.class);
     }
+  }
+
+  @Test
+  void readerPagesByKeysetInReceivedOrderAndFilters() throws Exception {
+    var journal = new PostgresEventJournal(dataSource());
+    String source = "urn:corp:reader-" + uid();
+    String other = "urn:corp:reader-other-" + uid();
+    for (int i = 0; i < 5; i++) {
+      journal.append(event(source, "e" + i, "1"), null, null);
+    }
+    journal.append(event(source, "replay:r1:e0", "1"), null, null);
+    journal.append(event(other, "x", "1"), null, null);
+
+    var all = new java.util.ArrayList<StoredEvent>();
+    JournalQuery q = new JournalQuery(source, null, null, true, null, 2);
+    for (var page = journal.read(q); !page.isEmpty(); page = journal.read(q)) {
+      assertThat(page).hasSizeLessThanOrEqualTo(2);
+      all.addAll(page);
+      q = q.after(JournalKey.of(page.get(page.size() - 1).entry()));
+    }
+
+    assertThat(all).extracting(e -> e.entry().eventId()).containsExactly("e0", "e1", "e2", "e3", "e4");
+    assertThat(all).allSatisfy(e -> {
+      assertThat(e.type()).isEqualTo(CanonicalEvent.TYPE_ASSET_UPSERTED);
+      assertThat(e.subject()).isEqualTo("it-system/EAM-1");
+    });
+
+    var withReplays = journal.read(new JournalQuery(source, null, null, false, null, 100));
+    assertThat(withReplays).extracting(e -> e.entry().eventId()).contains("replay:r1:e0").hasSize(6);
+
+    JournalEntry third = all.get(2).entry();
+    var window = journal.read(new JournalQuery(source, third.receivedAt(), third.receivedAt().plusNanos(1000), true, null, 100));
+    assertThat(window).extracting(e -> e.entry().eventId()).contains("e2").doesNotContain("e0");
+    assertThat(journal.read(new JournalQuery(source, null, all.get(0).entry().receivedAt(), true, null, 100))).isEmpty();
+  }
+
+  @Test
+  void readerRejectsBadLimit() {
+    assertThatThrownBy(() -> new JournalQuery(null, null, null, true, null, 0)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new JournalQuery(null, null, null, true, null, JournalQuery.MAX_LIMIT + 1))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }
