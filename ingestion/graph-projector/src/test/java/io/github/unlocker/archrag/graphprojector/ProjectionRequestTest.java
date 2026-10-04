@@ -84,6 +84,36 @@ class ProjectionRequestTest {
   }
 
   @Test
+  void relationOnlyRequestIsAccepted() {
+    var dep = new SourceKey(SourceSystemCode.EAM, "SERVICE_DEPENDENCY", "d1");
+    var other = new SourceKey(SourceSystemCode.SCM, "SERVICE", "s2");
+    var relation =
+        new UpsertRelation(RelationType.DEPENDS_ON, SVC, NodeLabel.SERVICE, other, NodeLabel.SERVICE, Map.of(), null, dep);
+
+    var req =
+        new ProjectionRequest(
+            dep, new SourceVersion("1"), T, null, Map.of(SVC, UUID.randomUUID(), other, UUID.randomUUID()),
+            List.of(relation));
+
+    assertThat(req.isRelationOnly()).isTrue();
+    assertThat(req.isTombstone()).isFalse();
+  }
+
+  @Test
+  void emptyCommandListIsAccepted() {
+    var req = request(Map.of(), new GraphCommand[0]);
+
+    assertThat(req.isRelationOnly()).isTrue();
+    assertThat(req.isTombstone()).isFalse();
+  }
+
+  @Test
+  void twoUpsertsAreRejected() {
+    assertThatThrownBy(() -> request(Map.of(SVC, UUID.randomUUID()), service(), service()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void nodePropertiesDropNullsAndConvertTypes() {
     var props = NodeProperties.of(new Team("core", null));
 

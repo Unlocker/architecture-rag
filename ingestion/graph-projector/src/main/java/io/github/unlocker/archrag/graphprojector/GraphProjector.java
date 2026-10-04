@@ -154,6 +154,9 @@ public final class GraphProjector implements GraphProjection {
         case CloseAssertion close -> closeAssertion(tx, request, close);
       }
     }
+    if (request.isRelationOnly()) {
+      markRelationOnlyRecord(tx, request);
+    }
     linkSyncRun(tx, request);
     return new ProjectionResult(ProjectionOutcome.APPLIED, skippedProperties, skippedRelations);
   }
@@ -208,6 +211,20 @@ public final class GraphProjector implements GraphProjection {
         .consume();
   }
 
+  /** Запись без узла: версия и активность фиксируются отдельно, иначе дедупликация и порядок версий не работают. */
+  private void markRelationOnlyRecord(TransactionContext tx, ProjectionRequest request) {
+    Map<String, Object> params = new HashMap<>(keyParams(request.key()));
+    params.put("version", request.version().value());
+    tx.run(
+            "MATCH (r:SourceRecord " + RECORD_KEY + ") "
+                + "SET r.sourceVersion = $version, r.active = true "
+                + "REMOVE r.deletedAt "
+                + "MERGE (sys:SourceSystem {code: $source}) "
+                + "MERGE (sys)-[:OWNS_RECORD]->(r)",
+            params)
+        .consume();
+  }
+
   private void tombstone(TransactionContext tx, ProjectionRequest request, TombstoneSourceRecord tombstone) {
     Map<String, Object> params = new HashMap<>(keyParams(tombstone.key()));
     params.put("version", request.version().value());
@@ -229,6 +246,20 @@ public final class GraphProjector implements GraphProjection {
                 + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
             params)
         .consume();
+    // Запись только со связью не имеет ASSERTS: ребро ищется по утверждающей записи напрямую. Тип связи — из enum.
+    for (RelationType type : RelationType.values()) {
+      if (!type.temporal()) {
+        continue;
+      }
+      tx.run(
+              "MATCH ()-[rel:" + type.name() + "]->() "
+                  + "WHERE rel.validTo IS NULL "
+                  + "AND rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
+                  + "AND rel.assertedById = $sourceId "
+                  + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
+              params)
+          .consume();
+    }
     // Каноничный узел закрывается только без других активных MASTER-утверждений.
     tx.run(
             "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n) "

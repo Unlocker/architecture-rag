@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
+import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
+import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
@@ -385,17 +388,38 @@ class GraphProjectorIT {
   }
 
   @Test
-  void nonAuthoritativeRelationIsSkippedAndReported() {
+  void scmServiceRecordBuildsDecomposedIntoFromEamSystem() {
     String system = "its-" + uid();
     String service = "svc-" + uid();
     upsert("eam", "IT_SYSTEM", system, "1", Map.of("name", "Payments"));
 
-    // SCM утверждает DECOMPOSED_INTO, но мастер этой связи по матрице — EAM.
     var result = upsert("scm", "SERVICE", service, "1", Map.of("name", "pay", "systemCode", system));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(result.projection().skippedRelations()).containsExactly("DECOMPOSED_INTO");
-    assertThat(query("MATCH ()-[r:DECOMPOSED_INTO]->() RETURN r")).isEmpty();
+    assertThat(result.projection().skippedRelations()).isEmpty();
+    assertThat(query("MATCH (:ITSystem)-[r:DECOMPOSED_INTO]->(:Service) RETURN r")).hasSize(1);
+  }
+
+  @Test
+  void nonAuthoritativeRelationIsSkippedAndReported() {
+    String a = "svc-" + uid();
+    String b = "svc-" + uid();
+    upsert("scm", "SERVICE", a, "1", Map.of("name", "a"));
+    upsert("scm", "SERVICE", b, "1", Map.of("name", "b"));
+    var from = key(SourceSystemCode.SCM, "SERVICE", a);
+    var to = key(SourceSystemCode.SCM, "SERVICE", b);
+    // Мастер DEPENDS_ON по матрице — EAM; SCM утверждает связь от своего имени.
+    var request = new ProjectionRequest(from, new SourceVersion("2"), T2, null,
+        Map.of(from, identity.resolve(from), to, identity.resolve(to)),
+        List.of(new UpsertNode(new SourceRecord(from, "2", "sha256:z", T2, true), new Service("a", null, null, null)),
+            new UpsertRelation(RelationType.DEPENDS_ON, from, NodeLabel.SERVICE, to, NodeLabel.SERVICE,
+                Map.of(), null, from)));
+
+    ProjectionResult result = projector.project(request);
+
+    assertThat(result.outcome()).isEqualTo(ProjectionOutcome.APPLIED);
+    assertThat(result.skippedRelations()).containsExactly("DEPENDS_ON");
+    assertThat(query("MATCH ()-[r:DEPENDS_ON]->() RETURN r")).isEmpty();
   }
 
   // ---- compute instance subtype ----------------------------------------------------------------
@@ -411,6 +435,81 @@ class GraphProjectorIT {
     upsert("cmdb", "COMPUTE_INSTANCE", host, "3", Map.of("hostname", "h1", "kind", "PHYSICAL_SERVER"));
     assertThat(single("MATCH (n:ComputeInstance) RETURN labels(n) AS l").get("l").asList())
         .containsExactlyInAnyOrder("ComputeInstance", "PhysicalServer");
+  }
+
+  // ---- relation-only records (SERVICE_DEPENDENCY -> DEPENDS_ON) -----------------------------------
+
+  private String[] twoServices() {
+    String a = "svc-" + uid();
+    String b = "svc-" + uid();
+    upsert("scm", "SERVICE", a, "1", Map.of("name", "payments"));
+    upsert("scm", "SERVICE", b, "1", Map.of("name", "ledger"));
+    return new String[] {a, b};
+  }
+
+  @Test
+  void serviceDependencyBuildsDependsOnEdgeAndIsIdempotentAndVersioned() {
+    String[] s = twoServices();
+    String dep = "dep-" + uid();
+    var payload = Map.<String, Object>of("from", s[0], "to", s[1], "kind", "SYNC", "protocol", "HTTP", "criticality", "HIGH");
+
+    assertThat(upsert("eam", "SERVICE_DEPENDENCY", dep, "5", payload).status()).isEqualTo(ProcessingStatus.PROJECTED);
+
+    var rel = single("MATCH (:Service {name: 'payments'})-[r:DEPENDS_ON]->(:Service {name: 'ledger'}) RETURN r")
+        .get("r").asRelationship();
+    assertThat(rel.get("kind").asString()).isEqualTo("SYNC");
+    assertThat(rel.get("protocol").asString()).isEqualTo("HTTP");
+    assertThat(rel.get("criticality").asString()).isEqualTo("HIGH");
+    var record = sourceRecord("EAM", "SERVICE_DEPENDENCY", dep).get("r").asNode();
+    assertThat(record.get("sourceVersion").asString()).isEqualTo("5");
+    assertThat(record.get("active").asBoolean()).isTrue();
+    assertThat(query("MATCH (:SourceSystem {code: 'EAM'})-[:OWNS_RECORD]->(:SourceRecord {sourceType: 'SERVICE_DEPENDENCY'}) RETURN 1"))
+        .hasSize(1);
+
+    var before = dump();
+    var same = upsert("eam", "SERVICE_DEPENDENCY", dep, "5", payload);
+    assertThat(same.status()).isEqualTo(ProcessingStatus.DUPLICATE);
+    var old = upsert("eam", "SERVICE_DEPENDENCY", dep, "4", Map.of("from", s[0], "to", s[1], "kind", "ASYNC"));
+    assertThat(old.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
+    assertThat(dump()).isEqualTo(before);
+  }
+
+  @Test
+  void serviceDependencyTombstoneClosesEdgeAndKeepsServicesCurrent() {
+    String[] s = twoServices();
+    String dep = "dep-" + uid();
+    upsert("eam", "SERVICE_DEPENDENCY", dep, "1", Map.of("from", s[0], "to", s[1], "kind", "SYNC"));
+
+    var result = handle(deleteEvent("d-" + uid(), "eam", "SERVICE_DEPENDENCY", dep, "2", T2));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    var rel = single("MATCH (:Service)-[r:DEPENDS_ON]->(:Service) RETURN r").get("r").asRelationship();
+    assertThat(rel.get("validTo").asZonedDateTime().toInstant()).isEqualTo(T2);
+    assertThat(sourceRecord("EAM", "SERVICE_DEPENDENCY", dep).get("r").get("active").asBoolean()).isFalse();
+    assertThat(query("MATCH (n:Service) WHERE n.isCurrent = true RETURN n")).hasSize(2);
+  }
+
+  @Test
+  void missingServiceDependencyIsFoundByReconcilerAndItsEdgeIsClosed() {
+    String[] s = twoServices();
+    String dep = "dep-" + uid();
+    upsert("eam", "SERVICE_DEPENDENCY", dep, "3", Map.of("from", s[0], "to", s[1]));
+    var depKey = key(SourceSystemCode.EAM, "SERVICE_DEPENDENCY", dep);
+
+    var active = projector.activeRecords(SourceSystemCode.EAM);
+    assertThat(active).anySatisfy(r -> {
+      assertThat(r.key()).isEqualTo(depKey);
+      assertThat(r.version()).isEqualTo(new SourceVersion("3"));
+    });
+
+    // Так же, как Reconciler: tombstone с применённой версией для записи, отсутствующей в snapshot.
+    var result = projector.project(new ProjectionRequest(
+        depKey, new SourceVersion("3"), T2, null, Map.of(), List.of(new TombstoneSourceRecord(depKey, T2))));
+
+    assertThat(result.outcome()).isEqualTo(ProjectionOutcome.APPLIED);
+    assertThat(single("MATCH (:Service)-[r:DEPENDS_ON]->(:Service) RETURN r").get("r").asRelationship().get("validTo")
+        .asZonedDateTime().toInstant()).isEqualTo(T2);
+    assertThat(projector.activeRecords(SourceSystemCode.EAM)).noneMatch(r -> r.key().equals(depKey));
   }
 
   // ---- tombstone ------------------------------------------------------------------------------
