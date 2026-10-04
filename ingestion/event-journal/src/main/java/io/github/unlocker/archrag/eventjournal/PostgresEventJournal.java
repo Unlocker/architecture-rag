@@ -5,6 +5,10 @@ import io.github.unlocker.archrag.eventschemas.CanonicalEventPublisher;
 import io.github.unlocker.archrag.eventschemas.Checkpoint;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.JournalKey;
+import io.github.unlocker.archrag.eventschemas.JournalQuery;
+import io.github.unlocker.archrag.eventschemas.JournalReader;
+import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.ObjectRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
@@ -17,19 +21,21 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import javax.sql.DataSource;
 
 /**
- * {@link EventJournal} и {@link CanonicalEventPublisher} на PostgreSQL (JDBC без ORM).
+ * {@link EventJournal}, {@link JournalReader} и {@link CanonicalEventPublisher} на PostgreSQL (JDBC без ORM).
  *
  * <p>Каждая операция — одна транзакция. Дубль {@code (source, eventId)} решается
  * {@code INSERT ... ON CONFLICT DO NOTHING} и не является исключением. SQL-ошибки пробрасываются
  * как {@link JournalException}. Время хранится в UTC ({@code timestamptz}).
  */
-public final class PostgresEventJournal implements EventJournal, CanonicalEventPublisher {
+public final class PostgresEventJournal implements EventJournal, JournalReader, CanonicalEventPublisher {
 
   private static final int MAX_REASON_LENGTH = 500;
 
@@ -150,6 +156,53 @@ public final class PostgresEventJournal implements EventJournal, CanonicalEventP
       }
     } catch (SQLException e) {
       throw new JournalException("toDlq failed", e);
+    }
+  }
+
+  @Override
+  public List<StoredEvent> read(JournalQuery q) {
+    // Условия собираются из фиксированных фрагментов, значения идут только параметрами.
+    StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE true");
+    List<Object> args = new ArrayList<>();
+    if (q.source() != null) {
+      sql.append(" AND source = ?");
+      args.add(q.source());
+    }
+    if (q.receivedFrom() != null) {
+      sql.append(" AND received_at >= ?");
+      args.add(Timestamp.from(q.receivedFrom()));
+    }
+    if (q.receivedTo() != null) {
+      sql.append(" AND received_at < ?");
+      args.add(Timestamp.from(q.receivedTo()));
+    }
+    if (q.excludeReplays()) {
+      sql.append(" AND event_id NOT LIKE ?");
+      args.add(JournalQuery.REPLAY_PREFIX + "%");
+    }
+    JournalKey after = q.after();
+    if (after != null) {
+      sql.append(" AND (received_at, source, event_id) > (?, ?, ?)");
+      args.add(Timestamp.from(after.receivedAt()));
+      args.add(after.source());
+      args.add(after.eventId());
+    }
+    sql.append(" ORDER BY received_at, source, event_id LIMIT ?");
+    args.add(q.limit());
+    try (Connection c = dataSource.getConnection();
+        PreparedStatement ps = c.prepareStatement(sql.toString())) {
+      for (int i = 0; i < args.size(); i++) {
+        ps.setObject(i + 1, args.get(i));
+      }
+      List<StoredEvent> page = new ArrayList<>();
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          page.add(new StoredEvent(map(rs), rs.getString("type"), rs.getString("subject")));
+        }
+      }
+      return page;
+    } catch (SQLException e) {
+      throw new JournalException("read failed", e);
     }
   }
 

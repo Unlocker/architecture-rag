@@ -20,5 +20,6 @@
     <module>normalizer</module>
     <module>identity-resolution</module>
     <module>graph-projector</module>
+    <module>ingestion-service</module>
   </modules>
 </project>

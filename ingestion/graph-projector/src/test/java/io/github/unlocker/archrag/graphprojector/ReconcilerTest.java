@@ -13,14 +13,17 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ObjectRef;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -31,8 +34,9 @@ class ReconcilerTest {
   private static final String SOURCE = "urn:corp:eam";
 
   private final StubJournal journal = new StubJournal();
+  private final StubRawStore rawStore = new StubRawStore();
   private final RecordingProjection projection = new RecordingProjection();
-  private final Reconciler reconciler = new Reconciler(journal, projection, Clock.fixed(NOW, ZoneOffset.UTC));
+  private final Reconciler reconciler = new Reconciler(journal, rawStore, projection, Clock.fixed(NOW, ZoneOffset.UTC));
 
   private static SourceKey team(String id) {
     return new SourceKey(SourceSystemCode.EAM, "TEAM", id);
@@ -152,8 +156,15 @@ class ReconcilerTest {
       return touched;
     }
 
+    final Map<String, JournalEntry> rows = new HashMap<>();
+    final List<CanonicalEvent> appended = new ArrayList<>();
+    final List<String> transitions = new ArrayList<>();
+
     @Override
     public Optional<JournalEntry> find(String source, String eventId) {
+      if (eventId.startsWith(Reconciler.EVENT_ID_PREFIX)) {
+        return Optional.ofNullable(rows.get(eventId));
+      }
       return Optional.of(
           new JournalEntry(source, eventId, null, "run-1", "SYNC_RUN", "run-1", new SourceVersion("1"), "1",
               ProcessingStatus.RECEIVED, null, null, 0, null, markerReceivedAt, markerReceivedAt));
@@ -161,12 +172,22 @@ class ReconcilerTest {
 
     @Override
     public JournalEntry append(CanonicalEvent event, RawPayloadRef payloadRef, String syncRunId) {
-      throw new UnsupportedOperationException();
+      appended.add(event);
+      var e = new JournalEntry(event.source(), event.id(), event.correlationid(), syncRunId,
+          event.data().sourceType(), event.data().sourceId(), event.data().sourceVersion(), event.dataschema(),
+          ProcessingStatus.RECEIVED, null, null, 0, payloadRef, NOW, NOW);
+      rows.put(event.id(), e);
+      return e;
     }
 
     @Override
     public JournalEntry transition(String s, String id, ProcessingStatus st, String c, String r) {
-      throw new UnsupportedOperationException();
+      transitions.add(id + "->" + st);
+      var o = rows.get(id);
+      var e = new JournalEntry(o.source(), o.eventId(), o.correlationId(), o.syncRunId(), o.sourceType(), o.sourceId(),
+          o.sourceVersion(), o.schemaVersion(), st, c, r, o.attempts(), o.payloadRef(), o.receivedAt(), NOW);
+      rows.put(id, e);
+      return e;
     }
 
     @Override
@@ -183,5 +204,53 @@ class ReconcilerTest {
     public Checkpoint saveCheckpoint(String consumer, String source, String cursor) {
       throw new UnsupportedOperationException();
     }
+  }
+
+  static final class StubRawStore implements RawPayloadStore {
+    final List<String> stored = new ArrayList<>();
+
+    @Override
+    public RawPayloadRef put(String source, byte[] content) {
+      stored.add(new String(content, java.nio.charset.StandardCharsets.UTF_8));
+      return new RawPayloadRef("raw/" + stored.size(), "h" + stored.size());
+    }
+
+    @Override
+    public byte[] get(RawPayloadRef ref) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  @Test
+  void tombstoneIsJournaledBeforeProjectionAndReachesFinalStatus() {
+    projection.active.add(new GraphProjection.ActiveRecord(team("gone"), new SourceVersion("7")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    String id = "reconcile:run-1:TEAM/gone";
+    assertThat(journal.appended).singleElement().satisfies(e -> {
+      assertThat(e.id()).isEqualTo(id);
+      assertThat(e.type()).isEqualTo("architecture.asset.deleted.v1");
+      assertThat(e.dataschema()).isEqualTo("urn:corp:schema:asset-deleted:1");
+      assertThat(e.time()).isEqualTo(NOW);
+      assertThat(e.data().sourceVersion()).isEqualTo(new SourceVersion("7"));
+    });
+    assertThat(rawStore.stored).singleElement().asString()
+        .contains("\"operation\":\"DELETE\"", "\"sourceVersion\":7", "\"updatedAt\":\"" + NOW + "\"");
+    assertThat(journal.transitions).containsExactly(
+        id + "->VALIDATED", id + "->NORMALIZED", id + "->RESOLVED", id + "->PROJECTED");
+  }
+
+  @Test
+  void repeatedReconcileDoesNotDuplicateTheJournalRowAndOldVersionIsRecorded() {
+    projection.outcome = ProjectionOutcome.IGNORED_OLD_VERSION;
+    projection.active.add(new GraphProjection.ActiveRecord(team("x"), new SourceVersion("1")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(journal.appended).hasSize(1);
+    assertThat(rawStore.stored).hasSize(1);
+    assertThat(journal.rows.get("reconcile:run-1:TEAM/x").status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
   }
 }

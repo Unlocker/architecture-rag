@@ -72,6 +72,8 @@ class ReconciliationIT {
 
   static Driver driver;
   static RecordingJournal journal;
+  /** Журнал для Reconciler: его tombstone-строки не должны попадать в ручной прогон {@link RecordingJournal}. */
+  static PostgresEventJournal pgJournal;
   static EventProcessor processor;
 
   private StubSource eam;
@@ -87,10 +89,11 @@ class ReconciliationIT {
     ds.setUser(POSTGRES.getUsername());
     ds.setPassword(POSTGRES.getPassword());
     JournalMigrations.apply(ds);
-    journal = new RecordingJournal(new PostgresEventJournal(ds));
+    pgJournal = new PostgresEventJournal(ds);
+    journal = new RecordingJournal(pgJournal);
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor = new EventProcessor(journal, Normalizer.standard(projector::isActive),
-        new PostgresIdentityMapping(ds), projector, new Reconciler(journal, projector, Clock.systemUTC()));
+        new PostgresIdentityMapping(ds), projector, new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC()));
   }
 
   @BeforeEach
@@ -244,7 +247,7 @@ class ReconciliationIT {
     drain();
     assertThat(active(gone)).isFalse();
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
-    var reconciler = new Reconciler(journal, projector, Clock.systemUTC());
+    var reconciler = new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC());
 
     var again = reconciler.reconcile(SOURCE, r.syncRunId(), "snapshot-complete:" + r.syncRunId(), 0);
 
