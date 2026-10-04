@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 /**
@@ -32,6 +31,8 @@ import java.util.function.Supplier;
  * <p>{@link #snapshotOnce()} запускает тот же snapshot при уже существующем курсоре (reconciliation); после
  * его маркера reconciliation удаляет то, чего источник не отдал. Циклы одного источника не пересекаются:
  * пока идёт один, другой вернёт {@link PollResult.Outcome#ALREADY_RUNNING}.
+ * Замок внутрипроцессный: PoC рассчитан ровно на один экземпляр adapter-сервиса, а ручной запуск E1.7
+ * идёт через тот же {@code Poller} внутри него. Для нескольких экземпляров нужен advisory lock в журнале.
  */
 public final class Poller {
 

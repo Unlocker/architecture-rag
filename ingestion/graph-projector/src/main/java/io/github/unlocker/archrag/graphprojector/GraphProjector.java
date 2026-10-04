@@ -102,6 +102,8 @@ public final class GraphProjector implements GraphProjection {
     }
   }
 
+  // Читает все активные записи источника в память: для PoC (сотни–тысячи объектов) допустимо; для большого
+  // источника нужно постраничное чтение по sourceId.
   @Override
   public List<ActiveRecord> activeRecords(SourceSystemCode source) {
     try (Session session = driver.session()) {
