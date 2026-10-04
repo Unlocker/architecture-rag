@@ -40,6 +40,7 @@ class EventProcessorTest {
 
   private FakeJournal journal;
   private FakeProjection projection;
+  private FakeIdentity identity;
   private final List<String> snapshots = new ArrayList<>();
   private EventProcessor processor;
 
@@ -47,11 +48,12 @@ class EventProcessorTest {
   void setUp() {
     journal = new FakeJournal();
     projection = new FakeProjection();
+    identity = new FakeIdentity();
     processor =
         new EventProcessor(
             journal,
             Normalizer.standard(key -> true),
-            new FakeIdentity(),
+            identity,
             projection,
             (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId));
   }
@@ -87,6 +89,25 @@ class EventProcessorTest {
     assertThat(projection.requests).hasSize(1);
     assertThat(projection.requests.get(0).gids()).hasSize(1);
     assertThat(projection.requests.get(0).syncRunId()).isEqualTo("run-1");
+  }
+
+  @Test
+  void relationOnlyEventIsProjectedNotQuarantined() {
+    var from = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-a");
+    var to = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-b");
+    identity.map.put(from, UUID.randomUUID());
+    identity.map.put(to, UUID.randomUUID());
+    var event =
+        new CanonicalEvent(
+            "e-dep", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, "dep/d1", T,
+            "urn:corp:schema:asset-upserted:1", null,
+            new AssetEventData(
+                "SERVICE_DEPENDENCY", "d1", new SourceVersion("1"), Map.of("from", "svc-a", "to", "svc-b", "kind", "SYNC")));
+
+    var result = run(event);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.isRelationOnly()).isTrue());
   }
 
   @Test

@@ -16,8 +16,8 @@ import java.util.UUID;
 /**
  * Одно изменение объекта источника для проекции: команды нормализатора плюс разрешённые {@code gid}.
  *
- * <p>Инварианты (нарушение — {@link IllegalArgumentException}): ровно один {@code UpsertNode} или ровно один
- * {@code TombstoneSourceRecord} (не оба), его ключ равен {@code key}, а версия {@code SourceRecord} равна
+ * <p>Инварианты (нарушение — {@link IllegalArgumentException}): не более одного {@code UpsertNode} или не более одного
+ * {@code TombstoneSourceRecord} (не оба; запись только со связями и пустой список допустимы), его ключ равен {@code key}, а версия {@code SourceRecord} равна
  * {@code version}; все связи и закрытия утверждаются этой же записью; для узла записи и обоих концов каждой
  * связи есть {@code gid}. {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
  *
@@ -43,8 +43,8 @@ public record ProjectionRequest(
     commands = List.copyOf(commands);
     long upserts = commands.stream().filter(UpsertNode.class::isInstance).count();
     long tombstones = commands.stream().filter(TombstoneSourceRecord.class::isInstance).count();
-    if (upserts + tombstones != 1) {
-      throw new IllegalArgumentException("exactly one UpsertNode or TombstoneSourceRecord is required");
+    if (upserts > 1 || tombstones > 1 || upserts + tombstones > 1) {
+      throw new IllegalArgumentException("at most one UpsertNode or TombstoneSourceRecord is allowed");
     }
     for (GraphCommand command : commands) {
       switch (command) {
@@ -75,7 +75,12 @@ public record ProjectionRequest(
 
   /** {@code true}, если запрос — удаление записи. */
   public boolean isTombstone() {
-    return commands.get(0) instanceof TombstoneSourceRecord;
+    return commands.stream().anyMatch(TombstoneSourceRecord.class::isInstance);
+  }
+
+  /** {@code true}, если в запросе нет ни узла, ни tombstone: запись состоит только из связей (или пуста). */
+  public boolean isRelationOnly() {
+    return commands.stream().noneMatch(c -> c instanceof UpsertNode || c instanceof TombstoneSourceRecord);
   }
 
   private static void requireSame(SourceKey key, SourceKey other, String what) {
