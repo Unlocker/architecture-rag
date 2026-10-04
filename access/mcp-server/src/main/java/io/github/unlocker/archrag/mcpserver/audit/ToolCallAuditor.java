@@ -29,8 +29,10 @@ public class ToolCallAuditor {
   static final String LOGGER = "archrag.audit.mcp";
   static final String OBSERVATION = "archrag.mcp.tool.call";
   static final String ROWS_SUMMARY = "archrag.mcp.tool.rows";
+  static final int MAX_TOOL_NAME = 64;
   static final String UNKNOWN_TOOL_TAG = "unknown";
 
+  private static final Logger LOG = LoggerFactory.getLogger(ToolCallAuditor.class);
   private static final Logger AUDIT = LoggerFactory.getLogger(LOGGER);
 
   private final ObservationRegistry observations;
@@ -57,21 +59,27 @@ public class ToolCallAuditor {
       Duration duration,
       ToolDecision decision,
       Throwable error) {
-    observation.lowCardinalityKeyValue("decision", decision.name());
-    observation.stop();
-    DistributionSummary.builder(ROWS_SUMMARY)
-        .tag("tool", tool)
-        .register(meters)
-        .record(context.rows());
-    write(
-        tool,
-        ToolArguments.normalize(arguments),
-        context.templates(),
-        duration,
-        context.rows(),
-        context.truncated(),
-        decision,
-        error == null ? null : error.getClass().getName());
+    // Вызывается из finally аспекта: сбой аудита не должен подменить ответ или исключение tool.
+    try {
+      observation.lowCardinalityKeyValue("decision", decision.name());
+      observation.stop();
+      DistributionSummary.builder(ROWS_SUMMARY)
+          .tag("tool", tool)
+          .register(meters)
+          .record(context.rows());
+      write(
+          tool,
+          ToolArguments.normalize(arguments),
+          context.templates(),
+          duration,
+          context.rows(),
+          context.truncated(),
+          decision,
+          error == null ? null : error.getClass().getName());
+    } catch (RuntimeException e) {
+      // Без аргументов вызова: они недоверенные.
+      LOG.warn("Сбой записи аудита tool-вызова: {}", e.getClass().getName());
+    }
   }
 
   /**
@@ -100,7 +108,7 @@ public class ToolCallAuditor {
     AUDIT
         .atInfo()
         .addKeyValue("principal", principal())
-        .addKeyValue("tool", tool)
+        .addKeyValue("tool", sanitize(tool))
         .addKeyValue("arguments", arguments)
         .addKeyValue("templates", templates)
         .addKeyValue("durationMs", duration.toMillis())
@@ -109,6 +117,15 @@ public class ToolCallAuditor {
         .addKeyValue("decision", decision)
         .addKeyValue("errorClass", errorClass)
         .log("mcp tool call");
+  }
+
+  /** Имя tool из запроса недоверенное: управляющие символы заменяются, длина до 64. */
+  static String sanitize(String tool) {
+    if (tool == null) {
+      return null;
+    }
+    String cut = tool.length() > MAX_TOOL_NAME ? tool.substring(0, MAX_TOOL_NAME) + "…" : tool;
+    return cut.replaceAll("\\p{Cntrl}", "?");
   }
 
   /** {@code sub} и {@code azp}/{@code client_id} из JWT; сам токен не читается. */
@@ -120,7 +137,8 @@ public class ToolCallAuditor {
       if (client == null) {
         client = jwt.getClaimAsString("client_id");
       }
-      return client == null ? "sub=" + jwt.getSubject() : "sub=" + jwt.getSubject() + " client=" + client;
+      String subject = "sub=" + jwt.getSubject();
+      return client == null ? subject : subject + " client=" + client;
     }
     return auth == null ? "anonymous" : auth.getName();
   }

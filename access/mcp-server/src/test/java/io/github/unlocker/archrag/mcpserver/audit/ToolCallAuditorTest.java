@@ -73,4 +73,22 @@ class ToolCallAuditorTest {
     assertThat(tools).contains("unknown/DENIED_UNKNOWN_TOOL", "ping/DENIED_SCOPE");
     assertThat(tools).noneMatch(t -> t.contains("attacker"));
   }
+
+  @Test
+  void sanitizeReplacesControlCharsAndTruncates() {
+    assertThat(ToolCallAuditor.sanitize("a\nb\rc")).isEqualTo("a?b?c");
+    assertThat(ToolCallAuditor.sanitize("x".repeat(200))).hasSize(65);
+    assertThat(ToolCallAuditor.sanitize(null)).isNull();
+  }
+
+  @Test
+  void auditFailureDoesNotPropagate() {
+    var observation = auditor.start("ping");
+    // null-контекст вызывает NPE внутри completed; он должен быть проглочен с предупреждением.
+    org.assertj.core.api.Assertions.assertThatCode(
+            () ->
+                auditor.completed(
+                    observation, "ping", Map.of(), null, Duration.ZERO, ToolDecision.ALLOWED, null))
+        .doesNotThrowAnyException();
+  }
 }

@@ -127,6 +127,37 @@ class McpAuditTest {
     assertThat(record).containsEntry("tool", "ping").containsEntry("decision", ToolDecision.ALLOWED);
     assertThat(record.get("principal").toString()).contains("test-user");
     assertThat(record.toString()).doesNotContain(token);
+    assertThat(appender.list.getFirst().getFormattedMessage()).doesNotContain(token);
+  }
+
+  @Test
+  void deniedCallsDoNotContainToken() {
+    String token = TestJwt.token("other.scope");
+    call(token, "ping", "{}");
+    call(token, "nope", "{}");
+    assertThat(appender.list).hasSize(2);
+    for (var event : appender.list) {
+      assertThat(event.getFormattedMessage()).doesNotContain(token);
+      assertThat(event.getKeyValuePairs().toString()).doesNotContain(token);
+    }
+  }
+
+  @Test
+  void unknownToolNameIsSanitizedAndTruncatedInAudit() {
+    call(TestJwt.token("architecture.read"), "x\\ny" + "z".repeat(500), "{}");
+    String tool = onlyRecord().get("tool").toString();
+    assertThat(tool).doesNotContain("\n").hasSizeLessThanOrEqualTo(70);
+  }
+
+  @Test
+  void toolFailureIsAuditedAsError() {
+    when(executor.execute(any(), any(), any())).thenThrow(new IllegalStateException("boom"));
+
+    call(TestJwt.token("architecture.read"), "probe", "{\"query\":\"abc\"}");
+
+    var record = onlyRecord();
+    assertThat(record).containsEntry("decision", ToolDecision.ERROR);
+    assertThat(record.get("errorClass").toString()).endsWith("IllegalStateException");
   }
 
   @Test

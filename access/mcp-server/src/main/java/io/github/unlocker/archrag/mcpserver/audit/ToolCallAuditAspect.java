@@ -31,12 +31,14 @@ public class ToolCallAuditAspect {
     var signature = (MethodSignature) joinPoint.getSignature();
     String tool = mcpTool.name().isEmpty() ? signature.getName() : mcpTool.name();
     Map<String, Object> arguments = argumentsOf(signature.getParameterNames(), joinPoint.getArgs());
-    ToolCallContext context = ToolCallContext.open();
-    Observation observation = auditor.start(tool);
+    ToolCallContext context = null;
+    Observation observation = null;
     long started = System.nanoTime();
     ToolDecision decision = ToolDecision.ALLOWED;
     Throwable failure = null;
     try {
+      context = ToolCallContext.open();
+      observation = auditor.start(tool);
       return joinPoint.proceed();
     } catch (Throwable e) {
       failure = e;
@@ -44,14 +46,16 @@ public class ToolCallAuditAspect {
       throw e;
     } finally {
       ToolCallContext.close();
-      auditor.completed(
-          observation,
-          tool,
-          arguments,
-          context,
-          Duration.ofNanos(System.nanoTime() - started),
-          decision,
-          failure);
+      if (observation != null) {
+        auditor.completed(
+            observation,
+            tool,
+            arguments,
+            context,
+            Duration.ofNanos(System.nanoTime() - started),
+            decision,
+            failure);
+      }
     }
   }
 
