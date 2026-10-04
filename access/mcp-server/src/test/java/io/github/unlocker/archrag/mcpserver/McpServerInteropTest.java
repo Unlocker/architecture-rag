@@ -12,6 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -20,10 +22,20 @@ class McpServerInteropTest {
 
   @LocalServerPort int port;
 
+  @DynamicPropertySource
+  static void jwt(DynamicPropertyRegistry registry) {
+    TestJwt.register(registry);
+  }
+
+  private static final String TOKEN = TestJwt.token("architecture.read");
+
   private McpSyncClient client() {
     return McpClient.sync(
             HttpClientStreamableHttpTransport.builder("http://localhost:" + port)
                 .endpoint("/mcp")
+                .httpRequestCustomizer(
+                    (builder, method, endpoint, body, context) ->
+                        builder.header("Authorization", "Bearer " + TOKEN))
                 .build())
         .build();
   }
@@ -41,13 +53,15 @@ class McpServerInteropTest {
                   .filter(t -> t.name().equals("ping"))
                   .findFirst()
                   .orElseThrow()
-                  .inputSchema())
-          .isNotNull();
+                  .inputSchema()
+                  .get("type"))
+          .isEqualTo("object");
 
       McpSchema.CallToolResult result =
           client.callTool(new McpSchema.CallToolRequest("ping", Map.of()));
       assertThat(result.isError()).isFalse();
-      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("\"status\":\"ok\"");
+      assertThat(((McpSchema.TextContent) result.content().get(0)).text())
+          .contains("\"status\":\"ok\"");
     }
   }
 
@@ -66,6 +80,7 @@ class McpServerInteropTest {
         RestClient.create("http://localhost:" + port)
             .post()
             .uri("/mcp")
+            .header("Authorization", "Bearer " + TOKEN)
             .header("Accept", "application/json, text/event-stream")
             .header("Content-Type", "application/json")
             .body(
@@ -73,7 +88,8 @@ class McpServerInteropTest {
                     + "\"params\":{\"name\":\"ping\",\"arguments\":{}}}")
             .retrieve()
             .toEntity(String.class);
-    assertThat(res.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_JSON)).isTrue();
+    assertThat(res.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_JSON))
+        .isTrue();
     assertThat(res.getHeaders().containsHeader("Mcp-Session-Id")).isFalse();
     assertThat(res.getStatusCode().value()).isEqualTo(200);
     var json = new JsonMapper().readTree(res.getBody());
@@ -93,6 +109,7 @@ class McpServerInteropTest {
             .build()
             .get()
             .uri("/sse")
+            .header("Authorization", "Bearer " + TOKEN)
             .retrieve()
             .toBodilessEntity();
     assertThat(res.getStatusCode().value()).isEqualTo(404);

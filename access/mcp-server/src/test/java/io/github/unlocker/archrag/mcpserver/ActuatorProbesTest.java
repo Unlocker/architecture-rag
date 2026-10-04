@@ -7,12 +7,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestClient;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 class ActuatorProbesTest {
 
   @LocalServerPort int port;
+
+  @DynamicPropertySource
+  static void jwt(DynamicPropertyRegistry registry) {
+    TestJwt.register(registry);
+  }
 
   private RestClient http() {
     return RestClient.builder()
@@ -32,7 +39,13 @@ class ActuatorProbesTest {
 
   @Test
   void envEndpointIsNotExposed() {
-    var res = http().get().uri("/actuator/env").retrieve().toEntity(String.class);
+    var res =
+        http()
+            .get()
+            .uri("/actuator/env")
+            .headers(h -> h.setBearerAuth(TestJwt.token()))
+            .retrieve()
+            .toEntity(String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
   }
 }
