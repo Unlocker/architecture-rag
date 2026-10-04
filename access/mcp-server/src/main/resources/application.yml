@@ -46,6 +46,11 @@ server:
   shutdown: graceful
 
 management:
+  metrics:
+    distribution:
+      # Гистограмма нужна для p95 latency по tool (критерий 9).
+      percentiles-histogram:
+        archrag.mcp.tool.call: true
   endpoints:
     web:
       exposure:
