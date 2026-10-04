@@ -8,10 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class PingTool {
 
-  /** Возвращает {@code pong}, а при непустом {@code message} добавляет его эхо. */
-  @McpTool(name = "ping", description = "Проверка доступности сервера: возвращает pong и эхо message")
+  /** Возвращает {@code {"status":"ok"}}; аргумент {@code message} необязателен и не влияет на ответ. */
+  @McpTool(name = "ping", description = "Проверка доступности сервера: возвращает {\"status\":\"ok\"}")
   public String ping(
       @McpToolParam(description = "Необязательное сообщение для эха", required = false) String message) {
-    return message == null || message.isBlank() ? "pong" : "pong: " + message;
+    return "{\"status\":\"ok\"}";
   }
 }

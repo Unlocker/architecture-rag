@@ -30,7 +30,7 @@ class McpServerInteropTest {
   void initializeListAndCallPing() {
     try (McpSyncClient client = client()) {
       McpSchema.InitializeResult init = client.initialize();
-      assertThat(init.serverInfo().name()).isEqualTo("arch-rag-mcp-server");
+      assertThat(init.serverInfo().name()).isEqualTo("arch-rag");
       assertThat(init.capabilities().tools()).isNotNull();
 
       assertThat(client.listTools().tools()).extracting(McpSchema.Tool::name).contains("ping");
@@ -38,7 +38,7 @@ class McpServerInteropTest {
       McpSchema.CallToolResult result =
           client.callTool(new McpSchema.CallToolRequest("ping", Map.of("message", "hi")));
       assertThat(result.isError()).isFalse();
-      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("pong").contains("hi");
+      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("\"status\":\"ok\"");
     }
   }
 
@@ -47,7 +47,7 @@ class McpServerInteropTest {
     try (McpSyncClient client = client()) {
       McpSchema.CallToolResult result =
           client.callTool(new McpSchema.CallToolRequest("ping", Map.of()));
-      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("pong");
+      assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("ok");
     }
   }
 
@@ -65,6 +65,21 @@ class McpServerInteropTest {
             .retrieve()
             .toEntity(String.class);
     assertThat(res.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_JSON)).isTrue();
-    assertThat(res.getBody()).contains("pong");
+    assertThat(res.getHeaders().containsHeader("Mcp-Session-Id")).isFalse();
+    assertThat(res.getBody()).contains("status");
+  }
+
+  @Test
+  void legacySseEndpointIsNotServed() {
+    var res =
+        org.springframework.web.client.RestClient.builder()
+            .baseUrl("http://localhost:" + port)
+            .defaultStatusHandler(s -> true, (req, rsp) -> {})
+            .build()
+            .get()
+            .uri("/sse")
+            .retrieve()
+            .toBodilessEntity();
+    assertThat(res.getStatusCode().value()).isEqualTo(404);
   }
 }

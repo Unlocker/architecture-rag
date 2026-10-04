@@ -1,12 +1,12 @@
 spring:
   application:
-    name: arch-rag-mcp-server
+    name: arch-rag
   lifecycle:
     timeout-per-shutdown-phase: 20s
   ai:
     mcp:
       server:
-        name: arch-rag-mcp-server
+        name: arch-rag
         version: 0.1.0
         protocol: STATELESS
         streamable-http:
