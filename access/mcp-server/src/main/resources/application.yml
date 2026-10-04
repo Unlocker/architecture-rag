@@ -12,6 +12,22 @@ spring:
         streamable-http:
           mcp-endpoint: /mcp
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ARCHRAG_OIDC_ISSUER_URI}
+          audiences: ${archrag.mcp.security.resource-uri}
+
+archrag:
+  mcp:
+    security:
+      resource-uri: ${ARCHRAG_MCP_RESOURCE_URI}
+      max-request-bytes: 1MB
+      # Каждый tool обязан иметь строку: tool без записи отклоняется (fail-closed).
+      tool-scopes:
+        ping: architecture.read
+
 server:
   shutdown: graceful
 
