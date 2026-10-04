@@ -8,16 +8,11 @@ import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
 import io.github.unlocker.archrag.eamadapter.EamAdapter;
-import io.github.unlocker.archrag.eventschemas.AssetEventData;
-import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
-import io.github.unlocker.archrag.eventschemas.EventJournal;
-import io.github.unlocker.archrag.eventschemas.JournalEntry;
-import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
-import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
-import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
-import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
+import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.ingestionservice.IngestionServiceApplication;
 import io.github.unlocker.archrag.scmadapter.ScmAdapter;
+import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.github.unlocker.archrag.sourcespi.WebhookEvent;
 import io.github.unlocker.archrag.sourcestubs.StubSource;
 import io.github.unlocker.archrag.sourcestubs.StubSourceServer;
@@ -25,11 +20,11 @@ import io.github.unlocker.archrag.sourcestubs.StubSources;
 import io.github.unlocker.archrag.sourcestubs.StubWebhookSender;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Clock;
@@ -37,18 +32,22 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.neo4j.driver.Driver;
+import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -65,42 +64,52 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Приёмочный сценарий синхронизации на полном конвейере: заглушки четырёх источников → адаптеры (webhook и polling) →
- * PostgreSQL inbox и S3 → диспетчер журнала → normalizer, identity, projector → Neo4j. Диспетчер работает сам, как в
- * проде; тест только кладёт данные в источники и смотрит в граф.
+ * Приёмка синхронизации (E1) на стенде, как в проде: заглушки четырёх источников → подписанный webhook или polling →
+ * адаптеры → {@code inbox_event} + S3 → работающий диспетчер журнала → Neo4j. Диспетчер на значениях по умолчанию
+ * ({@code poll-interval=1s}, {@code batch-size=100}), чтобы замер задержки был честным. Стенд один на класс,
+ * сценарии идут по порядку; каждый фиксирует своё исходное состояние сам и опирается только на загруженный срез.
  *
- * <ul>
- *   <li>критерий 2: webhook-изменение в графе с p95 ≤ 30 с; пропущенное изменение исправляет reconciliation;
- *   <li>критерий 3: повторная и out-of-order доставка не меняют граф;
- *   <li>критерий 4: rebuild из raw storage даёт эквивалентный граф.
- * </ul>
+ * <table>
+ *   <caption>Критерий готовности → метод</caption>
+ *   <tr><td>1 (срез)</td><td>{@link #k1_sliceIsLoaded}, {@link #k1_decomposedIntoLinksSystemToService}, {@link #k1_noQuarantine}</td></tr>
+ *   <tr><td>2 (p95 ≤ 30 с)</td><td>{@link #k2a_webhookLatencyP95}</td></tr>
+ *   <tr><td>2 (reconciliation)</td><td>{@link #k2b_missedChangesAreFixedByReconcile}</td></tr>
+ *   <tr><td>3 (повтор, out-of-order)</td><td>{@link #k3a_repeatedEventChangesNothing}, {@link #k3b_reversedWebhooks}, {@link #k3c_reorderedPolling}</td></tr>
+ *   <tr><td>4 (rebuild)</td><td>{@link #k4_rebuildGivesEquivalentCanonicalGraph}</td></tr>
+ * </table>
  */
-@Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(SyncAcceptanceIT.TestJwt.class)
 class SyncAcceptanceIT {
 
-  private static final String SOURCE = "urn:corp:eam";
   private static final String SECRET = "acceptance-webhook-secret";
+  private static final String BUCKET = "acceptance-it-bucket";
   private static final SecretKey KEY = new SecretKeySpec("0123456789abcdef0123456789abcdef".getBytes(), "HmacSHA256");
   /** Порог критерия 2. */
   private static final Duration SLA_P95 = Duration.ofSeconds(30);
   private static final int LATENCY_SAMPLES = 20;
+  /** Интервал опроса диспетчера (значение по умолчанию); пауза «ничего не изменилось» в К2б кратна ему. */
+  private static final Duration DISPATCHER_POLL = Duration.ofSeconds(1);
 
-  @Container
   static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
 
-  @Container
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 
-  @Container
   static final GenericContainer<?> S3 = ContainersSmokeIT.s3Container();
+
+  // При PER_CLASS Spring-контекст создаётся вместе с экземпляром, раньше расширения Testcontainers, поэтому
+  // контейнеры стартуют здесь; остановит их Ryuk по завершении JVM.
+  static {
+    NEO4J.start();
+    POSTGRES.start();
+    S3.start();
+  }
 
   /** Подписанные тестовым ключом токены вместо внешнего IdP. */
   @TestConfiguration
@@ -109,6 +118,27 @@ class SyncAcceptanceIT {
     JwtDecoder jwtDecoder() {
       return NimbusJwtDecoder.withSecretKey(KEY).macAlgorithm(MacAlgorithm.HS256).build();
     }
+  }
+
+  /** Управляющие порты адаптеров выбираются заранее: адрес нужен admin-сервису до старта самих адаптеров. */
+  private static final Map<SourceSystem, Integer> PORTS = new EnumMap<>(SourceSystem.class);
+
+  static {
+    for (SourceSystem s : SourceSystem.values()) {
+      PORTS.put(s, freePort());
+    }
+  }
+
+  private static int freePort() {
+    try (var socket = new ServerSocket(0)) {
+      return socket.getLocalPort();
+    } catch (java.io.IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private static String controlUrl(SourceSystem s) {
+    return "http://127.0.0.1:" + PORTS.get(s) + "/control/snapshot";
   }
 
   @DynamicPropertySource
@@ -122,212 +152,251 @@ class SyncAcceptanceIT {
     r.add("archrag.s3.endpoint", () -> "http://" + S3.getHost() + ":" + S3.getMappedPort(8333));
     r.add("archrag.s3.access-key", () -> ContainersSmokeIT.S3_ACCESS_KEY);
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
-    r.add("archrag.s3.bucket", () -> "acceptance-it-bucket");
+    r.add("archrag.s3.bucket", () -> BUCKET);
     // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
     r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
-    // Диспетчер включён и опрашивает журнал часто: замеряется конвейер, а не интервал опроса.
-    r.add("archrag.dispatcher.poll-interval", () -> "100ms");
+    r.add("archrag.adapters.eam.control-url", () -> controlUrl(SourceSystem.EAM));
+    r.add("archrag.adapters.scm.control-url", () -> controlUrl(SourceSystem.SCM));
+    r.add("archrag.adapters.cmdb.control-url", () -> controlUrl(SourceSystem.CMDB));
+    r.add("archrag.adapters.deploymap.control-url", () -> controlUrl(SourceSystem.DEPLOY_MAP));
+    // Остальные параметры диспетчера по умолчанию (poll-interval 1s, batch-size 100).
     r.add("archrag.dispatcher.retry-delay", () -> "1s");
   }
 
   @Value("${local.server.port}") int port;
   @Autowired Driver driver;
-  @Autowired EventJournal journal;
-  @Autowired RawPayloadStore rawStore;
 
-  private static final List<StubSourceServer> SERVERS = new ArrayList<>();
-  private static final List<SourceAdapter> ADAPTERS = new ArrayList<>();
-  private static StubSource eam;
-  private static SourceAdapter eamAdapter;
-  private static StubWebhookSender sender;
-  private static boolean loaded;
-
+  private final Map<SourceSystem, StubSource> stubs = new EnumMap<>(SourceSystem.class);
+  private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
+  private final List<StubSourceServer> servers = new ArrayList<>();
+  private final Map<SourceSystem, StubWebhookSender> senders = new EnumMap<>(SourceSystem.class);
+  private S3RawPayloadStore store;
   private final HttpClient http = HttpClient.newHttpClient();
 
+  /** Четыре адаптера над своими заглушками, webhook и control на заранее выбранных портах. Polling не запускаем. */
   @BeforeAll
-  static void noop() {}
+  void startAdapters() {
+    Clock clock = Clock.systemUTC();
+    var ds = new PGSimpleDataSource();
+    ds.setUrl(POSTGRES.getJdbcUrl());
+    ds.setUser(POSTGRES.getUsername());
+    ds.setPassword(POSTGRES.getPassword());
+    var journal = new PostgresEventJournal(ds);
+    store = S3RawPayloadStore.create(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)),
+        ContainersSmokeIT.S3_ACCESS_KEY, ContainersSmokeIT.S3_SECRET_KEY, BUCKET);
+    store.ensureBucket();
+    stubs.putAll(StubSources.seeded(clock));
+    stubs.forEach((system, stub) -> {
+      var server = new StubSourceServer(stub);
+      servers.add(server);
+      SourceAdapter adapter = switch (system) {
+        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, store);
+        case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, store);
+        case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, store);
+        case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
+      };
+      adapters.put(system, adapter);
+      var webhook = adapter.startWebhook(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORTS.get(system)));
+      senders.put(system, new StubWebhookSender(webhook.endpoint(), SECRET, clock));
+    });
+  }
 
   @AfterAll
-  static void stopAll() {
-    if (sender != null) {
-      sender.close();
+  void stopAll() {
+    senders.values().forEach(StubWebhookSender::close);
+    adapters.values().forEach(SourceAdapter::close);
+    servers.forEach(StubSourceServer::close);
+    if (store != null) {
+      store.close();
     }
-    ADAPTERS.forEach(SourceAdapter::close);
-    SERVERS.forEach(StubSourceServer::close);
   }
 
-  /** Первичная загрузка среза всеми четырьмя адаптерами; один раз на класс, после Spring-контекста. */
-  private synchronized void loadSlice() throws Exception {
-    if (loaded) {
-      return;
+  // ---- К1: срез ----------------------------------------------------------------------------
+
+  @Test
+  @Order(1)
+  void k1_sliceIsLoaded() {
+    // Первый pollOnce каждого адаптера делает полный snapshot.
+    for (SourceSystem s : SourceSystem.values()) {
+      assertThat(adapters.get(s).poller().pollOnce().outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     }
-    Clock clock = Clock.systemUTC();
-    eam = StubSources.eam(clock);
-    var stubs = List.of(eam, StubSources.scm(clock), StubSources.cmdb(clock), StubSources.deployMap(clock));
-    for (StubSource stub : stubs) {
-      var server = new StubSourceServer(stub);
-      SERVERS.add(server);
-      SourceAdapter adapter = switch (stub.system()) {
-        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, rawStore);
-        case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, rawStore);
-        case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, rawStore);
-        case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, rawStore);
-      };
-      ADAPTERS.add(adapter);
-      assertThat(adapter.poller().pollOnce().outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
-      if (stub == eam) {
-        eamAdapter = adapter;
-      }
-    }
-    var webhookServer = eamAdapter.startWebhook(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
-    sender = new StubWebhookSender(webhookServer.endpoint(), SECRET, clock);
-    loaded = true;
+    awaitJournalDrained();
+
+    // Направления связей — как в RelationType и GraphProjector.
+    assertThat(count("MATCH (:Service {name: 'payments-api'})-[:HAS_DEPLOYMENT]->(d:Deployment)-[:IN_ENVIRONMENT]->(:Environment) RETURN count(d) AS c"))
+        .isPositive();
+    assertThat(count("MATCH (:Deployment)-[:RUNS_ON]->(c:ComputeInstance) RETURN count(c) AS c")).isPositive();
+    assertThat(count("MATCH (:Service)-[:IMPLEMENTED_IN]->(r:Repository) RETURN count(r) AS c")).isPositive();
+    assertThat(count("MATCH (:ITSystem)-[:OWNED_BY]->(t:Team) RETURN count(t) AS c")).isPositive();
+    assertThat(count("MATCH (r:SourceRecord)-[:ASSERTS]->() RETURN count(DISTINCT r.source) AS c"))
+        .as("ASSERTS приходят минимум от трёх SourceSystem").isGreaterThanOrEqualTo(3);
+  }
+
+  /** Связь системы с сервисом, часть цепочки среза ITSystem → Service → Deployment → Environment → ComputeInstance. */
+  @Test
+  @Order(2)
+  void k1_decomposedIntoLinksSystemToService() {
+    assertThat(count("MATCH (:ITSystem)-[:DECOMPOSED_INTO]->(s:Service) RETURN count(s) AS c")).isPositive();
   }
 
   @Test
-  void initialLoadBuildsTheWholeSliceThroughTheRunningPipeline() throws Exception {
-    loadSlice();
-
-    awaitTrue(this::inboxDrained);
-    awaitTrue(() -> pathExists("Service", "ComputeInstance"));
-    for (String label : List.of("ITSystem", "Service", "Deployment", "Environment", "ComputeInstance", "Repository", "Team")) {
-      assertThat(count("MATCH (n:" + label + ") RETURN count(n) AS c")).as(label).isPositive();
-    }
-    awaitTrue(this::inboxDrained);
-    // TODO UNLOCKER-171: SERVICE_DEPENDENCY сейчас уходит в карантин INVALID_COMMANDS, а DECOMPOSED_INTO пропускается
-    // (SCM утверждает связь, мастер по матрице EAM): вопрос архитектору в задаче. Остальное должно проецироваться чисто.
-    assertThat(scalarLong("select count(*) from inbox_event where status in ('QUARANTINED','RETRYING')"
-        + " and source_type <> 'SERVICE_DEPENDENCY'")).isZero();
+  @Order(3)
+  void k1_noQuarantine() throws SQLException {
+    assertThat(scalarLong("select count(*) from inbox_event where status = 'QUARANTINED'")).isZero();
   }
 
+  // ---- К2: задержка и reconciliation ---------------------------------------------------------
+
   @Test
-  void webhookChangeReachesGraphWithinSlaP95() throws Exception {
-    loadSlice();
-    awaitTrue(() -> pathExists("Service", "ComputeInstance"));
+  @Order(4)
+  void k2a_webhookLatencyP95() throws SQLException {
+    StubSource eam = stubs.get(SourceSystem.EAM);
+    StubSource scm = stubs.get(SourceSystem.SCM);
     List<Duration> samples = new ArrayList<>();
 
+    // Изменения шлём по одному: меряется задержка конвейера, а не очередь.
     for (int i = 0; i < LATENCY_SAMPLES; i++) {
-      String name = "Ledger-" + uid();
-      eam.upsert(StubSources.IT_SYSTEM, "EAM-2001", StubSources.fields("name", name, "ownerTeam", "TEAM-PAY"));
-      WebhookEvent event = eam.webhookEvents().getLast();
+      String name = (i % 2 == 0 ? "Ledger-" : "ledger-api-") + uid();
+      boolean viaEam = i % 2 == 0;
+      StubSource stub = viaEam ? eam : scm;
+      if (viaEam) {
+        eam.upsert(StubSources.IT_SYSTEM, "EAM-2001", StubSources.fields("name", name, "ownerTeam", "TEAM-PAY"));
+      } else {
+        scm.upsert(StubSources.SERVICE, "svc-ledger-api",
+            StubSources.fields("name", name, "systemCode", "EAM-2001"));
+      }
+      WebhookEvent event = stub.webhookEvents().getLast();
+      String label = viaEam ? "ITSystem" : "Service";
 
       long start = System.nanoTime();
-      assertThat(sender.send(event)).isEqualTo(202);
-      awaitTrue(() -> nameExists(name));
+      assertThat(senders.get(stub.system()).send(event)).isEqualTo(202);
+      awaitTrue(() -> count("MATCH (n:" + label + " {name: '" + name + "'}) RETURN count(n) AS c") > 0, Duration.ofSeconds(60));
       samples.add(Duration.ofNanos(System.nanoTime() - start));
     }
 
     Duration p95 = percentile(samples, 95);
-    System.out.printf("webhook→graph latency over %d changes: p50=%s p95=%s max=%s%n", samples.size(),
-        percentile(samples, 50), p95, Collections.max(samples));
+    System.out.printf("SLA webhook→graph: n=%d p50=%s p95=%s max=%s; journal updated_at-received_at (PROJECTED): %s%n",
+        samples.size(), percentile(samples, 50), p95, Collections.max(samples), journalLag());
     assertThat(p95).isLessThanOrEqualTo(SLA_P95);
   }
 
   @Test
-  void reconciliationFixesChangesThatNeverGotAWebhook() throws Exception {
-    loadSlice();
+  @Order(5)
+  void k2b_missedChangesAreFixedByReconcile() throws Exception {
+    StubSource eam = stubs.get(SourceSystem.EAM);
     String gone = "T-GONE-" + uid();
-    String renamed = "T-REN-" + uid();
+    String fresh = "T-NEW-" + uid();
     eam.upsert(StubSources.TEAM, gone, StubSources.fields("name", "Gone " + gone));
-    eam.upsert(StubSources.TEAM, renamed, StubSources.fields("name", "Before " + renamed));
-    eamAdapter.poller().pollOnce();
-    awaitTrue(() -> Boolean.TRUE.equals(teamActive(gone)) && nameExists("Before " + renamed));
+    assertThat(senders.get(SourceSystem.EAM).send(eam.webhookEvents().getLast())).isEqualTo(202);
+    awaitTrue(() -> Boolean.TRUE.equals(teamActive(gone)), Duration.ofSeconds(60));
+    awaitJournalDrained();
+    List<String> before = CanonicalGraph.dump(driver);
 
-    // Три изменения, о которых адаптер не узнает: удаление, переименование, новый объект.
+    // Изменения без webhook: адаптер о них не знает.
     eam.suppressWebhooks(true);
-    String created = "T-NEW-" + uid();
     try {
       eam.delete(StubSources.TEAM, gone);
-      eam.upsert(StubSources.TEAM, renamed, StubSources.fields("name", "After " + renamed));
-      eam.upsert(StubSources.TEAM, created, StubSources.fields("name", "Created " + created));
-      Thread.sleep(500);
-      assertThat(teamActive(gone)).as("пропуск виден: без reconciliation граф устарел").isTrue();
-      assertThat(nameExists("After " + renamed)).isFalse();
+      eam.upsert(StubSources.TEAM, fresh, StubSources.fields("name", "Fresh " + fresh));
+      // Пауза часть проверки: за два интервала опроса диспетчера граф не должен измениться сам.
+      Thread.sleep(DISPATCHER_POLL.multipliedBy(2).toMillis());
     } finally {
       eam.suppressWebhooks(false);
     }
+    assertThat(CanonicalGraph.dump(driver)).isEqualTo(before);
 
-    PollResult run = eamAdapter.poller().snapshotOnce();
+    assertThat(post("/admin/reconcile/eam", token()).statusCode()).isEqualTo(202);
 
-    assertThat(run.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
-    awaitTrue(() -> Boolean.FALSE.equals(teamActive(gone)) && nameExists("After " + renamed)
-        && Boolean.TRUE.equals(teamActive(created)));
-    assertThat(nameExists("Before " + renamed)).isFalse();
+    awaitTrue(() -> Boolean.FALSE.equals(teamActive(gone)) && Boolean.TRUE.equals(teamActive(fresh)),
+        Duration.ofSeconds(60));
+    assertThat(count("MATCH (:SourceRecord {source: 'EAM', sourceType: 'TEAM', sourceId: '" + gone
+        + "'})-[:ASSERTS]->(t:Team) WHERE t.isCurrent = false RETURN count(t) AS c")).isEqualTo(1);
+  }
+
+  // ---- К3: повтор и out-of-order -------------------------------------------------------------
+
+  @Test
+  @Order(6)
+  void k3a_repeatedEventChangesNothing() throws Exception {
+    StubSource eam = stubs.get(SourceSystem.EAM);
+    String id = "T-DUP-" + uid();
+    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Dup " + id));
+    WebhookEvent event = eam.webhookEvents().getLast();
+    assertThat(senders.get(SourceSystem.EAM).send(event)).isEqualTo(202);
+    awaitTrue(() -> Boolean.TRUE.equals(teamActive(id)), Duration.ofSeconds(60));
+    awaitJournalDrained();
+    List<String> before = CanonicalGraph.dump(driver);
+
+    assertThat(senders.get(SourceSystem.EAM).send(event)).isEqualTo(202);
+    awaitJournalDrained();
+
+    assertThat(scalarLong("select count(*) from inbox_event where event_id = ?", event.eventId())).isEqualTo(1);
+    assertThat(CanonicalGraph.dump(driver)).isEqualTo(before);
   }
 
   @Test
-  void duplicateAndOutOfOrderDeliveriesDoNotChangeCorrectState() throws Exception {
-    loadSlice();
-    String id = "T-ORD-" + uid();
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "First " + id));
+  @Order(7)
+  void k3b_reversedWebhooks() throws Exception {
+    StubSource eam = stubs.get(SourceSystem.EAM);
+    String id = "T-REV-" + uid();
+    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "V1 " + id));
     WebhookEvent first = eam.webhookEvents().getLast();
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Second " + id));
+    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "V2 " + id));
     WebhookEvent second = eam.webhookEvents().getLast();
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Third " + id));
-    WebhookEvent third = eam.webhookEvents().getLast();
 
-    // Новая версия приходит раньше старой, затем всё повторяется.
-    assertThat(sender.send(third)).isEqualTo(202);
-    awaitTrue(() -> nameExists("Third " + id));
-    awaitTrue(this::inboxDrained);
-    List<String> settled = dump();
-    for (WebhookEvent e : List.of(second, first, third, third, first)) {
-      assertThat(sender.send(e)).isEqualTo(202);
+    // Уведомления в обратном порядке; обработчик читает объект по id, поэтому v1 в графе не появится.
+    assertThat(senders.get(SourceSystem.EAM).send(second)).isEqualTo(202);
+    assertThat(senders.get(SourceSystem.EAM).send(first)).isEqualTo(202);
+    awaitJournalDrained();
+
+    assertThat(count("MATCH (t:Team {name: 'V2 " + id + "'}) RETURN count(t) AS c")).isEqualTo(1);
+    assertThat(count("MATCH (t:Team {name: 'V1 " + id + "'}) RETURN count(t) AS c")).isZero();
+    assertThat(scalarLong("select count(*) from inbox_event where source_id = ? and status = 'DUPLICATE'", id))
+        .isGreaterThanOrEqualTo(1);
+    assertThat(scalarLong("select count(*) from inbox_event where source_id = ? and status = 'QUARANTINED'", id)).isZero();
+  }
+
+  @Test
+  @Order(8)
+  void k3c_reorderedPolling() throws Exception {
+    StubSource scm = stubs.get(SourceSystem.SCM);
+    // Курсор incremental polling сдвигаем сначала к концу журнала, чтобы страница содержала только наши изменения.
+    adapters.get(SourceSystem.SCM).poller().pollOnce();
+    awaitJournalDrained();
+    String id = "svc-reorder-" + uid();
+    scm.suppressWebhooks(true);
+    try {
+      scm.upsert(StubSources.SERVICE, id, StubSources.fields("name", "Old " + id));
+      scm.upsert(StubSources.SERVICE, id, StubSources.fields("name", "New " + id));
+      scm.reorderNextPage();
+
+      adapters.get(SourceSystem.SCM).poller().pollOnce();
+    } finally {
+      scm.suppressWebhooks(false);
     }
-    awaitTrue(this::inboxDrained);
+    awaitJournalDrained();
 
-    assertThat(nameExists("Third " + id)).isTrue();
-    assertThat(nameExists("First " + id)).isFalse();
-    assertThat(nameExists("Second " + id)).isFalse();
-    assertThat(dump()).isEqualTo(settled);
-    assertThat(scalarLong("select count(*) from inbox_event where source = ? and event_id = ?", SOURCE, third.eventId()))
-        .isEqualTo(1);
+    assertThat(count("MATCH (s:Service {name: 'New " + id + "'}) RETURN count(s) AS c")).isEqualTo(1);
+    assertThat(count("MATCH (s:Service {name: 'Old " + id + "'}) RETURN count(s) AS c")).isZero();
+    assertThat(scalarLong("select count(*) from inbox_event where source_id = ? and status in ('IGNORED_OLD_VERSION','DUPLICATE')", id))
+        .isGreaterThanOrEqualTo(1);
+    assertThat(scalarLong("select count(*) from inbox_event where source_id = ? and status = 'QUARANTINED'", id)).isZero();
   }
 
-  @Test
-  void eventWithOlderSourceVersionIsIgnoredAndRepeatedEventIdIsDuplicate() throws Exception {
-    loadSlice();
-    String id = "T-VER-" + uid();
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Old " + id));
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Current " + id));
-    assertThat(sender.send(eam.webhookEvents().getLast())).isEqualTo(202);
-    awaitTrue(() -> nameExists("Current " + id));
-
-    // Запоздавшее событие со старой версией и своим содержимым: журнал принимает его, projector не применяет.
-    String stale = "stale-" + uid();
-    CanonicalEvent old = new CanonicalEvent(stale, SOURCE, CanonicalEvent.TYPE_ASSET_UPSERTED, "team/" + id, Instant.now(),
-        "urn:corp:schema:asset-upserted:1", "corr",
-        new AssetEventData("TEAM", id, new SourceVersion("1"), Map.of("name", "Stale " + id)));
-    RawPayloadRef raw = rawStore.put(SOURCE, ("{\"operation\":\"UPSERT\",\"completeness\":\"COMPLETE\",\"updatedAt\":\""
-        + Instant.now() + "\",\"payload\":{\"name\":\"Stale " + id + "\"}}").getBytes(StandardCharsets.UTF_8));
-    journal.append(old, raw, null);
-
-    awaitTrue(() -> status(stale) == ProcessingStatus.IGNORED_OLD_VERSION);
-    assertThat(nameExists("Stale " + id)).isFalse();
-    assertThat(nameExists("Current " + id)).isTrue();
-
-    // Тот же eventId повторно: строка не добавляется, граф не меняется.
-    assertThat(journal.append(old, raw, null).status()).isEqualTo(ProcessingStatus.DUPLICATE);
-    assertThat(scalarLong("select count(*) from inbox_event where source = ? and event_id = ?", SOURCE, stale)).isEqualTo(1);
-    assertThat(nameExists("Stale " + id)).isFalse();
-  }
+  // ---- К4: rebuild ---------------------------------------------------------------------------
 
   @Test
-  void rebuildFromRawStorageGivesEquivalentGraph() throws Exception {
-    loadSlice();
-    String id = "T-RB-" + uid();
-    eam.upsert(StubSources.TEAM, id, StubSources.fields("name", "Rebuild " + id));
-    assertThat(sender.send(eam.webhookEvents().getLast())).isEqualTo(202);
-    awaitTrue(() -> nameExists("Rebuild " + id));
-    awaitTrue(this::inboxDrained);
-    List<String> before = dump();
+  @Order(9)
+  void k4_rebuildGivesEquivalentCanonicalGraph() throws Exception {
+    awaitJournalDrained();
+    List<String> before = CanonicalGraph.dump(driver);
     assertThat(before).anyMatch(s -> s.startsWith("R "));
 
-    HttpResponse<String> response = post("/admin/rebuild?confirm=true", token("architecture.admin"));
+    HttpResponse<String> response = post("/admin/rebuild?confirm=true", token());
 
     assertThat(response.statusCode()).isEqualTo(200);
-    awaitTrue(this::inboxDrained);
-    assertThat(dump()).isEqualTo(before);
+    awaitJournalDrained();
+    // Сравнение без CanonicalGraph.EXCLUDED_KEYS; граф включает tombstone из К2б и версии из К3.
+    assertThat(CanonicalGraph.dump(driver)).isEqualTo(before);
   }
 
   // ---- helpers -----------------------------------------------------------------------------
@@ -338,18 +407,19 @@ class SyncAcceptanceIT {
     return sorted.get(Math.max(rank, 1) - 1);
   }
 
-  private boolean pathExists(String from, String to) {
-    // Глубина зафиксирована литералом: срез ITSystem → Service → Deployment → Environment → ComputeInstance короче 6 рёбер.
-    return count("MATCH (a:" + from + ")-[*1..6]-(b:" + to + ") RETURN count(*) AS c") > 0;
+  /** Служебная латентность журнала: от приёма до последнего перехода в PROJECTED (p50/max, секунды). */
+  private String journalLag() throws SQLException {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var st = c.createStatement();
+        var rs = st.executeQuery("select percentile_cont(0.5) within group (order by extract(epoch from updated_at - received_at)),"
+            + " max(extract(epoch from updated_at - received_at)) from inbox_event where status = 'PROJECTED'")) {
+      rs.next();
+      return "p50=%.3fs max=%.3fs".formatted(rs.getDouble(1), rs.getDouble(2));
+    }
   }
 
   private long count(String cypher) {
     return driver.executableQuery(cypher).execute().records().getFirst().get("c").asLong();
-  }
-
-  private boolean nameExists(String name) {
-    return driver.executableQuery("MATCH (n) WHERE n.name = $name RETURN count(n) AS c")
-        .withParameters(Map.of("name", name)).execute().records().getFirst().get("c").asLong() > 0;
   }
 
   private Boolean teamActive(String id) {
@@ -359,47 +429,16 @@ class SyncAcceptanceIT {
     return rows.isEmpty() ? null : rows.getFirst().get("a").asBoolean();
   }
 
-  private ProcessingStatus status(String eventId) {
-    return journal.find(SOURCE, eventId).map(JournalEntry::status).orElse(null);
-  }
-
-  private boolean inboxDrained() {
-    try {
-      return scalarLong("select count(*) from inbox_event where status in ('RECEIVED','RETRYING','VALIDATED','NORMALIZED','RESOLVED')") == 0;
-    } catch (SQLException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  /**
-   * Канонический дамп графа: узлы и связи как отсортированные строки без elementId и без служебных временных полей
-   * ({@code *At}, {@code validFrom}, {@code validTo}), которые зависят от момента обработки.
-   */
-  private List<String> dump() {
-    List<String> out = new ArrayList<>();
-    for (var r : driver.executableQuery("MATCH (n) RETURN labels(n) AS l, properties(n) AS p").execute().records()) {
-      out.add("N " + sorted(r.get("l").asList()) + " " + stable(r.get("p").asMap()));
-    }
-    for (var r : driver.executableQuery(
-        "MATCH (a)-[r]->(b) RETURN labels(a) AS al, properties(a) AS ap, type(r) AS t, properties(r) AS rp, labels(b) AS bl, properties(b) AS bp")
-        .execute().records()) {
-      out.add("R " + sorted(r.get("al").asList()) + stable(r.get("ap").asMap()) + " -" + r.get("t").asString()
-          + stable(r.get("rp").asMap()) + "-> " + sorted(r.get("bl").asList()) + stable(r.get("bp").asMap()));
-    }
-    Collections.sort(out);
-    return out;
-  }
-
-  private static Map<String, Object> stable(Map<String, Object> props) {
-    Map<String, Object> m = new TreeMap<>(props);
-    m.keySet().removeIf(k -> k.endsWith("At") || k.equals("validFrom") || k.equals("validTo"));
-    return m;
-  }
-
-  private static List<Object> sorted(List<Object> l) {
-    var c = new ArrayList<>(l);
-    c.sort(Comparator.comparing(Object::toString));
-    return c;
+  /** Строк в нетерминальных статусах нет: всё принятое обработано. */
+  private void awaitJournalDrained() {
+    awaitTrue(() -> {
+      try {
+        return scalarLong("select count(*) from inbox_event where status in "
+            + "('RECEIVED','RETRYING','VALIDATED','NORMALIZED','RESOLVED')") == 0;
+      } catch (SQLException e) {
+        throw new IllegalStateException(e);
+      }
+    }, Duration.ofSeconds(60));
   }
 
   private static long scalarLong(String sql, String... args) throws SQLException {
@@ -415,10 +454,10 @@ class SyncAcceptanceIT {
     }
   }
 
-  private String token(String scope) {
+  private String token() {
     var encoder = new NimbusJwtEncoder(new ImmutableSecret<>(KEY));
     var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now())
-        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", scope);
+        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin");
     return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()))
         .getTokenValue();
   }
@@ -435,13 +474,17 @@ class SyncAcceptanceIT {
 
   /** Опрос с таймаутом: Awaitility в проект не входит, новую зависимость в задаче не вводим. */
   private static void awaitTrue(BooleanSupplier condition) {
-    long deadline = System.nanoTime() + Duration.ofSeconds(60).toNanos();
+    awaitTrue(condition, Duration.ofSeconds(60));
+  }
+
+  private static void awaitTrue(BooleanSupplier condition, Duration timeout) {
+    long deadline = System.nanoTime() + timeout.toNanos();
     while (!condition.getAsBoolean()) {
       if (System.nanoTime() > deadline) {
-        throw new AssertionError("condition not reached within 60s");
+        throw new AssertionError("condition not reached within " + timeout);
       }
       try {
-        Thread.sleep(20);
+        Thread.sleep(200);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new AssertionError("interrupted", e);
