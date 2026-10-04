@@ -6,17 +6,18 @@
 
   <parent>
     <groupId>io.github.unlocker.archrag</groupId>
-    <artifactId>archrag-parent</artifactId>
+    <artifactId>platform</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>platform</artifactId>
-  <packaging>pom</packaging>
-  <name>platform</name>
+  <artifactId>source-stubs</artifactId>
+  <name>source-stubs</name>
 
-  <modules>
-    <module>integration-tests</module>
-    <module>source-stubs</module>
-  </modules>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>source-spi</artifactId>
+    </dependency>
+  </dependencies>
 </project>
