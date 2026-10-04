@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: arch-rag-mcp-server
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  ai:
+    mcp:
+      server:
+        name: arch-rag-mcp-server
+        version: 0.1.0
+        protocol: STATELESS
+        streamable-http:
+          mcp-endpoint: /mcp
+
+server:
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
