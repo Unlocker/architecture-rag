@@ -82,12 +82,22 @@
     </dependency>
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>ingestion-service</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>graph-query-core</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>mcp-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
