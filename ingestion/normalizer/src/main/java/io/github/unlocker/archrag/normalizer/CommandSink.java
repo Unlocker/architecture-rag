@@ -54,6 +54,38 @@ public final class CommandSink {
     commands.add(new UpsertRelation(type, from, fromLabel, to, toLabel, Map.of(), validity, self));
   }
 
+  /**
+   * Добавляет связь {@code from → to}, обе стороны которой — внешние по отношению к записи события
+   * (запись сама является связью). Если сторона неизвестна, для неё фиксируется
+   * {@link UnresolvedReference}; связь строится, только когда известны обе.
+   *
+   * @param properties свойства связи; передаются только присутствующие в источнике
+   * @param fromField поле источника со ссылкой на {@code from}
+   * @param toField поле источника со ссылкой на {@code to}
+   */
+  public void link(
+      RelationType type,
+      SourceKey from,
+      NodeLabel fromLabel,
+      SourceKey to,
+      NodeLabel toLabel,
+      Map<String, Object> properties,
+      Validity validity,
+      String fromField,
+      String toField) {
+    boolean fromKnown = resolver.exists(from);
+    boolean toKnown = resolver.exists(to);
+    if (!fromKnown) {
+      unresolved.add(new UnresolvedReference(self, fromField, type, from));
+    }
+    if (!toKnown) {
+      unresolved.add(new UnresolvedReference(self, toField, type, to));
+    }
+    if (fromKnown && toKnown) {
+      commands.add(new UpsertRelation(type, from, fromLabel, to, toLabel, properties, validity, self));
+    }
+  }
+
   /** Фиксирует предупреждение (код без значений из источника). */
   public void warn(String warning) {
     warnings.add(warning);

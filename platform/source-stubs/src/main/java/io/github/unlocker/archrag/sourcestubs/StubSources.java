@@ -20,6 +20,8 @@ public final class StubSources {
   public static final String SERVICE = "SERVICE";
   public static final String REPOSITORY = "REPOSITORY";
   public static final String COMPUTE_INSTANCE = "COMPUTE_INSTANCE";
+  /** Зависимость между сервисами в EAM: {@code from}/{@code to} — коды сервисов (id в SCM). */
+  public static final String SERVICE_DEPENDENCY = "SERVICE_DEPENDENCY";
 
   private StubSources() {}
 
@@ -37,13 +39,16 @@ public final class StubSources {
     StubSource s = new StubSource(SourceSystem.EAM, clock);
     s.upsert(TEAM, "TEAM-PAY", fields("name", "Payments Team"));
     s.upsert(IT_SYSTEM, "EAM-2001", fields("name", "Ledger", "ownerTeam", "TEAM-PAY"));
+    s.upsert(IT_SYSTEM, "EAM-1042", fields("name", "Payments Core", "ownerTeam", "TEAM-PAY"));
     s.upsert(
-        IT_SYSTEM,
-        "EAM-1042",
+        SERVICE_DEPENDENCY,
+        "dep-payments-api-ledger-api",
         fields(
-            "name", "Payments Core",
-            "ownerTeam", "TEAM-PAY",
-            "dependsOn", List.of("EAM-2001")));
+            "from", "svc-payments-api",
+            "to", "svc-ledger-api",
+            "kind", "SYNC",
+            "protocol", "HTTP",
+            "criticality", "HIGH"));
     return s;
   }
 
@@ -58,6 +63,10 @@ public final class StubSources {
         "svc-payments-api",
         fields("name", "payments-api", "systemCode", "EAM-1042", "repositoryId",
             "repo-payments-api"));
+    s.upsert(
+        SERVICE,
+        "svc-ledger-api",
+        fields("name", "ledger-api", "systemCode", "EAM-2001"));
     return s;
   }
 

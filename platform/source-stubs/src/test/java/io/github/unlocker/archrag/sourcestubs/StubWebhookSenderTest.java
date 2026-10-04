@@ -64,9 +64,9 @@ class StubWebhookSenderTest {
     assertThat(sender.send(event())).isEqualTo(202);
     assertThat(verdicts).containsExactly(Result.VALID);
     assertThat(bodies.getFirst())
-        .contains("\"eventId\":\"eam-evt-3\"", "\"sourceId\":\"EAM-1042\"", "\"sourceVersion\":1",
+        .contains("\"eventId\":\"eam-evt-4\"", "\"sourceId\":\"dep-payments-api-ledger-api\"", "\"sourceVersion\":1",
             "\"operation\":\"UPSERT\"")
-        .doesNotContain("Payments Core");
+        .doesNotContain("svc-ledger-api");
   }
 
   @Test

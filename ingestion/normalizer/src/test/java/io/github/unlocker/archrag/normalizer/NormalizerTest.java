@@ -74,7 +74,7 @@ class NormalizerTest {
   }
 
   @Test
-  void eamItSystemMapsOwnerAndDropsUnsupportedDependsOn() {
+  void eamItSystemMapsOwner() {
     known.add(key(SourceSystemCode.EAM, "TEAM", "TEAM-PAY"));
     var n = stub(SourceSystem.EAM, "urn:corp:eam", "IT_SYSTEM", "EAM-1042");
     assertThat(((UpsertNode) n.commands().get(0)).data())
@@ -85,7 +85,99 @@ class NormalizerTest {
       assertThat(r.to()).isEqualTo(key(SourceSystemCode.EAM, "TEAM", "TEAM-PAY"));
       assertThat(r.validity()).isNull();
     });
+    assertThat(n.warnings()).isEmpty();
+  }
+
+  @Test
+  void eamItSystemLevelDependsOnIsNotMappedAndWarns() {
+    var e = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "IT_SYSTEM", "s",
+        fields("name", "S", "dependsOn", List.of("EAM-2001")));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(of(n, UpsertRelation.class)).isEmpty();
     assertThat(n.warnings()).containsExactly("DEPENDS_ON_NOT_SUPPORTED");
+  }
+
+  private static final SourceKey PAY = key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api");
+  private static final SourceKey LEDGER = key(SourceSystemCode.SCM, "SERVICE", "svc-ledger-api");
+
+  @Test
+  void eamServiceDependencyMapsToDependsOnBetweenServices() {
+    known.add(PAY);
+    known.add(LEDGER);
+    var n = stub(SourceSystem.EAM, "urn:corp:eam", "SERVICE_DEPENDENCY", "dep-payments-api-ledger-api");
+    assertThat(of(n, UpsertNode.class)).isEmpty();
+    assertThat(n.unresolved()).isEmpty();
+    assertThat(of(n, UpsertRelation.class)).singleElement().satisfies(r -> {
+      assertThat(r.type()).isEqualTo(RelationType.DEPENDS_ON);
+      assertThat(r.from()).isEqualTo(PAY);
+      assertThat(r.to()).isEqualTo(LEDGER);
+      assertThat(r.properties())
+          .containsOnly(Map.entry("kind", "SYNC"), Map.entry("protocol", "HTTP"),
+              Map.entry("criticality", "HIGH"));
+      assertThat(r.validity()).isNull();
+      assertThat(r.assertedBy())
+          .isEqualTo(key(SourceSystemCode.EAM, "SERVICE_DEPENDENCY", "dep-payments-api-ledger-api"));
+    });
+  }
+
+  @Test
+  void eamServiceDependencyWithUnknownServiceIsUnresolved() {
+    known.add(PAY);
+    var n = stub(SourceSystem.EAM, "urn:corp:eam", "SERVICE_DEPENDENCY", "dep-payments-api-ledger-api");
+    assertThat(of(n, UpsertRelation.class)).isEmpty();
+    assertThat(n.unresolved()).singleElement().satisfies(u -> {
+      assertThat(u.field()).isEqualTo("to");
+      assertThat(u.relationType()).isEqualTo(RelationType.DEPENDS_ON);
+      assertThat(u.target()).isEqualTo(LEDGER);
+    });
+    known.clear();
+    var both = stub(SourceSystem.EAM, "urn:corp:eam", "SERVICE_DEPENDENCY", "dep-payments-api-ledger-api");
+    assertThat(both.unresolved()).extracting(UnresolvedReference::field).containsExactly("from", "to");
+  }
+
+  @Test
+  void eamServiceDependencyWithoutOptionalPropertiesHasNoDefaults() {
+    known.add(PAY);
+    known.add(LEDGER);
+    var e = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
+        fields("from", "svc-payments-api", "to", "svc-ledger-api", "kind", " ", "protocol", null));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(of(n, UpsertRelation.class)).singleElement().satisfies(r -> {
+      assertThat(r.properties()).isEmpty();
+      assertThat(r.validity()).isNull();
+    });
+  }
+
+  @Test
+  void eamServiceDependencyTakesValidFromOnlyFromSource() {
+    known.add(PAY);
+    known.add(LEDGER);
+    var e = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
+        fields("from", "svc-payments-api", "to", "svc-ledger-api", "validFrom", "2026-02-01T00:00:00Z"));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(of(n, UpsertRelation.class)).singleElement().satisfies(r ->
+        assertThat(r.validity().validFrom()).isEqualTo(java.time.Instant.parse("2026-02-01T00:00:00Z")));
+  }
+
+  @Test
+  void eamServiceDependencyRejectsMissingEndAndUnknownCriticality() {
+    var noTo = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
+        fields("from", "svc-payments-api"));
+    assertThat(normalizer.normalize(noTo, RAW)).isInstanceOfSatisfying(Quarantined.class,
+        q -> assertThat(q.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD"));
+    var bad = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
+        fields("from", "a", "to", "b", "criticality", "SECRET-VALUE"));
+    assertThat(normalizer.normalize(bad, RAW)).isInstanceOfSatisfying(Quarantined.class,
+        q -> assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD"));
+  }
+
+  @Test
+  void eamServiceDependencyIsIdempotent() {
+    known.add(PAY);
+    known.add(LEDGER);
+    var e = event("urn:corp:eam",
+        STUBS.get(SourceSystem.EAM).fetchById("SERVICE_DEPENDENCY", "dep-payments-api-ledger-api").orElseThrow());
+    assertThat(normalizer.normalize(e, RAW)).isEqualTo(normalizer.normalize(e, RAW));
   }
 
   // ---- SCM

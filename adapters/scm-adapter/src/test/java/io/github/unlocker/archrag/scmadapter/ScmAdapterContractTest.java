@@ -60,7 +60,7 @@ class ScmAdapterContractTest {
       seen += page.changes().size();
     }
 
-    assertThat(seen).isEqualTo(2);
+    assertThat(seen).isEqualTo(3);
     assertThat(page.snapshotComplete()).isTrue();
     assertThat(connector.fetchChanges(page.nextCursor(), 10).changes()).isEmpty();
   }
@@ -109,6 +109,6 @@ class ScmAdapterContractTest {
           assertThat(e.isRateLimited()).isTrue();
           assertThat(e.retryAfter()).isEqualTo(Duration.ofSeconds(3));
         });
-    assertThat(connector.fetchChanges(null, 10).changes()).hasSize(2);
+    assertThat(connector.fetchChanges(null, 10).changes()).hasSize(3);
   }
 }
