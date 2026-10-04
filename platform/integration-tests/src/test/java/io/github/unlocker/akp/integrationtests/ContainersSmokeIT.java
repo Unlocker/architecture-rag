@@ -12,10 +12,19 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /** Проверяет, что Neo4j Community, PostgreSQL и MinIO поднимаются и отвечают. */
 @Testcontainers
 class ContainersSmokeIT {
+
+  /**
+   * Образ S3-эмулятора. Репозиторий {@code minio/minio} исчез с Docker Hub (404), поэтому берём
+   * {@code chainguard/minio}, закреплённый по digest: у него есть только плавающий {@code latest}.
+   */
+  static final DockerImageName MINIO_IMAGE = DockerImageName
+      .parse("chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034")
+      .asCompatibleSubstituteFor("minio/minio");
 
   @Container
   static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
@@ -24,7 +33,7 @@ class ContainersSmokeIT {
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 
   @Container
-  static final MinIOContainer MINIO = new MinIOContainer("minio/minio:RELEASE.2024-12-18T13-15-44Z");
+  static final MinIOContainer MINIO = new MinIOContainer(MINIO_IMAGE);
 
   @Test
   void neo4jAnswersCypher() {
