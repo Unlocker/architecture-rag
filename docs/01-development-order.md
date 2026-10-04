@@ -9,7 +9,7 @@
 1. **Каркас** нужен, чтобы было куда писать код и чем проверять PR.
 2. **Каноническая модель** общая для записи и для чтения, поэтому она идёт раньше обеих сторон.
 3. **Запись в граф** (синхронизация) и **чтение из графа** (MCP-каркас) не зависят друг от друга и ведутся параллельно.
-4. **Identity resolution** встраивается в конвейер синхронизации между normalizer и projector.
+4. **Identity resolution** делится на две части. Deterministic mapping и crosswalk (UNLOCKER-173) нужны projector-у сразу, поэтому входят в синхронизацию E1. Candidate matching и конфликты (E3) идут после E1.
 5. **Бизнес-фичи** собираются поверх готовых записи и чтения.
 6. **Демо-стенд** собирается из готовых сервисов. Замеры и production gap list имеют смысл только на работающей системе.
 
@@ -18,28 +18,32 @@
 ```mermaid
 flowchart LR
     E0["E0 Каркас, CI, видение<br/>UNLOCKER-155"] --> E2["E2 Модель графа и схема Neo4j<br/>UNLOCKER-159"]
-    E2 --> E1["E1 Синхронизация<br/>UNLOCKER-163"]
+    E2 --> E1["E1 Синхронизация<br/>вкл. mapping/crosswalk UNLOCKER-173<br/>UNLOCKER-163"]
     E2 --> E4["E4 MCP-каркас и безопасность<br/>UNLOCKER-176"]
-    E1 --> E3["E3 Identity resolution<br/>UNLOCKER-172"]
-    E3 --> F["F1–F4 Бизнес-фичи MCP<br/>UNLOCKER-181/185/188/192"]
-    E4 --> F
-    F --> E5["E5 Демо-стенд Docker Compose<br/>UNLOCKER-195"]
+    E1 --> E3["E3 Candidate matching и конфликты<br/>UNLOCKER-172"]
+    E1 --> F12["F1 Поиск/карточка · F2 Footprint<br/>UNLOCKER-181/185"]
+    E4 --> F12
+    E3 --> F34["F3 Зависимости/impact · F4 Provenance<br/>UNLOCKER-188/192"]
+    E4 --> F34
+    F12 --> E5
+    F34 --> E5
+    E5["E5 Демо-стенд Docker Compose<br/>UNLOCKER-195"]
 ```
 
 | Шаг | Фича | Задача | Зависит от | Критерии готовности PoC |
 |---|---|---|---|---|
 | 1 | E0. Каркас репозитория, CI, актуализация видения | UNLOCKER-155 | — | — |
 | 2 | E2. Каноническая модель графа и схема Neo4j (Community) | UNLOCKER-159 | E0 | 1 |
-| 3a | E1. Синхронизация из мастер-систем в граф | UNLOCKER-163 | E0, E2; identity-шаг — E3 | 1–4 |
+| 3a | E1. Синхронизация из мастер-систем в граф, включая deterministic mapping и crosswalk (UNLOCKER-173) | UNLOCKER-163 | E0, E2 | 1–4 |
 | 3b | E4. MCP-сервер: каркас, безопасность, query-слой | UNLOCKER-176 | E0, E2 | 6 |
-| 4 | E3. Identity resolution и конфликты источников | UNLOCKER-172 | E2 | — |
+| 4 | E3. Candidate matching и конфликты источников | UNLOCKER-172 | E2, E1 | — |
 | 5 | F1. Поиск и карточка актива (`search_assets`, `get_asset`) | UNLOCKER-181 | E4, E2, E1 | 5 |
 | 5 | F2. Runtime footprint (`find_runtime_footprint`) | UNLOCKER-185 | E4, E1 | 5 |
 | 5 | F3. Зависимости и impact (`trace_dependencies`, `mode=impact`) | UNLOCKER-188 | E4, E1, E3 | 5, 7 |
 | 5 | F4. Provenance (`explain_provenance`) | UNLOCKER-192 | E4, E1, E3 | 5 |
 | 6 | E5. Демо-стенд на Docker Compose, backup, замеры, gap list | UNLOCKER-195 | E1, E4 | 8, 9, 10 |
 
-Шаги 3a и 3b идут параллельно. F1–F4 после выполнения зависимостей независимы друг от друга и берутся в порядке F1 → F2 → F3 → F4, пока есть свободные слоты разработчика.
+Шаги 3a и 3b идут параллельно. F1 и F2 могут стартовать сразу после E1 и E4, параллельно с E3. F3 и F4 ждут E3 (конфликты нужны для conflict markers). Среди готовых к работе фичи берутся в порядке F1 → F2 → F3 → F4, пока у разработчика есть свободные слоты.
 
 ## Подзадачи по стадиям
 
@@ -49,8 +53,8 @@ flowchart LR
 |---|---|---|---|---|---|
 | E0 | UNLOCKER-156 Maven-скелет | UNLOCKER-157 CI; UNLOCKER-158 правка видения | | | |
 | E2 | UNLOCKER-160 типы модели и `GraphCommand`; UNLOCKER-161 authority matrix | UNLOCKER-162 схема Neo4j и миграция | | | |
-| E1 | UNLOCKER-164 `EventJournal` + raw storage; UNLOCKER-165 `source-spi` и заглушки | UNLOCKER-166 адаптеры; UNLOCKER-167 normalizer | UNLOCKER-168 graph projector | UNLOCKER-169 reconciliation; UNLOCKER-170 админский эндпоинт | UNLOCKER-171 приёмка и замер SLA |
-| E3 | UNLOCKER-173 deterministic mapping и crosswalk; UNLOCKER-174 candidate matching | UNLOCKER-175 конфликты | | | |
+| E1 | UNLOCKER-164 `EventJournal` + raw storage; UNLOCKER-165 `source-spi` и заглушки | UNLOCKER-166 адаптеры; UNLOCKER-167 normalizer; UNLOCKER-173 deterministic mapping и crosswalk | UNLOCKER-168 graph projector | UNLOCKER-169 reconciliation; UNLOCKER-170 админский эндпоинт | UNLOCKER-171 приёмка и замер SLA |
+| E3 | UNLOCKER-174 candidate matching | UNLOCKER-175 конфликты | | | |
 | E4 | UNLOCKER-177 каркас MCP; UNLOCKER-178 OIDC | UNLOCKER-179 `graph-query-core`; UNLOCKER-180 аудит и телеметрия | | | |
 | F1 | UNLOCKER-182 `search_assets`; UNLOCKER-183 `get_asset` | UNLOCKER-184 приёмочный MCP-тест | | | |
 | F2 | UNLOCKER-186 `find_runtime_footprint` | UNLOCKER-187 приёмочный MCP-тест | | | |
@@ -85,12 +89,17 @@ develop
 - У разработчика одновременно не больше **2** активных задач.
 - Архитектор просыпается **каждый час** (автопилот «Arch RAG: почасовая проверка и добор задач из беклога»). Он проверяет PR, SHA и CI, вливает готовые подзадачи в epic и перезапускает зависшие задачи. Если у разработчика есть свободный слот, он берёт следующую подзадачу из беклога в порядке этого документа.
 
-## Открытое предложение (ждёт решения владельца)
+## Решение: deterministic mapping внутри E1 (2026-10-04)
 
-Projector из E1 (UNLOCKER-168, стадия 3) получает `gid` через deterministic mapping и crosswalk из E3.1 (UNLOCKER-173). При порядке «E3 целиком после E1» конвейер E1 упрётся в эту зависимость на стадии 3.
+Владелец выбрал вариант B: UNLOCKER-173 (бывш. E3.1, deterministic mapping и approved crosswalk) перенесена из E3 в E1, на стадию 2.
 
-Предлагается разделить E3:
-- UNLOCKER-173 (E3.1) выполнить до UNLOCKER-168, после E2 или параллельно со стадиями 1–2 E1;
-- UNLOCKER-174 и UNLOCKER-175 (кандидаты и конфликты) оставить после E1.
-
-Пока решения нет, действует порядок из таблицы выше. После решения документ, строки «Зависит от» в задачах и автопилот обновляются вместе.
+- **Зачем.** Projector (UNLOCKER-168) привязывает `SourceRecord` к узлу и разрешает ссылки между источниками только через сопоставление `(source, sourceType, sourceId) → gid`. Rebuild из raw storage (критерий 4) даёт тот же граф, только если сопоставление хранится, а не генерируется заново. Код в `epic/UNLOCKER-172` недоступен ветке `epic/UNLOCKER-163` до вливания E3 в `develop`, поэтому задача должна жить в той же фиче, что и projector.
+- **Зависимости:**
+  - UNLOCKER-173 ← E2 и UNLOCKER-164 (PostgreSQL + Flyway);
+  - UNLOCKER-168 ← UNLOCKER-173 (собственная таблица сопоставления в projector запрещена);
+  - UNLOCKER-170 ← UNLOCKER-173 (загрузка crosswalk).
+- **Критерии PoC:**
+  - критерии 1–4 закрываются внутри E1 (UNLOCKER-171), без временного сопоставления и повторной приёмки;
+  - F1 и F2 не ждут E3;
+  - критерии 6 и 8–10 не затронуты.
+- **Цена:** стадия 2 фичи E1 выросла на одну подзадачу.
