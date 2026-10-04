@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,7 +64,8 @@ class StubWebhookSenderTest {
     assertThat(sender.send(event())).isEqualTo(202);
     assertThat(verdicts).containsExactly(Result.VALID);
     assertThat(bodies.getFirst())
-        .contains("\"eventId\":\"eam-evt-3\"", "\"sourceId\":\"EAM-1042\"", "\"sourceVersion\":1", "\"operation\":\"UPSERT\"")
+        .contains("\"eventId\":\"eam-evt-3\"", "\"sourceId\":\"EAM-1042\"", "\"sourceVersion\":1",
+            "\"operation\":\"UPSERT\"")
         .doesNotContain("Payments Core");
   }
 

@@ -2,7 +2,10 @@ package io.github.unlocker.archrag.sourcespi;
 
 import java.time.Duration;
 
-/** Источник недоступен или ограничивает частоту (429/5xx/timeout); вызов можно повторить с backoff. */
+/**
+ * Источник недоступен или ограничивает частоту (429/5xx/timeout); вызов можно повторить с
+ * backoff.
+ */
 public class SourceUnavailableException extends RuntimeException {
 
   private final int statusCode;

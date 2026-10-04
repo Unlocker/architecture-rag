@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 /**
  * ВРЕМЕННЫЙ собственный формат deploy map и Helm charts для заглушки.

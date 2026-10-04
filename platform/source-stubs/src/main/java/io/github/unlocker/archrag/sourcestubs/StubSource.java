@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import io.github.unlocker.archrag.sourcespi.ChangeOperation;
 import io.github.unlocker.archrag.sourcespi.ChangePage;
@@ -11,6 +11,7 @@ import io.github.unlocker.archrag.sourcespi.WebhookEvent;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,7 @@ public final class StubSource implements SourceConnector {
   private final List<Entry> journal = new ArrayList<>();
   private final Map<String, Long> versions = new LinkedHashMap<>();
   private boolean webhooksSuppressed;
+  private boolean reorderNextPage;
   private int failuresLeft;
   private int failureStatus;
   private Duration failureRetryAfter;
@@ -73,6 +75,15 @@ public final class StubSource implements SourceConnector {
   }
 
   /**
+   * Следующая инкрементальная страница {@link #fetchChanges} придёт в обратном порядке и с
+   * дубликатом первого изменения (повторная доставка и перестановка версий при polling). Курсор
+   * страницы не меняется. Действует один раз.
+   */
+  public synchronized void reorderNextPage() {
+    this.reorderNextPage = true;
+  }
+
+  /**
    * Следующие {@code times} вызовов чтения завершатся {@link SourceUnavailableException}.
    *
    * @param status 429, 5xx или 0 для timeout
@@ -108,6 +119,12 @@ public final class StubSource implements SourceConnector {
           page.add(e.change());
           last = e.seq();
         }
+      }
+      if (reorderNextPage && !page.isEmpty()) {
+        reorderNextPage = false;
+        SourceChange first = page.getFirst();
+        Collections.reverse(page);
+        page.add(first);
       }
       // seq == индекс в журнале + 1, поэтому есть ещё записи, если журнал длиннее last.
       return new ChangePage(page, "i" + last, journal.size() > last, false);
@@ -163,7 +180,8 @@ public final class StubSource implements SourceConnector {
   }
 
   private SourceChange append(
-      String type, String id, ChangeOperation op, Completeness completeness, Map<String, Object> p) {
+      String type, String id, ChangeOperation op, Completeness completeness, Map<String,
+          Object> p) {
     long version = versions.merge(key(type, id), 1L, Long::sum);
     SourceChange change =
         new SourceChange(type, id, version, op, completeness, clock.instant(), p);

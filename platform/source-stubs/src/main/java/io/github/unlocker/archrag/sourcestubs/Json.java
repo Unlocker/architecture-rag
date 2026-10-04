@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import java.util.Collection;
 import java.util.Map;

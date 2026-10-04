@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,6 +15,7 @@ class JsonTest {
     m.put("a", "q\"\\\n\u0001");
     m.put("b", List.of(1, true));
     m.put("c", null);
-    assertThat(Json.write(m)).isEqualTo("{\"a\":\"q\\\"\\\\\\n\\u0001\",\"b\":[1,true],\"c\":null}");
+    assertThat(Json.write(m))
+        .isEqualTo("{\"a\":\"q\\\"\\\\\\n\\u0001\",\"b\":[1,true],\"c\":null}");
   }
 }

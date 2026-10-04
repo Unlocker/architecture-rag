@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import io.github.unlocker.archrag.sourcespi.WebhookEvent;
 import io.github.unlocker.archrag.sourcespi.WebhookSignature;
@@ -23,7 +23,8 @@ public final class StubWebhookSender implements AutoCloseable {
   private final URI target;
   private final String secret;
   private final Clock clock;
-  private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+  private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+      .build();
 
   /**
    * @param target URL webhook-endpoint'а адаптера
@@ -43,7 +44,8 @@ public final class StubWebhookSender implements AutoCloseable {
   /** Отправляет корректно подписанное событие с заданным timestamp (проверка replay window). */
   public int sendAt(WebhookEvent event, Instant timestamp) {
     String body = body(event);
-    return post(event, body, timestamp.getEpochSecond(), WebhookSignature.sign(secret, timestamp.getEpochSecond(), body));
+    return post(event, body, timestamp.getEpochSecond(), WebhookSignature.sign(secret,
+        timestamp.getEpochSecond(), body));
   }
 
   /** Отправляет событие с подписью, вычисленной другим секретом. */
@@ -79,7 +81,8 @@ public final class StubWebhookSender implements AutoCloseable {
     try {
       return http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
     } catch (IOException e) {
-      throw new IllegalStateException("webhook delivery failed: " + e.getClass().getSimpleName(), e);
+      throw new IllegalStateException("webhook delivery failed: " + e.getClass().getSimpleName(),
+          e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException("webhook delivery interrupted", e);

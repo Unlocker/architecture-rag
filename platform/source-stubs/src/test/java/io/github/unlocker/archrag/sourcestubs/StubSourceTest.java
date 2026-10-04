@@ -1,6 +1,6 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
-import static io.github.unlocker.archrag.sourcespi.stub.StubSources.fields;
+import static io.github.unlocker.archrag.sourcestubs.StubSources.fields;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -32,7 +32,8 @@ class StubSourceTest {
     assertThat(all.get(SourceSystem.SCM).fetchById("SERVICE", "svc-payments-api")).isPresent();
     assertThat(all.get(SourceSystem.CMDB).fetchById("COMPUTE_INSTANCE", "vm-pay-01")).isPresent();
     SourceChange deployment =
-        all.get(SourceSystem.DEPLOY_MAP).fetchById(DeployMapFormat.DEPLOYMENT, "dep-payments-api-prod").orElseThrow();
+        all.get(SourceSystem.DEPLOY_MAP).fetchById(DeployMapFormat.DEPLOYMENT,
+            "dep-payments-api-prod").orElseThrow();
     assertThat(deployment.payload()).containsEntry("format", DeployMapFormat.FORMAT);
   }
 
@@ -42,7 +43,8 @@ class StubSourceTest {
     long v1 = eam.fetchById("IT_SYSTEM", "EAM-1042").orElseThrow().sourceVersion();
     SourceChange updated = eam.upsert("IT_SYSTEM", "EAM-1042", fields("name", "Payments Core v2"));
     assertThat(updated.sourceVersion()).isEqualTo(v1 + 1);
-    assertThat(eam.fetchById("IT_SYSTEM", "EAM-1042").orElseThrow().payload()).containsEntry("name", "Payments Core v2");
+    assertThat(eam.fetchById("IT_SYSTEM", "EAM-1042").orElseThrow().payload())
+        .containsEntry("name", "Payments Core v2");
   }
 
   @Test
@@ -55,7 +57,8 @@ class StubSourceTest {
     assertThat(eam.fetchById("IT_SYSTEM", "EAM-2001")).contains(deleted);
     assertThat(deleted.operation()).isEqualTo(ChangeOperation.DELETE);
     assertThat(eam.fetchChanges(checkpoint, 100).changes()).containsExactly(deleted);
-    assertThat(eam.fetchChanges(null, 100).changes()).extracting(SourceChange::sourceId).doesNotContain("EAM-2001");
+    assertThat(eam.fetchChanges(null, 100).changes()).extracting(SourceChange::sourceId)
+        .doesNotContain("EAM-2001");
   }
 
   @Test
@@ -78,12 +81,14 @@ class StubSourceTest {
       }
     } while (true);
 
-    assertThat(all).extracting(SourceChange::sourceId).containsExactlyInAnyOrder("TEAM-PAY", "EAM-2001", "EAM-1042");
+    assertThat(all).extracting(SourceChange::sourceId).containsExactlyInAnyOrder("TEAM-PAY",
+        "EAM-2001", "EAM-1042");
     assertThat(pages).hasSize(2);
     assertThat(pages.get(0).snapshotComplete()).isFalse();
     assertThat(pages.get(1).snapshotComplete()).isTrue();
     // Позже созданный объект приходит инкрементально с курсором snapshot.
-    assertThat(eam.fetchChanges(cursor, 10).changes()).extracting(SourceChange::sourceId).containsExactly("EAM-9999");
+    assertThat(eam.fetchChanges(cursor, 10).changes()).extracting(SourceChange::sourceId)
+        .containsExactly("EAM-9999");
   }
 
   @Test
@@ -132,7 +137,8 @@ class StubSourceTest {
 
     List<WebhookEvent> events = eam.webhookEvents();
     assertThat(events).hasSize(before + 1);
-    assertThat(events).extracting(WebhookEvent::sourceId).doesNotContain("missed").endsWith("EAM-2001");
+    assertThat(events).extracting(WebhookEvent::sourceId).doesNotContain("missed")
+        .endsWith("EAM-2001");
     assertThat(eam.fetchChanges(cursor, 10).changes()).extracting(SourceChange::sourceId)
         .containsExactly("EAM-1042", "EAM-2001");
   }
@@ -141,11 +147,13 @@ class StubSourceTest {
   void staleWebhookVersionIsLowerThanCurrentState() {
     StubSource eam = StubSources.eam(clock);
     eam.upsert("IT_SYSTEM", "EAM-1042", fields("name", "v2"));
-    List<WebhookEvent> events = eam.webhookEvents().stream().filter(e -> e.sourceId().equals("EAM-1042")).toList();
+    List<WebhookEvent> events = eam.webhookEvents().stream().filter(e -> e.sourceId()
+        .equals("EAM-1042")).toList();
     assertThat(events).hasSize(2);
     long current = eam.fetchById("IT_SYSTEM", "EAM-1042").orElseThrow().sourceVersion();
     // out-of-order: старое уведомление доставлено после нового.
-    assertThat(events.get(0).sourceVersion()).isLessThan(events.get(1).sourceVersion()).isLessThan(current + 1);
+    assertThat(events.get(0).sourceVersion()).isLessThan(events.get(1).sourceVersion())
+        .isLessThan(current + 1);
     assertThat(events).extracting(WebhookEvent::eventId).doesNotHaveDuplicates();
   }
 
@@ -166,15 +174,33 @@ class StubSourceTest {
     StubSource eam = StubSources.eam(clock);
     eam.failNext(2, 503, null);
     assertThatThrownBy(() -> eam.fetchById("IT_SYSTEM", "EAM-1042"))
-        .isInstanceOfSatisfying(SourceUnavailableException.class, e -> assertThat(e.statusCode()).isEqualTo(503));
-    assertThatThrownBy(() -> eam.fetchChanges(null, 10)).isInstanceOf(SourceUnavailableException.class);
+        .isInstanceOfSatisfying(SourceUnavailableException.class, e -> assertThat(e.statusCode())
+            .isEqualTo(503));
+    assertThatThrownBy(() -> eam.fetchChanges(null, 10))
+        .isInstanceOf(SourceUnavailableException.class);
     assertThat(eam.fetchById("IT_SYSTEM", "EAM-1042")).isPresent();
+  }
+
+  @Test
+  void reorderedPageHasDuplicateAndReversedVersions() {
+    StubSource eam = StubSources.eam(clock);
+    String cursor = eam.fetchChanges(null, 100).nextCursor();
+    eam.upsert("IT_SYSTEM", "EAM-1042", fields("name", "v2"));
+    eam.upsert("IT_SYSTEM", "EAM-1042", fields("name", "v3"));
+    eam.reorderNextPage();
+
+    ChangePage page = eam.fetchChanges(cursor, 10);
+    assertThat(page.changes()).extracting(SourceChange::sourceVersion).containsExactly(3L, 2L, 2L);
+    // Один раз: следующий вызов с тем же курсором приходит в нормальном порядке.
+    assertThat(eam.fetchChanges(cursor, 10).changes())
+        .extracting(SourceChange::sourceVersion).containsExactly(2L, 3L);
   }
 
   @Test
   void invalidLimitIsRejected() {
     StubSource eam = StubSources.eam(clock);
-    assertThatThrownBy(() -> eam.fetchChanges(null, 0)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> eam.fetchChanges(null, 0))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.sourcespi.stub;
+package io.github.unlocker.archrag.sourcestubs;
 
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import java.time.Clock;
@@ -10,8 +10,8 @@ import java.util.Map;
 /**
  * Начальные fixtures четырёх источников: репрезентативный вертикальный срез {@code ITSystem ->
  * Service -> Deployment -> Environment -> ComputeInstance} плюс {@code Repository} и {@code Team}.
- * Идентификаторы согласованы между источниками: сервис SCM ссылается на систему EAM, deployment — на
- * сервис, environment и хосты CMDB.
+ * Идентификаторы согласованы между источниками: сервис SCM ссылается на систему EAM, deployment —
+ * на сервис, environment и хосты CMDB.
  */
 public final class StubSources {
 
@@ -56,7 +56,8 @@ public final class StubSources {
     s.upsert(
         SERVICE,
         "svc-payments-api",
-        fields("name", "payments-api", "systemCode", "EAM-1042", "repositoryId", "repo-payments-api"));
+        fields("name", "payments-api", "systemCode", "EAM-1042", "repositoryId",
+            "repo-payments-api"));
     return s;
   }
 
@@ -65,13 +66,15 @@ public final class StubSources {
     s.upsert(
         COMPUTE_INSTANCE,
         "vm-pay-01",
-        fields("hostname", "vm-pay-01.prod.example.org", "state", "RUNNING", "environment", "prod"));
+        fields("hostname", "vm-pay-01.prod.example.org", "state", "RUNNING", "environment",
+            "prod"));
     return s;
   }
 
   public static StubSource deployMap(Clock clock) {
     StubSource s = new StubSource(SourceSystem.DEPLOY_MAP, clock);
-    s.upsert(DeployMapFormat.ENVIRONMENT, "prod", fields("format", DeployMapFormat.FORMAT, "name", "Production"));
+    s.upsert(DeployMapFormat.ENVIRONMENT, "prod", fields("format", DeployMapFormat.FORMAT, "name",
+        "Production"));
     s.upsert(
         DeployMapFormat.DEPLOYMENT,
         "dep-payments-api-prod",

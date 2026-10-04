@@ -20,7 +20,8 @@ class WebhookSignatureTest {
   @Test
   void validSignatureIsAccepted() {
     String sig = WebhookSignature.sign("s3cret", NOW.getEpochSecond(), BODY);
-    assertThat(WebhookSignature.verify("s3cret", ts(NOW), sig, BODY, NOW, WINDOW)).isEqualTo(Result.VALID);
+    assertThat(WebhookSignature.verify("s3cret", ts(NOW), sig, BODY, NOW, WINDOW))
+        .isEqualTo(Result.VALID);
   }
 
   @Test
@@ -47,10 +48,15 @@ class WebhookSignatureTest {
 
   @Test
   void missingOrMalformedHeadersAreRejected() {
-    assertThat(WebhookSignature.verify("s", null, "sha256=00", BODY, NOW, WINDOW)).isEqualTo(Result.MALFORMED);
-    assertThat(WebhookSignature.verify("s", ts(NOW), null, BODY, NOW, WINDOW)).isEqualTo(Result.MALFORMED);
-    assertThat(WebhookSignature.verify("s", "abc", "sha256=00", BODY, NOW, WINDOW)).isEqualTo(Result.MALFORMED);
-    assertThat(WebhookSignature.verify("s", ts(NOW), "sha256=zz", BODY, NOW, WINDOW)).isEqualTo(Result.MALFORMED);
-    assertThat(WebhookSignature.verify("s", ts(NOW), "md5=00", BODY, NOW, WINDOW)).isEqualTo(Result.MALFORMED);
+    assertThat(WebhookSignature.verify("s", null, "sha256=00", BODY, NOW, WINDOW))
+        .isEqualTo(Result.MALFORMED);
+    assertThat(WebhookSignature.verify("s", ts(NOW), null, BODY, NOW, WINDOW))
+        .isEqualTo(Result.MALFORMED);
+    assertThat(WebhookSignature.verify("s", "abc", "sha256=00", BODY, NOW, WINDOW))
+        .isEqualTo(Result.MALFORMED);
+    assertThat(WebhookSignature.verify("s", ts(NOW), "sha256=zz", BODY, NOW, WINDOW))
+        .isEqualTo(Result.MALFORMED);
+    assertThat(WebhookSignature.verify("s", ts(NOW), "md5=00", BODY, NOW, WINDOW))
+        .isEqualTo(Result.MALFORMED);
   }
 }

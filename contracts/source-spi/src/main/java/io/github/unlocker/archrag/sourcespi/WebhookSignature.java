@@ -10,7 +10,11 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Подпись webhook: {@code sha256=hex(HMAC-SHA256(secret, timestamp + "." + body))}.
+ * Подпись webhook — контракт между источником и адаптером.
+ *
+ * <p>Заголовки: {@code X-Archrag-Signature: sha256=<hex>}, где {@code <hex>} — {@code
+ * HMAC-SHA256(secret, timestamp + "." + body)}; {@code X-Archrag-Timestamp} — unix-секунды
+ * отправки; {@code X-Archrag-Event-Id} — идентификатор события.
  *
  * <p>Проверка сравнивает подпись за постоянное время и отвергает запросы вне replay window.
  * Секрет не попадает в исключения и сообщения.
@@ -18,13 +22,13 @@ import javax.crypto.spec.SecretKeySpec;
 public final class WebhookSignature {
 
   /** Заголовок с подписью. */
-  public static final String SIGNATURE_HEADER = "X-Webhook-Signature";
+  public static final String SIGNATURE_HEADER = "X-Archrag-Signature";
 
   /** Заголовок с временем отправки в epoch seconds. */
-  public static final String TIMESTAMP_HEADER = "X-Webhook-Timestamp";
+  public static final String TIMESTAMP_HEADER = "X-Archrag-Timestamp";
 
   /** Заголовок с идентификатором события. */
-  public static final String EVENT_ID_HEADER = "X-Webhook-Event-Id";
+  public static final String EVENT_ID_HEADER = "X-Archrag-Event-Id";
 
   private static final String PREFIX = "sha256=";
 
