@@ -175,4 +175,18 @@ class WebhookHandlerTest {
 
     assertThat(journal.eventList().getFirst().type()).isEqualTo(EventMapper.TYPE_ASSET_DELETED);
   }
+
+  @Test
+  void deleteNotificationForForgottenObjectIsRecordedFromSignedBody() {
+    WebhookEvent gone = new WebhookEvent("eam-evt-777", "eam", "IT_SYSTEM", "GONE", 5,
+        ChangeOperation.DELETE, NOW);
+
+    assertThat(deliver(gone)).isEqualTo(202);
+
+    var e = journal.eventList().getFirst();
+    assertThat(e.type()).isEqualTo(EventMapper.TYPE_ASSET_DELETED);
+    assertThat(e.data().sourceVersion().value()).isEqualTo("5");
+    assertThat(deliver(gone)).isEqualTo(202);
+    assertThat(journal.rows).hasSize(1);
+  }
 }

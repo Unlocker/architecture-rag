@@ -122,7 +122,7 @@ class PollerTest {
     poller.pollOnce();
     String before = journal.loadCheckpoint("eam-poller", SOURCE).orElseThrow().cursor();
     eam.upsert(StubSources.IT_SYSTEM, "EAM-4000", StubSources.fields("name", "N"));
-    eam.failNext(10, 429, Duration.ofSeconds(7));
+    eam.failNext(10, 429, Duration.ofSeconds(3));
     int rowsBefore = journal.rows.size();
 
     PollResult limited = poller.pollOnce();
@@ -131,7 +131,7 @@ class PollerTest {
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE).orElseThrow().cursor()).isEqualTo(before);
     assertThat(journal.rows).hasSize(rowsBefore);
     // 3 попытки → 2 паузы, и обе не короче Retry-After.
-    assertThat(sleeps).hasSize(2).allMatch(d -> d.compareTo(Duration.ofSeconds(7)) >= 0);
+    assertThat(sleeps).hasSize(2).allMatch(d -> d.compareTo(Duration.ofSeconds(3)) >= 0);
 
     eam.failNext(0, 429, null);
     PollResult recovered = poller.pollOnce();
@@ -208,6 +208,38 @@ class PollerTest {
         .isInstanceOf(IllegalStateException.class);
 
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE).orElseThrow().cursor()).isEqualTo(before);
+  }
+
+  @Test
+  void hasMoreWithoutNewCursorFailsInsteadOfLooping() {
+    var stuckSnapshot = new StuckConnector(null);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> pollerOver(stuckSnapshot).pollOnce())
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).isEmpty();
+
+    journal.saveCheckpoint("eam-poller", SOURCE, "i1");
+    var stuckIncremental = new StuckConnector("i1");
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> pollerOver(stuckIncremental).pollOnce())
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  /** Всегда отвечает {@code hasMore=true} с тем же курсором. */
+  private record StuckConnector(String sameCursor)
+      implements io.github.unlocker.archrag.sourcespi.SourceConnector {
+    @Override
+    public SourceSystem system() {
+      return SourceSystem.EAM;
+    }
+
+    @Override
+    public io.github.unlocker.archrag.sourcespi.ChangePage fetchChanges(String cursor, int limit) {
+      return new io.github.unlocker.archrag.sourcespi.ChangePage(List.of(), sameCursor, true, false);
+    }
+
+    @Override
+    public java.util.Optional<io.github.unlocker.archrag.sourcespi.SourceChange> fetchById(String t, String i) {
+      return java.util.Optional.empty();
+    }
   }
 
   private Poller pollerOver(io.github.unlocker.archrag.sourcespi.SourceConnector connector) {

@@ -98,6 +98,10 @@ public final class Poller {
         inbox.record(EventMapper.pollEventId(c), c, null, null);
         appended++;
       }
+      if (page.hasMore() && (page.nextCursor() == null || page.nextCursor().equals(cursor))) {
+        // Источник недоверенный: страница «есть ещё» без нового курсора зациклила бы чтение.
+        throw noProgress();
+      }
       if (page.nextCursor() != null && !page.nextCursor().equals(cursor)) {
         // Курсор сдвигается только после append всей страницы.
         journal.saveCheckpoint(pollerConsumer(), source, page.nextCursor());
@@ -122,6 +126,9 @@ public final class Poller {
         appended++;
       }
       if (page.hasMore()) {
+        if (page.nextCursor() == null || page.nextCursor().equals(cursor)) {
+          throw noProgress();
+        }
         cursor = page.nextCursor();
         continue;
       }
@@ -135,6 +142,10 @@ public final class Poller {
       journal.saveCheckpoint(pollerConsumer(), source, page.nextCursor());
       return new PollResult(PollResult.Outcome.SNAPSHOT_COMPLETED, appended, runId);
     }
+  }
+
+  private IllegalStateException noProgress() {
+    return new IllegalStateException(config.system().code() + " reported hasMore without advancing the cursor");
   }
 
   private String snapshotRunId(String source) {

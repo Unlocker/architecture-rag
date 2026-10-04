@@ -39,10 +39,16 @@ class RetryPolicyTest {
   @Test
   void retryAfterRaisesTheDelayButNeverLowersIt() {
     Random random = new Random(3);
-    assertThat(policy.delay(1, failure(Duration.ofSeconds(20)), random))
-        .isEqualTo(Duration.ofSeconds(20));
+    assertThat(policy.delay(1, failure(Duration.ofSeconds(6)), random))
+        .isEqualTo(Duration.ofSeconds(6));
     assertThat(policy.delay(4, failure(Duration.ofMillis(10)), random))
         .isGreaterThanOrEqualTo(Duration.ofSeconds(4));
+  }
+
+  @Test
+  void hugeRetryAfterIsCappedByMaxDelay() {
+    assertThat(policy.delay(1, failure(Duration.ofSeconds(999_999_999)), new Random(3)))
+        .isEqualTo(Duration.ofSeconds(8));
   }
 
   @Test

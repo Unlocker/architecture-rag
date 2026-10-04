@@ -2,6 +2,8 @@ package io.github.unlocker.archrag.adaptercore;
 
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
+import io.github.unlocker.archrag.sourcespi.ChangeOperation;
+import io.github.unlocker.archrag.sourcespi.Completeness;
 import io.github.unlocker.archrag.sourcespi.SourceChange;
 import io.github.unlocker.archrag.sourcespi.SourceConnector;
 import io.github.unlocker.archrag.sourcespi.SourceUnavailableException;
@@ -18,8 +20,8 @@ import java.util.function.Function;
  * <p>Статусы: {@code 202} — событие зафиксировано в inbox (в том числе повтор, он даёт {@code
  * DUPLICATE} и не создаёт вторую строку); {@code 401} — подпись отсутствует, неверна или вне
  * replay window (без деталей); {@code 400} — тело не разбирается, не совпали идентификатор
- * события в заголовке и теле либо источник; {@code 404} — источник не знает объект, фиксировать
- * нечего; {@code 503} — источник недоступен, доставку нужно повторить. Сбои журнала и S3
+ * события в заголовке и теле либо источник; {@code 404} — источник не знает объект при уведомлении об upsert, фиксировать
+ * нечего (при уведомлении об удалении фиксируется tombstone по подписанному телу); {@code 503} — источник недоступен, доставку нужно повторить. Сбои журнала и S3
  * пробрасываются: {@code 202} до записи в inbox не отдаётся.
  *
  * <p>Дедупликация идёт по {@code eventId} из подписанного тела: заголовок {@code
@@ -85,11 +87,22 @@ public final class WebhookHandler {
     } catch (SourceUnavailableException e) {
       return 503;
     }
-    if (state.isEmpty()) {
+    SourceChange change;
+    if (state.isPresent()) {
+      change = state.get();
+    } else if ("DELETE".equals(notification.get("operation"))) {
+      // Источник уже забыл удалённый объект: tombstone строим по подписанному уведомлению.
+      Long version = notification.get("sourceVersion") instanceof Number n ? n.longValue() : null;
+      if (version == null || version < 0) {
+        return 400;
+      }
+      change = new SourceChange(sourceType, sourceId, version, ChangeOperation.DELETE,
+          Completeness.COMPLETE, clock.instant(), Map.of());
+    } else {
       return 404;
     }
     // append вернул управление: событие в inbox (RECEIVED или DUPLICATE).
-    inbox.record(eventId, state.get(), eventId, null);
+    inbox.record(eventId, change, eventId, null);
     return 202;
   }
 

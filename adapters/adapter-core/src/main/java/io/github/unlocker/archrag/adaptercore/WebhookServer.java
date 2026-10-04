@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.Executors;
 
 /**
  * HTTP-привязка {@link WebhookHandler} на JDK {@code HttpServer}: {@code POST /webhook}. Тело
@@ -34,6 +35,8 @@ public final class WebhookServer implements AutoCloseable {
     } catch (IOException e) {
       throw new IllegalStateException("cannot start webhook server", e);
     }
+    // Медленный fetchById одного запроса не должен блокировать приём остальных.
+    server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     server.createContext("/webhook", this::serve);
     server.start();
   }

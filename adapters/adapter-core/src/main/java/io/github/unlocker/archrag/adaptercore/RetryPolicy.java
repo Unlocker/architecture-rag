@@ -10,7 +10,7 @@ import java.util.Random;
  *
  * <p>Задержка попытки {@code n} (с 1): {@code ceiling = min(maxDelay, baseDelay * 2^(n-1))}, затем
  * «equal jitter»: {@code ceiling/2 + random[0, ceiling/2]}. Если источник прислал {@code
- * Retry-After}, ждём не меньше него. Число попыток ограничено {@code maxAttempts}.
+ * Retry-After}, ждём не меньше него, но не дольше {@code maxDelay}. Число попыток ограничено {@code maxAttempts}.
  *
  * @param maxAttempts максимум обращений к источнику за один вызов, не меньше 1
  * @param baseDelay базовая задержка, положительная
@@ -43,6 +43,9 @@ public record RetryPolicy(int maxAttempts, Duration baseDelay, Duration maxDelay
     long half = ceiling / 2;
     Duration backoff = Duration.ofMillis(half + (long) (random.nextDouble() * (ceiling - half + 1)));
     Duration retryAfter = failure.retryAfter();
+    if (retryAfter != null && retryAfter.compareTo(maxDelay) > 0) {
+      retryAfter = maxDelay; // недоверенный источник не может усыпить poller надолго
+    }
     return retryAfter != null && retryAfter.compareTo(backoff) > 0 ? retryAfter : backoff;
   }
 }
