@@ -20,6 +20,10 @@
       <artifactId>graph-query-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.neo4j.driver</groupId>
+      <artifactId>neo4j-java-driver</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
     </dependency>
