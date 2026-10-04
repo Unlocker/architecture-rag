@@ -166,7 +166,7 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 (:ITSystem {gid: '...', name: 'Payments'})
 ```
 
-> **Открытый вопрос:** формат `sourceId` не зафиксирован: здесь `'1042'`, а в каноническом событии ниже — `'EAM-1042'`. Решение владельца не принято; до него оба примера остаются как есть.
+Решение владельца 2026-10-04: `sourceId` — сырой ID источника без префикса системы (например, `'1042'`); система определяется полем `source`.
 
 Такой паттерн позволяет нескольким системам подтверждать один canonical node, не смешивает источник с бизнес-сущностью и дает точку для tombstone, версии и hash. Узлы должны иметь уникальное свойство или набор свойств; специфические relationship types уменьшают лишние обходы.[^15][^16]
 
@@ -264,13 +264,14 @@ CREATE CONSTRAINT source_record_key IF NOT EXISTS
 FOR (n:SourceRecord)
 REQUIRE (n.source, n.sourceType, n.sourceId) IS UNIQUE;
 
-CREATE RANGE INDEX deployment_env IF NOT EXISTS
-FOR (n:Deployment) ON (n.environmentKey);
+CREATE CONSTRAINT environment_code IF NOT EXISTS
+FOR (n:Environment) REQUIRE n.code IS UNIQUE;
 
 CREATE FULLTEXT INDEX asset_text IF NOT EXISTS
 FOR (n:ITSystem|Solution|Platform|Service|Document)
 ON EACH [n.name, n.description, n.title];
 
+// вне PoC: KnowledgeChunk и embeddings в срез не входят
 CREATE VECTOR INDEX chunk_embedding IF NOT EXISTS
 FOR (n:KnowledgeChunk) ON n.embedding
 OPTIONS {indexConfig: {
@@ -279,7 +280,7 @@ OPTIONS {indexConfig: {
 }};
 ```
 
-> **Открытый вопрос:** индекс `deployment_env` построен по `environmentKey`, которого нет в модели `Deployment` (см. «Основные узлы»: окружение задается связью `IN_ENVIRONMENT`). Нужно решить: добавить свойство в модель или перестроить индекс. Не решено.
+Решение владельца 2026-10-04: индекс `deployment_env` убран; окружение задаётся связью `IN_ENVIRONMENT`, а `Environment.code` защищён UNIQUE-constraint `environment_code`.
 
 Для `source_record_key` в Community Edition используется `IS UNIQUE`: ранее здесь стоял `IS NODE KEY`, который доступен только в Enterprise. `UNIQUE` не требует существования свойств, поэтому обязательность `source`, `sourceType`, `sourceId` проверяет приложение (Community), см. E2.
 
@@ -409,7 +410,7 @@ RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
   "correlationid": "...",
   "data": {
     "sourceType": "IT_SYSTEM",
-    "sourceId": "EAM-1042",
+    "sourceId": "1042",
     "sourceVersion": "184",
     "payload": {}
   }
