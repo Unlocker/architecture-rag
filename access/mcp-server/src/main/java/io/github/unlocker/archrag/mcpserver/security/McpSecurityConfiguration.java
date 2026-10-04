@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.mcpserver.security;
 
+import io.github.unlocker.archrag.mcpserver.audit.ToolCallAuditor;
 import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -25,13 +26,14 @@ public class McpSecurityConfiguration {
   SecurityFilterChain mcpSecurityFilterChain(
       HttpSecurity http,
       McpSecurityProperties properties,
+      ToolCallAuditor auditor,
       OAuth2ResourceServerProperties resourceServer)
       throws Exception {
     String issuer = resourceServer.getJwt().getIssuerUri();
     List<String> scopes = properties.toolScopes().values().stream().distinct().sorted().toList();
     // Фильтр создаётся через new, а не бином: иначе Boot зарегистрирует его ещё и как
     // servlet-фильтр.
-    var toolScopeFilter = new ToolScopeFilter(properties);
+    var toolScopeFilter = new ToolScopeFilter(properties, auditor);
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(

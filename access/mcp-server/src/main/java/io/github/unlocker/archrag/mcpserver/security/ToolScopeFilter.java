@@ -7,6 +7,8 @@ import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import io.github.unlocker.archrag.mcpserver.audit.ToolCallAuditor;
+import io.github.unlocker.archrag.mcpserver.audit.ToolDecision;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -30,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Работает только на {@code POST /mcp}. Тело читается не более {@code max-request-bytes} и
  * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется
- * (fail-closed). Остальные методы MCP требуют только валидный токен.
+ * (fail-closed). Отказы пишутся в аудит. Остальные методы MCP требуют только валидный токен.
  */
 final class ToolScopeFilter extends OncePerRequestFilter {
 
@@ -38,10 +40,12 @@ final class ToolScopeFilter extends OncePerRequestFilter {
   private static final String MCP_PATH = "/mcp";
 
   private final McpSecurityProperties properties;
+  private final ToolCallAuditor auditor;
   private final JsonMapper mapper = new JsonMapper();
 
-  ToolScopeFilter(McpSecurityProperties properties) {
+  ToolScopeFilter(McpSecurityProperties properties, ToolCallAuditor auditor) {
     this.properties = properties;
+    this.auditor = auditor;
   }
 
   @Override
@@ -80,10 +84,12 @@ final class ToolScopeFilter extends OncePerRequestFilter {
       String scope = tool == null ? null : properties.toolScopes().get(tool);
       if (scope == null) {
         LOG.warn("tools/call отклонён: для tool нет записи в archrag.mcp.security.tool-scopes");
+        auditor.denied(tool, ToolDecision.DENIED_UNKNOWN_TOOL);
         forbid(request, response, null);
         return;
       }
       if (!hasAuthority("SCOPE_" + scope)) {
+        auditor.denied(tool, ToolDecision.DENIED_SCOPE);
         forbid(request, response, scope);
         return;
       }
