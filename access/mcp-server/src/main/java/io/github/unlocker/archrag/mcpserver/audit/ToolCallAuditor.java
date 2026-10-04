@@ -125,7 +125,7 @@ public class ToolCallAuditor {
       return null;
     }
     String cut = tool.length() > MAX_TOOL_NAME ? tool.substring(0, MAX_TOOL_NAME) + "…" : tool;
-    return cut.replaceAll("\\p{Cntrl}", "?");
+    return cut.replaceAll("[\\p{Cntrl}\\p{Zl}\\p{Zp}\\u0085]", "?");
   }
 
   /** {@code sub} и {@code azp}/{@code client_id} из JWT; сам токен не читается. */

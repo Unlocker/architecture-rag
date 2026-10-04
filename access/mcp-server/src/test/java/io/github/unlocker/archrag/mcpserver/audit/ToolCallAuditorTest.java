@@ -77,6 +77,7 @@ class ToolCallAuditorTest {
   @Test
   void sanitizeReplacesControlCharsAndTruncates() {
     assertThat(ToolCallAuditor.sanitize("a\nb\rc")).isEqualTo("a?b?c");
+    assertThat(ToolCallAuditor.sanitize("a\u2028b\u2029c\u0085d")).isEqualTo("a?b?c?d");
     assertThat(ToolCallAuditor.sanitize("x".repeat(200))).hasSize(65);
     assertThat(ToolCallAuditor.sanitize(null)).isNull();
   }
