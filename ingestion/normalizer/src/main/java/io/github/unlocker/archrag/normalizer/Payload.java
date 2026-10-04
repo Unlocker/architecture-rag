@@ -1,5 +1,7 @@
 package io.github.unlocker.archrag.normalizer;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,19 @@ final class Payload {
     }
     String trimmed = s.strip();
     return trimmed.isEmpty() ? Optional.empty() : Optional.of(trimmed);
+  }
+
+  /** Необязательный момент времени в ISO-8601 (UTC). */
+  Optional<Instant> optionalInstant(String field) {
+    return optional(field)
+        .map(
+            s -> {
+              try {
+                return Instant.parse(s);
+              } catch (DateTimeParseException e) {
+                throw invalidType(field);
+              }
+            });
   }
 
   /** Необязательное булево поле. */

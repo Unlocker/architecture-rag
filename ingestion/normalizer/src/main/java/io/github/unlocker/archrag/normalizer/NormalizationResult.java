@@ -12,7 +12,9 @@ public sealed interface NormalizationResult {
    * <p>Инварианты: {@code commands} начинаются с {@code UpsertNode} записи события, источник-DTO в
    * них не просачивается; {@code null} и отсутствующие поля источника не превращаются в
    * {@code CloseAssertion} или обнуление — необязательные поля узла просто {@code null}, а
-   * проектор не должен их записывать. {@code warnings} — коды потерянных данных (без значений).
+   * проектор (E1.5, UNLOCKER-168) не должен их записывать. Время начала действия связи ({@code validity})
+   * задаётся только если источник его передал; иначе оно {@code null} и выбор остаётся за проектором
+   * (не перезаписывать открытую связь). {@code warnings} — коды потерянных данных (без значений).
    */
   record Normalized(
       List<GraphCommand> commands, List<UnresolvedReference> unresolved, List<String> warnings)

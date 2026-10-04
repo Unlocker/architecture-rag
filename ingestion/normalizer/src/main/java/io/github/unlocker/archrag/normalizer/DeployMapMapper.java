@@ -15,7 +15,8 @@ import java.util.Set;
 /**
  * Deploy map и Helm charts во ВРЕМЕННОМ формате {@code deploymap-poc-0} (после решения владельца
  * маппер заменяется): {@code ENVIRONMENT} ({@code name}, {@code class}) и {@code DEPLOYMENT}
- * ({@code service}, {@code environment}, {@code chart}, {@code chartVersion}, {@code hosts}).
+ * ({@code name}, {@code service}, {@code environment}, {@code chart}, {@code chartVersion},
+ * {@code hosts}, {@code validFrom} для связи {@code RUNS_ON}).
  *
  * <p>Класс окружения берётся из {@code class}, иначе выводится из кода окружения; неопознанный —
  * {@code INVALID_PAYLOAD}. Хосты ссылаются на {@code sourceId} записей CMDB.
@@ -46,7 +47,7 @@ public final class DeployMapMapper implements CanonicalMapper {
         sink.add(
             new UpsertNode(
                 input.record(),
-                new Environment(code, p.optional("name").orElse(code), environmentClass(classText))));
+                new Environment(code, p.required("name"), environmentClass(classText))));
       }
       case DEPLOYMENT -> {
         sink.add(
@@ -54,7 +55,7 @@ public final class DeployMapMapper implements CanonicalMapper {
                 input.record(),
                 new Deployment(
                     key.sourceId(),
-                    p.optional("name").orElseGet(() -> p.required("chart")),
+                    p.required("name"),
                     p.optional("chartVersion").orElse(null),
                     p.optional("status").orElse(null),
                     input.time())));
@@ -87,12 +88,17 @@ public final class DeployMapMapper implements CanonicalMapper {
               NodeLabel.DEPLOYMENT,
               new SourceKey(SourceSystemCode.CMDB, CmdbMapper.COMPUTE_INSTANCE, host),
               NodeLabel.COMPUTE_INSTANCE,
-              new Validity(input.time(), null),
+              validity(p),
               "hosts");
         }
       }
       default -> throw new NormalizationException("UNKNOWN_SOURCE_TYPE", "unknown deploymap sourceType");
     }
+  }
+
+  /** {@code validFrom} из источника; без него validity не задаётся, решение остаётся за проектором (E1.5). */
+  private static Validity validity(Payload p) {
+    return p.optionalInstant("validFrom").map(from -> new Validity(from, null)).orElse(null);
   }
 
   private static EnvironmentClass environmentClass(String text) {

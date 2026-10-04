@@ -35,7 +35,7 @@ public final class Normalizer {
     mappers.forEach(m -> this.mappers.put(m.source(), m));
   }
 
-  /** Нормализатор со стандартными маппером'ами четырёх источников PoC. */
+  /** Нормализатор со стандартными мапперами четырёх источников PoC. */
   public static Normalizer standard(ReferenceResolver resolver) {
     return new Normalizer(
         List.of(new EamMapper(), new ScmMapper(), new CmdbMapper(), new DeployMapMapper()), resolver);
@@ -73,8 +73,9 @@ public final class Normalizer {
     } catch (NormalizationException e) {
       return quarantine(e.code(), e.getMessage());
     } catch (IllegalArgumentException e) {
-      // Инварианты records канонической модели: сообщения содержат имена полей, не значения.
-      return quarantine("INVALID_PAYLOAD", e.getMessage());
+      // Нарушен инвариант record'а модели; текст исключения может содержать значения источника,
+      // поэтому в причину он не попадает.
+      return quarantine("INVALID_PAYLOAD", "payload violates canonical model invariants");
     }
     return sink.result();
   }

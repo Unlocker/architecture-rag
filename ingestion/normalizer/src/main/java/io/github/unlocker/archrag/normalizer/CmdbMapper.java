@@ -9,8 +9,8 @@ import java.util.Set;
 
 /**
  * CMDB: {@code COMPUTE_INSTANCE} ({@code hostname}, {@code kind}, {@code ip}, {@code os},
- * {@code state}, {@code hypervisorRef}, {@code serialNumber}). Без {@code kind} запись получает
- * {@code ComputeKind.UNSPECIFIED}; поле {@code environment} не используется: привязку к окружению
+ * {@code state}, {@code hypervisorRef}, {@code serialNumber}). {@code kind} обязателен (значение по
+ * умолчанию затирало бы известный тип); поле {@code environment} не используется: привязку к окружению
  * задаёт deploy map.
  */
 public final class CmdbMapper implements CanonicalMapper {
@@ -33,8 +33,8 @@ public final class CmdbMapper implements CanonicalMapper {
       throw new NormalizationException("UNKNOWN_SOURCE_TYPE", "unknown CMDB sourceType");
     }
     var p = new Payload(input.payload());
-    ComputeKind kind =
-        p.optional("kind").map(CmdbMapper::kind).orElse(ComputeKind.UNSPECIFIED);
+    // kind обязателен: подстановка UNSPECIFIED затёрла бы известный тип; частичный апдейт — E1.5.
+    ComputeKind kind = kind(p.required("kind"));
     sink.add(
         new UpsertNode(
             input.record(),

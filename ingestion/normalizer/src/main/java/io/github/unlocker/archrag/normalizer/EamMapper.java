@@ -14,7 +14,7 @@ import java.util.Set;
 
 /**
  * EAM: {@code TEAM}, {@code IT_SYSTEM} (поля {@code name}, {@code status}, {@code criticality},
- * {@code description}, {@code ownerTeam}, {@code dependsOn}).
+ * {@code description}, {@code ownerTeam}, {@code ownerSince}, {@code dependsOn}).
  *
  * <p>{@code dependsOn} между IT-системами в модели не представим ({@code DEPENDS_ON} допустим
  * только {@code Service -> Service}); такие ссылки не выдаются, а попадают в предупреждение
@@ -59,7 +59,7 @@ public final class EamMapper implements CanonicalMapper {
                         NodeLabel.IT_SYSTEM,
                         new SourceKey(SourceSystemCode.EAM, TEAM, team),
                         NodeLabel.TEAM,
-                        new Validity(input.time(), null),
+                        p.optionalInstant("ownerSince").map(from -> new Validity(from, null)).orElse(null),
                         "ownerTeam"));
         if (!p.optionalList("dependsOn").isEmpty()) {
           sink.warn("DEPENDS_ON_NOT_SUPPORTED");

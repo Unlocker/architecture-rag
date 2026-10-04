@@ -41,7 +41,7 @@ public final class ScmMapper implements CanonicalMapper {
                   new Repository(
                       p.required("url"),
                       p.optional("defaultBranch").orElse(null),
-                      p.optionalBoolean("archived").orElse(false))));
+                      p.optionalBoolean("archived").orElse(null))));
       case SERVICE -> {
         sink.add(
             new UpsertNode(

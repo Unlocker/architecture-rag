@@ -83,8 +83,7 @@ class NormalizerTest {
     assertThat(rel).singleElement().satisfies(r -> {
       assertThat(r.type()).isEqualTo(RelationType.OWNED_BY);
       assertThat(r.to()).isEqualTo(key(SourceSystemCode.EAM, "TEAM", "TEAM-PAY"));
-      assertThat(r.validity().validFrom()).isEqualTo(T);
-      assertThat(r.validity().validTo()).isNull();
+      assertThat(r.validity()).isNull();
     });
     assertThat(n.warnings()).containsExactly("DEPENDS_ON_NOT_SUPPORTED");
   }
@@ -95,7 +94,7 @@ class NormalizerTest {
   void scmRepositoryMapsToRepository() {
     var n = stub(SourceSystem.SCM, "urn:corp:scm", "REPOSITORY", "repo-payments-api");
     assertThat(((UpsertNode) n.commands().get(0)).data())
-        .isEqualTo(new Repository("https://git.example.org/pay/payments-api", "main", false));
+        .isEqualTo(new Repository("https://git.example.org/pay/payments-api", "main", null));
   }
 
   @Test
@@ -138,12 +137,12 @@ class NormalizerTest {
   // ---- CMDB
 
   @Test
-  void cmdbComputeInstanceWithoutKindIsUnspecified() {
+  void cmdbComputeInstanceMapsKindAndState() {
     var n = stub(SourceSystem.CMDB, "urn:corp:cmdb", "COMPUTE_INSTANCE", "vm-pay-01");
     assertThat(((UpsertNode) n.commands().get(0)).data())
         .isEqualTo(
             new ComputeInstance(
-                "vm-pay-01.prod.example.org", ComputeKind.UNSPECIFIED, null, null, "RUNNING", null, null));
+                "vm-pay-01.prod.example.org", ComputeKind.VIRTUAL_MACHINE, null, null, "RUNNING", null, null));
   }
 
   @Test
@@ -151,7 +150,7 @@ class NormalizerTest {
     var e = event("urn:corp:cmdb", "urn:corp:schema:asset-upserted:1", "COMPUTE_INSTANCE", "x",
         fields("hostname", "h", "kind", "PHYSICAL_SERVER", "hypervisorRef", "hv"));
     assertThat(normalizer.normalize(e, RAW))
-        .isEqualTo(new Quarantined("INVALID_PAYLOAD", "hypervisorRef is allowed only for VIRTUAL_MACHINE"));
+        .isEqualTo(new Quarantined("INVALID_PAYLOAD", "payload violates canonical model invariants"));
   }
 
   // ---- deploymap
@@ -178,7 +177,7 @@ class NormalizerTest {
     assertThat(of(n, UpsertRelation.class))
         .filteredOn(r -> r.type() == RelationType.RUNS_ON)
         .singleElement()
-        .satisfies(r -> assertThat(r.validity().validFrom()).isEqualTo(T));
+        .satisfies(r -> assertThat(r.validity()).isNull());
   }
 
   // ---- schema, completeness, validation
@@ -248,5 +247,80 @@ class NormalizerTest {
     var e = new io.github.unlocker.archrag.eventschemas.CanonicalEvent(base.id(), base.source(),
         "architecture.asset.deleted.v1", base.subject(), base.time(), base.dataschema(), null, base.data());
     assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("UNSUPPORTED_EVENT_TYPE");
+  }
+
+  // ---- review: defaults must not overwrite, idempotence, unresolved in deploymap
+
+  @Test
+  void absentArchivedStaysNullInsteadOfFalse() {
+    var e = event("urn:corp:scm", "urn:corp:schema:asset-upserted:1", "REPOSITORY", "r",
+        fields("url", "https://git.example.org/r"));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(((UpsertNode) n.commands().get(0)).data())
+        .isEqualTo(new Repository("https://git.example.org/r", null, null));
+  }
+
+  @Test
+  void absentKindIsQuarantinedNotDefaulted() {
+    var e = event("urn:corp:cmdb", "urn:corp:schema:asset-upserted:1", "COMPUTE_INSTANCE", "c",
+        fields("hostname", "h"));
+    assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("MISSING_REQUIRED_FIELD");
+  }
+
+  @Test
+  void absentNameOfEnvironmentAndDeploymentIsQuarantinedNotDefaulted() {
+    var env = event("urn:corp:deploymap", "urn:corp:schema:asset-upserted:1", "ENVIRONMENT", "prod",
+        fields("class", "PROD"));
+    var dep = event("urn:corp:deploymap", "urn:corp:schema:asset-upserted:1", "DEPLOYMENT", "d",
+        fields("chart", "payments-api"));
+    assertThat(((Quarantined) normalizer.normalize(env, RAW)).errorCode()).isEqualTo("MISSING_REQUIRED_FIELD");
+    assertThat(((Quarantined) normalizer.normalize(dep, RAW)).errorCode()).isEqualTo("MISSING_REQUIRED_FIELD");
+  }
+
+  @Test
+  void invariantViolationReasonDoesNotLeakSourceValues() {
+    var e = event("urn:corp:cmdb", "urn:corp:schema:asset-upserted:1", "COMPUTE_INSTANCE", "c",
+        fields("hostname", "h", "kind", "SECRET-KIND"));
+    var q = (Quarantined) normalizer.normalize(e, RAW);
+    assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD");
+    assertThat(q.reason()).doesNotContain("SECRET-KIND");
+  }
+
+  @Test
+  void deploymentWithUnknownReferencesYieldsUnresolvedForEach() {
+    var n = stub(SourceSystem.DEPLOY_MAP, "urn:corp:deploymap", "DEPLOYMENT", "dep-payments-api-prod");
+    var dep = key(SourceSystemCode.DEPLOYMAP, "DEPLOYMENT", "dep-payments-api-prod");
+    assertThat(of(n, UpsertRelation.class)).isEmpty();
+    assertThat(n.unresolved())
+        .extracting(UnresolvedReference::field, UnresolvedReference::relationType,
+            UnresolvedReference::from, UnresolvedReference::target)
+        .containsExactlyInAnyOrder(
+            org.assertj.core.api.Assertions.tuple("service", RelationType.HAS_DEPLOYMENT, dep,
+                key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api")),
+            org.assertj.core.api.Assertions.tuple("environment", RelationType.IN_ENVIRONMENT, dep,
+                key(SourceSystemCode.DEPLOYMAP, "ENVIRONMENT", "prod")),
+            org.assertj.core.api.Assertions.tuple("hosts", RelationType.RUNS_ON, dep,
+                key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", "vm-pay-01")));
+  }
+
+  @Test
+  void validityIsTakenOnlyFromSourceAndIsStableAcrossReplays() {
+    known.add(key(SourceSystemCode.EAM, "TEAM", "TEAM-PAY"));
+    var payload = fields("name", "S", "ownerTeam", "TEAM-PAY", "ownerSince", "2026-01-01T00:00:00Z");
+    var first = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "IT_SYSTEM", "s", payload);
+    var later = new io.github.unlocker.archrag.eventschemas.CanonicalEvent(first.id(), first.source(), first.type(),
+        first.subject(), T.plusSeconds(3600), first.dataschema(), null, first.data());
+    var a = normalized(normalizer.normalize(first, RAW));
+    var b = normalized(normalizer.normalize(later, RAW));
+    assertThat(of(a, UpsertRelation.class)).singleElement()
+        .satisfies(r -> assertThat(r.validity().validFrom()).isEqualTo(java.time.Instant.parse("2026-01-01T00:00:00Z")));
+    assertThat(of(b, UpsertRelation.class)).isEqualTo(of(a, UpsertRelation.class));
+  }
+
+  @Test
+  void normalizingSameEventTwiceGivesEqualResult() {
+    known.add(key(SourceSystemCode.EAM, "TEAM", "TEAM-PAY"));
+    var e = event("urn:corp:eam", STUBS.get(SourceSystem.EAM).fetchById("IT_SYSTEM", "EAM-1042").orElseThrow());
+    assertThat(normalizer.normalize(e, RAW)).isEqualTo(normalizer.normalize(e, RAW));
   }
 }

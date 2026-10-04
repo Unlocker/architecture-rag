@@ -66,8 +66,8 @@ public final class StubSources {
     s.upsert(
         COMPUTE_INSTANCE,
         "vm-pay-01",
-        fields("hostname", "vm-pay-01.prod.example.org", "state", "RUNNING", "environment",
-            "prod"));
+        fields("hostname", "vm-pay-01.prod.example.org", "kind", "VIRTUAL_MACHINE", "state", "RUNNING",
+            "environment", "prod"));
     return s;
   }
 
@@ -80,6 +80,7 @@ public final class StubSources {
         "dep-payments-api-prod",
         fields(
             "format", DeployMapFormat.FORMAT,
+            "name", "payments-api",
             "service", "svc-payments-api",
             "environment", "prod",
             "chart", "payments-api",
