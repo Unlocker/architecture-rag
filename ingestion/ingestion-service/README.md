@@ -17,3 +17,10 @@
 
 Для PoC достаточно проверки издателя и scope; audience токена не проверяется (токен того же издателя со scope
 `architecture.admin`, выданный для другого ресурса, будет принят).
+
+## Диспетчер журнала (E1.11)
+
+`JournalDispatcher` забирает из `inbox_event` события в статусах `RECEIVED`, `RETRYING` и промежуточных
+(`VALIDATED`/`NORMALIZED`/`RESOLVED`) в порядке `(received_at, source, event_id)` и передаёт их в `EventProcessor`.
+Строки replay пропускаются. Один поток, один экземпляр сервиса. Настройки: `archrag.dispatcher.enabled|pause|batch-size`
+(env `ARCHRAG_DISPATCHER_*`). Пока ранняя версия объекта в `RETRYING`, его более поздние события в том же проходе не берутся.

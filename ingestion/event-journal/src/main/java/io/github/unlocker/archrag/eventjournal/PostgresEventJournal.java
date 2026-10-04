@@ -180,6 +180,10 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
       sql.append(" AND event_id NOT LIKE ?");
       args.add(JournalQuery.REPLAY_PREFIX + "%");
     }
+    if (q.statuses() != null) {
+      sql.append(" AND status IN (").append("?,".repeat(q.statuses().size()), 0, 2 * q.statuses().size() - 1).append(")");
+      q.statuses().stream().map(Enum::name).sorted().forEach(args::add);
+    }
     JournalKey after = q.after();
     if (after != null) {
       sql.append(" AND (received_at, source, event_id) > (?, ?, ?)");
