@@ -8,7 +8,6 @@ class IntegrationTestsSmokeTest {
 
   @Test
   void moduleMarkerIsOnClasspath() {
-    org.junit.jupiter.api.Assertions.fail("temporary: proves CI goes red");
     assertThat(IntegrationTestsModule.class.getPackageName()).isEqualTo("io.github.unlocker.akp.integrationtests");
   }
 }
