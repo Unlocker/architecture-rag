@@ -269,7 +269,8 @@ public final class GraphProjector implements GraphProjection {
     params.put("validTo", NodeProperties.utc(close.validTo()));
     // Нет подходящей открытой связи — ничего не меняется: повтор закрытия идемпотентен.
     tx.run(
-            "MATCH (a {gid: $from})-[rel:" + close.type().name() + "]->(b {gid: $to}) "
+            "MATCH (a:" + roots(close.type().sources()) + " {gid: $from})-[rel:" + close.type().name()
+                + "]->(b:" + roots(close.type().targets()) + " {gid: $to}) "
                 + "WHERE rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
                 + "AND rel.assertedById = $sourceId AND rel.validTo IS NULL "
                 + "SET rel.validTo = CASE WHEN rel.validFrom > $validTo THEN rel.validFrom ELSE $validTo END",
@@ -313,6 +314,11 @@ public final class GraphProjector implements GraphProjection {
     return new AppliedRecord(
         new SourceVersion(row.get("version").asString()),
         !row.get("active").isNull() && row.get("active").asBoolean());
+  }
+
+  /** Корневые метки через {@code |} (из enum): позволяют планировщику взять gid-индекс вместо AllNodesScan. */
+  private static String roots(java.util.Set<NodeLabel> labels) {
+    return labels.stream().map(l -> root(l).label()).distinct().sorted().reduce((x, y) -> x + "|" + y).orElseThrow();
   }
 
   private static NodeLabel root(NodeLabel label) {

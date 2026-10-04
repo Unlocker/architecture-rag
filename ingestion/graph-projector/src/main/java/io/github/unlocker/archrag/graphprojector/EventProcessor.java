@@ -218,7 +218,11 @@ public final class EventProcessor {
     } catch (TransientException | ServiceUnavailableException | SessionExpiredException e) {
       return retry(event, "GRAPH_UNAVAILABLE", e.getClass().getSimpleName());
     } catch (ClientException e) {
-      return quarantine(event, "GRAPH_REJECTED", e.code());
+      // В карантин только отказ по самому запросу; безопасность и гонка MERGE (constraint) — не вина события.
+      if (e.code().startsWith("Neo.ClientError.Statement.") || e.code().startsWith("Neo.ClientError.Request.")) {
+        return quarantine(event, "GRAPH_REJECTED", e.code());
+      }
+      return retry(event, "GRAPH_CLIENT_ERROR", e.code());
     } catch (Neo4jException e) {
       return retry(event, "GRAPH_ERROR", e.getClass().getSimpleName());
     }

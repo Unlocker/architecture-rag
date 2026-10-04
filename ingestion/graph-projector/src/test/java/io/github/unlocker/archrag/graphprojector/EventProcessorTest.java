@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.neo4j.driver.exceptions.ClientException;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 
 /** Оркестрация события на подменах портов: статусы, маршрутизация по type, checkpoint. Граф здесь не участвует. */
@@ -131,6 +132,18 @@ class EventProcessorTest {
     assertThat(result.errorCode()).isEqualTo("GRAPH_UNAVAILABLE");
     assertThat(journal.checkpoint).isNull();
     assertThat(journal.entry("e1").errorReason()).doesNotContain("down");
+  }
+
+  @Test
+  void securityAndConstraintErrorsRetryButStatementErrorsQuarantine() {
+    projection.failure = new ClientException("Neo.ClientError.Security.Unauthorized", "x");
+    assertThat(run(upsert("e1", "5", Map.of("name", "core"))).status()).isEqualTo(ProcessingStatus.RETRYING);
+    projection.failure = new ClientException("Neo.ClientError.Schema.ConstraintValidationFailed", "x");
+    assertThat(run(upsert("e2", "5", Map.of("name", "core"))).status()).isEqualTo(ProcessingStatus.RETRYING);
+    projection.failure = new ClientException("Neo.ClientError.Statement.SyntaxError", "x");
+    var result = run(upsert("e3", "5", Map.of("name", "core")));
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo("GRAPH_REJECTED");
   }
 
   @Test

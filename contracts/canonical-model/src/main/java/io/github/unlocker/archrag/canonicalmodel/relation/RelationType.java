@@ -38,6 +38,16 @@ public enum RelationType {
         return temporal;
     }
 
+    /** Allowed source labels (as declared, without subtypes). */
+    public Set<NodeLabel> sources() {
+        return sources;
+    }
+
+    /** Allowed target labels (as declared, without subtypes). */
+    public Set<NodeLabel> targets() {
+        return targets;
+    }
+
     /** True if {@code from -> to} is permitted, taking label supertypes into account. */
     public boolean allows(NodeLabel from, NodeLabel to) {
         return sources.stream().anyMatch(from::isA) && targets.stream().anyMatch(to::isA);
