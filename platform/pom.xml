@@ -5,8 +5,8 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.github.unlocker.akp</groupId>
-    <artifactId>akp-parent</artifactId>
+    <groupId>io.github.unlocker.archrag</groupId>
+    <artifactId>archrag-parent</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
