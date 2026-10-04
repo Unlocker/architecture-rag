@@ -44,7 +44,7 @@ class HttpSourceConnectorTest {
     assertThat(first.snapshotComplete()).isFalse();
 
     ChangePage last = connector.fetchChanges(first.nextCursor(), 2);
-    assertThat(last.changes()).hasSize(1);
+    assertThat(last.changes()).hasSize(2);
     assertThat(last.snapshotComplete()).isTrue();
     assertThat(connector.fetchChanges(last.nextCursor(), 2).changes()).isEmpty();
   }

@@ -82,7 +82,7 @@ class StubSourceTest {
     } while (true);
 
     assertThat(all).extracting(SourceChange::sourceId).containsExactlyInAnyOrder("TEAM-PAY",
-        "EAM-2001", "EAM-1042");
+        "EAM-2001", "EAM-1042", "dep-payments-api-ledger-api");
     assertThat(pages).hasSize(2);
     assertThat(pages.get(0).snapshotComplete()).isFalse();
     assertThat(pages.get(1).snapshotComplete()).isTrue();

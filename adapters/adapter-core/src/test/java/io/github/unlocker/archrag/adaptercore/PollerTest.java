@@ -48,13 +48,13 @@ class PollerTest {
     PollResult r = poller.pollOnce();
 
     assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
-    assertThat(r.appended()).isEqualTo(3);
+    assertThat(r.appended()).isEqualTo(4);
     assertThat(r.syncRunId()).isEqualTo("run-1");
     List<CanonicalEvent> all = journal.eventList();
-    assertThat(all).hasSize(4);
+    assertThat(all).hasSize(5);
     assertThat(all.getLast().type()).isEqualTo(EventMapper.TYPE_SNAPSHOT_COMPLETE);
     assertThat(all.getLast().data().sourceId()).isEqualTo("run-1");
-    assertThat(all.getLast().data().payload()).containsEntry("objectCount", 3L);
+    assertThat(all.getLast().data().payload()).containsEntry("objectCount", 4L);
     assertThat(journal.rows.values()).allMatch(row -> "run-1".equals(row.syncRunId()));
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE)).isPresent();
   }
@@ -82,8 +82,8 @@ class PollerTest {
     assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     assertThat(r.syncRunId()).isEqualTo("run-1");
     assertThat(runCounter.get()).isEqualTo(1);
-    // 3 объекта + маркер; 2 уже записанных не задвоились.
-    assertThat(journal.rows).hasSize(4);
+    // 4 объекта + маркер; 2 уже записанных не задвоились.
+    assertThat(journal.rows).hasSize(5);
     assertThat(journal.loadCheckpoint("eam-snapshot", SOURCE).orElseThrow().cursor())
         .isEqualTo("done:run-1");
   }
@@ -114,7 +114,7 @@ class PollerTest {
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE).orElseThrow().cursor())
         .isNotEqualTo(cursorAfterSnapshot);
     assertThat(poller.pollOnce().outcome()).isEqualTo(PollResult.Outcome.UP_TO_DATE);
-    assertThat(journal.rows).hasSize(4 + 3);
+    assertThat(journal.rows).hasSize(5 + 3);
   }
 
   @Test
