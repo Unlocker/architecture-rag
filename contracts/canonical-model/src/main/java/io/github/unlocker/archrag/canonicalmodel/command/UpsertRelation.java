@@ -13,6 +13,9 @@ import java.util.Objects;
  *
  * <p>Invariants: {@code type.allows(fromLabel, toLabel)}; {@code validity} only for temporal types
  * (may be {@code null} otherwise); {@code properties} are validated and copied immutably.
+ *
+ * <p>Property keys (e.g. {@code kind}/{@code protocol}/{@code criticality} of {@code DEPENDS_ON}) are not
+ * checked at this level: that is the normalizer's responsibility.
  */
 public record UpsertRelation(RelationType type, SourceKey from, NodeLabel fromLabel, SourceKey to,
                              NodeLabel toLabel, Map<String, Object> properties, Validity validity,
