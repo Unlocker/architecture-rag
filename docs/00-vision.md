@@ -235,9 +235,10 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 | VM, physical host, serial number | CMDB/asset DB | Runtime discovery |
 | Deployment на стенде | Deploy map + Helm charts (отдельный `deploymap-adapter`) | SCM metadata |
 | Связь `DEPENDS_ON` между сервисами | EAM | SCM metadata |
+| Связь `DECOMPOSED_INTO` ITSystem→Service | SCM/catalog | EAM |
 | Описания и документы | EAM/docs | Репозиторий |
 
-Было: master для `Deployment` — «CD/Kubernetes или CMDB». Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
+Было: master для `Deployment` — «CD/Kubernetes или CMDB»; master для `DECOMPOSED_INTO` — EAM (UNLOCKER-171). Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
 
 `SourceRecord` сохраняет источник конкретного утверждения, время извлечения, версию и hash. Такая модель проще для аудита конфликтов, чем массив `sourceIds` на бизнес-узле, и концептуально согласуется с W3C PROV, где `Entity`, `Activity` и `Agent` позволяют описывать происхождение и цепочки преобразований.[^17]
 

@@ -100,7 +100,7 @@ public final class AuthorityMatrix {
         var relations = new EnumMap<RelationType, Set<SourceSystemCode>>(RelationType.class);
         relations.put(RelationType.DEPENDS_ON, Set.of(EAM));
         relations.put(RelationType.OWNED_BY, Set.of(EAM));
-        relations.put(RelationType.DECOMPOSED_INTO, Set.of(EAM));
+        relations.put(RelationType.DECOMPOSED_INTO, Set.of(SCM));
         relations.put(RelationType.IMPLEMENTED_IN, Set.of(SCM));
         relations.put(RelationType.HAS_DEPLOYMENT, Set.of(DEPLOYMAP));
         relations.put(RelationType.IN_ENVIRONMENT, Set.of(DEPLOYMAP));

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
+import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
@@ -385,17 +387,38 @@ class GraphProjectorIT {
   }
 
   @Test
-  void nonAuthoritativeRelationIsSkippedAndReported() {
+  void scmServiceRecordBuildsDecomposedIntoFromEamSystem() {
     String system = "its-" + uid();
     String service = "svc-" + uid();
     upsert("eam", "IT_SYSTEM", system, "1", Map.of("name", "Payments"));
 
-    // SCM утверждает DECOMPOSED_INTO, но мастер этой связи по матрице — EAM.
     var result = upsert("scm", "SERVICE", service, "1", Map.of("name", "pay", "systemCode", system));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(result.projection().skippedRelations()).containsExactly("DECOMPOSED_INTO");
-    assertThat(query("MATCH ()-[r:DECOMPOSED_INTO]->() RETURN r")).isEmpty();
+    assertThat(result.projection().skippedRelations()).isEmpty();
+    assertThat(query("MATCH (:ITSystem)-[r:DECOMPOSED_INTO]->(:Service) RETURN r")).hasSize(1);
+  }
+
+  @Test
+  void nonAuthoritativeRelationIsSkippedAndReported() {
+    String a = "svc-" + uid();
+    String b = "svc-" + uid();
+    upsert("scm", "SERVICE", a, "1", Map.of("name", "a"));
+    upsert("scm", "SERVICE", b, "1", Map.of("name", "b"));
+    var from = key(SourceSystemCode.SCM, "SERVICE", a);
+    var to = key(SourceSystemCode.SCM, "SERVICE", b);
+    // Мастер DEPENDS_ON по матрице — EAM; SCM утверждает связь от своего имени.
+    var request = new ProjectionRequest(from, new SourceVersion("2"), T2, null,
+        Map.of(from, identity.resolve(from), to, identity.resolve(to)),
+        List.of(new UpsertNode(new SourceRecord(from, "2", "sha256:z", T2, true), new Service("a", null, null, null)),
+            new UpsertRelation(RelationType.DEPENDS_ON, from, NodeLabel.SERVICE, to, NodeLabel.SERVICE,
+                Map.of(), null, from)));
+
+    ProjectionResult result = projector.project(request);
+
+    assertThat(result.outcome()).isEqualTo(ProjectionOutcome.APPLIED);
+    assertThat(result.skippedRelations()).containsExactly("DEPENDS_ON");
+    assertThat(query("MATCH ()-[r:DEPENDS_ON]->() RETURN r")).isEmpty();
   }
 
   // ---- compute instance subtype ----------------------------------------------------------------
