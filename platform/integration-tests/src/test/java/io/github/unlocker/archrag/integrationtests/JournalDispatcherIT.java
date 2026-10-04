@@ -2,56 +2,46 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.unlocker.archrag.adaptercore.SourceAdapter;
-import io.github.unlocker.archrag.assetadapter.AssetAdapter;
-import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
-import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
-import io.github.unlocker.archrag.eventschemas.SourceVersion;
-import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.adaptercore.AdapterConfig;
+import io.github.unlocker.archrag.adaptercore.EventMapper;
+import io.github.unlocker.archrag.adaptercore.PollResult;
+import io.github.unlocker.archrag.adaptercore.Poller;
+import io.github.unlocker.archrag.adaptercore.RetryPolicy;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
+import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
-import io.github.unlocker.archrag.eventschemas.JournalKey;
-import io.github.unlocker.archrag.eventschemas.JournalQuery;
-import io.github.unlocker.archrag.eventschemas.JournalReader;
+import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
-import io.github.unlocker.archrag.eventschemas.StoredEvent;
-import io.github.unlocker.archrag.graphprojector.EventProcessor;
+import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.ingestionservice.IngestionServiceApplication;
-import io.github.unlocker.archrag.scmadapter.ScmAdapter;
+import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.github.unlocker.archrag.sourcestubs.StubSource;
-import io.github.unlocker.archrag.sourcestubs.StubSourceServer;
-import io.github.unlocker.archrag.sourcestubs.StubSources;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.neo4j.driver.Driver;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -59,17 +49,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 /**
- * Диспетчер журнала на реальных PostgreSQL, Neo4j и S3: событие, добавленное в журнал, появляется в графе без ручного
- * вызова {@code EventProcessor}; битое событие уходит в карантин и не блокирует следующие.
+ * Диспетчер журнала на реальных PostgreSQL, Neo4j и S3 (batch-size 1, чтобы keyset-переход между страницами
+ * выполнялся на каждом событии): события, добавленные в журнал, попадают в граф без ручного вызова; битое событие
+ * уходит в карантин и в DLQ, следующие за ним проецируются; маркер snapshot-complete запускает reconciliation, а при
+ * неполном журнале ничего не удаляется.
  */
 @Testcontainers
 @SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(JournalDispatcherIT.TestJwt.class)
 class JournalDispatcherIT {
 
+  private static final String SOURCE = "urn:corp:eam";
   private static final SecretKey KEY = new SecretKeySpec("0123456789abcdef0123456789abcdef".getBytes(), "HmacSHA256");
 
   @Container
@@ -81,6 +73,7 @@ class JournalDispatcherIT {
   @Container
   static final GenericContainer<?> S3 = ContainersSmokeIT.s3Container();
 
+  /** Подписанные тестовым ключом токены вместо внешнего IdP. */
   @TestConfiguration
   static class TestJwt {
     @Bean
@@ -101,107 +94,194 @@ class JournalDispatcherIT {
     r.add("archrag.s3.access-key", () -> ContainersSmokeIT.S3_ACCESS_KEY);
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
     r.add("archrag.s3.bucket", () -> "dispatcher-it-bucket");
+    // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
     r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
-    r.add("archrag.dispatcher.pause", () -> "100ms");
+    r.add("archrag.dispatcher.poll-interval", () -> "100ms");
+    r.add("archrag.dispatcher.batch-size", () -> "1");
+    r.add("archrag.dispatcher.retry-delay", () -> "1s");
   }
 
   @Autowired Driver driver;
   @Autowired EventJournal journal;
   @Autowired RawPayloadStore rawStore;
 
-  @Test
-  void eventAppendedToJournalReachesGraphWithoutManualCall() throws Exception {
-    var eam = StubSources.eam(Clock.systemUTC());
-    try (var server = new StubSourceServer(eam);
-        SourceAdapter adapter = EamAdapter.create(EamAdapter.config(server.baseUri(), "s"), journal, rawStore)) {
-      adapter.poller().pollOnce();
-    }
+  private int runs;
 
-    awaitTrue(() -> recordActive("IT_SYSTEM", "EAM-1042"));
-    assertThat(journal.find("urn:corp:eam", firstEventId("EAM-1042")).orElseThrow().status())
-        .isEqualTo(ProcessingStatus.PROJECTED);
+  /** Курсор poller-а хранится по источнику, а все тесты работают с одним: каждому нужен свежий Poller с нуля. */
+  @BeforeEach
+  void resetCheckpoints() throws SQLException {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var st = c.createStatement()) {
+      st.execute("TRUNCATE consumer_checkpoint");
+    }
   }
 
   @Test
-  void failedEventDoesNotBlockFollowingOnes() throws Exception {
+  void eventsAppendedToJournalReachGraphWithoutManualCall() {
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    String c = "c-" + uid();
+    eam.upsert("TEAM", a, team("A"));
+    eam.upsert("TEAM", b, team("B"));
+    eam.upsert("TEAM", c, team("C"));
+
+    poller(eam).pollOnce();
+
+    awaitTrue(() -> Boolean.TRUE.equals(active(a)) && Boolean.TRUE.equals(active(b)) && Boolean.TRUE.equals(active(c)));
+  }
+
+  @Test
+  void brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected() {
     // Событие с битым raw приходит раньше всех остальных.
-    RawPayloadRef broken = rawStore.put("urn:corp:scm", "not json".getBytes());
-    CanonicalEvent bad = new CanonicalEvent(
-        "bad-1", "urn:corp:scm", CanonicalEvent.TYPE_ASSET_UPSERTED, "service/BAD", Instant.now(),
-        "urn:corp:schema:asset-upserted:1", "corr-bad",
-        new AssetEventData("SERVICE", "BAD", new SourceVersion("1"), Map.of()));
-    journal.append(bad, broken, null);
+    RawPayloadRef broken = rawStore.put(SOURCE, "not json SECRET".getBytes(StandardCharsets.UTF_8));
+    String badId = "bad-" + uid();
+    journal.append(event(badId, "TEAM", "BAD-" + uid(), CanonicalEvent.TYPE_ASSET_UPSERTED, Map.of()),
+        broken, null);
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String after1 = "after1-" + uid();
+    String after2 = "after2-" + uid();
+    eam.upsert("TEAM", after1, team("One"));
+    eam.upsert("TEAM", after2, team("Two"));
 
-    var scm = StubSources.scm(Clock.systemUTC());
-    try (var server = new StubSourceServer(scm);
-        SourceAdapter adapter = ScmAdapter.create(ScmAdapter.config(server.baseUri(), "s"), journal, rawStore)) {
-      adapter.poller().pollOnce();
-    }
+    poller(eam).pollOnce();
 
-    awaitTrue(() -> journal.find("urn:corp:scm", "bad-1").orElseThrow().status() == ProcessingStatus.QUARANTINED);
-    var quarantined = journal.find("urn:corp:scm", "bad-1").orElseThrow();
-    assertThat(quarantined.errorCode()).isEqualTo("RAW_INVALID");
-    awaitTrue(() -> countProjected("urn:corp:scm") > 0);
-    assertThat(quarantined.errorReason()).doesNotContain("not json");
+    awaitTrue(() -> status(badId) == ProcessingStatus.QUARANTINED);
+    JournalEntry quarantined = journal.find(SOURCE, badId).orElseThrow();
+    assertThat(quarantined.errorCode()).isEqualTo("INVALID_RAW_PAYLOAD");
+    assertThat(quarantined.errorReason()).doesNotContain("SECRET");
+    assertThat(openDlqRows(badId)).isEqualTo(1);
+    awaitTrue(() -> Boolean.TRUE.equals(active(after1)) && Boolean.TRUE.equals(active(after2)));
   }
 
   @Test
-  void unsupportedTypeIsQuarantinedWithCode() throws Exception {
-    RawPayloadRef raw = rawStore.put("urn:corp:eam", "{\"operation\":\"UPSERT\",\"completeness\":\"FULL\",\"updatedAt\":\"2026-01-01T00:00:00Z\",\"payload\":{}}".getBytes());
-    CanonicalEvent unknownType = new CanonicalEvent(
-        "unknown-type-1", "urn:corp:eam", "architecture.unknown.v1", "x/1", Instant.now(),
-        "urn:corp:schema:asset-upserted:1", "corr-x",
-        new AssetEventData("IT_SYSTEM", "X-1", new SourceVersion("1"), Map.of()));
-    journal.append(unknownType, raw, null);
-    awaitTrue(() -> journal.find("urn:corp:eam", "unknown-type-1").orElseThrow().status() == ProcessingStatus.QUARANTINED);
-    assertThat(journal.find("urn:corp:eam", "unknown-type-1").orElseThrow().errorCode())
-        .isEqualTo("UNSUPPORTED_EVENT_TYPE");
+  void unsupportedTypeIsQuarantinedWithCode() {
+    RawPayloadRef raw = rawStore.put(SOURCE,
+        "{\"operation\":\"UPSERT\",\"completeness\":\"COMPLETE\",\"updatedAt\":\"2026-01-01T00:00:00Z\",\"payload\":{}}"
+            .getBytes(StandardCharsets.UTF_8));
+    String id = "unknown-" + uid();
+    journal.append(event(id, "TEAM", "X-" + uid(), "architecture.unknown.v1", Map.of()), raw, null);
+
+    awaitTrue(() -> status(id) == ProcessingStatus.QUARANTINED);
+    assertThat(journal.find(SOURCE, id).orElseThrow().errorCode()).isEqualTo("UNSUPPORTED_EVENT_TYPE");
+  }
+
+  @Test
+  void snapshotMarkerTombstonesObjectMissingFromRun() {
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String keep = "keep-" + uid();
+    String gone = "gone-" + uid();
+    eam.upsert("TEAM", keep, team("Keep"));
+    eam.upsert("TEAM", gone, team("Gone"));
+    Poller poller = poller(eam);
+    poller.pollOnce();
+    awaitTrue(() -> Boolean.TRUE.equals(active(keep)) && Boolean.TRUE.equals(active(gone)));
+
+    // Удаление без webhook: узнать о нём можно только из полного snapshot.
+    eam.suppressWebhooks(true);
+    eam.delete("TEAM", gone);
+    PollResult run = poller.snapshotOnce();
+
+    assertThat(run.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    awaitTrue(() -> Boolean.FALSE.equals(active(gone)));
+    assertThat(active(keep)).isTrue();
+    awaitTrue(() -> status("snapshot-complete:" + run.syncRunId()) == ProcessingStatus.PROJECTED);
+  }
+
+  @Test
+  void markerClaimingMoreObjectsThanJournalHoldsDeletesNothing() throws Exception {
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String victim = "victim-" + uid();
+    eam.upsert("TEAM", victim, team("Victim"));
+    poller(eam).pollOnce();
+    awaitTrue(() -> Boolean.TRUE.equals(active(victim)));
+
+    // Адаптер записал 5 событий прогона, в журнале их 0: прогон неполон.
+    String runId = "incomplete-" + uid();
+    CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 5L);
+    RawPayloadRef raw = rawStore.put(SOURCE, ("{\"syncRunId\":\"" + runId + "\",\"objectCount\":5,\"updatedAt\":\""
+        + Instant.now() + "\"}").getBytes(StandardCharsets.UTF_8));
+    journal.append(marker, raw, runId);
+
+    awaitTrue(() -> status(marker.id()) == ProcessingStatus.RETRYING);
+    Thread.sleep(1500);
+    assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("RECONCILIATION_TRIGGER_FAILED");
+    assertThat(active(victim)).isTrue();
+  }
+
+  @Test
+  void markerWithoutRawGoesToDlq() {
+    String runId = "noraw-" + uid();
+    CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 0L);
+    journal.append(marker, null, runId);
+
+    awaitTrue(() -> status(marker.id()) == ProcessingStatus.QUARANTINED);
+    assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("MARKER_NO_RAW");
+    assertThat(openDlqRows(marker.id())).isEqualTo(1);
   }
 
   // ---- helpers -----------------------------------------------------------------------------
 
-  private String firstEventId(String sourceId) {
-    try (var c = java.sql.DriverManager.getConnection(
-            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+  private Poller poller(StubSource eam) {
+    var config = new AdapterConfig(SourceSystem.EAM, URI.create("http://unused"), "s", Duration.ofMinutes(5), 2,
+        Duration.ofSeconds(1), Duration.ofHours(1), new RetryPolicy(2, Duration.ofMillis(1), Duration.ofMillis(2)));
+    String prefix = uid();
+    return new Poller(config, eam, journal, rawStore, Clock.systemUTC(), d -> {}, new Random(1),
+        () -> prefix + "-run-" + (++runs));
+  }
+
+  private static CanonicalEvent event(String id, String sourceType, String sourceId, String type, Map<String, Object> payload) {
+    return new CanonicalEvent(id, SOURCE, type, "x/" + sourceId, Instant.now(), "urn:corp:schema:asset-upserted:1",
+        "corr", new AssetEventData(sourceType, sourceId, new SourceVersion("1"), payload));
+  }
+
+  private static Map<String, Object> team(String name) {
+    return Map.of("name", name);
+  }
+
+  private static String uid() {
+    return UUID.randomUUID().toString().substring(0, 8);
+  }
+
+  private ProcessingStatus status(String eventId) {
+    return journal.find(SOURCE, eventId).map(JournalEntry::status).orElse(null);
+  }
+
+  private Boolean active(String id) {
+    var rows = driver.executableQuery(
+            "MATCH (r:SourceRecord {source: 'EAM', sourceType: 'TEAM', sourceId: $id}) RETURN r.active AS a")
+        .withParameters(Map.of("id", id)).execute().records();
+    return rows.isEmpty() ? null : rows.getFirst().get("a").asBoolean();
+  }
+
+  private static int openDlqRows(String eventId) {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         var ps = c.prepareStatement(
-            "SELECT event_id FROM inbox_event WHERE source_id = ? ORDER BY received_at LIMIT 1")) {
-      ps.setString(1, sourceId);
+            "SELECT count(*) FROM dlq_entry WHERE source = ? AND event_id = ? AND replayed_at IS NULL")) {
+      ps.setString(1, SOURCE);
+      ps.setString(2, eventId);
       try (var rs = ps.executeQuery()) {
         rs.next();
-        return rs.getString(1);
+        return rs.getInt(1);
       }
-    } catch (java.sql.SQLException e) {
+    } catch (SQLException e) {
       throw new IllegalStateException(e);
     }
   }
 
-  private boolean recordActive(String type, String id) {
-    return !driver.executableQuery(
-            "MATCH (r:SourceRecord {sourceType: $t, sourceId: $id}) WHERE r.active RETURN r")
-        .withParameters(Map.of("t", type, "id", id)).execute().records().isEmpty();
-  }
-
-  private long countProjected(String source) {
-    try (var c = java.sql.DriverManager.getConnection(
-            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-        var ps = c.prepareStatement("SELECT count(*) FROM inbox_event WHERE source = ? AND status = 'PROJECTED'")) {
-      ps.setString(1, source);
-      try (var rs = ps.executeQuery()) {
-        rs.next();
-        return rs.getLong(1);
-      }
-    } catch (java.sql.SQLException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  private static void awaitTrue(java.util.function.BooleanSupplier condition) throws InterruptedException {
-    long deadline = System.nanoTime() + java.time.Duration.ofSeconds(30).toNanos();
+  /** Опрос с таймаутом: Awaitility в проект не входит, новую зависимость в задаче не вводим. */
+  private static void awaitTrue(BooleanSupplier condition) {
+    long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
     while (!condition.getAsBoolean()) {
       if (System.nanoTime() > deadline) {
         throw new AssertionError("condition not reached within 30s");
       }
-      Thread.sleep(100);
+      try {
+        Thread.sleep(100);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new AssertionError("interrupted", e);
+      }
     }
   }
 }

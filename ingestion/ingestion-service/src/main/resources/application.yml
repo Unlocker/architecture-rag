@@ -37,5 +37,7 @@ archrag:
   # Диспетчер журнала: RECEIVED/RETRYING → EventProcessor. Один поток, один экземпляр сервиса.
   dispatcher:
     enabled: ${ARCHRAG_DISPATCHER_ENABLED:true}
-    pause: ${ARCHRAG_DISPATCHER_PAUSE:1s}
+    poll-interval: ${ARCHRAG_DISPATCHER_POLL_INTERVAL:1s}
     batch-size: ${ARCHRAG_DISPATCHER_BATCH_SIZE:100}
+    retry-delay: ${ARCHRAG_DISPATCHER_RETRY_DELAY:30s}
+    shutdown-timeout: ${ARCHRAG_DISPATCHER_SHUTDOWN_TIMEOUT:30s}

@@ -38,9 +38,22 @@ final class InboxWriter {
     return journal.append(event, ref, syncRunId);
   }
 
-  /** Записывает событие без raw payload (маркер snapshot). */
-  JournalEntry record(CanonicalEvent event, String syncRunId) {
-    return journal.append(event, null, syncRunId);
+  /**
+   * Записывает маркер snapshot вместе с raw {@code {syncRunId, objectCount, updatedAt}}: {@code objectCount} нужен
+   * reconciliation, чтобы не удалять объекты при неполном журнале.
+   */
+  JournalEntry record(CanonicalEvent marker, String syncRunId) {
+    RawPayloadRef ref = rawStore.put(system.code(), markerRawJson(marker).getBytes(StandardCharsets.UTF_8));
+    return journal.append(marker, ref, syncRunId);
+  }
+
+  /** Raw маркера snapshot; формат читает {@code StoredEventReader}. */
+  static String markerRawJson(CanonicalEvent marker) {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("syncRunId", marker.data().payload().get("syncRunId"));
+    m.put("objectCount", marker.data().payload().get("objectCount"));
+    m.put("updatedAt", marker.time());
+    return Json.write(m);
   }
 
   /** Состояние объекта в формате источника; недоверенное, хранится только в S3. */

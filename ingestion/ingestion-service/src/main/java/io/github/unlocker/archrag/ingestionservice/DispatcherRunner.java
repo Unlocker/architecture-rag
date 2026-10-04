@@ -38,7 +38,7 @@ public class DispatcherRunner implements SmartLifecycle {
       t.setDaemon(true);
       return t;
     });
-    long pause = props.pause().toMillis();
+    long pause = props.pollInterval().toMillis();
     // Исключение, дошедшее до executor-а, отменило бы все следующие запуски, поэтому проход его ловит сам.
     executor.scheduleWithFixedDelay(this::pass, 0, pause, TimeUnit.MILLISECONDS);
   }

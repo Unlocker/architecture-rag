@@ -107,4 +107,32 @@ class StoredEventReaderContractTest {
     assertThatThrownBy(() -> reader.toEvent(stored, "{\"completeness\":\"COMPLETE\"}".getBytes(StandardCharsets.UTF_8)))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  /** Raw маркера snapshot-complete, который пишет InboxWriter, читается как событие адаптера, objectCount — Long. */
+  @Test
+  void snapshotMarkerMatchesEventMapperAndKeepsObjectCount() {
+    var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 100L);
+    String raw = InboxWriter.markerRawJson(marker);
+    var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
+        marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
+        new RawPayloadRef("raw/x", "h"), T, T);
+
+    var event = reader.toEvent(new StoredEvent(entry, marker.type(), marker.subject()), raw.getBytes(StandardCharsets.UTF_8));
+
+    assertThat(event).isEqualTo(marker);
+    assertThat(event.data().payload().get("objectCount")).isEqualTo(100L);
+  }
+
+  @Test
+  void snapshotMarkerWithoutObjectCountIsRejected() {
+    var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 1L);
+    var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
+        marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
+        new RawPayloadRef("raw/x", "h"), T, T);
+    var stored = new StoredEvent(entry, marker.type(), marker.subject());
+
+    assertThatThrownBy(() -> reader.toEvent(stored,
+        ("{\"syncRunId\":\"run-1\",\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8)))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
 }

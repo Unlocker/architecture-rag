@@ -87,7 +87,9 @@ public class IngestionServiceConfiguration {
       RawPayloadStore rawStore,
       StoredEventReader events,
       EventProcessor processor,
+      AdminLock lock,
       DispatcherProperties props) {
-    return new JournalDispatcher(reader, journal, rawStore, events, processor, props.batchSize());
+    return new JournalDispatcher(
+        reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay());
   }
 }

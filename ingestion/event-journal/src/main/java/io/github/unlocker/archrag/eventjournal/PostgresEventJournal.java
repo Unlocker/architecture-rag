@@ -180,10 +180,6 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
       sql.append(" AND event_id NOT LIKE ?");
       args.add(JournalQuery.REPLAY_PREFIX + "%");
     }
-    if (q.statuses() != null) {
-      sql.append(" AND status IN (").append("?,".repeat(q.statuses().size()), 0, 2 * q.statuses().size() - 1).append(")");
-      q.statuses().stream().map(Enum::name).sorted().forEach(args::add);
-    }
     JournalKey after = q.after();
     if (after != null) {
       sql.append(" AND (received_at, source, event_id) > (?, ?, ?)");
@@ -207,6 +203,36 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
       return page;
     } catch (SQLException e) {
       throw new JournalException("read failed", e);
+    }
+  }
+
+  @Override
+  public List<StoredEvent> pending(JournalKey after, Instant retryNotAfter, int limit) {
+    if (limit < 1 || limit > JournalQuery.MAX_LIMIT) {
+      throw new IllegalArgumentException("limit must be in 1.." + JournalQuery.MAX_LIMIT);
+    }
+    String sql = "SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE (status = 'RECEIVED'"
+        + " OR (status IN ('RETRYING','VALIDATED','NORMALIZED','RESOLVED') AND updated_at <= ?))"
+        + (after == null ? "" : " AND (received_at, source, event_id) > (?, ?, ?)")
+        + " ORDER BY received_at, source, event_id LIMIT ?";
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      int i = 1;
+      ps.setTimestamp(i++, Timestamp.from(retryNotAfter));
+      if (after != null) {
+        ps.setTimestamp(i++, Timestamp.from(after.receivedAt()));
+        ps.setString(i++, after.source());
+        ps.setString(i++, after.eventId());
+      }
+      ps.setInt(i, limit);
+      List<StoredEvent> page = new ArrayList<>();
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          page.add(new StoredEvent(map(rs), rs.getString("type"), rs.getString("subject")));
+        }
+      }
+      return page;
+    } catch (SQLException e) {
+      throw new JournalException("pending failed", e);
     }
   }
 

@@ -1,21 +1,21 @@
 package io.github.unlocker.archrag.ingestionservice;
 
-import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.JournalKey;
-import io.github.unlocker.archrag.eventschemas.JournalQuery;
 import io.github.unlocker.archrag.eventschemas.JournalReader;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
-import io.github.unlocker.archrag.graphprojector.ProcessingResult;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,27 +23,30 @@ import org.slf4j.LoggerFactory;
 /**
  * Передаёт ожидающие события журнала в {@link EventProcessor} в порядке журнала. Один поток, один экземпляр сервиса.
  *
- * <p>Выбираются строки в статусах {@code RECEIVED} и {@code RETRYING}, а также промежуточных
- * ({@code VALIDATED}, {@code NORMALIZED}, {@code RESOLVED}): их оставляет прерванная обработка, и без повторного
- * захода они зависли бы навсегда. Строки replay ({@code eventId} с префиксом {@code replay:}) пропускаются, их
- * ведёт {@link ReplayService}. Порядок — {@code (receivedAt, source, eventId)}, страницы читаются keyset-ом.
+ * <p>Выборка — {@link JournalReader#pending}: {@code RECEIVED}, а также {@code RETRYING} и промежуточные статусы,
+ * не менявшиеся дольше {@code retryDelay}. Порядок — {@code (receivedAt, source, eventId)}, страницы читаются
+ * keyset-ом до пустой страницы.
  *
- * <p>Инварианты: дубль и устаревшую версию решает {@link EventProcessor}, а не диспетчер; пока ранняя версия объекта
- * остаётся в {@code RETRYING}, более поздние события этого объекта в том же проходе не берутся, чтобы порядок внутри
- * {@code (source, sourceType, sourceId)} не нарушался; ошибка одного события не останавливает проход; битый или
- * отсутствующий raw переводит событие в {@code QUARANTINED} с кодом и причиной без содержимого источника.
+ * <p>Инварианты:
+ * <ul>
+ *   <li>каждая страница обрабатывается под {@link AdminLock}; если замок занят, проход заканчивается, так что replay
+ *       и rebuild не конкурируют с живой проекцией и не теряют свои строки {@code replay:*};</li>
+ *   <li>дубль и устаревшую версию решает {@link EventProcessor}, а не диспетчер;</li>
+ *   <li>если событие объекта {@code (source, sourceType, sourceId)} ушло в {@code RETRYING} или бросило исключение,
+ *       более поздние события этого объекта в том же проходе пропускаются;</li>
+ *   <li>ошибка одного события не останавливает проход; в логе только класс исключения, не текст.</li>
+ * </ul>
+ *
+ * <p>Отступление от «DLQ ведёт {@code EventProcessor}»: до {@code process} не доходят и иначе висели бы в
+ * {@code RECEIVED} вечно строки с битым raw ({@value #INVALID_RAW_PAYLOAD}), без raw ({@value #NO_RAW_PAYLOAD}) и
+ * маркер {@code snapshot-complete} без raw ({@value #MARKER_NO_RAW}: восстановление через
+ * {@code POST /admin/reconcile/{source}}). Они уходят в DLQ отсюда. Ошибки raw storage и журнала в DLQ не ведут.
  */
 public class JournalDispatcher {
 
-  static final String RAW_MISSING = "RAW_MISSING";
-  static final String RAW_INVALID = "RAW_INVALID";
-  private static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
-  private static final Set<ProcessingStatus> PENDING = Set.of(
-      ProcessingStatus.RECEIVED,
-      ProcessingStatus.RETRYING,
-      ProcessingStatus.VALIDATED,
-      ProcessingStatus.NORMALIZED,
-      ProcessingStatus.RESOLVED);
+  static final String INVALID_RAW_PAYLOAD = "INVALID_RAW_PAYLOAD";
+  static final String NO_RAW_PAYLOAD = "NO_RAW_PAYLOAD";
+  static final String MARKER_NO_RAW = "MARKER_NO_RAW";
 
   private static final Logger LOG = LoggerFactory.getLogger(JournalDispatcher.class);
 
@@ -52,7 +55,10 @@ public class JournalDispatcher {
   private final RawPayloadStore rawStore;
   private final StoredEventReader events;
   private final EventProcessor processor;
+  private final AdminLock lock;
+  private final Clock clock;
   private final int batchSize;
+  private final Duration retryDelay;
   private volatile boolean stopped;
 
   public JournalDispatcher(
@@ -61,13 +67,19 @@ public class JournalDispatcher {
       RawPayloadStore rawStore,
       StoredEventReader events,
       EventProcessor processor,
-      int batchSize) {
+      AdminLock lock,
+      Clock clock,
+      int batchSize,
+      Duration retryDelay) {
     this.reader = reader;
     this.journal = journal;
     this.rawStore = rawStore;
     this.events = events;
     this.processor = processor;
+    this.lock = lock;
+    this.clock = clock;
     this.batchSize = batchSize;
+    this.retryDelay = retryDelay;
   }
 
   /** Просит текущий проход закончиться после обрабатываемого события. */
@@ -75,28 +87,41 @@ public class JournalDispatcher {
     stopped = true;
   }
 
-  /** Один проход по ожидающим событиям; возвращает число переданных в {@link EventProcessor}. */
+  /** Один проход по ожидающим событиям; возвращает число событий, взятых в обработку. */
   public int runOnce() {
     int handled = 0;
     Set<String> blocked = new HashSet<>();
-    JournalQuery query = new JournalQuery(null, null, null, true, null, batchSize).withStatuses(PENDING);
-    for (List<StoredEvent> page = reader.read(query); !page.isEmpty(); page = reader.read(query)) {
-      for (StoredEvent stored : page) {
-        if (stopped) {
-          return handled;
-        }
-        JournalEntry entry = stored.entry();
-        String object = entry.source() + "\0" + entry.sourceType() + "\0" + entry.sourceId();
-        if (blocked.contains(object)) {
-          continue;
-        }
-        ProcessingStatus status = dispatch(stored);
-        handled++;
-        if (status == null || status == ProcessingStatus.RETRYING) {
-          blocked.add(object);
+    Instant retryNotAfter = clock.instant().minus(retryDelay);
+    JournalKey after = null;
+    while (!stopped) {
+      Optional<AdminLock.Lease> lease = lock.tryAcquire();
+      if (lease.isEmpty()) {
+        LOG.debug("admin operation in progress, dispatcher pass skipped");
+        return handled;
+      }
+      List<StoredEvent> page;
+      try (AdminLock.Lease ignored = lease.get()) {
+        page = reader.pending(after, retryNotAfter, batchSize);
+        for (StoredEvent stored : page) {
+          if (stopped) {
+            return handled;
+          }
+          JournalEntry entry = stored.entry();
+          String object = entry.source() + "\0" + entry.sourceType() + "\0" + entry.sourceId();
+          if (blocked.contains(object)) {
+            continue;
+          }
+          ProcessingStatus status = dispatch(stored);
+          handled++;
+          if (status == null || status == ProcessingStatus.RETRYING) {
+            blocked.add(object);
+          }
         }
       }
-      query = query.after(JournalKey.of(page.get(page.size() - 1).entry()));
+      if (page.isEmpty()) {
+        return handled;
+      }
+      after = JournalKey.of(page.get(page.size() - 1).entry());
     }
     return handled;
   }
@@ -106,25 +131,22 @@ public class JournalDispatcher {
     JournalEntry entry = stored.entry();
     try {
       RawPayloadRef ref = entry.payloadRef();
-      CanonicalEvent event;
       if (ref == null) {
-        if (!TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
-          return quarantine(entry, RAW_MISSING, "event has no raw payload");
-        }
-        // У маркера snapshot-complete raw нет: всё нужное лежит в строке журнала.
-        event = marker(stored);
-      } else {
-        try {
-          event = events.toEvent(stored, rawStore.get(ref));
-        } catch (IllegalArgumentException e) {
-          return quarantine(entry, RAW_INVALID, "raw payload is not a valid event");
-        }
+        boolean marker = StoredEventReader.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
+        return quarantine(entry, marker ? MARKER_NO_RAW : NO_RAW_PAYLOAD, "event has no raw payload");
       }
-      ProcessingResult result = processor.process(event, ref);
-      return result.status();
+      // Ошибки хранилища (нет объекта, расхождение hash) — не вина события: наружу, повтор в следующем проходе.
+      byte[] raw = rawStore.get(ref);
+      CanonicalEvent event;
+      try {
+        event = events.toEvent(stored, raw);
+      } catch (IllegalArgumentException e) {
+        return quarantine(entry, INVALID_RAW_PAYLOAD, "raw payload is not a valid event");
+      }
+      return processor.process(event, ref).status();
     } catch (RuntimeException e) {
-      // Событие остаётся в прежнем статусе и будет взято в следующем проходе. Текст исключения не логируется:
-      // он может нести данные источника.
+      // Событие остаётся в прежнем статусе и будет взято позже. Текст исключения не логируется: он может нести
+      // данные источника.
       LOG.error("dispatch failed: source={} eventId={} cause={}", entry.source(), entry.eventId(),
           e.getClass().getName());
       return null;
@@ -133,18 +155,5 @@ public class JournalDispatcher {
 
   private ProcessingStatus quarantine(JournalEntry entry, String code, String reason) {
     return journal.toDlq(entry.source(), entry.eventId(), code, reason).status();
-  }
-
-  private static CanonicalEvent marker(StoredEvent stored) {
-    JournalEntry e = stored.entry();
-    return new CanonicalEvent(
-        e.eventId(),
-        e.source(),
-        stored.type(),
-        stored.subject(),
-        e.receivedAt(),
-        e.schemaVersion(),
-        e.correlationId(),
-        new AssetEventData(e.sourceType(), e.sourceId(), e.sourceVersion(), Map.of()));
   }
 }
