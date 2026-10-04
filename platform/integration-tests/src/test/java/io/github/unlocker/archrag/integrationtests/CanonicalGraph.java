@@ -11,14 +11,16 @@ import org.neo4j.driver.Driver;
 
 /**
  * Канонический дамп графа для сравнения «до и после» (rebuild, повторная доставка): канонические узлы с их
- * доменными связями, а также {@code SourceRecord} с {@code ASSERTS}. Служебные временные поля, {@code elementId},
+ * доменными связями, а также {@code SourceRecord} с {@code ASSERTS}. Поля из {@link #EXCLUDED_KEYS}, {@code elementId},
  * {@code SyncRun} и {@code PROCESSED} в дамп не входят. Используется только {@link SyncAcceptanceIT}.
  */
 final class CanonicalGraph {
 
-  /** Временные поля, которые вправе отличаться между прогонами; ослаблять сравнение сверх этого списка нельзя. */
-  static final Set<String> EXCLUDED_KEYS =
-      Set.of("fetchedAt", "firstSeenAt", "lastSeenAt", "deletedAt", "validFrom", "validTo", "startedAt");
+  /**
+   * Временные поля, которые вправе отличаться между прогонами. Сейчас список пуст: rebuild воспроизводит и их, а
+   * сравнение ослаблять без решения архитектора нельзя.
+   */
+  static final Set<String> EXCLUDED_KEYS = Set.of();
 
   private static final String CANONICAL =
       "(n:ITSystem OR n:Service OR n:Repository OR n:Team OR n:Environment OR n:Deployment OR n:ComputeInstance)";

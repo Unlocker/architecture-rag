@@ -75,7 +75,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *
  * <table>
  *   <caption>Критерий готовности → метод</caption>
- *   <tr><td>1 (срез)</td><td>{@link #k1_sliceIsLoaded}, {@link #k1_decomposedIntoLinksSystemToService}, {@link #k1_noQuarantine}</td></tr>
+ *   <tr><td>1 (срез)</td><td>{@link #k1_sliceIsLoaded}, {@link #k1_decomposedIntoLinksSystemToService}, {@link #k1_dependsOnLinksServices}, {@link #k1_noQuarantine}</td></tr>
  *   <tr><td>2 (p95 ≤ 30 с)</td><td>{@link #k2a_webhookLatencyP95}</td></tr>
  *   <tr><td>2 (reconciliation)</td><td>{@link #k2b_missedChangesAreFixedByReconcile}</td></tr>
  *   <tr><td>3 (повтор, out-of-order)</td><td>{@link #k3a_repeatedEventChangesNothing}, {@link #k3b_reversedWebhooks}, {@link #k3c_reorderedPolling}</td></tr>
@@ -237,10 +237,20 @@ class SyncAcceptanceIT {
   @Order(2)
   void k1_decomposedIntoLinksSystemToService() {
     assertThat(count("MATCH (:ITSystem)-[:DECOMPOSED_INTO]->(s:Service) RETURN count(s) AS c")).isPositive();
+    // Полная цепочка среза; глубина зафиксирована литералом.
+    assertThat(count("MATCH (:ITSystem {name: 'Payments Core'})-[:DECOMPOSED_INTO]->(:Service)-[:HAS_DEPLOYMENT]->(:Deployment)"
+        + "-[:RUNS_ON]->(c:ComputeInstance) RETURN count(c) AS c")).isPositive();
   }
 
   @Test
   @Order(3)
+  void k1_dependsOnLinksServices() {
+    assertThat(count("MATCH (:Service {name: 'payments-api'})-[:DEPENDS_ON]->(s:Service {name: 'ledger-api'}) RETURN count(s) AS c"))
+        .isEqualTo(1);
+  }
+
+  @Test
+  @Order(4)
   void k1_noQuarantine() throws SQLException {
     assertThat(scalarLong("select count(*) from inbox_event where status = 'QUARANTINED'")).isZero();
   }
@@ -248,7 +258,7 @@ class SyncAcceptanceIT {
   // ---- К2: задержка и reconciliation ---------------------------------------------------------
 
   @Test
-  @Order(4)
+  @Order(5)
   void k2a_webhookLatencyP95() throws SQLException {
     StubSource eam = stubs.get(SourceSystem.EAM);
     StubSource scm = stubs.get(SourceSystem.SCM);
@@ -281,7 +291,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(5)
+  @Order(6)
   void k2b_missedChangesAreFixedByReconcile() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String gone = "T-GONE-" + uid();
@@ -315,7 +325,7 @@ class SyncAcceptanceIT {
   // ---- К3: повтор и out-of-order -------------------------------------------------------------
 
   @Test
-  @Order(6)
+  @Order(7)
   void k3a_repeatedEventChangesNothing() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-DUP-" + uid();
@@ -334,7 +344,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(7)
+  @Order(8)
   void k3b_reversedWebhooks() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-REV-" + uid();
@@ -356,7 +366,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(8)
+  @Order(9)
   void k3c_reorderedPolling() throws Exception {
     StubSource scm = stubs.get(SourceSystem.SCM);
     // Курсор incremental polling сдвигаем сначала к концу журнала, чтобы страница содержала только наши изменения.
@@ -385,7 +395,7 @@ class SyncAcceptanceIT {
   // ---- К4: rebuild ---------------------------------------------------------------------------
 
   @Test
-  @Order(9)
+  @Order(10)
   void k4_rebuildGivesEquivalentCanonicalGraph() throws Exception {
     awaitJournalDrained();
     List<String> before = CanonicalGraph.dump(driver);
@@ -395,7 +405,7 @@ class SyncAcceptanceIT {
 
     assertThat(response.statusCode()).isEqualTo(200);
     awaitJournalDrained();
-    // Сравнение без CanonicalGraph.EXCLUDED_KEYS; граф включает tombstone из К2б и версии из К3.
+    // Временные поля тоже воспроизводятся (исключений нет); граф включает tombstone из К2б и версии из К3.
     assertThat(CanonicalGraph.dump(driver)).isEqualTo(before);
   }
 
