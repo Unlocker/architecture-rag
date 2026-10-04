@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Админский эндпоинт ingestion-сервиса: replay, rebuild, crosswalk. Доступен только со scope
+ * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk. Доступен только со scope
  * {@value SecurityConfiguration#ADMIN_SCOPE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
  * Операции синхронные, идут под {@link AdminLock} и пишутся в аудит ({@link AdminOperations}).
  */
@@ -33,13 +34,19 @@ public class AdminController {
   private final ReplayService replay;
   private final RebuildService rebuild;
   private final CrosswalkService crosswalk;
+  private final ReconcileService reconcile;
 
   public AdminController(
-      AdminOperations operations, ReplayService replay, RebuildService rebuild, CrosswalkService crosswalk) {
+      AdminOperations operations,
+      ReplayService replay,
+      RebuildService rebuild,
+      CrosswalkService crosswalk,
+      ReconcileService reconcile) {
     this.operations = operations;
     this.replay = replay;
     this.rebuild = rebuild;
     this.crosswalk = crosswalk;
+    this.reconcile = reconcile;
   }
 
   /**
@@ -83,6 +90,35 @@ public class AdminController {
         "REBUILD", jwt.getSubject(), Map.of("confirm", true), replayId, () -> rebuild.rebuild(replayId), AdminController::summary);
   }
 
+  /**
+   * Повторно применяет missing set последнего завершённого snapshot источника; новый snapshot не запускается.
+   * {@code 404} — завершённых snapshot нет, {@code 409 SNAPSHOT_NOT_COMPLETE} — последний маркер ещё не обработан.
+   *
+   * @param source {@code urn:corp:<код>} или короткий код ({@code eam}, {@code scm}, {@code cmdb}, {@code deploymap})
+   */
+  @PostMapping("/reconcile/{source}")
+  public ReconcileResult reconcile(@PathVariable String source, @AuthenticationPrincipal Jwt jwt) {
+    String urn = source.startsWith("urn:corp:") ? source : "urn:corp:" + source;
+    if (!SOURCE.matcher(urn).matches()) {
+      throw new BadRequestException("source is invalid");
+    }
+    return operations.run(
+        "RECONCILE",
+        jwt.getSubject(),
+        Map.of("source", urn),
+        null,
+        () -> reconcile.reconcile(urn),
+        r -> {
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("syncRunId", r.syncRunId());
+          m.put("tombstoned", r.report().tombstoned());
+          m.put("ignoredOldVersion", r.report().ignoredOldVersion());
+          m.put("keptRecentlyTouched", r.report().keptRecentlyTouched());
+          m.put("keptInSnapshot", r.report().keptInSnapshot());
+          return m;
+        });
+  }
+
   @PostMapping("/crosswalks")
   public List<CrosswalkResult> crosswalks(@RequestBody List<CrosswalkItem> items, @AuthenticationPrincipal Jwt jwt) {
     if (items.isEmpty() || items.size() > MAX_CROSSWALK_ITEMS) {
@@ -94,6 +130,16 @@ public class AdminController {
   @ExceptionHandler(BadRequestException.class)
   ResponseEntity<Map<String, String>> badRequest(BadRequestException e) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+  }
+
+  @ExceptionHandler(SnapshotNotFoundException.class)
+  ResponseEntity<Map<String, String>> noSnapshot(SnapshotNotFoundException e) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+  }
+
+  @ExceptionHandler(SnapshotNotCompleteException.class)
+  ResponseEntity<Map<String, String>> snapshotNotComplete(SnapshotNotCompleteException e) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", SnapshotNotCompleteException.CODE));
   }
 
   @ExceptionHandler(AdminBusyException.class)

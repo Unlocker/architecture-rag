@@ -358,4 +358,68 @@ class AdminEndpointIT {
     }
     assertThat(admin("/admin/replay", "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(200);
   }
+
+  @Test
+  void reconcileTombstoneSurvivesRebuildAndRepeatedReconcileChangesNothing() throws Exception {
+    seed();
+    Clock clock = Clock.systemUTC();
+    var eam = StubSources.eam(clock);
+    eam.upsert(StubSources.TEAM, "TEAM-GONE", StubSources.fields("name", "Doomed Team"));
+    String sourceUrn = "urn:corp:eam";
+    // Прогон 1: объект есть в источнике; прогон 2: источник его уже не отдаёт, маркер запускает Reconciler.
+    runSnapshot(eam);
+    assertThat(active("TEAM-GONE")).isTrue();
+    eam.delete(StubSources.TEAM, "TEAM-GONE");
+    runSnapshot(eam);
+    assertThat(active("TEAM-GONE")).as("tombstone applied by Reconciler").isFalse();
+    assertThat(scalarLong("select count(*) from inbox_event where event_id = 'reconcile:'||"
+        + "(select sync_run_id from inbox_event where type = 'architecture.sync.snapshot-complete.v1' and source = ?"
+        + " and event_id not like 'replay:%' order by received_at desc limit 1)||':TEAM/TEAM-GONE' and status = 'PROJECTED'",
+        sourceUrn)).isEqualTo(1);
+    List<String> before = dump();
+
+    assertThat(admin("/admin/rebuild?confirm=true", null).statusCode()).isEqualTo(200);
+
+    assertThat(dump()).isEqualTo(before);
+    assertThat(active("TEAM-GONE")).isFalse();
+
+    // Повторный reconcile по тому же маркеру: ни новых строк, ни изменений графа.
+    long rows = scalarLong("select count(*) from inbox_event where event_id like 'reconcile:%'");
+    var again = admin("/admin/reconcile/eam", null);
+    assertThat(again.statusCode()).isEqualTo(200);
+    assertThat(again.body()).contains("\"syncRunId\"").contains("\"tombstoned\":0");
+    assertThat(scalarLong("select count(*) from inbox_event where event_id like 'reconcile:%'")).isEqualTo(rows);
+    assertThat(dump()).isEqualTo(before);
+    assertThat(scalarLong("select count(*) from admin_audit where operation = 'RECONCILE' and status = 'SUCCEEDED'"))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void reconcileWithoutCompletedSnapshotIs404AndIncompleteMarkerIs409() throws Exception {
+    seed();
+    assertThat(admin("/admin/reconcile/nope", null).statusCode()).isEqualTo(404);
+    assertThat(post("/admin/reconcile/eam", token("architecture.read"), null).statusCode()).isEqualTo(403);
+    assertThat(post("/admin/reconcile/eam", null, null).statusCode()).isEqualTo(401);
+    // Маркер, который ещё не обработан диспетчером (RECEIVED), полноту не подтверждает.
+    var marker = io.github.unlocker.archrag.adaptercore.EventMapper.snapshotComplete(
+        io.github.unlocker.archrag.sourcespi.SourceSystem.DEPLOY_MAP, "run-pending", Instant.now(), 0);
+    journal.append(marker, null, "run-pending");
+    assertThat(admin("/admin/reconcile/deploymap", null).statusCode()).isEqualTo(409);
+    assertThat(admin("/admin/reconcile/deploymap", null).body()).contains("SNAPSHOT_NOT_COMPLETE");
+  }
+
+  /** Полный snapshot заглушки адаптером eam и обработка записанного, включая маркер. */
+  private void runSnapshot(StubSource eam) throws Exception {
+    try (var server = new StubSourceServer(eam);
+        var adapter = EamAdapter.create(EamAdapter.config(server.baseUri(), "s"), journal, rawStore)) {
+      adapter.poller().snapshotOnce();
+    }
+    processAllReceived();
+  }
+
+  private boolean active(String teamId) {
+    return driver.executableQuery(
+            "MATCH (r:SourceRecord {source: 'EAM', sourceType: 'TEAM', sourceId: $id}) RETURN r.active AS a")
+        .withParameters(Map.of("id", teamId)).execute().records().stream().anyMatch(r -> r.get("a").asBoolean(false));
+  }
 }

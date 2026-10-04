@@ -41,6 +41,7 @@ class AdminControllerTest {
   @MockitoBean ReplayService replay;
   @MockitoBean RebuildService rebuild;
   @MockitoBean CrosswalkService crosswalk;
+  @MockitoBean ReconcileService reconcile;
 
   private static RequestPostProcessor admin() {
     return jwt().jwt(j -> j.subject("alice")).authorities(new SimpleGrantedAuthority("SCOPE_architecture.admin"));
@@ -68,6 +69,7 @@ class AdminControllerTest {
       {"/admin/replay", REPLAY_BODY},
       {"/admin/rebuild?confirm=true", ""},
       {"/admin/crosswalks", "[]"},
+      {"/admin/reconcile/eam", ""},
   };
 
   @Test
@@ -75,7 +77,7 @@ class AdminControllerTest {
     for (String[] e : ENDPOINTS) {
       mvc.perform(post(e[0]).contentType(MediaType.APPLICATION_JSON).content(e[1])).andExpect(status().isUnauthorized());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, operations);
+    verifyNoInteractions(replay, rebuild, crosswalk, reconcile, operations);
   }
 
   @Test
@@ -84,7 +86,7 @@ class AdminControllerTest {
       mvc.perform(post(e[0]).with(otherScope()).contentType(MediaType.APPLICATION_JSON).content(e[1]))
           .andExpect(status().isForbidden());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, operations);
+    verifyNoInteractions(replay, rebuild, crosswalk, reconcile, operations);
   }
 
   @Test
@@ -142,6 +144,27 @@ class AdminControllerTest {
         .andExpect(status().isOk()).andExpect(jsonPath("$[0].status").value("CONFLICT"));
     mvc.perform(post("/admin/crosswalks").with(admin()).contentType(MediaType.APPLICATION_JSON).content("[]"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void reconcileNormalizesSourceAndReturnsReport() throws Exception {
+    when(reconcile.reconcile("urn:corp:eam")).thenReturn(
+        new ReconcileResult("urn:corp:eam", "run-1", "snapshot-complete:run-1", new io.github.unlocker.archrag.graphprojector.Reconciler.Report(2, 0, 1, 5)));
+
+    mvc.perform(post("/admin/reconcile/eam").with(admin())).andExpect(status().isOk())
+        .andExpect(jsonPath("$.syncRunId").value("run-1")).andExpect(jsonPath("$.report.tombstoned").value(2));
+    verify(operations).run(eq("RECONCILE"), eq("alice"), any(), eq(null), any(), any());
+  }
+
+  @Test
+  void reconcileMapsNoSnapshotTo404AndIncompleteTo409() throws Exception {
+    when(reconcile.reconcile("urn:corp:scm")).thenThrow(new SnapshotNotFoundException());
+    when(reconcile.reconcile("urn:corp:cmdb")).thenThrow(new SnapshotNotCompleteException());
+
+    mvc.perform(post("/admin/reconcile/scm").with(admin())).andExpect(status().isNotFound());
+    mvc.perform(post("/admin/reconcile/cmdb").with(admin())).andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error").value("SNAPSHOT_NOT_COMPLETE"));
+    mvc.perform(post("/admin/reconcile/bad source").with(admin())).andExpect(status().isBadRequest());
   }
 
   @Test

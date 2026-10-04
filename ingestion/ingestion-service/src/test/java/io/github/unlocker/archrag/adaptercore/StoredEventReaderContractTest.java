@@ -80,6 +80,20 @@ class StoredEventReaderContractTest {
     assertThat(event.data().payload()).isEmpty();
   }
 
+  /** Raw tombstone, который пишет Reconciler (UNLOCKER-169/170), читается как DELETE адаптера. */
+  @Test
+  void reconcilerTombstoneRawMatchesEventMapperDelete() {
+    var change = new SourceChange("TEAM", "gone", 7L, ChangeOperation.DELETE, Completeness.COMPLETE, T, Map.of());
+    var adapter = viaAdapter(change, "reconcile:run-1:TEAM/gone", "run-1");
+    String raw = "{\"sourceType\":\"TEAM\",\"sourceId\":\"gone\",\"sourceVersion\":7,\"operation\":\"DELETE\","
+        + "\"completeness\":\"COMPLETE\",\"updatedAt\":\"" + T + "\",\"payload\":{}}";
+    var entry = new JournalEntry(adapter.source(), adapter.id(), "run-1", "run-1", "TEAM", "gone", new SourceVersion("7"),
+        EventMapper.SCHEMA_DELETED, ProcessingStatus.PROJECTED, null, null, 0, new RawPayloadRef("raw/x", "h"), T, T);
+
+    assertThat(reader.toEvent(new StoredEvent(entry, EventMapper.TYPE_ASSET_DELETED, adapter.subject()),
+        raw.getBytes(StandardCharsets.UTF_8))).isEqualTo(adapter);
+  }
+
   @Test
   void brokenRawIsRejectedWithoutQuotingContent() {
     var change = new SourceChange("IT_SYSTEM", "EAM-1", 1L, ChangeOperation.UPSERT, Completeness.COMPLETE, T, Map.of());

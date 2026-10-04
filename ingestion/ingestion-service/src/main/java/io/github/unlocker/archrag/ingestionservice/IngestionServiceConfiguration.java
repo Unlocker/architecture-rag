@@ -5,6 +5,7 @@ import io.github.unlocker.archrag.eventjournal.JournalMigrations;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
+import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
@@ -63,8 +64,8 @@ public class IngestionServiceConfiguration {
 
   /** Reconciliation после маркера {@code snapshot-complete} (E1.6): missing set получает tombstone. */
   @Bean
-  Reconciler reconciler(EventJournal journal, GraphProjector projector) {
-    return new Reconciler(journal, projector, Clock.systemUTC());
+  Reconciler reconciler(EventJournal journal, RawPayloadStore rawStore, GraphProjector projector) {
+    return new Reconciler(journal, rawStore, projector, Clock.systemUTC());
   }
 
   @Bean

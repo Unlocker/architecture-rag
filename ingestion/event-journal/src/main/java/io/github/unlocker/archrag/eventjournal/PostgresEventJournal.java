@@ -207,6 +207,24 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
   }
 
   @Override
+  public Optional<StoredEvent> latest(String source, String type) {
+    String sql = "SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE source = ? AND type = ?"
+        + " AND event_id NOT LIKE ? ORDER BY received_at DESC, source DESC, event_id DESC LIMIT 1";
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, type);
+      ps.setString(3, JournalQuery.REPLAY_PREFIX + "%");
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next()
+            ? Optional.of(new StoredEvent(map(rs), rs.getString("type"), rs.getString("subject")))
+            : Optional.empty();
+      }
+    } catch (SQLException e) {
+      throw new JournalException("latest failed", e);
+    }
+  }
+
+  @Override
   public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
     try (Connection c = dataSource.getConnection();
         PreparedStatement ps = c.prepareStatement(
