@@ -24,7 +24,8 @@ import javax.sql.DataSource;
  * сериализуются advisory-lock'ом на {@code (семейство, вид, значение)}: иначе при READ COMMITTED обе
  * транзакции не увидели бы друг друга и пара была бы потеряна. Общий {@code gid} проверяется по
  * {@code identity_mapping} той же БД. Если у одного признака больше {@value #MAX_MATCHES} совпадений,
- * кандидаты по нему не создаются (WARN с количеством, без значения).
+ * кандидаты по нему не создаются (WARN с количеством, без значения); если у пары такой признак пропущен,
+ * {@code matched} при upsert перезаписывается без него (допущение PoC).
  */
 public final class PostgresIdentityCandidates implements IdentityCandidates {
 
