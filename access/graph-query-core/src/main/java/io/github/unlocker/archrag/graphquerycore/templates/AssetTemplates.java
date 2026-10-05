@@ -29,6 +29,9 @@ public final class AssetTemplates {
    * <p>Параметры: {@code query} (trim-нутый ввод), {@code text} (Lucene-экранированный ввод или
    * {@code null}), {@code types} и {@code environment} (оба могут быть {@code null}). Возвращает
    * проекции {@code gid, type, name, score, matchType, sources, lastSeenAt}; только {@code isCurrent}.
+   *
+   * <p>Фильтр по environment — один {@code EXISTS} с {@code UNION} по меткам, а не четыре {@code OR EXISTS}:
+   * холодное планирование последнего занимало 8–26 с и не укладывалось в таймаут транзакции (UNLOCKER-216).
    */
   public static final QueryTemplate SEARCH_ASSETS =
       new QueryTemplate(
@@ -49,13 +52,15 @@ public final class AssetTemplates {
           WHERE n.isCurrent = true
             AND any(l IN labels(n) WHERE l IN %s)
             AND ($types IS NULL OR any(l IN labels(n) WHERE l IN $types))
-            AND ($environment IS NULL OR (
-              (n:Deployment AND EXISTS { (n)-[:IN_ENVIRONMENT]->%s })
-              OR (n:Service AND EXISTS { (n)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s })
-              OR (n:ITSystem AND EXISTS {
-                (n)-[:DECOMPOSED_INTO]->(:Service)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s })
-              OR (n:ComputeInstance AND EXISTS {
-                (n)<-[ro:RUNS_ON]-(:Deployment)-[:IN_ENVIRONMENT]->%s WHERE ro.validTo IS NULL })))
+            AND ($environment IS NULL OR EXISTS {
+              MATCH (n:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              UNION
+              MATCH (n:Service)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              UNION
+              MATCH (n:ITSystem)-[:DECOMPOSED_INTO]->(:Service)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              UNION
+              MATCH (n:ComputeInstance)<-[ro:RUNS_ON]-(:Deployment)-[:IN_ENVIRONMENT]->%s WHERE ro.validTo IS NULL RETURN 1
+            })
           RETURN n.gid AS gid,
                  [l IN labels(n) WHERE l IN %s][0] AS type,
                  coalesce(n.name, n.hostname, n.url, n.code) AS name,
