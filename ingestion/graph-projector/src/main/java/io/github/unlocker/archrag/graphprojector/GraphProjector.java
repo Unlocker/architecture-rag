@@ -46,7 +46,11 @@ import org.neo4j.driver.TransactionContext;
  *       {@code null} никогда не записывается;</li>
  *   <li>удаления физического нет: tombstone ставит {@code active=false}, а каноничный узел архивируется
  *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных MASTER-утверждений;</li>
- *   <li>время хранится как {@code datetime} в UTC.</li>
+ *   <li>время хранится как {@code datetime} в UTC;</li>
+ *   <li>маркеры конфликтов ({@link ConflictMarkers}) пишутся в той же транзакции после upsert или tombstone: на
+ *       всех рёбрах {@code ASSERTS} узла {@code gid} свойство {@code conflicts} получает записи из набора и
+ *       снимается у остальных; в граф попадают только имена свойств, значения остаются в PostgreSQL. Сами
+ *       конфликты считаются и сохраняются до транзакции (E3.3), проектор их не вычисляет и значения узла не меняет.</li>
  * </ul>
  *
  * <p>Отложенные связи ({@code DeferRelation}, E1.14): связь с неизвестным концом хранится узлом
@@ -180,6 +184,7 @@ public final class GraphProjector implements GraphProjection {
     if (request.isRelationOnly()) {
       markRelationOnlyRecord(tx, request);
     }
+    writeConflictMarkers(tx, request.conflicts());
     linkSyncRun(tx, request);
     return new ProjectionResult(ProjectionOutcome.APPLIED, skippedProperties, skippedRelations);
   }
@@ -247,6 +252,32 @@ public final class GraphProjector implements GraphProjection {
                 + "MERGE (r)-[a:ASSERTS]->(n) "
                 + "SET a.confidence = 1.0, a.authority = $authority",
             params)
+        .consume();
+  }
+
+  /**
+   * Полный набор маркеров узла: {@code SET a.conflicts} у записей из набора, {@code REMOVE} у остальных. Корневые
+   * метки узла берутся из enum (индекс по {@code gid}), значения конфликтов в граф не пишутся.
+   */
+  private void writeConflictMarkers(TransactionContext tx, ConflictMarkers markers) {
+    if (markers.isNone()) {
+      return;
+    }
+    List<Map<String, Object>> records = new ArrayList<>();
+    markers.byRecord().forEach((key, properties) -> {
+      Map<String, Object> record = keyParams(key);
+      record.put("properties", properties);
+      records.add(record);
+    });
+    String roots =
+        NodeLabel.canonical().stream().map(l -> root(l).label()).distinct().sorted().reduce((x, y) -> x + "|" + y).orElseThrow();
+    tx.run(
+            "MATCH (n:" + roots + " {gid: $gid})<-[a:ASSERTS]-(r:SourceRecord) "
+                + "WITH a, [m IN $records WHERE m.source = r.source AND m.sourceType = r.sourceType "
+                + "AND m.sourceId = r.sourceId] AS hit "
+                + "FOREACH (x IN CASE WHEN size(hit) > 0 THEN [1] ELSE [] END | SET a.conflicts = hit[0].properties) "
+                + "FOREACH (x IN CASE WHEN size(hit) = 0 THEN [1] ELSE [] END | REMOVE a.conflicts)",
+            Map.of("gid", markers.gid().toString(), "records", records))
         .consume();
   }
 

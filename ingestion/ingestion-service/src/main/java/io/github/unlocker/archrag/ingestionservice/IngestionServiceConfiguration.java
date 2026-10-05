@@ -14,6 +14,8 @@ import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
+import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
+import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.net.URI;
@@ -51,6 +53,11 @@ public class IngestionServiceConfiguration {
     return new PostgresIdentityCandidates(dataSource);
   }
 
+  @Bean
+  SourceConflicts sourceConflicts(DataSource dataSource, PostgresEventJournal migrated) {
+    return new PostgresSourceConflicts(dataSource, AuthorityMatrix.defaults());
+  }
+
   @Bean(destroyMethod = "close")
   Driver neo4jDriver(Neo4jProperties props) {
     Driver driver = GraphDatabase.driver(props.uri(), AuthTokens.basic(props.username(), props.password()));
@@ -83,9 +90,10 @@ public class IngestionServiceConfiguration {
       GraphProjector projector,
       IdentityMapping identity,
       Reconciler reconciliation,
-      IdentityCandidates candidates) {
+      IdentityCandidates candidates,
+      SourceConflicts conflicts) {
     return new EventProcessor(
-        journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation, candidates);
+        journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation, candidates, conflicts);
   }
 
   @Bean

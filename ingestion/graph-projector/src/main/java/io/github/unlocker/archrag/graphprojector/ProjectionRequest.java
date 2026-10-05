@@ -23,13 +23,16 @@ import java.util.UUID;
  * все связи и закрытия утверждаются этой же записью; для узла записи и обоих концов каждой связи есть
  * {@code gid}. Исключение — {@code DeferRelation}: конец связи может быть ещё неизвестен, поэтому {@code gid}
  * для неё не требуется (достраивание берёт его из графа), но утверждает её эта же запись.
- * {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
+ * {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт. Маркеры конфликтов
+ * ({@link ConflictMarkers}) относятся только к {@code gid} записи: для не-tombstone запроса {@code gid} маркеров
+ * равен {@code gids[key]}; у tombstone {@code gids} пуст, и {@code gid} маркеров берётся из {@code IdentityMapping}.
  *
  * @param key запись источника, к которой относится изменение
  * @param version версия объекта в источнике
  * @param eventTime время события (UTC); задаёт {@code lastSeenAt}, {@code validFrom} по умолчанию, {@code deletedAt}
  * @param syncRunId прогон синхронизации или {@code null}
  * @param gids {@code gid} по ключам источника
+ * @param conflicts полный набор открытых конфликтов {@code gid} записи или {@link ConflictMarkers#none()}
  */
 public record ProjectionRequest(
     SourceKey key,
@@ -37,7 +40,19 @@ public record ProjectionRequest(
     Instant eventTime,
     String syncRunId,
     Map<SourceKey, UUID> gids,
-    List<GraphCommand> commands) {
+    List<GraphCommand> commands,
+    ConflictMarkers conflicts) {
+
+  /** Запрос без изменения маркеров конфликтов. */
+  public ProjectionRequest(
+      SourceKey key,
+      SourceVersion version,
+      Instant eventTime,
+      String syncRunId,
+      Map<SourceKey, UUID> gids,
+      List<GraphCommand> commands) {
+    this(key, version, eventTime, syncRunId, gids, commands, ConflictMarkers.none());
+  }
 
   public ProjectionRequest {
     Objects.requireNonNull(key, "key");
@@ -45,6 +60,7 @@ public record ProjectionRequest(
     Objects.requireNonNull(eventTime, "eventTime");
     gids = Map.copyOf(gids);
     commands = List.copyOf(commands);
+    Objects.requireNonNull(conflicts, "conflicts");
     long upserts = commands.stream().filter(UpsertNode.class::isInstance).count();
     long tombstones = commands.stream().filter(TombstoneSourceRecord.class::isInstance).count();
     if (upserts + tombstones > 1) {
@@ -75,6 +91,9 @@ public record ProjectionRequest(
     }
     if (tombstones == 1 && commands.size() != 1) {
       throw new IllegalArgumentException("a tombstone request must not carry other commands");
+    }
+    if (!conflicts.isNone() && tombstones == 0 && !conflicts.gid().equals(gids.get(key))) {
+      throw new IllegalArgumentException("conflict markers must belong to the gid of the request record");
     }
   }
 

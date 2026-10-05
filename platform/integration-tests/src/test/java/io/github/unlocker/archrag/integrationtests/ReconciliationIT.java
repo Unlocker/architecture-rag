@@ -25,6 +25,7 @@ import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
+import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.sourcespi.ChangePage;
@@ -95,7 +96,7 @@ class ReconciliationIT {
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor = new EventProcessor(journal, Normalizer.standard(projector::isActive),
         new PostgresIdentityMapping(ds), projector, new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC()),
-        new PostgresIdentityCandidates(ds));
+        new PostgresIdentityCandidates(ds), new PostgresSourceConflicts(ds, AuthorityMatrix.defaults()));
   }
 
   @BeforeEach

@@ -21,6 +21,7 @@ import io.github.unlocker.archrag.identityresolution.Feature;
 import io.github.unlocker.archrag.identityresolution.FeatureKind;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
+import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
@@ -75,7 +76,8 @@ class IdentityCandidateIT {
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor =
         new EventProcessor(
-            journal, Normalizer.standard(projector::isActive), identity, projector, (source, run, id, count) -> {}, candidates);
+            journal, Normalizer.standard(projector::isActive), identity, projector, (source, run, id, count) -> {}, candidates,
+            new PostgresSourceConflicts(ds, AuthorityMatrix.defaults()));
   }
 
   private static String uid() {
