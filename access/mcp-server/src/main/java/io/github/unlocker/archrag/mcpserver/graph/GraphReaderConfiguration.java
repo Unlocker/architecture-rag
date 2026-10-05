@@ -4,6 +4,7 @@ import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
+import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
@@ -37,6 +38,21 @@ public class GraphReaderConfiguration {
         limits.maxPaths(),
         limits.timeout(),
         limits.maxResponseBytes().toBytes());
+  }
+
+  @Bean
+  QueryTemplate searchAssetsTemplate() {
+    return AssetTemplates.SEARCH_ASSETS;
+  }
+
+  @Bean
+  QueryTemplate getAssetTemplate() {
+    return AssetTemplates.GET_ASSET;
+  }
+
+  @Bean
+  QueryTemplate assetRelationsTemplate() {
+    return AssetTemplates.ASSET_RELATIONS;
   }
 
   @Bean

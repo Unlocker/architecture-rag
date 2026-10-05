@@ -27,6 +27,8 @@ archrag:
       # Каждый tool обязан иметь строку: tool без записи отклоняется (fail-closed).
       tool-scopes:
         ping: architecture.read
+        search_assets: architecture.read
+        get_asset: architecture.read
 
   neo4j:
     reader:

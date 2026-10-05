@@ -57,6 +57,10 @@
             <goals>
               <goal>repackage</goal>
             </goals>
+            <configuration>
+              <!-- Обычный jar остаётся основным артефактом: на него зависит platform/integration-tests. -->
+              <classifier>exec</classifier>
+            </configuration>
           </execution>
         </executions>
       </plugin>
