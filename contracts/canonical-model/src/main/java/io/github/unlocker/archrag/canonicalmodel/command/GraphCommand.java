@@ -5,5 +5,5 @@ package io.github.unlocker.archrag.canonicalmodel.command;
  * Commands reference nodes by {@code SourceKey}; {@code gid} is assigned later by identity resolution.
  */
 public sealed interface GraphCommand
-        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord {
+        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation {
 }

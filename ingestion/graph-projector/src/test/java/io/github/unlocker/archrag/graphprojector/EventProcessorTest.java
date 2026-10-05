@@ -3,7 +3,9 @@ package io.github.unlocker.archrag.graphprojector;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
@@ -108,6 +110,30 @@ class EventProcessorTest {
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.isRelationOnly()).isTrue());
+  }
+
+  @Test
+  void unresolvedReferenceReachesProjectorAsDeferredRelationOnce() {
+    var unknown = new EventProcessor(
+        journal, Normalizer.standard(key -> false), identity, projection, (source, run, eventId, count) -> {});
+    var event =
+        new CanonicalEvent(
+            "e-dep", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, "dep/d1", T,
+            "urn:corp:schema:asset-upserted:1", null,
+            new AssetEventData(
+                "SERVICE_DEPENDENCY", "d1", new SourceVersion("1"), Map.of("from", "svc-a", "to", "svc-b", "kind", "SYNC")));
+    journal.append(event, RAW, "run-1");
+
+    var result = unknown.process(event, RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(projection.requests).singleElement().satisfies(r -> {
+      assertThat(r.commands()).hasSize(1).first().isInstanceOf(DeferRelation.class);
+      var spec = ((DeferRelation) r.commands().get(0)).relation();
+      assertThat(spec.type()).isEqualTo(RelationType.DEPENDS_ON);
+      assertThat(spec.from().sourceId()).isEqualTo("svc-a");
+      assertThat(spec.to().sourceId()).isEqualTo("svc-b");
+    });
   }
 
   @Test

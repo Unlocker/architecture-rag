@@ -103,6 +103,7 @@ class GraphCommandTest {
             case UpsertRelation r -> "relation";
             case CloseAssertion c -> "close";
             case TombstoneSourceRecord t -> "tombstone";
+            case DeferRelation d -> "defer";
         };
         assertThat(kind).isEqualTo("tombstone");
     }

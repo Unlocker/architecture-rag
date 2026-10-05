@@ -275,6 +275,25 @@ class AdminEndpointIT {
   }
 
   @Test
+  void rebuildReproducesRelationsThatWereDeferredUntilTheirEndpointsArrived() throws Exception {
+    seed();
+    // Зависимость сервисов приходит в журнал раньше самих сервисов, значит, была отложена и достроена позже.
+    assertThat(scalarLong(
+        "select count(*) from inbox_event d where d.source_type = 'SERVICE_DEPENDENCY' and not exists ("
+            + "select 1 from inbox_event s where s.source_type = 'SERVICE' and s.received_at < d.received_at)"))
+        .isPositive();
+    assertThat(driver.executableQuery("MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS c").execute().records().get(0).get("c").asLong())
+        .isPositive();
+    assertThat(driver.executableQuery("MATCH (p:PendingRelation) RETURN count(p) AS c").execute().records().get(0).get("c").asLong())
+        .isZero();
+    List<String> before = dump();
+
+    assertThat(admin("/admin/rebuild?confirm=true", null).statusCode()).isEqualTo(200);
+
+    assertThat(dump()).isEqualTo(before);
+  }
+
+  @Test
   void rebuildWithoutConfirmIsRejectedAndGraphIsUntouched() throws Exception {
     seed();
     List<String> before = dump();
