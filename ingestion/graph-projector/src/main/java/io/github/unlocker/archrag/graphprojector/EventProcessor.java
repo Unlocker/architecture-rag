@@ -6,8 +6,6 @@ import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
-import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
-import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
@@ -17,9 +15,8 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
-import io.github.unlocker.archrag.identityresolution.Feature;
+import io.github.unlocker.archrag.identityresolution.FeatureExtractor;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
-import io.github.unlocker.archrag.identityresolution.IdentityFeatures;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
@@ -58,6 +55,10 @@ import org.neo4j.driver.exceptions.SessionExpiredException;
  *   <li>checkpoint ({@value #CONSUMER}, ключ — {@code source}) сохраняется только после коммита Neo4j и
  *       перехода в конечный статус, курсором служит {@code eventId}; при {@code RETRYING}/{@code QUARANTINED}
  *       он не сдвигается;</li>
+ *   <li>matching кандидатов на совпадение ({@link IdentityCandidates}) идёт после {@code resolveGids} и до
+ *       транзакции Neo4j, не читает и не меняет карту {@code gids} и не вызывает
+ *       {@code IdentityMapping.resolve/approve}: узлы не объединяются ни при каком score; tombstone
+ *       убирает признаки ключа ({@code forget}); сбой хранилища — {@code RETRYING}/{@value #CANDIDATE_FAILED};</li>
  *   <li>ошибки не глушатся: нормализация и отказ графа переводят событие в {@code QUARANTINED}/{@code RETRYING}
  *       с кодом и причиной без значений из источника; неожиданные исключения, а также ошибки журнала
  *       пробрасываются вызывающему (событие остаётся в прежнем статусе, повтор безопасен).</li>
@@ -72,6 +73,7 @@ public final class EventProcessor {
   /** Имя consumer в {@code consumer_checkpoint}. */
   public static final String CONSUMER = "projector";
 
+  static final String CANDIDATE_FAILED = "IDENTITY_CANDIDATE_FAILED";
   static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
   static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
@@ -91,16 +93,6 @@ public final class EventProcessor {
   private final GraphProjection projection;
   private final ReconciliationTrigger reconciliation;
   private final IdentityCandidates candidates;
-
-  /** Процессор без поиска кандидатов на совпадение ({@link IdentityCandidates#DISABLED}). */
-  public EventProcessor(
-      EventJournal journal,
-      Normalizer normalizer,
-      IdentityMapping identity,
-      GraphProjection projection,
-      ReconciliationTrigger reconciliation) {
-    this(journal, normalizer, identity, projection, reconciliation, IdentityCandidates.DISABLED);
-  }
 
   public EventProcessor(
       EventJournal journal,
@@ -168,10 +160,10 @@ public final class EventProcessor {
       return retry(event, e.code(), e.getMessage());
     }
     try {
-      observeCandidates(key, commands, gids);
+      recordCandidates(key, commands, gids);
     } catch (IdentityStoreException e) {
-      // observe идемпотентен: повтор безопасен. Значения признаков в причину не попадают.
-      return retry(event, "CANDIDATE_STORE_FAILED", "identity candidate store failed");
+      // record идемпотентен: повтор безопасен. Значения признаков в причину не попадают.
+      return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
     }
     advance(event, ProcessingStatus.RESOLVED);
     return write(event, entry, key, commands, gids);
@@ -193,6 +185,11 @@ public final class EventProcessor {
     }
     advance(event, ProcessingStatus.VALIDATED);
     advance(event, ProcessingStatus.NORMALIZED);
+    try {
+      candidates.forget(key);
+    } catch (IdentityStoreException e) {
+      return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
+    }
     advance(event, ProcessingStatus.RESOLVED);
     return write(event, entry, key, List.of(new TombstoneSourceRecord(key, event.time())), Map.of());
   }
@@ -267,30 +264,12 @@ public final class EventProcessor {
   }
 
   /**
-   * Передаёт признаки узла самого события в {@link IdentityCandidates}; вне транзакции Neo4j. Владелец —
-   * {@code gid} команды из {@code OWNED_BY} этого же события, найденный через {@code find} (чужие ключи не создаются).
+   * Передаёт признаки узла самого события в {@link IdentityCandidates}; вне транзакции Neo4j. Карта
+   * {@code gids} только читается: matching не создаёт и не меняет {@code gid}.
    */
-  private void observeCandidates(SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids) {
-    Optional<UpsertNode> own =
-        commands.stream()
-            .filter(UpsertNode.class::isInstance)
-            .map(UpsertNode.class::cast)
-            .filter(u -> u.record().key().equals(key))
-            .findFirst();
-    if (own.isEmpty()) {
-      return;
-    }
-    Optional<UUID> owner =
-        commands.stream()
-            .filter(UpsertRelation.class::isInstance)
-            .map(UpsertRelation.class::cast)
-            .filter(r -> r.type() == RelationType.OWNED_BY && r.from().equals(key) && r.toLabel() == NodeLabel.TEAM)
-            .findFirst()
-            .flatMap(r -> identity.find(r.to()));
-    Set<Feature> features = IdentityFeatures.of(own.get().data(), owner);
-    if (!features.isEmpty()) {
-      candidates.observe(key, gids.get(key), own.get().data().label(), features);
-    }
+  private void recordCandidates(SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids) {
+    FeatureExtractor.labelOf(key, commands)
+        .ifPresent(label -> candidates.record(key, label, FeatureExtractor.extract(key, commands, Map.copyOf(gids))));
   }
 
   /** {@code gid} всех ключей команд; вызывается до транзакции Neo4j. */

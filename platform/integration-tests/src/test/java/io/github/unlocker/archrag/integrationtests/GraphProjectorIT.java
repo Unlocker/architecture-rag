@@ -30,6 +30,7 @@ import io.github.unlocker.archrag.graphprojector.ProjectionResult;
 import io.github.unlocker.archrag.graphprojector.ReconciliationTrigger;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
+import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
@@ -77,6 +78,7 @@ class GraphProjectorIT {
   static Driver driver;
   static PostgresEventJournal journal;
   static PostgresIdentityMapping identity;
+  static PostgresIdentityCandidates candidates;
   static GraphProjector projector;
   static EventProcessor processor;
   static final List<String> snapshots = new ArrayList<>();
@@ -93,13 +95,14 @@ class GraphProjectorIT {
     JournalMigrations.apply(dataSource);
     journal = new PostgresEventJournal(dataSource);
     identity = new PostgresIdentityMapping(dataSource);
+    candidates = new PostgresIdentityCandidates(dataSource);
     projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor = processor(projector);
   }
 
   private static EventProcessor processor(GraphProjection projection) {
     ReconciliationTrigger trigger = (source, run, id, count) -> snapshots.add(run);
-    return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projection, trigger);
+    return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projection, trigger, candidates);
   }
 
   @BeforeEach

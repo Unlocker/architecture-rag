@@ -2,7 +2,7 @@ package io.github.unlocker.archrag.identityresolution;
 
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
-import java.sql.Array;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,52 +10,62 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.EnumSet;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.UUID;
 import javax.sql.DataSource;
 
 /**
  * {@link IdentityCandidates} на PostgreSQL (JDBC без ORM); схема из {@code V4__identity_candidate.sql}.
  *
- * <p>{@code observe} — одна транзакция. Текущий {@code gid} другой записи берётся из
- * {@code identity_mapping}, поэтому записи, объединённые crosswalk, кандидатов не дают. Число пар на
- * одно наблюдение ограничено {@value #MAX_PAIRS}: остаток отбрасывается с предупреждением в журнале
- * (значения признаков в журнал не попадают).
+ * <p>Каждая операция — одна транзакция. Параллельные {@code record} с одним значением признака
+ * сериализуются advisory-lock'ом на {@code (семейство, вид, значение)}: иначе при READ COMMITTED обе
+ * транзакции не увидели бы друг друга и пара была бы потеряна. Общий {@code gid} проверяется по
+ * {@code identity_mapping} той же БД. Если у одного признака больше {@value #MAX_MATCHES} совпадений,
+ * кандидаты по нему не создаются (WARN с количеством, без значения).
  */
 public final class PostgresIdentityCandidates implements IdentityCandidates {
 
-  /** Предел числа пар, которые создаёт или обновляет одно наблюдение. */
-  public static final int MAX_PAIRS = 50;
+  /** Предел совпадений одного признака, сверх которого кандидаты по нему не создаются. */
+  public static final int MAX_MATCHES = 50;
 
   private static final System.Logger LOG = System.getLogger(PostgresIdentityCandidates.class.getName());
 
-  private static final String UPSERT_FEATURE =
-      "INSERT INTO identity_feature (source, source_type, source_id, gid, label, feature, value, updated_at)"
-          + " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (source, source_type, source_id, feature) DO UPDATE SET"
-          + " gid = EXCLUDED.gid, label = EXCLUDED.label, value = EXCLUDED.value, updated_at = EXCLUDED.updated_at";
-  private static final String DELETE_STALE =
-      "DELETE FROM identity_feature WHERE source = ? AND source_type = ? AND source_id = ? AND feature <> ALL (?)";
+  private static final String LOCK = "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))";
+  private static final String DELETE_FEATURES =
+      "DELETE FROM identity_feature WHERE source = ? AND source_type = ? AND source_id = ?";
+  private static final String INSERT_FEATURE =
+      "INSERT INTO identity_feature (source, source_type, source_id, feature, value, label_family, updated_at)"
+          + " VALUES (?,?,?,?,?,?,?)";
   private static final String FIND_OTHERS =
-      "SELECT DISTINCT m.gid FROM identity_feature f JOIN identity_mapping m ON m.source = f.source"
-          + " AND m.source_type = f.source_type AND m.source_id = f.source_id"
-          + " WHERE f.label = ? AND f.feature = ? AND f.value = ? AND m.gid <> ? ORDER BY m.gid LIMIT ?";
-  private static final String FIND_OTHERS_AMONG =
-      "SELECT DISTINCT m.gid FROM identity_feature f JOIN identity_mapping m ON m.source = f.source"
-          + " AND m.source_type = f.source_type AND m.source_id = f.source_id"
-          + " WHERE f.label = ? AND f.feature = ? AND f.value = ? AND m.gid = ANY (?)";
-  private static final String SELECT_FEATURES =
-      "SELECT features FROM identity_candidate WHERE left_gid = ? AND right_gid = ?";
+      "SELECT f.source, f.source_type, f.source_id FROM identity_feature f"
+          + " WHERE f.feature = ? AND f.label_family = ? AND f.value = ?"
+          + " AND NOT (f.source = ? AND f.source_type = ? AND f.source_id = ?)"
+          + " AND NOT EXISTS (SELECT 1 FROM identity_mapping a JOIN identity_mapping b ON a.gid = b.gid"
+          + " WHERE a.source = ? AND a.source_type = ? AND a.source_id = ?"
+          + " AND b.source = f.source AND b.source_type = f.source_type AND b.source_id = f.source_id)"
+          + " ORDER BY f.source, f.source_type, f.source_id LIMIT ?";
+  private static final String HAS_FEATURE =
+      "SELECT 1 FROM identity_feature WHERE source = ? AND source_type = ? AND source_id = ?"
+          + " AND feature = ? AND value = ?";
   private static final String UPSERT_CANDIDATE =
-      "INSERT INTO identity_candidate (left_gid, right_gid, label, features, score, created_at, updated_at)"
-          + " VALUES (?,?,?,?,?,?,?) ON CONFLICT (left_gid, right_gid) DO UPDATE SET"
-          + " features = EXCLUDED.features, score = EXCLUDED.score, updated_at = EXCLUDED.updated_at";
+      "INSERT INTO identity_candidate (left_source, left_type, left_id, right_source, right_type, right_id,"
+          + " label_family, matched, score, first_seen_at, updated_at) VALUES (?,?,?,?,?,?,?,"
+          + " (SELECT jsonb_agg(jsonb_build_object('feature', t.f, 'value', t.v) ORDER BY t.o)"
+          + " FROM unnest(?::text[], ?::text[]) WITH ORDINALITY AS t(f, v, o)), ?, ?, ?)"
+          + " ON CONFLICT (left_source, left_type, left_id, right_source, right_type, right_id) DO UPDATE SET"
+          + " matched = EXCLUDED.matched, score = EXCLUDED.score, updated_at = EXCLUDED.updated_at"
+          + " RETURNING status, first_seen_at, updated_at";
   private static final String SELECT_CANDIDATES =
-      "SELECT left_gid, right_gid, label, features, score, status, created_at, updated_at FROM identity_candidate"
-          + " WHERE left_gid = ? OR right_gid = ? ORDER BY left_gid, right_gid";
+      "SELECT left_source, left_type, left_id, right_source, right_type, right_id, label_family,"
+          + " ARRAY(SELECT e->>'feature' FROM jsonb_array_elements(matched) WITH ORDINALITY t(e, o) ORDER BY o),"
+          + " ARRAY(SELECT e->>'value' FROM jsonb_array_elements(matched) WITH ORDINALITY t(e, o) ORDER BY o),"
+          + " score, status, first_seen_at, updated_at FROM identity_candidate"
+          + " WHERE (left_source = ? AND left_type = ? AND left_id = ?)"
+          + " OR (right_source = ? AND right_type = ? AND right_id = ?)"
+          + " ORDER BY left_source, left_type, left_id, right_source, right_type, right_id";
 
   private final DataSource dataSource;
 
@@ -64,45 +74,74 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
   }
 
   @Override
-  public void observe(SourceKey key, UUID gid, NodeLabel label, Set<Feature> features) {
+  public List<IdentityCandidate> record(SourceKey key, NodeLabel label, Set<Feature> features) {
+    NodeLabel family = LabelFamily.of(label);
+    List<Feature> own = features.stream().sorted(Comparator.comparing(Feature::kind).thenComparing(Feature::value)).toList();
     try (Connection c = dataSource.getConnection()) {
       c.setAutoCommit(false);
       try {
+        lock(c, "key|" + key);
+        lockValues(c, family, own);
+        replaceFeatures(c, key, family, own);
+        Map<SourceKey, List<Feature>> matches = findMatches(c, key, family, own);
+        List<IdentityCandidate> result = new ArrayList<>();
         Instant now = Instant.now();
-        storeFeatures(c, key, gid, label, features, now);
-        Map<UUID, Set<FeatureType>> matches = findMatches(c, gid, label, features);
-        for (Map.Entry<UUID, Set<FeatureType>> match : matches.entrySet()) {
-          upsertCandidate(c, gid, match.getKey(), label, match.getValue(), now);
+        for (Map.Entry<SourceKey, List<Feature>> match : matches.entrySet()) {
+          result.add(upsertCandidate(c, key, match.getKey(), family, match.getValue(), now));
         }
+        c.commit();
+        return result;
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    } catch (SQLException e) {
+      throw new IdentityStoreException("record failed", e);
+    }
+  }
+
+  @Override
+  public void forget(SourceKey key) {
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      try (PreparedStatement ps = c.prepareStatement(DELETE_FEATURES)) {
+        lock(c, "key|" + key);
+        bindKey(ps, 1, key);
+        ps.executeUpdate();
         c.commit();
       } catch (SQLException | RuntimeException e) {
         c.rollback();
         throw e;
       }
     } catch (SQLException e) {
-      throw new IdentityStoreException("observe failed", e);
+      throw new IdentityStoreException("forget failed", e);
     }
   }
 
   @Override
-  public List<IdentityCandidate> candidatesOf(UUID gid) {
+  public List<IdentityCandidate> candidatesOf(SourceKey key) {
     try (Connection c = dataSource.getConnection();
         PreparedStatement ps = c.prepareStatement(SELECT_CANDIDATES)) {
-      ps.setObject(1, gid);
-      ps.setObject(2, gid);
+      bindKey(ps, bindKey(ps, 1, key), key);
       try (ResultSet rs = ps.executeQuery()) {
         List<IdentityCandidate> result = new ArrayList<>();
         while (rs.next()) {
+          String[] kinds = (String[]) rs.getArray(8).getArray();
+          String[] values = (String[]) rs.getArray(9).getArray();
+          List<Feature> matched = new ArrayList<>();
+          for (int i = 0; i < kinds.length; i++) {
+            matched.add(new Feature(FeatureKind.valueOf(kinds[i]), values[i]));
+          }
           result.add(
               new IdentityCandidate(
-                  rs.getObject(1, UUID.class),
-                  rs.getObject(2, UUID.class),
-                  NodeLabel.valueOf(rs.getString(3)),
-                  parseTypes((String[]) rs.getArray(4).getArray()),
-                  rs.getBigDecimal(5),
-                  rs.getString(6),
-                  rs.getTimestamp(7).toInstant(),
-                  rs.getTimestamp(8).toInstant()));
+                  readKey(rs, 1),
+                  readKey(rs, 4),
+                  NodeLabel.valueOf(rs.getString(7)),
+                  matched,
+                  rs.getBigDecimal(10),
+                  rs.getString(11),
+                  rs.getTimestamp(12).toInstant(),
+                  rs.getTimestamp(13).toInstant()));
         }
         return result;
       }
@@ -111,67 +150,86 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
     }
   }
 
-  private static void storeFeatures(
-      Connection c, SourceKey key, UUID gid, NodeLabel label, Set<Feature> features, Instant now) throws SQLException {
-    String[] names = features.stream().map(f -> f.type().name()).toArray(String[]::new);
-    try (PreparedStatement ps = c.prepareStatement(DELETE_STALE)) {
-      bindKey(ps, key);
-      ps.setArray(4, c.createArrayOf("text", names));
+  /** Сначала блокируется сам ключ (параллельные {@code record} одной записи иначе упираются в PK), затем значения. Порядок детерминирован (features уже отсортированы): взаимной блокировки нет. */
+  private static void lockValues(Connection c, NodeLabel family, List<Feature> features) throws SQLException {
+    for (Feature f : features) {
+      if (!f.kind().strong()) {
+        continue;
+      }
+      lock(c, family.name() + "|" + f.kind().name() + "|" + f.value());
+    }
+  }
+
+  private static void lock(Connection c, String name) throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(LOCK)) {
+      ps.setString(1, name);
+      ps.execute();
+    }
+  }
+
+  private static void replaceFeatures(Connection c, SourceKey key, NodeLabel family, List<Feature> features)
+      throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(DELETE_FEATURES)) {
+      bindKey(ps, 1, key);
       ps.executeUpdate();
     }
-    try (PreparedStatement ps = c.prepareStatement(UPSERT_FEATURE)) {
+    Timestamp now = Timestamp.from(Instant.now());
+    try (PreparedStatement ps = c.prepareStatement(INSERT_FEATURE)) {
       for (Feature f : features) {
-        bindKey(ps, key);
-        ps.setObject(4, gid);
-        ps.setString(5, label.name());
-        ps.setString(6, f.type().name());
-        ps.setString(7, f.value());
-        ps.setTimestamp(8, Timestamp.from(now));
+        int i = bindKey(ps, 1, key);
+        ps.setString(i++, f.kind().name());
+        ps.setString(i++, f.value());
+        ps.setString(i++, family.name());
+        ps.setTimestamp(i, now);
         ps.executeUpdate();
       }
     }
   }
 
-  /** Другие {@code gid} с общими признаками; {@code OWNER} учитывается только для пар, уже найденных по другим признакам. */
-  private static Map<UUID, Set<FeatureType>> findMatches(Connection c, UUID gid, NodeLabel label, Set<Feature> features)
-      throws SQLException {
-    Map<UUID, Set<FeatureType>> matches = new TreeMap<>();
-    for (Feature f : features) {
-      if (!f.type().standalone()) {
+  /** Другие ключи с общими сильными признаками; {@code OWNER} повышает score, но пару сам не создаёт. */
+  private static Map<SourceKey, List<Feature>> findMatches(
+      Connection c, SourceKey key, NodeLabel family, List<Feature> own) throws SQLException {
+    Map<SourceKey, List<Feature>> matches = new LinkedHashMap<>();
+    for (Feature f : own) {
+      if (!f.kind().strong()) {
         continue;
       }
+      List<SourceKey> others = new ArrayList<>();
       try (PreparedStatement ps = c.prepareStatement(FIND_OTHERS)) {
-        ps.setString(1, label.name());
-        ps.setString(2, f.type().name());
+        ps.setString(1, f.kind().name());
+        ps.setString(2, family.name());
         ps.setString(3, f.value());
-        ps.setObject(4, gid);
-        ps.setInt(5, MAX_PAIRS + 1);
+        int i = bindKey(ps, 4, key);
+        i = bindKey(ps, i, key);
+        ps.setInt(i, MAX_MATCHES + 1);
         try (ResultSet rs = ps.executeQuery()) {
           while (rs.next()) {
-            matches.computeIfAbsent(rs.getObject(1, UUID.class), k -> EnumSet.noneOf(FeatureType.class)).add(f.type());
+            others.add(readKey(rs, 1));
           }
         }
       }
-    }
-    if (matches.size() > MAX_PAIRS) {
-      LOG.log(System.Logger.Level.WARNING, "identity candidates capped at {0} pairs for label {1}", MAX_PAIRS, label);
-      Map<UUID, Set<FeatureType>> capped = new TreeMap<>();
-      matches.entrySet().stream().limit(MAX_PAIRS).forEach(e -> capped.put(e.getKey(), e.getValue()));
-      matches = capped;
-    }
-    for (Feature f : features) {
-      if (f.type().standalone() || matches.isEmpty()) {
+      if (others.size() > MAX_MATCHES) {
+        LOG.log(System.Logger.Level.WARNING,
+            "identity candidates skipped: feature {0} of {1} matches more than {2} records", f.kind(), family, MAX_MATCHES);
         continue;
       }
-      Array among = c.createArrayOf("uuid", matches.keySet().toArray());
-      try (PreparedStatement ps = c.prepareStatement(FIND_OTHERS_AMONG)) {
-        ps.setString(1, label.name());
-        ps.setString(2, f.type().name());
-        ps.setString(3, f.value());
-        ps.setArray(4, among);
-        try (ResultSet rs = ps.executeQuery()) {
-          while (rs.next()) {
-            matches.get(rs.getObject(1, UUID.class)).add(f.type());
+      for (SourceKey other : others) {
+        matches.computeIfAbsent(other, k -> new ArrayList<>()).add(f);
+      }
+    }
+    for (Feature f : own) {
+      if (f.kind().strong()) {
+        continue;
+      }
+      for (Map.Entry<SourceKey, List<Feature>> match : matches.entrySet()) {
+        try (PreparedStatement ps = c.prepareStatement(HAS_FEATURE)) {
+          int i = bindKey(ps, 1, match.getKey());
+          ps.setString(i++, f.kind().name());
+          ps.setString(i, f.value());
+          try (ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+              match.getValue().add(f);
+            }
           }
         }
       }
@@ -179,45 +237,40 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
     return matches;
   }
 
-  private static void upsertCandidate(
-      Connection c, UUID gid, UUID other, NodeLabel label, Set<FeatureType> matched, Instant now) throws SQLException {
-    UUID left = gid.compareTo(other) < 0 ? gid : other;
-    UUID right = left.equals(gid) ? other : gid;
-    Set<FeatureType> union = EnumSet.noneOf(FeatureType.class);
-    union.addAll(matched);
-    try (PreparedStatement ps = c.prepareStatement(SELECT_FEATURES)) {
-      ps.setObject(1, left);
-      ps.setObject(2, right);
+  private static IdentityCandidate upsertCandidate(
+      Connection c, SourceKey self, SourceKey other, NodeLabel family, List<Feature> matched, Instant now)
+      throws SQLException {
+    boolean swap = SourceKeys.compare(self, other) > 0;
+    SourceKey left = swap ? other : self;
+    SourceKey right = swap ? self : other;
+    String[] kinds = matched.stream().map(f -> f.kind().name()).toArray(String[]::new);
+    String[] values = matched.stream().map(Feature::value).toArray(String[]::new);
+    var score = FeatureKind.score(matched.stream().map(Feature::kind).toList());
+    try (PreparedStatement ps = c.prepareStatement(UPSERT_CANDIDATE)) {
+      int i = bindKey(ps, 1, left);
+      i = bindKey(ps, i, right);
+      ps.setString(i++, family.name());
+      ps.setArray(i++, c.createArrayOf("text", kinds));
+      ps.setArray(i++, c.createArrayOf("text", values));
+      ps.setBigDecimal(i++, score);
+      ps.setTimestamp(i++, Timestamp.from(now));
+      ps.setTimestamp(i, Timestamp.from(now));
       try (ResultSet rs = ps.executeQuery()) {
-        if (rs.next()) {
-          union.addAll(parseTypes((String[]) rs.getArray(1).getArray()));
-        }
+        rs.next();
+        return new IdentityCandidate(
+            left, right, family, matched, score, rs.getString(1), rs.getTimestamp(2).toInstant(), rs.getTimestamp(3).toInstant());
       }
     }
-    String[] names = union.stream().map(Enum::name).toArray(String[]::new);
-    try (PreparedStatement ps = c.prepareStatement(UPSERT_CANDIDATE)) {
-      ps.setObject(1, left);
-      ps.setObject(2, right);
-      ps.setString(3, label.name());
-      ps.setArray(4, c.createArrayOf("text", names));
-      ps.setBigDecimal(5, IdentityFeatures.score(union));
-      ps.setTimestamp(6, Timestamp.from(now));
-      ps.setTimestamp(7, Timestamp.from(now));
-      ps.executeUpdate();
-    }
   }
 
-  private static Set<FeatureType> parseTypes(String[] names) {
-    Set<FeatureType> types = EnumSet.noneOf(FeatureType.class);
-    for (String name : names) {
-      types.add(FeatureType.valueOf(name));
-    }
-    return types;
+  private static SourceKey readKey(ResultSet rs, int index) throws SQLException {
+    return new SourceKey(SourceSystemCode.valueOf(rs.getString(index)), rs.getString(index + 1), rs.getString(index + 2));
   }
 
-  private static void bindKey(PreparedStatement ps, SourceKey key) throws SQLException {
-    ps.setString(1, key.source().name());
-    ps.setString(2, key.sourceType());
-    ps.setString(3, key.sourceId());
+  private static int bindKey(PreparedStatement ps, int index, SourceKey key) throws SQLException {
+    ps.setString(index++, key.source().name());
+    ps.setString(index++, key.sourceType());
+    ps.setString(index++, key.sourceId());
+    return index;
   }
 }

@@ -21,11 +21,12 @@ import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.identityresolution.Feature;
-import io.github.unlocker.archrag.identityresolution.FeatureType;
+import io.github.unlocker.archrag.identityresolution.FeatureKind;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
+
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -49,6 +50,7 @@ class EventProcessorTest {
   private FakeJournal journal;
   private FakeProjection projection;
   private FakeIdentity identity;
+  private FakeCandidates candidates;
   private final List<String> snapshots = new ArrayList<>();
   private EventProcessor processor;
 
@@ -57,13 +59,15 @@ class EventProcessorTest {
     journal = new FakeJournal();
     projection = new FakeProjection();
     identity = new FakeIdentity();
+    candidates = new FakeCandidates(projection);
     processor =
         new EventProcessor(
             journal,
             Normalizer.standard(key -> true),
             identity,
             projection,
-            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId));
+            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId),
+            candidates);
   }
 
   private static CanonicalEvent upsert(String id, String version, Map<String, Object> payload) {
@@ -100,56 +104,87 @@ class EventProcessorTest {
   }
 
   @Test
-  void observesCandidateFeaturesOfEventKeyAfterResolve() {
-    var observed = new ArrayList<String>();
-    var withCandidates = processorWith(new RecordingCandidates(observed, false));
-
-    var result = withCandidates.process(appended(upsert("e1", "5", Map.of("name", "Core  Team"))), RAW);
+  void recordsCandidateFeaturesAfterResolveAndBeforeGraphWrite() {
+    var result = run(upsert("e1", "5", Map.of("name", "Core  Team")));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     var key = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
-    assertThat(observed)
-        .containsExactly(key + "/" + identity.map.get(key) + "/TEAM/" + new Feature(FeatureType.NAME, "core team"));
+    assertThat(identity.map).containsKey(key);
+    assertThat(candidates.recorded).containsExactly(key + "/TEAM/" + new Feature(FeatureKind.NAME, "core team"));
+    assertThat(candidates.graphUntouchedAtRecord).containsExactly(true);
+  }
+
+  @Test
+  void matchingDoesNotChangeGidsPassedToProjection() {
+    run(upsert("e1", "5", Map.of("name", "core")));
+
+    var key = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    assertThat(projection.requests.get(0).gids()).isEqualTo(Map.of(key, identity.map.get(key)));
+    assertThat(identity.map).hasSize(1);
   }
 
   @Test
   void candidateStoreFailureRetriesBeforeGraphIsTouched() {
-    var failing = processorWith(new RecordingCandidates(new ArrayList<>(), true));
+    candidates.fail = true;
 
-    var result = failing.process(appended(upsert("e1", "5", Map.of("name", "core"))), RAW);
+    var result = run(upsert("e1", "5", Map.of("name", "core")));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
-    assertThat(result.errorCode()).isEqualTo("CANDIDATE_STORE_FAILED");
+    assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
     assertThat(projection.requests).isEmpty();
     assertThat(journal.checkpoint).isNull();
   }
 
   @Test
-  void fiveArgumentConstructorDoesNotLookForCandidates() {
-    assertThat(run(upsert("e1", "5", Map.of("name", "core"))).status()).isEqualTo(ProcessingStatus.PROJECTED);
+  void tombstoneForgetsFeaturesOfKey() {
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(candidates.forgotten).containsExactly(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"));
   }
 
-  private EventProcessor processorWith(IdentityCandidates candidates) {
-    return new EventProcessor(
-        journal, Normalizer.standard(key -> true), identity, projection, (source, run, eventId, count) -> {}, candidates);
+  @Test
+  void tombstoneCandidateStoreFailureRetriesBeforeGraphIsTouched() {
+    candidates.fail = true;
+
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
+    assertThat(projection.requests).isEmpty();
   }
 
-  private CanonicalEvent appended(CanonicalEvent event) {
-    journal.append(event, RAW, "run-1");
-    return event;
-  }
+  private static final class FakeCandidates implements IdentityCandidates {
+    final List<String> recorded = new ArrayList<>();
+    final List<SourceKey> forgotten = new ArrayList<>();
+    final List<Boolean> graphUntouchedAtRecord = new ArrayList<>();
+    private final FakeProjection projection;
+    boolean fail;
 
-  private record RecordingCandidates(List<String> observed, boolean fail) implements IdentityCandidates {
-    @Override
-    public void observe(SourceKey key, UUID gid, NodeLabel label, Set<Feature> features) {
-      if (fail) {
-        throw new IdentityStoreException("down", null);
-      }
-      features.forEach(f -> observed.add(key + "/" + gid + "/" + label.name() + "/" + f));
+    FakeCandidates(FakeProjection projection) {
+      this.projection = projection;
     }
 
     @Override
-    public List<IdentityCandidate> candidatesOf(UUID gid) {
+    public List<IdentityCandidate> record(SourceKey key, NodeLabel label, Set<Feature> features) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      graphUntouchedAtRecord.add(projection.requests.isEmpty());
+      features.forEach(f -> recorded.add(key + "/" + label.name() + "/" + f));
+      return List.of();
+    }
+
+    @Override
+    public void forget(SourceKey key) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      forgotten.add(key);
+    }
+
+    @Override
+    public List<IdentityCandidate> candidatesOf(SourceKey key) {
       return List.of();
     }
   }
@@ -176,7 +211,7 @@ class EventProcessorTest {
   @Test
   void unresolvedReferenceReachesProjectorAsDeferredRelationOnce() {
     var unknown = new EventProcessor(
-        journal, Normalizer.standard(key -> false), identity, projection, (source, run, eventId, count) -> {});
+        journal, Normalizer.standard(key -> false), identity, projection, (source, run, eventId, count) -> {}, candidates);
     var event =
         new CanonicalEvent(
             "e-dep", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, "dep/d1", T,

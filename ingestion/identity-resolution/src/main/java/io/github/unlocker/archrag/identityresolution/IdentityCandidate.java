@@ -1,21 +1,22 @@
 package io.github.unlocker.archrag.identityresolution;
 
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Set;
-import java.util.UUID;
+import java.util.List;
 
 /**
- * Подозрение, что два canonical-узла одной метки описывают один объект. Только запись: узлы не
- * объединяются и {@code gid} не меняются. Пара нормализована ({@code leftGid < rightGid}).
+ * Подозрение, что две записи одного семейства меток описывают один объект. Только запись: узлы не
+ * объединяются, {@code gid} не меняются. Пара нормализована ({@code left < right}); {@code matched} —
+ * совпавшие признаки с нормализованными значениями.
  */
 public record IdentityCandidate(
-    UUID leftGid,
-    UUID rightGid,
-    NodeLabel label,
-    Set<FeatureType> features,
+    SourceKey left,
+    SourceKey right,
+    NodeLabel labelFamily,
+    List<Feature> matched,
     BigDecimal score,
     String status,
-    Instant createdAt,
+    Instant firstSeenAt,
     Instant updatedAt) {}

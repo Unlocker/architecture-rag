@@ -2,11 +2,11 @@ package io.github.unlocker.archrag.identityresolution;
 
 import java.util.Objects;
 
-/** Признак идентичности: тип и уже нормализованное значение. Значение не пустое. */
-public record Feature(FeatureType type, String value) {
+/** Признак идентичности: вид и уже нормализованное значение (сырое значение источника не хранится). Значение не пустое. */
+public record Feature(FeatureKind kind, String value) {
 
   public Feature {
-    Objects.requireNonNull(type, "type");
+    Objects.requireNonNull(kind, "kind");
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException("feature value must not be blank");
     }
