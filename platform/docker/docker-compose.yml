@@ -43,6 +43,7 @@ services:
     entrypoint: ["/bin/sh", "/gen-certs.sh"]
     volumes:
       - certs:/certs
+      - ca-key:/ca-key
       - ./certs/gen-certs.sh:/gen-certs.sh:ro
     networks: [backend]
     restart: "no"
@@ -374,6 +375,7 @@ secrets:
 
 volumes:
   certs:
+  ca-key:
   neo4j-data:
   pg-data:
   s3-data:

@@ -40,15 +40,22 @@ if mcp_exec env | grep -qE '^(ARCHRAG_PG_|NEO4J_PASSWORD=|ARCHRAG_NEO4J_PASSWORD
 fi
 secrets=$(mcp_exec ls /run/secrets | tr -d '\r')
 [ "$secrets" = ARCHRAG_NEO4J_READER_PASSWORD ] || fail "mcp-server /run/secrets must hold only the reader password, got: $secrets"
+# Положительный контроль в том же контейнере: neo4j резолвится и достижим, иначе отсутствие postgres ничего не доказывает.
+[ -n "$(mcp_exec getent hosts neo4j | tr -d '\r')" ] || fail "control: mcp-server cannot resolve neo4j (getent missing or graph network broken)"
+mcp_exec timeout 3 bash -c 'exec 3<>/dev/tcp/neo4j/7687' 2>/dev/null || fail "control: mcp-server cannot reach neo4j:7687"
 if [ -n "$(mcp_exec getent hosts postgres | tr -d '\r')" ]; then fail "mcp-server resolves postgres"; fi
 if mcp_exec timeout 3 bash -c 'exec 3<>/dev/tcp/postgres/5432' 2>/dev/null; then fail "mcp-server reaches postgres:5432"; fi
 
-# --- с proxy не видна админка ingestion ---
+# --- с proxy не видна админка ingestion (контроль: mcp-server из той же сети edge резолвится) ---
+[ -n "$(docker compose exec -T reverse-proxy getent hosts mcp-server | tr -d '\r')" ] || fail "control: reverse-proxy cannot resolve mcp-server"
 if [ -n "$(docker compose exec -T reverse-proxy getent hosts ingestion | tr -d '\r')" ]; then fail "reverse-proxy resolves ingestion"; fi
 
-# --- plain Bolt к Neo4j отклоняется (tls_level=REQUIRED): сервер закрывает соединение без ответа на handshake ---
-reply=$(docker compose exec -T ingestion timeout 5 bash -c \
-  'exec 3<>/dev/tcp/neo4j/7687; printf "\x60\x60\xb0\x17\x00\x00\x05\x04\x00\x00\x04\x04\x00\x00\x03\x04\x00\x00\x00\x00" >&3; timeout 3 head -c 4 <&3 | od -An -tx1' || true)
-[ -z "$(echo "$reply" | tr -d '[:space:]')" ] || fail "plain Bolt handshake to neo4j was answered: $reply"
+# --- plain Bolt к Neo4j отклоняется (tls_level=REQUIRED): соединение устанавливается, сервер закрывает его без ответа ---
+# Только встроенные команды bash. Исходы: CLOSED (EOF без данных) = отказ; REPLIED/TIMEOUT/UNREACHABLE = провал проверки.
+bolt=$(docker compose exec -T ingestion bash -c '
+  exec 3<>/dev/tcp/neo4j/7687 || { echo UNREACHABLE; exit 0; }
+  printf "\x60\x60\xb0\x17\x00\x00\x05\x04\x00\x00\x04\x04\x00\x00\x03\x04\x00\x00\x00\x00" >&3
+  if read -r -n 4 -t 5 -u 3 reply; then echo REPLIED; else rc=$?; [ "$rc" -gt 128 ] && echo TIMEOUT || { [ -z "$reply" ] && echo CLOSED || echo REPLIED; }; fi' | tr -d '\r')
+[ "$bolt" = CLOSED ] || fail "plain Bolt to neo4j must be closed without reply, got: ${bolt:-<no output>}"
 
 echo "smoke ok: TLS, 401 without token, 200 with token, network boundaries and secrets"
