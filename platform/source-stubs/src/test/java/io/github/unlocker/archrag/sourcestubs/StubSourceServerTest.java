@@ -50,6 +50,16 @@ class StubSourceServerTest {
   }
 
   @Test
+  void explicitAddressOverloadServesOnChosenPort() throws Exception {
+    try (var other = new StubSourceServer(source,
+        new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0))) {
+      assertThat(other.port()).isPositive();
+      HttpRequest request = HttpRequest.newBuilder(URI.create(other.baseUri() + "/changes?limit=1")).GET().build();
+      assertThat(http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+    }
+  }
+
+  @Test
   void pagesAreWalkedByCursor() throws Exception {
     HttpResponse<String> first = get("/changes?limit=2");
     assertThat(first.statusCode()).isEqualTo(200);

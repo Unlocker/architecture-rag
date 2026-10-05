@@ -18,5 +18,6 @@
   <modules>
     <module>integration-tests</module>
     <module>source-stubs</module>
+    <module>demo-launcher</module>
   </modules>
 </project>
