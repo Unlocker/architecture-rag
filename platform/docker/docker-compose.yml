@@ -1,6 +1,6 @@
 # Демо-стенд PoC (E5.1). Перед запуском: ./mvnw -B -ntp package -DskipTests && cp .env.example .env (см. README).
-# Одна сеть по умолчанию, наружу публикуется только reverse-proxy. Сети, TLS, Docker secrets, раздельные
-# креденшелы reader/writer — E5.2 (UNLOCKER-197).
+# Сети edge/backend/graph (default не используется), наружу публикуется только reverse-proxy по TLS.
+# Секреты — Docker secrets (из .env), Neo4j: отдельные креденшелы writer и reader, Bolt только по TLS (E5.2).
 name: archrag
 
 x-demo-launcher: &demo-launcher
@@ -11,15 +11,23 @@ x-demo-launcher: &demo-launcher
       JAR: platform/demo-launcher/target/demo-launcher-0.1.0-SNAPSHOT-exec.jar
   image: archrag/demo-launcher:dev
 
+# Пароли, ключи S3 и секрет webhook приходят как Docker secrets: entrypoint.sh образа экспортирует
+# каждый /run/secrets/<ИМЯ> в переменную <ИМЯ>.
 x-adapter-env: &adapter-env
   ARCHRAG_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
   ARCHRAG_PG_USER: ${POSTGRES_USER:?}
-  ARCHRAG_PG_PASSWORD: ${POSTGRES_PASSWORD:?}
   ARCHRAG_S3_ENDPOINT: http://seaweedfs:8333
-  ARCHRAG_S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
-  ARCHRAG_S3_SECRET_KEY: ${S3_SECRET_KEY:?}
   ARCHRAG_S3_BUCKET: ${S3_BUCKET:?}
-  ARCHRAG_WEBHOOK_SECRET: ${WEBHOOK_SECRET:?}
+
+x-adapter-secrets: &adapter-secrets
+  - { source: pg_password, target: ARCHRAG_PG_PASSWORD }
+  - { source: s3_access_key, target: ARCHRAG_S3_ACCESS_KEY }
+  - { source: s3_secret_key, target: ARCHRAG_S3_SECRET_KEY }
+  - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
+
+x-adapter-networks: &adapter-networks
+  - edge
+  - backend
 
 x-adapter-depends: &adapter-depends
   postgres: { condition: service_healthy }
@@ -29,26 +37,74 @@ x-adapter-depends: &adapter-depends
 
 services:
   # ---- инфраструктура ------------------------------------------------------------------------
+  # Одноразовый сервис: демо-CA и серверные сертификаты (proxy, Bolt Neo4j) в volume `certs`. Идемпотентен.
+  certs:
+    image: alpine/openssl:3.5.4
+    entrypoint: ["/bin/sh", "/gen-certs.sh"]
+    volumes:
+      - certs:/certs
+      - ca-key:/ca-key
+      - ./certs/gen-certs.sh:/gen-certs.sh:ro
+    networks: [backend]
+    restart: "no"
+
   neo4j:
     image: neo4j:5-community
+    # NEO4J_AUTH собирается из Docker secret при старте и не попадает в Config.Env; затем штатный entrypoint образа.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - export NEO4J_AUTH="neo4j/$$(cat /run/secrets/neo4j_password)" && exec tini -g -- /startup/docker-entrypoint.sh "$$@"
+      - --
+    command: ["neo4j"]
     environment:
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?}
+      # Bolt только по TLS (сертификат демо-CA из volume certs); Browser (HTTP 7474) наружу не публикуется.
+      NEO4J_server_bolt_tls__level: REQUIRED
+      NEO4J_dbms_ssl_policy_bolt_enabled: "true"
+      NEO4J_dbms_ssl_policy_bolt_base__directory: /certs/neo4j
+      NEO4J_dbms_ssl_policy_bolt_private__key: private.key
+      NEO4J_dbms_ssl_policy_bolt_public__certificate: public.crt
+      NEO4J_dbms_ssl_policy_bolt_client__auth: NONE
+    secrets:
+      - neo4j_password
     volumes:
       - neo4j-data:/data
+      - certs:/certs:ro
+    networks: [graph]
+    depends_on:
+      certs: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#neo4j/}\" 'RETURN 1' >/dev/null"]
+      test: ["CMD-SHELL", "cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p \"$$(cat /run/secrets/neo4j_password)\" 'RETURN 1' >/dev/null"]
       # cypher-shell стартует JVM и под нагрузкой стенда отвечает дольше 10 с: короткий timeout давал ложный unhealthy.
       interval: 10s
       timeout: 30s
       retries: 12
       start_period: 20s
 
+  # Одноразовый сервис: пользователь archrag_reader для mcp-server. Community не знает ролей, поэтому это только
+  # отдельный креденшел (без writer-пароля у MCP), а read-only обеспечивает приложение (read-транзакции).
+  neo4j-init:
+    image: neo4j:5-community
+    entrypoint: ["/bin/bash", "/init-reader.sh"]
+    secrets:
+      - neo4j_password
+      - neo4j_reader_password
+    volumes:
+      - ./neo4j/init-reader.sh:/init-reader.sh:ro
+    networks: [graph]
+    restart: "no"
+    depends_on:
+      neo4j: { condition: service_healthy }
+
   postgres:
     image: postgres:16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?}
       POSTGRES_USER: ${POSTGRES_USER:?}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    secrets:
+      - pg_password
+    networks: [backend]
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -66,6 +122,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?}
     volumes:
       - s3-data:/data
+    networks: [backend]
     healthcheck:
       # Любой HTTP-ответ ниже 500 на S3-порту: так же ждёт контейнер ContainersSmokeIT.
       test: ["CMD-SHELL", "wget -q -S -O /dev/null http://127.0.0.1:8333/ 2>&1 | grep -qE 'HTTP/[0-9.]+ [1-4][0-9][0-9]'"]
@@ -87,9 +144,11 @@ services:
       KC_HEALTH_ENABLED: "true"
       # Подстановки в archrag-realm.json.
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?}
-      ARCHRAG_MCP_RESOURCE_URI: http://localhost:${ARCHRAG_PUBLIC_PORT:-8080}/mcp
+      ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
     volumes:
       - ./keycloak/archrag-realm.json:/opt/keycloak/data/import/archrag-realm.json:ro
+    # edge: proxy отдаёт токен-endpoint; backend: ingestion проверяет JWT админки по issuer.
+    networks: [edge, backend]
     healthcheck:
       # В образе нет curl: запрос к management-порту 9000 через /dev/tcp.
       test:
@@ -114,19 +173,23 @@ services:
     environment:
       ARCHRAG_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
       ARCHRAG_PG_USER: ${POSTGRES_USER:?}
-      ARCHRAG_PG_PASSWORD: ${POSTGRES_PASSWORD:?}
-      ARCHRAG_NEO4J_URI: bolt://neo4j:7687
+      # bolt+ssc: TLS без проверки цепочки (демо-допущение, см. README).
+      ARCHRAG_NEO4J_URI: bolt+ssc://neo4j:7687
       ARCHRAG_NEO4J_USER: neo4j
-      ARCHRAG_NEO4J_PASSWORD: ${NEO4J_PASSWORD:?}
       ARCHRAG_S3_ENDPOINT: http://seaweedfs:8333
-      ARCHRAG_S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
-      ARCHRAG_S3_SECRET_KEY: ${S3_SECRET_KEY:?}
       ARCHRAG_S3_BUCKET: ${S3_BUCKET:?}
       ARCHRAG_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
       ARCHRAG_EAM_CONTROL_URL: http://adapter-eam:8080/control/snapshot
       ARCHRAG_SCM_CONTROL_URL: http://adapter-scm:8080/control/snapshot
       ARCHRAG_CMDB_CONTROL_URL: http://adapter-cmdb:8080/control/snapshot
       ARCHRAG_DEPLOYMAP_CONTROL_URL: http://adapter-deploymap:8080/control/snapshot
+    secrets:
+      - { source: pg_password, target: ARCHRAG_PG_PASSWORD }
+      - { source: neo4j_password, target: ARCHRAG_NEO4J_PASSWORD }
+      - { source: s3_access_key, target: ARCHRAG_S3_ACCESS_KEY }
+      - { source: s3_secret_key, target: ARCHRAG_S3_SECRET_KEY }
+    # Не в edge: админка ingestion недоступна с proxy.
+    networks: [backend, graph]
     depends_on:
       neo4j: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -150,13 +213,16 @@ services:
     # Без container_name и без published ports: сервис масштабируется `--scale mcp-server=2` за proxy.
     environment:
       ARCHRAG_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
-      ARCHRAG_MCP_RESOURCE_URI: http://localhost:${ARCHRAG_PUBLIC_PORT:-8080}/mcp
-      ARCHRAG_NEO4J_READER_URI: bolt://neo4j:7687
-      # Community не умеет роли: reader пока ходит под тем же пользователем, что и writer (разделение — E5.2).
-      ARCHRAG_NEO4J_READER_USERNAME: neo4j
-      ARCHRAG_NEO4J_READER_PASSWORD: ${NEO4J_PASSWORD:?}
+      ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
+      ARCHRAG_NEO4J_READER_URI: bolt+ssc://neo4j:7687
+      ARCHRAG_NEO4J_READER_USERNAME: archrag_reader
+    # Только reader-пароль; ни writer-пароля, ни PostgreSQL/S3 у MCP нет.
+    secrets:
+      - { source: neo4j_reader_password, target: ARCHRAG_NEO4J_READER_PASSWORD }
+    networks: [edge, graph]
     depends_on:
       neo4j: { condition: service_healthy }
+      neo4j-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
       # Схему Neo4j создаёт ingestion при старте.
       ingestion: { condition: service_healthy }
@@ -171,6 +237,8 @@ services:
   adapter-eam:
     <<: *demo-launcher
     command: ["adapter", "EAM"]
+    secrets: *adapter-secrets
+    networks: *adapter-networks
     environment:
       <<: *adapter-env
       ARCHRAG_SOURCE_URL: http://stub-eam:8080
@@ -188,6 +256,8 @@ services:
   adapter-scm:
     <<: *demo-launcher
     command: ["adapter", "SCM"]
+    secrets: *adapter-secrets
+    networks: *adapter-networks
     environment:
       <<: *adapter-env
       ARCHRAG_SOURCE_URL: http://stub-scm:8080
@@ -200,6 +270,8 @@ services:
   adapter-cmdb:
     <<: *demo-launcher
     command: ["adapter", "CMDB"]
+    secrets: *adapter-secrets
+    networks: *adapter-networks
     environment:
       <<: *adapter-env
       ARCHRAG_SOURCE_URL: http://stub-cmdb:8080
@@ -212,6 +284,8 @@ services:
   adapter-deploymap:
     <<: *demo-launcher
     command: ["adapter", "DEPLOY_MAP"]
+    secrets: *adapter-secrets
+    networks: *adapter-networks
     environment:
       <<: *adapter-env
       ARCHRAG_SOURCE_URL: http://stub-deploymap:8080
@@ -225,6 +299,7 @@ services:
   stub-eam:
     <<: *demo-launcher
     command: ["stub", "EAM"]
+    networks: [edge]
     healthcheck: &stub-health
       test: ["CMD-SHELL", "curl -fs 'http://127.0.0.1:8080/changes?limit=1' >/dev/null"]
       interval: 3s
@@ -235,26 +310,32 @@ services:
   stub-scm:
     <<: *demo-launcher
     command: ["stub", "SCM"]
+    networks: [edge]
     healthcheck: *stub-health
 
   stub-cmdb:
     <<: *demo-launcher
     command: ["stub", "CMDB"]
+    networks: [edge]
     healthcheck: *stub-health
 
   stub-deploymap:
     <<: *demo-launcher
     command: ["stub", "DEPLOY_MAP"]
+    networks: [edge]
     healthcheck: *stub-health
 
   # ---- единственная публикуемая точка ---------------------------------------------------------
   reverse-proxy:
     image: nginx:1.27-alpine
     ports:
-      - "127.0.0.1:${ARCHRAG_PUBLIC_PORT:-8080}:8080"
+      - "127.0.0.1:${ARCHRAG_PUBLIC_PORT:-8443}:8443"
     volumes:
       - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certs:/certs:ro
+    networks: [edge]
     depends_on:
+      certs: { condition: service_completed_successfully }
       mcp-server: { condition: service_healthy }
       keycloak: { condition: service_healthy }
       adapter-eam: { condition: service_healthy }
@@ -262,12 +343,39 @@ services:
       adapter-cmdb: { condition: service_healthy }
       adapter-deploymap: { condition: service_healthy }
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1:8443/healthz"]
       interval: 3s
       timeout: 3s
       retries: 20
 
+networks:
+  # Proxy, MCP, Keycloak, адаптеры и заглушки (заглушки изображают внешние мастер-системы). Не internal.
+  edge:
+  # Сервисы <-> PostgreSQL/SeaweedFS. Без внешнего доступа.
+  backend:
+    internal: true
+  # Сервисы <-> Neo4j. Без внешнего доступа.
+  graph:
+    internal: true
+
+# Значения берутся из .env (вне Git); внутри контейнера это файлы /run/secrets/<target>, а не переменные окружения.
+secrets:
+  pg_password:
+    environment: POSTGRES_PASSWORD
+  neo4j_password:
+    environment: NEO4J_PASSWORD
+  neo4j_reader_password:
+    environment: NEO4J_READER_PASSWORD
+  s3_access_key:
+    environment: S3_ACCESS_KEY
+  s3_secret_key:
+    environment: S3_SECRET_KEY
+  webhook_secret:
+    environment: WEBHOOK_SECRET
+
 volumes:
+  certs:
+  ca-key:
   neo4j-data:
   pg-data:
   s3-data:

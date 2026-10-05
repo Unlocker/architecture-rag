@@ -1,3 +1,4 @@
 # Контекст сборки — корень репозитория; в образ нужны только исполняемые jar.
 **
 !**/target/*-exec.jar
+!platform/docker/entrypoint.sh
