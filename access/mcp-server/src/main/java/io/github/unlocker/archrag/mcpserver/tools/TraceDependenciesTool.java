@@ -13,9 +13,8 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +33,26 @@ public class TraceDependenciesTool {
   private static final String MODE_TRACE = "trace";
   private static final String MODE_IMPACT = "impact";
   private static final int MAX_ENVIRONMENT_LENGTH = 128;
+
+  private static final Comparator<Map<String, Object>> PATH_ORDER =
+      Comparator.<Map<String, Object>>comparingInt(row -> pathNodes(row).size())
+          .thenComparing(
+              (a, b) -> {
+                var x = pathNodes(a);
+                var y = pathNodes(b);
+                for (int i = 0; i < x.size(); i++) {
+                  int c = String.valueOf(x.get(i).get("gid")).compareTo(String.valueOf(y.get(i).get("gid")));
+                  if (c != 0) {
+                    return c;
+                  }
+                }
+                return 0;
+              });
+
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, Object>> pathNodes(Map<String, Object> row) {
+    return (List<Map<String, Object>>) row.get("nodes");
+  }
 
   private final GraphQueries queries;
   private final QueryLimits limits;
@@ -70,7 +89,8 @@ public class TraceDependenciesTool {
               + " (Environment.code) требует, чтобы каждый Deployment на пути был в этом окружении, путь без Deployment"
               + " фильтр проходит. Только действующие связи и текущие узлы. Шаг пути объясним: связь несёт источник"
               + " (assertedBy*), sourceFetchedAt, stale; узел несёт stale и conflicts. truncated=true, если путей больше"
-              + " лимита: тогда состав путей может отличаться между вызовами.")
+              + " лимита: тогда состав путей может отличаться между вызовами. Ограничение: связь, утверждённая записью без узла,"
+              + " пока не несёт sourceFetchedAt и всегда stale.")
   public TraceDependenciesResult traceDependencies(
       @McpToolParam(description = "gid стартового актива (UUID)") String gid,
       @McpToolParam(description = "upstream или downstream, по умолчанию downstream; для impact только upstream", required = false)
@@ -114,7 +134,7 @@ public class TraceDependenciesTool {
         impact
             ? DependencyTemplates.IMPACT_UPSTREAM
             : dir.equals(DOWNSTREAM) ? DependencyTemplates.TRACE_DOWNSTREAM : DependencyTemplates.TRACE_UPSTREAM;
-    Map<String, Object> params = new HashMap<>();
+    Map<String, Object> params = new LinkedHashMap<>();
     params.put("gid", normalizedGid);
     params.put("relationTypes", types);
     if (impact) {
@@ -155,26 +175,6 @@ public class TraceDependenciesTool {
       }
     }
     return List.copyOf(requested);
-  }
-
-  private static final Comparator<Map<String, Object>> PATH_ORDER =
-      Comparator.<Map<String, Object>>comparingInt(row -> pathNodes(row).size())
-          .thenComparing(
-              (a, b) -> {
-                var x = pathNodes(a);
-                var y = pathNodes(b);
-                for (int i = 0; i < x.size(); i++) {
-                  int c = String.valueOf(x.get(i).get("gid")).compareTo(String.valueOf(y.get(i).get("gid")));
-                  if (c != 0) {
-                    return c;
-                  }
-                }
-                return 0;
-              });
-
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, Object>> pathNodes(Map<String, Object> row) {
-    return (List<Map<String, Object>>) row.get("nodes");
   }
 
   /** Старше порога: ровно на пороге ещё свежо; не заданное время считается устаревшим. */
