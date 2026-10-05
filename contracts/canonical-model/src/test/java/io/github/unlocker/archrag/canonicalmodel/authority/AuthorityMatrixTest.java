@@ -35,6 +35,15 @@ class AuthorityMatrixTest {
     }
 
     @Test
+    void decomposedIntoOnlyScm() {
+        assertThat(matrix.relationAuthorities(RelationType.DECOMPOSED_INTO)).containsExactly(SCM);
+        assertThat(matrix.isAuthoritative(RelationType.DECOMPOSED_INTO, SCM)).isTrue();
+        for (var other : allExcept(SCM)) {
+            assertThat(matrix.isAuthoritative(RelationType.DECOMPOSED_INTO, other)).as(other.name()).isFalse();
+        }
+    }
+
+    @Test
     void deploymentOnlyDeploymap() {
         assertThat(matrix.nodeAuthorities(NodeLabel.DEPLOYMENT)).containsExactly(DEPLOYMAP);
         assertThat(matrix.isAuthoritative(NodeLabel.DEPLOYMENT, "version", DEPLOYMAP)).isTrue();

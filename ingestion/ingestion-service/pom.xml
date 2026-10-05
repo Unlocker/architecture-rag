@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.unlocker.archrag</groupId>
+    <artifactId>ingestion</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>ingestion-service</artifactId>
+  <name>ingestion-service</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>canonical-model</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>event-schemas</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>event-journal</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>normalizer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>identity-resolution</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>graph-projector</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+    </dependency>
+    <!-- DataSource для PostgresEventJournal и PostgresIdentityMapping; Flyway из Boot не подключаем (миграции — JournalMigrations). -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+
+    <!-- Контрактный тест StoredEventReader сверяет его с EventMapper адаптеров; в compile адаптеры не нужны. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>adapter-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>source-spi</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+            <configuration>
+              <!-- Обычный jar остаётся основным артефактом: на него зависит platform/integration-tests. -->
+              <classifier>exec</classifier>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

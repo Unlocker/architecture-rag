@@ -49,6 +49,8 @@ public final class Neo4jSchema {
     statements.add("CREATE CONSTRAINT source_system_code IF NOT EXISTS FOR (n:SourceSystem) "
       + "REQUIRE n.code IS UNIQUE");
     statements.add("CREATE CONSTRAINT sync_run_id IF NOT EXISTS FOR (n:SyncRun) REQUIRE n.runId IS UNIQUE");
+    statements.add("CREATE CONSTRAINT pending_relation_key IF NOT EXISTS FOR (n:PendingRelation) "
+      + "REQUIRE n.key IS UNIQUE");
     statements.add("CREATE CONSTRAINT environment_code IF NOT EXISTS FOR (n:Environment) "
       + "REQUIRE n.code IS UNIQUE");
     statements.add("CREATE FULLTEXT INDEX asset_text IF NOT EXISTS FOR (n:ITSystem|Service) "

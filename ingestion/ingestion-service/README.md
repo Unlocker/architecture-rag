@@ -1,0 +1,27 @@
+# ingestion-service
+
+Админский эндпоинт ингеста (E1.7): `POST /admin/replay`, `/admin/rebuild?confirm=true`, `/admin/reconcile/{source}`,
+`/admin/crosswalks`. Доступен только с OIDC scope `architecture.admin`, в MCP и во внешний ingress не входит.
+
+## Обязательные переменные окружения
+
+| Переменная | Назначение |
+|---|---|
+| `ARCHRAG_PG_URL`, `ARCHRAG_PG_USER`, `ARCHRAG_PG_PASSWORD` | PostgreSQL (inbox, identity, аудит); миграции применяются при старте |
+| `ARCHRAG_NEO4J_URI`, `ARCHRAG_NEO4J_USER`, `ARCHRAG_NEO4J_PASSWORD` | Neo4j с правами записи |
+| `ARCHRAG_S3_ENDPOINT`, `ARCHRAG_S3_ACCESS_KEY`, `ARCHRAG_S3_SECRET_KEY`, `ARCHRAG_S3_BUCKET` | S3-совместимое хранилище raw payload |
+| `ARCHRAG_OIDC_ISSUER_URI` | издатель токенов (проверяются подпись, срок и scope) |
+
+Необязательные: `ARCHRAG_ADMIN_PORT` (по умолчанию 8081) и `ARCHRAG_<EAM|SCM|CMDB|DEPLOYMAP>_CONTROL_URL` — полный URL
+`/control/snapshot` adapter-сервиса источника; без него `POST /admin/reconcile/<source>` отвечает 404.
+
+Для PoC достаточно проверки издателя и scope; audience токена не проверяется (токен того же издателя со scope
+`architecture.admin`, выданный для другого ресурса, будет принят).
+
+## Диспетчер журнала (E1.11)
+
+`JournalDispatcher` забирает из `inbox_event` события в статусах `RECEIVED`, `RETRYING` и промежуточных
+(`VALIDATED`/`NORMALIZED`/`RESOLVED`) в порядке `(received_at, source, event_id)` и передаёт их в `EventProcessor`.
+Один поток, один экземпляр сервиса. Настройки: `archrag.dispatcher.enabled|poll-interval|batch-size|retry-delay|shutdown-timeout`
+(env `ARCHRAG_DISPATCHER_*`). Каждая страница выборки обрабатывается под `AdminLock` (занят — проход пропускается),
+`RETRYING` и прерванные события ждут `retry-delay` с последнего изменения. Пока ранняя версия объекта в `RETRYING`, его более поздние события в том же проходе не берутся.

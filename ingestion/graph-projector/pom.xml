@@ -20,6 +20,19 @@
       <artifactId>canonical-model</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>event-schemas</artifactId>
+    </dependency>
+    <!-- Оркестратор события (EventProcessor) вызывает Normalizer и IdentityMapping; это модули того же reactor, не новая библиотека. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>normalizer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>identity-resolution</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.neo4j.driver</groupId>
       <artifactId>neo4j-java-driver</artifactId>
     </dependency>

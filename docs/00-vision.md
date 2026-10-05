@@ -235,9 +235,10 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 | VM, physical host, serial number | CMDB/asset DB | Runtime discovery |
 | Deployment на стенде | Deploy map + Helm charts (отдельный `deploymap-adapter`) | SCM metadata |
 | Связь `DEPENDS_ON` между сервисами | EAM | SCM metadata |
+| Связь `DECOMPOSED_INTO` ITSystem→Service | SCM/catalog | EAM |
 | Описания и документы | EAM/docs | Репозиторий |
 
-Было: master для `Deployment` — «CD/Kubernetes или CMDB». Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
+Было: master для `Deployment` — «CD/Kubernetes или CMDB»; master для `DECOMPOSED_INTO` — EAM (UNLOCKER-171). Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
 
 `SourceRecord` сохраняет источник конкретного утверждения, время извлечения, версию и hash. Такая модель проще для аудита конфликтов, чем массив `sourceIds` на бизнес-узле, и концептуально согласуется с W3C PROV, где `Entity`, `Activity` и `Agent` позволяют описывать происхождение и цепочки преобразований.[^17]
 
@@ -315,7 +316,7 @@ LLM или embedding similarity могут предлагать соответс
 | Duplicate event | Повторная доставка | Находит inbox по `source + eventId` | Возвращает прежний result без повторной мутации |
 | Out-of-order event | Версия/время меньше примененной | Сохраняет raw event с `IGNORED_OLD_VERSION` | Не откатывает состояние |
 | Partial object | API возвращает неполную запись | Помечает completeness и ставит retry | Не затирает известные authoritative поля `null`-значениями без явной семантики удаления |
-| Broken reference | Сервис ссылается на неизвестную систему | Публикует команду со source reference | Создает `UnresolvedReference` либо quarantine; не создает фиктивный business node без политики |
+| Broken reference | Сервис ссылается на неизвестную систему | Публикует команду со source reference | `UnresolvedReference` сохраняется как отложенная связь и достраивается при появлении конечной точки; фиктивный узел не создаётся |
 | Source outage/rate limit | 429/5xx/timeout | Backoff, jitter, Retry-After, circuit breaker | Сохраняет прежнюю витрину; обновляет freshness/lag, не объявляет данные удаленными |
 | Contract change | Неизвестная schema version | Сохраняет raw payload, отправляет в quarantine | Не выполняет best-effort запись неизвестной структуры |
 | Replay/backfill | Оператор задает диапазон/cursor | Повторно публикует raw events с новым replay ID | Дедупликация по business event ID/version; результат детерминирован |
@@ -489,7 +490,7 @@ public interface CanonicalMapper {
 }
 
 public sealed interface GraphCommand
-        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord {}
+        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation {}
 ```
 
 Source DTO не должны проникать в graph projector. Маппинг следует тестировать contract fixtures, а операции проекции — integration tests с реальным Neo4j/Testcontainers.
