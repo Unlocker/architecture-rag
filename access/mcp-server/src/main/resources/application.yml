@@ -28,6 +28,7 @@ archrag:
       tool-scopes:
         ping: architecture.read
         search_assets: architecture.read
+        get_asset: architecture.read
 
   neo4j:
     reader:

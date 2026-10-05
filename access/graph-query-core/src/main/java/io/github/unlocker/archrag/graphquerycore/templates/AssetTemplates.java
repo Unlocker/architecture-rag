@@ -82,6 +82,78 @@ public final class AssetTemplates {
           Set.of("query", "text", "types", "environment"),
           ResultKind.NODES);
 
+  /**
+   * Типы связей, которые {@code get_asset} отдаёт как связи 1 уровня. Служебные ({@code ASSERTS},
+   * {@code OWNS_RECORD}, {@code PROCESSED}, {@code PART_OF}, {@code HOSTED_ON}) не входят.
+   */
+  public static final List<String> RELATION_TYPES =
+      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY");
+
+  /**
+   * Карточка актива по {@code gid}. Метки только из {@link #SEARCHABLE_TYPES}: служебные узлы не читаются.
+   *
+   * <p>Параметр {@code gid}. Фильтра {@code isCurrent} нет: закрытый узел отдаётся с
+   * {@code isCurrent=false}. Возвращает {@code gid, type, properties, firstSeenAt, lastSeenAt, deletedAt,
+   * isCurrent, sources}; {@code sources} включает неактивные записи (активные первыми).
+   */
+  public static final QueryTemplate GET_ASSET =
+      new QueryTemplate(
+          "get_asset",
+          """
+          MATCH (n:%s {gid: $gid})
+          RETURN n.gid AS gid,
+                 [l IN labels(n) WHERE l IN %s][0] AS type,
+                 properties(n) AS properties,
+                 toString(n.firstSeenAt) AS firstSeenAt,
+                 toString(n.lastSeenAt) AS lastSeenAt,
+                 toString(n.deletedAt) AS deletedAt,
+                 n.isCurrent AS isCurrent,
+                 COLLECT {
+                   MATCH (r:SourceRecord)-[a:ASSERTS]->(n)
+                   RETURN {
+                     source: r.source,
+                     sourceType: r.sourceType,
+                     sourceId: r.sourceId,
+                     sourceVersion: r.sourceVersion,
+                     fetchedAt: toString(r.fetchedAt),
+                     active: r.active,
+                     authority: a.authority
+                   } AS record
+                   ORDER BY r.active DESC, r.source, r.sourceId
+                 } AS sources
+          LIMIT $limit
+          """
+              .formatted(LABELS, cypherList(SEARCHABLE_TYPES)),
+          Set.of("gid"),
+          ResultKind.NODES);
+
+  /**
+   * Действующие связи 1 уровня актива в обе стороны. Типы связей из {@link #RELATION_TYPES}, соседи
+   * только с метками {@link #SEARCHABLE_TYPES}, закрытые связи ({@code validTo} задан) не возвращаются.
+   *
+   * <p>Параметр {@code gid}. Возвращает {@code relationType, direction (OUT|IN), gid, type, name,
+   * isCurrent, validFrom} соседа.
+   */
+  public static final QueryTemplate ASSET_RELATIONS =
+      new QueryTemplate(
+          "asset_relations",
+          """
+          MATCH (n:%s {gid: $gid})-[rel]-(m:%s)
+          WHERE type(rel) IN %s AND rel.validTo IS NULL
+          RETURN type(rel) AS relationType,
+                 CASE WHEN startNode(rel) = n THEN 'OUT' ELSE 'IN' END AS direction,
+                 m.gid AS gid,
+                 [l IN labels(m) WHERE l IN %s][0] AS type,
+                 coalesce(m.name, m.hostname, m.url, m.code) AS name,
+                 m.isCurrent AS isCurrent,
+                 toString(rel.validFrom) AS validFrom
+          ORDER BY relationType, direction, gid
+          LIMIT $limit
+          """
+              .formatted(LABELS, LABELS, cypherList(RELATION_TYPES), cypherList(SEARCHABLE_TYPES)),
+          Set.of("gid"),
+          ResultKind.NODES);
+
   private AssetTemplates() {}
 
   /** Литерал списка строк из констант allowlist (не из ввода). */

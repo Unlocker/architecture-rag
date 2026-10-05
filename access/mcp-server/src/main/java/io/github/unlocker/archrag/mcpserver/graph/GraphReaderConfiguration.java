@@ -46,6 +46,16 @@ public class GraphReaderConfiguration {
   }
 
   @Bean
+  QueryTemplate getAssetTemplate() {
+    return AssetTemplates.GET_ASSET;
+  }
+
+  @Bean
+  QueryTemplate assetRelationsTemplate() {
+    return AssetTemplates.ASSET_RELATIONS;
+  }
+
+  @Bean
   QueryTemplateRegistry queryTemplateRegistry(List<QueryTemplate> templates, QueryLimits limits) {
     return QueryTemplateRegistry.of(templates, limits);
   }
