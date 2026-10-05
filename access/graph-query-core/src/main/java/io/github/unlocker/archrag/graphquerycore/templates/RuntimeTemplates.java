@@ -14,7 +14,7 @@ public final class RuntimeTemplates {
    * Развёртывания системы: одна строка на (service, deployment, compute).
    *
    * <p>Параметры: {@code systemGid}, {@code environment} ({@code null} — без фильтра). Инварианты:
-   * только действующие факты ({@code isCurrent}; у {@code RUNS_ON} ещё и {@code validTo IS NULL});
+   * только действующие факты ({@code isCurrent}; у темпоральной {@code RUNS_ON} ещё и {@code validTo IS NULL}, {@code HOSTED_ON} не темпоральна);
    * нет действующей системы с таким gid или она не {@code ITSystem} — строк нет; сервис без
    * подходящих deployments возвращается строкой с {@code null} в полях deployment; цели
    * {@code RUNS_ON} ограничены меткой {@code ComputeInstance} (Namespace не попадает). Узлы отдаются
@@ -33,7 +33,7 @@ public final class RuntimeTemplates {
           OPTIONAL MATCH (d)-[ro:RUNS_ON]->(c:ComputeInstance)
           WHERE ro.validTo IS NULL AND c.isCurrent = true
           OPTIONAL MATCH (c:VirtualMachine)-[ho:HOSTED_ON]->(p:PhysicalServer)
-          WHERE ho.validTo IS NULL AND p.isCurrent = true
+          WHERE p.isCurrent = true
           RETURN
             {gid: s.gid, name: s.name, lastSeenAt: toString(s.lastSeenAt),
              sources: COLLECT { MATCH (r:SourceRecord {active: true})-[a:ASSERTS]->(s)

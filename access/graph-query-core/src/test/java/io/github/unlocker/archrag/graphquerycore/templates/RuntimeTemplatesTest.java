@@ -45,6 +45,11 @@ class RuntimeTemplatesTest {
   }
 
   @Test
+  void hostedOnIsNotFilteredByValidity() {
+    assertThat(T.cypher()).doesNotContain("ho.validTo");
+  }
+
+  @Test
   void usesOnlyActiveAssertionsForSources() {
     assertThat(T.cypher()).contains("SourceRecord {active: true})-[a:ASSERTS]->");
   }
