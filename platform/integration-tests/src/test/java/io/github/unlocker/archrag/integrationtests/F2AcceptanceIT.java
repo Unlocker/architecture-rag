@@ -164,7 +164,6 @@ class F2AcceptanceIT {
   private ConfigurableApplicationContext mcpApp;
   private String mcpUrl;
   private String systemGid;
-  private String initialDeploymentSeenAt;
 
   /** Граф: полный snapshot четырёх заглушек через адаптеры и работающий диспетчер; затем MCP-приложение. */
   @BeforeAll
@@ -290,8 +289,8 @@ class F2AcceptanceIT {
     assertThat(Instant.parse(deployment.lastSeenAt())).isNotNull();
     assertThat(deployment.sources()).extracting(FindRuntimeFootprintResult.FactSource::source)
         .contains("DEPLOYMAP");
-    assertThat(deployment.hasDeployment()).isNotNull();
-    initialDeploymentSeenAt = deployment.lastSeenAt();
+    assertThat(deployment.hasDeployment().source()).isNotBlank();
+    assertThat(deployment.hasDeployment().sourceId()).isNotBlank();
 
     assertThat(deployment.compute()).hasSize(1);
     ComputeFootprint vm = deployment.compute().getFirst();
@@ -299,7 +298,8 @@ class F2AcceptanceIT {
     assertThat(vm.hostname()).isEqualTo("vm-pay-01.prod.example.org");
     assertThat(Instant.parse(vm.lastSeenAt())).isNotNull();
     assertThat(vm.sources()).extracting(FindRuntimeFootprintResult.FactSource::source).contains("CMDB");
-    assertThat(vm.runsOn()).isNotNull();
+    assertThat(vm.runsOn().source()).isNotBlank();
+    assertThat(vm.runsOn().sourceId()).isEqualTo(DEPLOYMENT);
   }
 
   @Test
@@ -314,6 +314,7 @@ class F2AcceptanceIT {
   @Test
   @Order(4)
   void s4_deployMapChangeIsVisibleAfterSync() {
+    String initialSeenAt = onlyDeployment(service(footprint(systemGid, PROD), "payments-api")).lastSeenAt();
     // Новый хост сначала попадает в CMDB, затем deploy map на него ссылается.
     stubs.get(SourceSystem.CMDB).upsert(StubSources.COMPUTE_INSTANCE, "vm-pay-02", StubSources.fields(
         "hostname", "vm-pay-02.prod.example.org", "kind", "VIRTUAL_MACHINE", "state", "RUNNING",
@@ -342,7 +343,7 @@ class F2AcceptanceIT {
     assertThat(deployment.version()).isEqualTo("1.5.0");
     assertThat(deployment.compute()).extracting(ComputeFootprint::hostname)
         .contains("vm-pay-02.prod.example.org");
-    assertThat(Instant.parse(deployment.lastSeenAt())).isAfter(Instant.parse(initialDeploymentSeenAt));
+    assertThat(Instant.parse(deployment.lastSeenAt())).isAfter(Instant.parse(initialSeenAt));
     assertThat(changed.warnings()).isEmpty();
     assertThat(changed.truncated()).isFalse();
   }
@@ -406,7 +407,7 @@ class F2AcceptanceIT {
   // ---- helpers -----------------------------------------------------------------------------
 
   private void poll(SourceSystem system) {
-    assertThat(adapters.get(system).poller().pollOnce().outcome()).isNotEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(adapters.get(system).poller().pollOnce().outcome()).isEqualTo(PollResult.Outcome.ADVANCED);
   }
 
   private static ServiceFootprint service(FindRuntimeFootprintResult result, String name) {
