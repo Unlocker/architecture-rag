@@ -5,6 +5,7 @@ import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
+import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
@@ -53,6 +54,16 @@ public class GraphReaderConfiguration {
   @Bean
   QueryTemplate assetRelationsTemplate() {
     return AssetTemplates.ASSET_RELATIONS;
+  }
+
+  @Bean
+  QueryTemplate traceDownstreamTemplate() {
+    return DependencyTemplates.TRACE_DOWNSTREAM;
+  }
+
+  @Bean
+  QueryTemplate traceUpstreamTemplate() {
+    return DependencyTemplates.TRACE_UPSTREAM;
   }
 
   @Bean
