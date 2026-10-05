@@ -81,7 +81,7 @@ public final class PostgresIdentityMapping implements IdentityMapping {
   public UUID approve(Crosswalk crosswalk) {
     SourceKey left = crosswalk.left();
     SourceKey right = crosswalk.right();
-    boolean swap = compare(left, right) > 0;
+    boolean swap = SourceKeys.compare(left, right) > 0;
     SourceKey lo = swap ? right : left;
     SourceKey hi = swap ? left : right;
     try (Connection c = dataSource.getConnection()) {
@@ -158,14 +158,5 @@ public final class PostgresIdentityMapping implements IdentityMapping {
     ps.setString(index++, key.sourceType());
     ps.setString(index++, key.sourceId());
     return index;
-  }
-
-  /** Нормализованный порядок пары (его держит только приложение): по (source, sourceType, sourceId) в лексикографическом порядке строк. */
-  private static int compare(SourceKey a, SourceKey b) {
-    int r = a.source().name().compareTo(b.source().name());
-    if (r == 0) {
-      r = a.sourceType().compareTo(b.sourceType());
-    }
-    return r == 0 ? a.sourceId().compareTo(b.sourceId()) : r;
   }
 }
