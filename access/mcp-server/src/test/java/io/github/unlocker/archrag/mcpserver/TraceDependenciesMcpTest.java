@@ -67,10 +67,11 @@ class TraceDependenciesMcpTest {
 
   @Test
   void callWithScopeReturnsPathsAndTruncated() {
-    var a = Map.<String, Object>of("gid", GID, "label", "ITSystem", "name", "Pay", "lastSeenAt", "2026-01-01T00:00:00Z");
-    var b = Map.<String, Object>of("gid", "g2", "label", "Service", "name", "Billing", "lastSeenAt", "2026-01-01T00:00:00Z");
+    var a = Map.<String, Object>of("gid", GID, "label", "ITSystem", "name", "Pay", "lastSeenAt", "2026-01-01T00:00:00Z", "conflicts", List.of());
+    var b = Map.<String, Object>of("gid", "g2", "label", "Service", "name", "Billing", "lastSeenAt", "2026-01-01T00:00:00Z", "conflicts", List.of());
     var r = Map.<String, Object>of("type", "DECOMPOSED_INTO", "from", GID, "to", "g2", "validFrom", "2026-01-01T00:00:00Z",
-        "assertedBySource", "EAM", "assertedByType", "relation", "assertedById", "x");
+        "assertedBySource", "EAM", "assertedByType", "relation", "assertedById", "x",
+        "sourceFetchedAt", "2026-01-01T00:00:00Z", "sourceActive", true);
     when(executor.execute(eq("trace_downstream"), any(), any()))
         .thenReturn(new QueryResult("trace_downstream", List.of(Map.of("nodes", List.of(a, b), "relations", List.of(r))),
             true, 1, Duration.ZERO));
@@ -103,9 +104,51 @@ class TraceDependenciesMcpTest {
   }
 
   @Test
-  void impactModeIsReportedAsToolError() {
-    var res = call(TestJwt.token("architecture.read"), "{\"gid\":\"" + GID + "\",\"mode\":\"impact\"}");
+  void impactModeReturnsAffectedWithStepProvenance() {
+    var vm = Map.<String, Object>of("gid", GID, "label", "ComputeInstance", "name", "vm", "lastSeenAt", "2026-01-01T00:00:00Z",
+        "conflicts", List.of());
+    var svc = Map.<String, Object>of("gid", "g2", "label", "Service", "name", "Billing", "lastSeenAt", "2026-01-01T00:00:00Z",
+        "conflicts", List.of());
+    var r = Map.<String, Object>of("type", "RUNS_ON", "from", "g2", "to", GID, "validFrom", "2026-01-01T00:00:00Z",
+        "assertedBySource", "SCM", "assertedByType", "relation", "assertedById", "x", "sourceFetchedAt", "2026-01-01T00:00:00Z",
+        "sourceActive", true);
+    when(executor.execute(eq("trace_impact"), any(), any()))
+        .thenReturn(new QueryResult("trace_impact", List.of(Map.of("nodes", List.of(vm, svc), "relations", List.of(r))),
+            false, 1, Duration.ZERO));
 
-    assertThat(res.getBody()).contains("\"isError\":true").contains("mode impact is not supported yet");
+    var res = call(TestJwt.token("architecture.read"), "{\"gid\":\"" + GID + "\",\"mode\":\"impact\",\"environment\":\"prod\"}");
+
+    var result = new JsonMapper().readTree(res.getBody()).get("result");
+    assertThat(result.get("isError").asBoolean()).isFalse();
+    var payload = new JsonMapper().readTree(result.get("content").get(0).get("text").asString());
+    assertThat(payload.get("mode").asString()).isEqualTo("impact");
+    assertThat(payload.get("environment").asString()).isEqualTo("prod");
+    assertThat(payload.get("affected").get(0).asString()).isEqualTo("g2");
+    assertThat(payload.get("relations").get(0).get("assertedBySource").asString()).isEqualTo("SCM");
+    assertThat(payload.get("relations").get(0).get("sourceFetchedAt").asString()).isEqualTo("2026-01-01T00:00:00Z");
+    assertThat(payload.get("relations").get(0).get("stale").asBoolean()).isTrue();
+  }
+
+  @Test
+  void impactWithoutRequiredScopeIsDenied() {
+    var res = call(TestJwt.token("other.scope"), "{\"gid\":\"" + GID + "\",\"mode\":\"impact\"}");
+
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+  }
+
+  @Test
+  void impactValidationErrorsAreToolErrorsWithoutEchoingInput() {
+    var res = call(TestJwt.token("architecture.read"),
+        "{\"gid\":\"" + GID + "\",\"mode\":\"impact\",\"direction\":\"downstream\",\"environment\":\"leaky-env\"}");
+
+    assertThat(res.getBody()).contains("\"isError\":true").contains("direction must be upstream for mode impact")
+        .doesNotContain("leaky-env");
+  }
+
+  @Test
+  void unknownModeIsReportedAsToolError() {
+    var res = call(TestJwt.token("architecture.read"), "{\"gid\":\"" + GID + "\",\"mode\":\"bogus-leak\"}");
+
+    assertThat(res.getBody()).contains("\"isError\":true").contains("mode must be trace or impact").doesNotContain("bogus-leak");
   }
 }
