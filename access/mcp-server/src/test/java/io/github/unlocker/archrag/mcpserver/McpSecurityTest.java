@@ -104,7 +104,7 @@ class McpSecurityTest {
     assertThat(init.getStatusCode().value()).isEqualTo(200);
     var list = post(token, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
     assertThat(list.getStatusCode().value()).isEqualTo(200);
-    assertThat(list.getBody()).contains("ping");
+    assertThat(list.getBody()).contains("ping").contains("find_runtime_footprint");
   }
 
   @Test
@@ -116,6 +116,18 @@ class McpSecurityTest {
         .contains("scope=\"architecture.read\"")
         .contains("resource_metadata=");
     assertThat(res.getBody()).isNullOrEmpty();
+  }
+
+  @Test
+  void runtimeFootprintCallRequiresScope() {
+    String call =
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{"
+            + "\"name\":\"find_runtime_footprint\",\"arguments\":{"
+            + "\"systemGid\":\"11111111-1111-1111-1111-111111111111\"}}}";
+    var noScope = post(TestJwt.token(), call);
+    assertThat(noScope.getStatusCode().value()).isEqualTo(403);
+    assertThat(challenge(noScope)).contains("scope=\"architecture.read\"");
+    assertThat(post(TestJwt.token("other.scope"), call).getStatusCode().value()).isEqualTo(403);
   }
 
   @Test

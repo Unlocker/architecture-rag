@@ -27,9 +27,11 @@ archrag:
       # Каждый tool обязан иметь строку: tool без записи отклоняется (fail-closed).
       tool-scopes:
         ping: architecture.read
+        find_runtime_footprint: architecture.read
         search_assets: architecture.read
         get_asset: architecture.read
         explain_provenance: architecture.read
+        trace_dependencies: architecture.read
 
   neo4j:
     reader:
@@ -38,6 +40,8 @@ archrag:
       username: ${ARCHRAG_NEO4J_READER_USERNAME}
       password: ${ARCHRAG_NEO4J_READER_PASSWORD}
   query:
+    # Порог устаревания фактов (lastSeenAt старше → stale).
+    stale-after: P7D
     limits:
       max-depth: 6
       max-nodes: 500

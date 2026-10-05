@@ -5,10 +5,14 @@ import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
+import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
+import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
+import java.time.Clock;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,7 +25,11 @@ import org.springframework.context.annotation.Configuration;
  * {@link QueryTemplate}.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({GraphReaderProperties.class, GraphReaderProperties.Limits.class})
+@EnableConfigurationProperties({
+  GraphReaderProperties.class,
+  GraphReaderProperties.Limits.class,
+  StalenessProperties.class
+})
 public class GraphReaderConfiguration {
 
   @Bean(destroyMethod = "close")
@@ -61,6 +69,21 @@ public class GraphReaderConfiguration {
   }
 
   @Bean
+  QueryTemplate traceDownstreamTemplate() {
+    return DependencyTemplates.TRACE_DOWNSTREAM;
+  }
+
+  @Bean
+  QueryTemplate traceUpstreamTemplate() {
+    return DependencyTemplates.TRACE_UPSTREAM;
+  }
+
+  @Bean
+  QueryTemplate traceImpactTemplate() {
+    return DependencyTemplates.IMPACT_UPSTREAM;
+  }
+
+  @Bean
   QueryTemplateRegistry queryTemplateRegistry(List<QueryTemplate> templates, QueryLimits limits) {
     return QueryTemplateRegistry.of(templates, limits);
   }
@@ -68,5 +91,16 @@ public class GraphReaderConfiguration {
   @Bean
   GraphQueryExecutor graphQueryExecutor(Driver graphReaderDriver, QueryTemplateRegistry registry) {
     return new GraphQueryExecutor(graphReaderDriver, registry);
+  }
+
+  @Bean
+  QueryTemplate runtimeFootprintTemplate() {
+    return RuntimeTemplates.RUNTIME_FOOTPRINT;
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  Clock clock() {
+    return Clock.systemUTC();
   }
 }
