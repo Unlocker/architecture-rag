@@ -46,6 +46,9 @@ import org.neo4j.driver.TransactionContext;
  *       {@code null} никогда не записывается;</li>
  *   <li>удаления физического нет: tombstone ставит {@code active=false}, а каноничный узел архивируется
  *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных MASTER-утверждений;</li>
+ *   <li>версия записи замещает свои темпоральные связи: открытая связь типа, который эта версия утверждает
+ *       (или откладывает), от этой записи, но отсутствующая в версии, закрывается на {@code eventTime}; типы,
+ *       которых в версии нет, не трогаются; tombstone и повтор версии ничего не замещают;</li>
  *   <li>время хранится как {@code datetime} в UTC;</li>
  *   <li>маркеры конфликтов ({@link ConflictMarkers}) пишутся в той же транзакции после upsert или tombstone: на
  *       всех рёбрах {@code ASSERTS} узла {@code gid} свойство {@code conflicts} получает записи из набора и
@@ -180,6 +183,9 @@ public final class GraphProjector implements GraphProjection {
                 skippedRelations);
         case CloseAssertion close -> closeAssertion(tx, request, close);
       }
+    }
+    if (!request.isTombstone()) {
+      closeReplacedRelations(tx, request);
     }
     if (request.isRelationOnly()) {
       markRelationOnlyRecord(tx, request);
@@ -385,6 +391,49 @@ public final class GraphProjector implements GraphProjection {
     if (rows.isEmpty()) {
       throw new ProjectionException(ProjectionException.UNRESOLVED_ENDPOINT, "relation endpoint is not in the graph");
     }
+  }
+
+  /**
+   * Замещающая семантика темпоральных связей: для каждого типа, который версия утверждает ({@code UpsertRelation})
+   * или откладывает ({@code DeferRelation}, чтобы старое ребро закрылось и при ещё неизвестном новом конце),
+   * закрывает открытые связи этой записи (все три поля {@code assertedBy*}) вне набора текущих пар {@code (from, to)}.
+   * Тип без утверждений в версии не затрагивается: частичная запись ничего не закрывает. Ребро, переутверждённое
+   * другой записью, имеет другой {@code assertedBy*} и не закрывается. Тип связи подставляется из enum.
+   */
+  private void closeReplacedRelations(TransactionContext tx, ProjectionRequest request) {
+    SourceKey key = request.key();
+    Map<RelationType, List<List<String>>> kept = new LinkedHashMap<>();
+    for (GraphCommand command : request.commands()) {
+      switch (command) {
+        case UpsertRelation relation when replaces(relation, key) ->
+            kept.computeIfAbsent(relation.type(), t -> new ArrayList<>())
+                .add(List.of(request.gids().get(relation.from()).toString(), request.gids().get(relation.to()).toString()));
+        case DeferRelation defer when replaces(defer.relation(), key) ->
+            kept.computeIfAbsent(defer.relation().type(), t -> new ArrayList<>());
+        default -> {}
+      }
+    }
+    Map<String, Object> params = new HashMap<>(keyParams(key));
+    params.put("at", NodeProperties.utc(request.eventTime()));
+    // Запрос по типу связи без индекса, как и при tombstone: для PoC приемлемо.
+    kept.forEach(
+        (type, pairs) -> {
+          params.put("kept", pairs);
+          tx.run(
+                  "MATCH (a)-[rel:" + type.name() + "]->(b) "
+                      + "WHERE rel.validTo IS NULL AND rel.assertedBySource = $source "
+                      + "AND rel.assertedByType = $sourceType AND rel.assertedById = $sourceId "
+                      + "AND NOT [a.gid, b.gid] IN $kept "
+                      + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
+                  params)
+              .consume();
+        });
+  }
+
+  private boolean replaces(UpsertRelation relation, SourceKey key) {
+    return relation.type().temporal()
+        && relation.assertedBy().equals(key)
+        && matrix.isAuthoritative(relation.type(), key.source());
   }
 
   private void closeAssertion(TransactionContext tx, ProjectionRequest request, CloseAssertion close) {
