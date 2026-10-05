@@ -11,7 +11,9 @@ import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.net.URI;
@@ -42,6 +44,11 @@ public class IngestionServiceConfiguration {
   IdentityMapping identityMapping(DataSource dataSource, PostgresEventJournal migrated) {
     // Зависимость от журнала гарантирует, что миграции уже применены.
     return new PostgresIdentityMapping(dataSource);
+  }
+
+  @Bean
+  IdentityCandidates identityCandidates(DataSource dataSource, PostgresEventJournal migrated) {
+    return new PostgresIdentityCandidates(dataSource);
   }
 
   @Bean(destroyMethod = "close")
@@ -75,8 +82,10 @@ public class IngestionServiceConfiguration {
       EventJournal journal,
       GraphProjector projector,
       IdentityMapping identity,
-      Reconciler reconciliation) {
-    return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation);
+      Reconciler reconciliation,
+      IdentityCandidates candidates) {
+    return new EventProcessor(
+        journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation, candidates);
   }
 
   @Bean
