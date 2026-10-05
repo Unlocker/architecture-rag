@@ -211,7 +211,7 @@ class F1AcceptanceIT {
         "--archrag.query.limits.max-depth=6",
         "--archrag.query.limits.max-nodes=500",
         "--archrag.query.limits.max-paths=50",
-        // Первый запрос на холодном Neo4j (прогрев индексов) в CI не укладывается в 5 с продакшен-бюджета.
+        // Первый запрос на холодном Neo4j в CI не укладывается в 5 с продакшен-бюджета; причина разбирается в UNLOCKER-216.
         "--archrag.query.limits.timeout=30s",
         "--archrag.query.limits.max-response-bytes=512KB");
     return new SpringApplicationBuilder(McpServerApplication.class).run(args.toArray(String[]::new));
