@@ -51,4 +51,44 @@ class DependencyTemplatesTest {
     assertThat(DependencyTemplates.TRACE_RELATION_TYPES)
         .containsExactly("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY");
   }
+
+  @Test
+  void noTemplateOrdersBeforeLimit() {
+    for (QueryTemplate t :
+        List.of(DependencyTemplates.TRACE_DOWNSTREAM, DependencyTemplates.TRACE_UPSTREAM, DependencyTemplates.IMPACT_UPSTREAM)) {
+      assertThat(t.cypher()).doesNotContain("ORDER BY").contains("WITH p LIMIT $limit");
+    }
+  }
+
+  @Test
+  void impactTemplateGoesUpstreamToServicesAndSystemsFilteredByEnvironment() {
+    var t = DependencyTemplates.IMPACT_UPSTREAM;
+
+    assertThat(t.id()).isEqualTo("trace_impact");
+    assertThat(t.kind()).isEqualTo(ResultKind.PATHS);
+    assertThat(t.parameters()).containsExactlyInAnyOrder("gid", "relationTypes", "environment");
+    assertThat(t.cypher())
+        .contains("<-[*1..{maxDepth}]-(t:Service|ITSystem)")
+        .contains("IN_ENVIRONMENT")
+        .contains("e.validTo IS NULL")
+        .contains("r.validTo IS NULL");
+    assertThat(t.render(4, 6)).contains("[*1..4]");
+    assertThat(QueryTemplateRegistry.of(List.of(t), LIMITS).find("trace_impact")).isPresent();
+  }
+
+  @Test
+  void impactAllowlistIsExactAndSubsetOfTraceAllowlist() {
+    assertThat(DependencyTemplates.IMPACT_RELATION_TYPES)
+        .containsExactly("RUNS_ON", "HOSTED_ON", "HAS_DEPLOYMENT", "DECOMPOSED_INTO", "DEPENDS_ON")
+        .doesNotContain("OWNED_BY")
+        .isSubsetOf(DependencyTemplates.TRACE_RELATION_TYPES);
+    assertThat(DependencyTemplates.IMPACT_TARGET_LABELS).containsExactly("Service", "ITSystem");
+  }
+
+  @Test
+  void projectionCarriesProvenanceFreshnessAndConflicts() {
+    for (QueryTemplate t : List.of(DependencyTemplates.TRACE_UPSTREAM, DependencyTemplates.IMPACT_UPSTREAM)) {
+      assertThat(t.cypher()).contains("sourceFetchedAt").contains("sourceActive").contains("a.conflicts IS NOT NULL");
+    }
+  }
 }

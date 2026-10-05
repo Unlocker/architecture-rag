@@ -36,7 +36,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.neo4j.Neo4jContainer;
 
-/** Шаблоны {@code trace_downstream} и {@code trace_upstream} на Neo4j Community со схемой из {@link Neo4jSchema}. */
+/** Шаблоны {@code trace_downstream}, {@code trace_upstream} и {@code trace_impact} на Neo4j Community со схемой из {@link Neo4jSchema}. */
 @Testcontainers
 class TraceDependenciesIT {
 
@@ -71,7 +71,11 @@ class TraceDependenciesIT {
         new GraphQueryExecutor(
             reader,
             QueryTemplateRegistry.of(
-                List.of(DependencyTemplates.TRACE_DOWNSTREAM, DependencyTemplates.TRACE_UPSTREAM, AssetTemplates.GET_ASSET),
+                List.of(
+                    DependencyTemplates.TRACE_DOWNSTREAM,
+                    DependencyTemplates.TRACE_UPSTREAM,
+                    DependencyTemplates.IMPACT_UPSTREAM,
+                    AssetTemplates.GET_ASSET),
                 LIMITS));
   }
 
@@ -109,6 +113,10 @@ class TraceDependenciesIT {
                 + "(:PhysicalServer:ComputeInstance {gid: $srv, hostname: 'srv-01', isCurrent: true,"
                 + " lastSeenAt: datetime('2026-01-01T10:00:00Z')})")
         .withParameters(Map.of("vm", GID_VM, "srv", GID_SRV))
+        .execute();
+    // Записи-источники связей фикстуры не несут fetchedAt (в проде его пишет запись узла): задаём свежесть шагов.
+    driver
+        .executableQuery("MATCH (r:SourceRecord) WHERE r.fetchedAt IS NULL SET r.fetchedAt = datetime('2026-01-01T10:00:00Z')")
         .execute();
   }
 
@@ -207,5 +215,179 @@ class TraceDependenciesIT {
 
     assertThat(trace("trace_downstream", unknown, 6, 50, ALL).rows()).isEmpty();
     assertThat(executor.execute("get_asset", Map.of("gid", unknown), null).rows()).isEmpty();
+  }
+
+  // ---- impact ----
+
+  static final String GID_DEP_TEST = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  static final String ENV_PROD = "eeeeeeee-0000-0000-0000-000000000001";
+  static final String ENV_TEST = "eeeeeeee-0000-0000-0000-000000000002";
+
+  private static QueryResult impact(String gid, String environment, int depth, int maxPaths) {
+    var budget = new ResultBudget(depth, LIMITS.maxNodes(), maxPaths, LIMITS.timeout(), LIMITS.maxResponseBytes());
+    Map<String, Object> params = new java.util.HashMap<>();
+    params.put("gid", gid);
+    params.put("relationTypes", DependencyTemplates.IMPACT_RELATION_TYPES);
+    params.put("environment", environment);
+    return executor.execute("trace_impact", params, budget);
+  }
+
+  /** Второе развёртывание billing на той же VM, но в окружении test; обе Deployment привязаны к окружениям. */
+  private static void seedEnvironments() {
+    driver
+        .executableQuery(
+            "MATCH (b:Service {gid: $billing}), (v:ComputeInstance {gid: $vm}), (dep:Deployment {gid: $dep}) "
+                + "CREATE (e1:Environment {gid: $e1, code: 'prod', isCurrent: true, lastSeenAt: datetime()}), "
+                + "(e2:Environment {gid: $e2, code: 'test', isCurrent: true, lastSeenAt: datetime()}), "
+                + "(d2:Deployment {gid: $d2, name: 'billing-test', isCurrent: true, lastSeenAt: datetime()}) "
+                + "CREATE (b)-[:HAS_DEPLOYMENT {validFrom: datetime()}]->(d2), "
+                + "(d2)-[:RUNS_ON {validFrom: datetime()}]->(v), "
+                + "(dep)-[:IN_ENVIRONMENT {validFrom: datetime()}]->(e1), "
+                + "(d2)-[:IN_ENVIRONMENT {validFrom: datetime()}]->(e2)")
+        .withParameters(Map.of("billing", GID_BILLING, "vm", GID_VM, "dep", GID_DEP, "d2", GID_DEP_TEST, "e1", ENV_PROD, "e2", ENV_TEST))
+        .execute();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static boolean anyPathContains(QueryResult result, String gid) {
+    return result.rows().stream()
+        .anyMatch(r -> ((List<Map<String, Object>>) r.get("nodes")).stream().anyMatch(n -> gid.equals(n.get("gid"))));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void stoppingVmReachesServicesAndSystemsWithStepProvenance() {
+    var result = impact(GID_VM, null, 6, 50);
+
+    assertThat(endGids(result)).contains(GID_BILLING, GID_SYS).doesNotContain(GID_DEP, GID_VM);
+    var toSystem = result.rows().stream().filter(r -> GID_SYS.equals(endGid(r))).findFirst().orElseThrow();
+    var steps = (List<Map<String, Object>>) toSystem.get("relations");
+    assertThat(steps).extracting(r -> r.get("type")).containsExactly("RUNS_ON", "HAS_DEPLOYMENT", "DECOMPOSED_INTO");
+    assertThat(steps).allSatisfy(step -> {
+      assertThat(step.get("assertedBySource")).isNotNull();
+      assertThat(step.get("assertedById")).isNotNull();
+      assertThat(step.get("sourceFetchedAt")).isEqualTo("2026-01-01T10:00:00Z");
+      assertThat(step.get("sourceActive")).isEqualTo(true);
+    });
+    // Путь идёт против стрелок: первая связь Deployment -RUNS_ON-> VM.
+    assertThat(steps.getFirst()).containsEntry("from", GID_DEP).containsEntry("to", GID_VM);
+    assertThat(result.truncated()).isFalse();
+  }
+
+  @Test
+  void dependsOnConsumerOfAffectedServiceIsAffectedAndOwnershipIsNotFollowed() {
+    var result = impact(GID_VM, null, 6, 50);
+
+    assertThat(endGids(result)).contains(GID_AUTH).doesNotContain(GID_TEAM);
+  }
+
+  @Test
+  void environmentFilterCutsDeploymentsOfOtherEnvironments() {
+    seedEnvironments();
+
+    var prod = impact(GID_VM, "prod", 6, 50);
+    var unfiltered = impact(GID_VM, null, 6, 50);
+
+    assertThat(endGids(prod)).contains(GID_BILLING, GID_SYS);
+    assertThat(anyPathContains(prod, GID_DEP)).isTrue();
+    assertThat(anyPathContains(prod, GID_DEP_TEST)).isFalse();
+    assertThat(anyPathContains(unfiltered, GID_DEP)).isTrue();
+    assertThat(anyPathContains(unfiltered, GID_DEP_TEST)).isTrue();
+    assertThat(impact(GID_VM, "no-such-env", 6, 50).rows()).isEmpty();
+  }
+
+  @Test
+  void environmentFilterIgnoresClosedEnvironmentLink() {
+    seedEnvironments();
+    driver
+        .executableQuery("MATCH (:Deployment {gid: $g})-[e:IN_ENVIRONMENT]->() SET e.validTo = datetime('2026-01-02T00:00:00Z')")
+        .withParameters(Map.of("g", GID_DEP))
+        .execute();
+
+    assertThat(impact(GID_VM, "prod", 6, 50).rows()).isEmpty();
+  }
+
+  @Test
+  void pathWithoutDeploymentPassesEnvironmentFilter() {
+    seedEnvironments();
+
+    var result = impact(GID_AUTH, "prod", 6, 50);
+
+    assertThat(endGids(result)).contains(GID_BILLING);
+  }
+
+  @Test
+  void closedRunsOnGivesNoImpact() {
+    assertThat(impact(GID_VM_OLD, null, 6, 50).rows()).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void freshnessConflictsAndInactiveSourceAreProjected() {
+    driver
+        .executableQuery("MATCH (n {gid: $g}) SET n.lastSeenAt = datetime('2025-01-01T00:00:00Z')")
+        .withParameters(Map.of("g", GID_DEP))
+        .execute();
+    driver
+        .executableQuery("MATCH (:SourceRecord)-[a:ASSERTS]->(n {gid: $g}) SET a.conflicts = ['name']")
+        .withParameters(Map.of("g", GID_BILLING))
+        .execute();
+    driver
+        .executableQuery("MATCH (r:SourceRecord {sourceId: $id}) SET r.active = false")
+        .withParameters(Map.of("id", "RUNS_ON/" + GID_DEP + "/" + GID_VM))
+        .execute();
+
+    var result = impact(GID_VM, null, 6, 50);
+    var toBilling = result.rows().stream().filter(r -> GID_BILLING.equals(endGid(r))).findFirst().orElseThrow();
+    var nodes = (List<Map<String, Object>>) toBilling.get("nodes");
+    var dep = nodes.stream().filter(n -> GID_DEP.equals(n.get("gid"))).findFirst().orElseThrow();
+    var billing = nodes.getLast();
+
+    assertThat(dep.get("lastSeenAt")).isEqualTo("2025-01-01T00:00:00Z");
+    assertThat(dep.get("conflicts")).isEqualTo(List.of());
+    assertThat((List<Map<String, Object>>) billing.get("conflicts"))
+        .singleElement()
+        .satisfies(c -> {
+          assertThat(c).containsEntry("source", "SCM").containsEntry("sourceType", "component").containsEntry("sourceId", "billing");
+          assertThat(c.get("properties")).isEqualTo(List.of("name"));
+        });
+    assertThat(((List<Map<String, Object>>) toBilling.get("relations")).getFirst()).containsEntry("sourceActive", false);
+  }
+
+  /** 1 CI, 30 Deployment на ней, 30 Service (по одному на Deployment), DEPENDS_ON «каждый с каждым». */
+  private static void seedDenseGraph() {
+    driver.executableQuery("MATCH (n) DETACH DELETE n").execute();
+    driver
+        .executableQuery(
+            "CREATE (ci:ComputeInstance {gid: 'ci', hostname: 'ci', isCurrent: true, lastSeenAt: datetime()}) "
+                + "WITH ci UNWIND range(1, 30) AS i "
+                + "CREATE (d:Deployment {gid: 'd' + i, name: 'd' + i, isCurrent: true, lastSeenAt: datetime()}), "
+                + "(s:Service {gid: 's' + i, name: 's' + i, isCurrent: true, lastSeenAt: datetime()}) "
+                + "CREATE (d)-[:RUNS_ON {validFrom: datetime()}]->(ci), (s)-[:HAS_DEPLOYMENT {validFrom: datetime()}]->(d)")
+        .execute();
+    driver
+        .executableQuery(
+            "MATCH (a:Service), (b:Service) WHERE a <> b CREATE (a)-[:DEPENDS_ON {validFrom: datetime()}]->(b)")
+        .execute();
+  }
+
+  @Test
+  void denseGraphImpactIsTruncatedWithinTimeout() {
+    seedDenseGraph();
+
+    var result = impact("ci", null, 6, LIMITS.maxPaths());
+
+    assertThat(result.truncated()).isTrue();
+    assertThat(result.rows()).hasSize(LIMITS.maxPaths());
+  }
+
+  @Test
+  void denseGraphUpstreamTraceIsTruncatedWithinTimeout() {
+    seedDenseGraph();
+
+    var result = trace("trace_upstream", "ci", 6, LIMITS.maxPaths(), ALL);
+
+    assertThat(result.truncated()).isTrue();
+    assertThat(result.rows()).hasSize(LIMITS.maxPaths());
   }
 }
