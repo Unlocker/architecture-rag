@@ -6,6 +6,8 @@ import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
@@ -15,7 +17,11 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
+import io.github.unlocker.archrag.identityresolution.Feature;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
+import io.github.unlocker.archrag.identityresolution.IdentityFeatures;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.normalizer.UnresolvedReference;
@@ -84,18 +90,31 @@ public final class EventProcessor {
   private final IdentityMapping identity;
   private final GraphProjection projection;
   private final ReconciliationTrigger reconciliation;
+  private final IdentityCandidates candidates;
 
+  /** Процессор без поиска кандидатов на совпадение ({@link IdentityCandidates#DISABLED}). */
   public EventProcessor(
       EventJournal journal,
       Normalizer normalizer,
       IdentityMapping identity,
       GraphProjection projection,
       ReconciliationTrigger reconciliation) {
+    this(journal, normalizer, identity, projection, reconciliation, IdentityCandidates.DISABLED);
+  }
+
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates) {
     this.journal = Objects.requireNonNull(journal, "journal");
     this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
     this.identity = Objects.requireNonNull(identity, "identity");
     this.projection = Objects.requireNonNull(projection, "projection");
     this.reconciliation = Objects.requireNonNull(reconciliation, "reconciliation");
+    this.candidates = Objects.requireNonNull(candidates, "candidates");
   }
 
   /**
@@ -147,6 +166,12 @@ public final class EventProcessor {
       gids = resolveGids(key, commands);
     } catch (ProjectionException e) {
       return retry(event, e.code(), e.getMessage());
+    }
+    try {
+      observeCandidates(key, commands, gids);
+    } catch (IdentityStoreException e) {
+      // observe идемпотентен: повтор безопасен. Значения признаков в причину не попадают.
+      return retry(event, "CANDIDATE_STORE_FAILED", "identity candidate store failed");
     }
     advance(event, ProcessingStatus.RESOLVED);
     return write(event, entry, key, commands, gids);
@@ -239,6 +264,33 @@ public final class EventProcessor {
             ? ProcessingStatus.IGNORED_OLD_VERSION
             : ProcessingStatus.PROJECTED;
     return finish(event, status, result);
+  }
+
+  /**
+   * Передаёт признаки узла самого события в {@link IdentityCandidates}; вне транзакции Neo4j. Владелец —
+   * {@code gid} команды из {@code OWNED_BY} этого же события, найденный через {@code find} (чужие ключи не создаются).
+   */
+  private void observeCandidates(SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids) {
+    Optional<UpsertNode> own =
+        commands.stream()
+            .filter(UpsertNode.class::isInstance)
+            .map(UpsertNode.class::cast)
+            .filter(u -> u.record().key().equals(key))
+            .findFirst();
+    if (own.isEmpty()) {
+      return;
+    }
+    Optional<UUID> owner =
+        commands.stream()
+            .filter(UpsertRelation.class::isInstance)
+            .map(UpsertRelation.class::cast)
+            .filter(r -> r.type() == RelationType.OWNED_BY && r.from().equals(key) && r.toLabel() == NodeLabel.TEAM)
+            .findFirst()
+            .flatMap(r -> identity.find(r.to()));
+    Set<Feature> features = IdentityFeatures.of(own.get().data(), owner);
+    if (!features.isEmpty()) {
+      candidates.observe(key, gids.get(key), own.get().data().label(), features);
+    }
   }
 
   /** {@code gid} всех ключей команд; вызывается до транзакции Neo4j. */

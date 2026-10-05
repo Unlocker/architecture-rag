@@ -19,7 +19,13 @@ import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.identityresolution.Feature;
+import io.github.unlocker.archrag.identityresolution.FeatureType;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -91,6 +97,61 @@ class EventProcessorTest {
     assertThat(projection.requests).hasSize(1);
     assertThat(projection.requests.get(0).gids()).hasSize(1);
     assertThat(projection.requests.get(0).syncRunId()).isEqualTo("run-1");
+  }
+
+  @Test
+  void observesCandidateFeaturesOfEventKeyAfterResolve() {
+    var observed = new ArrayList<String>();
+    var withCandidates = processorWith(new RecordingCandidates(observed, false));
+
+    var result = withCandidates.process(appended(upsert("e1", "5", Map.of("name", "Core  Team"))), RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    var key = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    assertThat(observed)
+        .containsExactly(key + "/" + identity.map.get(key) + "/TEAM/" + new Feature(FeatureType.NAME, "core team"));
+  }
+
+  @Test
+  void candidateStoreFailureRetriesBeforeGraphIsTouched() {
+    var failing = processorWith(new RecordingCandidates(new ArrayList<>(), true));
+
+    var result = failing.process(appended(upsert("e1", "5", Map.of("name", "core"))), RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("CANDIDATE_STORE_FAILED");
+    assertThat(projection.requests).isEmpty();
+    assertThat(journal.checkpoint).isNull();
+  }
+
+  @Test
+  void fiveArgumentConstructorDoesNotLookForCandidates() {
+    assertThat(run(upsert("e1", "5", Map.of("name", "core"))).status()).isEqualTo(ProcessingStatus.PROJECTED);
+  }
+
+  private EventProcessor processorWith(IdentityCandidates candidates) {
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> true), identity, projection, (source, run, eventId, count) -> {}, candidates);
+  }
+
+  private CanonicalEvent appended(CanonicalEvent event) {
+    journal.append(event, RAW, "run-1");
+    return event;
+  }
+
+  private record RecordingCandidates(List<String> observed, boolean fail) implements IdentityCandidates {
+    @Override
+    public void observe(SourceKey key, UUID gid, NodeLabel label, Set<Feature> features) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      features.forEach(f -> observed.add(key + "/" + gid + "/" + label.name() + "/" + f));
+    }
+
+    @Override
+    public List<IdentityCandidate> candidatesOf(UUID gid) {
+      return List.of();
+    }
   }
 
   @Test
