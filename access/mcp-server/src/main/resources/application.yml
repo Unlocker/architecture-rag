@@ -29,6 +29,7 @@ archrag:
         ping: architecture.read
         search_assets: architecture.read
         get_asset: architecture.read
+        explain_provenance: architecture.read
 
   neo4j:
     reader:
