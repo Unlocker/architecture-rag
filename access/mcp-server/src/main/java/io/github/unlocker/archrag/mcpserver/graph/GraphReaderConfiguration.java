@@ -56,6 +56,11 @@ public class GraphReaderConfiguration {
   }
 
   @Bean
+  QueryTemplate explainProvenanceTemplate() {
+    return AssetTemplates.EXPLAIN_PROVENANCE;
+  }
+
+  @Bean
   QueryTemplateRegistry queryTemplateRegistry(List<QueryTemplate> templates, QueryLimits limits) {
     return QueryTemplateRegistry.of(templates, limits);
   }

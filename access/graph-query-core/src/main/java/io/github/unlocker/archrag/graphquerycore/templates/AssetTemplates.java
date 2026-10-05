@@ -159,6 +159,48 @@ public final class AssetTemplates {
           Set.of("gid"),
           ResultKind.NODES);
 
+  /**
+   * Происхождение актива по {@code gid}: все записи источников, утверждающие узел, с параметрами ребра
+   * {@code ASSERTS}. Метки только из {@link #SEARCHABLE_TYPES}.
+   *
+   * <p>Параметр {@code gid}. Фильтра {@code isCurrent} нет: закрытый узел и неактивные (tombstone) записи
+   * отдаются. Возвращает {@code gid, type, isCurrent, deletedAt, records}; запись содержит {@code source,
+   * sourceType, sourceId, sourceVersion, fetchedAt, contentHash, active, deletedAt, authority, confidence,
+   * conflicts} (имена свойств-расхождений с ребра {@code ASSERTS} или {@code null}); активные первыми.
+   * Значений свойств в ответе нет.
+   */
+  public static final QueryTemplate EXPLAIN_PROVENANCE =
+      new QueryTemplate(
+          "explain_provenance",
+          """
+          MATCH (n:%s {gid: $gid})
+          RETURN n.gid AS gid,
+                 [l IN labels(n) WHERE l IN %s][0] AS type,
+                 n.isCurrent AS isCurrent,
+                 toString(n.deletedAt) AS deletedAt,
+                 COLLECT {
+                   MATCH (r:SourceRecord)-[a:ASSERTS]->(n)
+                   RETURN {
+                     source: r.source,
+                     sourceType: r.sourceType,
+                     sourceId: r.sourceId,
+                     sourceVersion: r.sourceVersion,
+                     fetchedAt: toString(r.fetchedAt),
+                     contentHash: r.contentHash,
+                     active: r.active,
+                     deletedAt: toString(r.deletedAt),
+                     authority: a.authority,
+                     confidence: a.confidence,
+                     conflicts: a.conflicts
+                   } AS record
+                   ORDER BY r.active DESC, r.source, r.sourceId
+                 } AS records
+          LIMIT $limit
+          """
+              .formatted(LABELS, cypherList(SEARCHABLE_TYPES)),
+          Set.of("gid"),
+          ResultKind.NODES);
+
   private AssetTemplates() {}
 
   /** Литерал списка строк из констант allowlist (не из ввода). */
