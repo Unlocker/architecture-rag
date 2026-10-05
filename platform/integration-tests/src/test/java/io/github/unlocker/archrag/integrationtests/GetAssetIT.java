@@ -136,11 +136,10 @@ class GetAssetIT {
   @Test
   void unknownGidAndServiceNodeGidReturnNothing() {
     assertThat(run("get_asset", "99999999-9999-9999-9999-999999999999", 10).rows()).isEmpty();
-    // gid служебного узла (SourceRecord) не читается: шаблон ограничен метками активов.
-    try (var session = driver.session()) {
-      String recordGid = session.run("MATCH (r:SourceRecord) RETURN coalesce(r.gid, 'none') AS g LIMIT 1").single().get("g").asString();
-      assertThat(run("get_asset", recordGid, 10).rows()).isEmpty();
-    }
+    // Служебному узлу (SourceRecord) на время теста выдаём gid: шаблон не должен его читать из-за ограничения по меткам.
+    String serviceGid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    driver.executableQuery("MATCH (r:SourceRecord {sourceId: 'billing'}) SET r.gid = $g").withParameters(Map.of("g", serviceGid)).execute();
+    assertThat(run("get_asset", serviceGid, 10).rows()).isEmpty();
   }
 
   @Test

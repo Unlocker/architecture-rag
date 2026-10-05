@@ -139,4 +139,15 @@ class GetAssetMcpTest {
     assertThat(res.getStatusCode().value()).isEqualTo(200);
     assertThat(res.getBody()).contains("\"isError\":true").contains("gid must be a UUID").doesNotContain("leaky-value");
   }
+
+  @Test
+  void unknownGidIsReportedAsToolErrorWithoutGid() {
+    when(executor.execute(eq("get_asset"), any(), any()))
+        .thenReturn(new QueryResult("get_asset", List.of(), false, 0, Duration.ZERO));
+
+    var res = call(TestJwt.token("architecture.read"), "{\"gid\":\"" + GID + "\"}");
+
+    assertThat(res.getStatusCode().value()).isEqualTo(200);
+    assertThat(res.getBody()).contains("\"isError\":true").contains("asset not found").doesNotContain(GID);
+  }
 }
