@@ -25,6 +25,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 /** search_assets через Streamable HTTP: scope, аудит и вид ошибки аргумента у клиента. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
@@ -89,7 +90,20 @@ class SearchAssetsMcpTest {
     var res = call(TestJwt.token("architecture.read"), "{\"query\":\"g1\"}");
 
     assertThat(res.getStatusCode().value()).isEqualTo(200);
-    assertThat(res.getBody()).contains("\"isError\":false").contains("g1").contains("truncated");
+    var result = new JsonMapper().readTree(res.getBody()).get("result");
+    assertThat(result.get("isError").asBoolean()).isFalse();
+    // Ответ tool — JSON в text-контенте: проверяем форму полей, как их увидит агент (критерий приёмки 5).
+    var payload = new JsonMapper().readTree(result.get("content").get(0).get("text").asString());
+    assertThat(payload.get("truncated").asBoolean()).isFalse();
+    var hit = payload.get("items").get(0);
+    assertThat(hit.get("gid").asString()).isEqualTo("g1");
+    assertThat(hit.get("type").asString()).isEqualTo("Service");
+    assertThat(hit.get("name").asString()).isEqualTo("Pay");
+    assertThat(hit.get("score").asDouble()).isEqualTo(1000.0);
+    assertThat(hit.get("matchType").asString()).isEqualTo("EXACT");
+    assertThat(hit.get("sources").get(0).asString()).isEqualTo("EAM");
+    assertThat(hit.get("lastSeenAt").isString()).isTrue();
+    assertThat(java.time.Instant.parse(hit.get("lastSeenAt").asString())).isEqualTo("2026-01-01T00:00:00Z");
     assertThat(appender.list).hasSize(1);
     var kv = appender.list.getFirst().getKeyValuePairs().stream().filter(p -> p.key.equals("templates")).findFirst();
     assertThat(kv).isPresent();

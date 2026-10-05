@@ -2,6 +2,19 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
+import io.github.unlocker.archrag.canonicalmodel.node.ComputeInstance;
+import io.github.unlocker.archrag.canonicalmodel.node.ComputeKind;
+import io.github.unlocker.archrag.canonicalmodel.node.Deployment;
+import io.github.unlocker.archrag.canonicalmodel.node.Environment;
+import io.github.unlocker.archrag.canonicalmodel.node.EnvironmentClass;
+import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
+import io.github.unlocker.archrag.canonicalmodel.node.Repository;
+import io.github.unlocker.archrag.canonicalmodel.node.Service;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
+import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
+import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
@@ -11,9 +24,11 @@ import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.FulltextQuery;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,9 +55,12 @@ class SearchAssetsIT {
   static final String GID_OLD = "44444444-4444-4444-4444-444444444444";
   static final String GID_VM = "55555555-5555-5555-5555-555555555555";
   static final String GID_VM_OLD = "66666666-6666-6666-6666-666666666666";
+  static final String GID_PROD = "77777777-7777-7777-7777-777777777777";
+  static final String GID_DEP = "88888888-8888-8888-8888-888888888888";
 
   static Driver driver;
   static GraphQueryExecutor executor;
+  AssetFixtures fixtures;
 
   @BeforeAll
   static void connect() {
@@ -59,43 +77,43 @@ class SearchAssetsIT {
   @BeforeEach
   void seed() {
     driver.executableQuery("MATCH (n) DETACH DELETE n").execute();
-    driver.executableQuery(
-            """
-            CREATE (sys:ITSystem {gid: $pay, name: 'Payments Platform', description: 'handles card payments',
-                    isCurrent: true, lastSeenAt: datetime('2026-01-01T10:00:00Z')})
-            CREATE (svc:Service {gid: $billing, name: 'Billing Service', description: 'invoices and payments',
-                    isCurrent: true, lastSeenAt: datetime('2026-01-02T10:00:00Z')})
-            CREATE (repo:Repository {gid: $repo, url: 'https://git.example/billing', isCurrent: true,
-                    lastSeenAt: datetime('2026-01-03T10:00:00Z')})
-            CREATE (old:Service {gid: $old, name: 'Legacy Payments Service', description: 'payments',
-                    isCurrent: false, lastSeenAt: datetime('2025-01-01T10:00:00Z')})
-            CREATE (prod:Environment {gid: '77777777-7777-7777-7777-777777777777', code: 'prod', name: 'Production',
-                    isCurrent: true, lastSeenAt: datetime('2026-01-01T10:00:00Z')})
-            CREATE (dep:Deployment {gid: '88888888-8888-8888-8888-888888888888', deploymentKey: 'billing-prod',
-                    name: 'billing-prod', isCurrent: true, lastSeenAt: datetime('2026-01-01T10:00:00Z')})
-            CREATE (vm:ComputeInstance:VirtualMachine {gid: $vm, hostname: 'vm-prod-01', isCurrent: true,
-                    lastSeenAt: datetime('2026-01-01T10:00:00Z')})
-            CREATE (vmOld:ComputeInstance {gid: $vmOld, hostname: 'vm-prod-old', isCurrent: true,
-                    lastSeenAt: datetime('2026-01-01T10:00:00Z')})
-            CREATE (sys)-[:DECOMPOSED_INTO]->(svc)
-            CREATE (svc)-[:HAS_DEPLOYMENT]->(dep)
-            CREATE (dep)-[:IN_ENVIRONMENT]->(prod)
-            CREATE (dep)-[:RUNS_ON {validFrom: datetime('2026-01-01T00:00:00Z')}]->(vm)
-            CREATE (dep)-[:RUNS_ON {validFrom: datetime('2025-01-01T00:00:00Z'),
-                    validTo: datetime('2025-06-01T00:00:00Z')}]->(vmOld)
-            CREATE (rSys:SourceRecord {source: 'EAM', sourceType: 'system', sourceId: 'EAM-1', active: true})
-            CREATE (rSvc:SourceRecord {source: 'SCM', sourceType: 'component', sourceId: 'billing', active: true})
-            CREATE (rSvc2:SourceRecord {source: 'EAM', sourceType: 'service', sourceId: 'EAM-9', active: true})
-            CREATE (rSvcOff:SourceRecord {source: 'ASSET', sourceType: 'x', sourceId: 'gone', active: false})
-            CREATE (rSys)-[:ASSERTS]->(sys)
-            CREATE (rSvc)-[:ASSERTS]->(svc)
-            CREATE (rSvc2)-[:ASSERTS]->(svc)
-            CREATE (rSvcOff)-[:ASSERTS]->(svc)
-            """)
-        .withParameters(
-            Map.of("pay", GID_PAY, "billing", GID_BILLING, "repo", GID_REPO, "old", GID_OLD, "vm", GID_VM,
-                "vmOld", GID_VM_OLD))
-        .execute();
+    fixtures = new AssetFixtures(new GraphProjector(driver, AuthorityMatrix.defaults()));
+    var t1 = Instant.parse("2026-01-01T10:00:00Z");
+    var t2 = Instant.parse("2026-01-02T10:00:00Z");
+    var t3 = Instant.parse("2026-01-03T10:00:00Z");
+
+    var pay = fixtures.node(UUID.fromString(GID_PAY), "system", "EAM-1",
+        new ITSystem("Payments Platform", null, null, "handles card payments"), t1);
+    var billing = fixtures.node(UUID.fromString(GID_BILLING), "component", "billing",
+        new Service("Billing Payments Service", null, null, null), t2);
+    // Вторая активная запись и закрытая запись того же узла: в sources попадут только активные.
+    fixtures.nodeFrom(SourceSystemCode.EAM, UUID.fromString(GID_BILLING), "service", "EAM-9",
+        new Service("Billing Payments Service", null, null, null), t2);
+    var gone = fixtures.nodeFrom(SourceSystemCode.MANUAL, UUID.fromString(GID_BILLING), "x", "gone",
+        new Service("Billing Payments Service", null, null, null), t2);
+    fixtures.tombstone(gone, UUID.fromString(GID_BILLING), t2);
+    fixtures.node(UUID.fromString(GID_REPO), "repo", "repo-1",
+        new Repository("https://git.example/billing", null, null), t3);
+    // Закрытый узел: единственная мастер-запись tombstone-ится, isCurrent=false.
+    var old = fixtures.node(UUID.fromString(GID_OLD), "component", "legacy",
+        new Service("Legacy Payments Service", null, null, null), t1);
+    fixtures.tombstone(old, UUID.fromString(GID_OLD), t2);
+    var prod = fixtures.node(UUID.fromString(GID_PROD), "env", "prod",
+        new Environment("prod", "Production", EnvironmentClass.PROD), t1);
+    var dep = fixtures.node(UUID.fromString(GID_DEP), "deployment", "billing-prod",
+        new Deployment("billing-prod", "billing-prod", null, null, null), t1);
+    var vm = fixtures.node(UUID.fromString(GID_VM), "host", "vm-prod-01",
+        new ComputeInstance("vm-prod-01", ComputeKind.VIRTUAL_MACHINE, null, null, null, null, null), t1);
+    var vmOld = fixtures.node(UUID.fromString(GID_VM_OLD), "host", "vm-prod-old",
+        new ComputeInstance("vm-prod-old", ComputeKind.UNSPECIFIED, null, null, null, null, null), t1);
+
+    fixtures.relation(RelationType.DECOMPOSED_INTO, pay, UUID.fromString(GID_PAY), billing, UUID.fromString(GID_BILLING), null, t1);
+    fixtures.relation(RelationType.HAS_DEPLOYMENT, billing, UUID.fromString(GID_BILLING), dep, UUID.fromString(GID_DEP), null, t1);
+    fixtures.relation(RelationType.IN_ENVIRONMENT, dep, UUID.fromString(GID_DEP), prod, UUID.fromString(GID_PROD), null, t1);
+    fixtures.relation(RelationType.RUNS_ON, dep, UUID.fromString(GID_DEP), vm, UUID.fromString(GID_VM),
+        new Validity(t1, null), t1);
+    fixtures.relation(RelationType.RUNS_ON, dep, UUID.fromString(GID_DEP), vmOld, UUID.fromString(GID_VM_OLD),
+        new Validity(Instant.parse("2025-01-01T00:00:00Z"), Instant.parse("2025-06-01T00:00:00Z")), t1);
     // FULLTEXT-индекс обновляется асинхронно: ждём, пока он увидит засеянные узлы.
     try (var session = driver.session()) {
       session.run("CALL db.awaitIndexes(30)").consume();
@@ -123,7 +141,7 @@ class SearchAssetsIT {
     var exact = search(GID_BILLING, null, null, null);
     assertThat(exact.rows().getFirst()).containsEntry("gid", GID_BILLING).containsEntry("matchType", "EXACT");
     assertThat(((Number) exact.rows().getFirst().get("score")).doubleValue()).isEqualTo(AssetTemplates.EXACT_SCORE);
-    assertThat(exact.rows().getFirst().get("name")).isEqualTo("Billing Service");
+    assertThat(exact.rows().getFirst().get("name")).isEqualTo("Billing Payments Service");
     assertThat(exact.rows().getFirst().get("type")).isEqualTo("Service");
     assertThat(exact.rows().getFirst().get("lastSeenAt").toString()).startsWith("2026-01-02T10:00");
   }
@@ -149,7 +167,8 @@ class SearchAssetsIT {
   @Test
   void nodeFoundByExactAndFulltextAppearsOnceWithExactType() {
     // Имя узла совпадает с sourceId одной из его записей: найден обеими ветками.
-    driver.executableQuery("MATCH (r:SourceRecord {sourceId: 'EAM-9'}) SET r.sourceId = 'billing service'").execute();
+    fixtures.nodeFrom(SourceSystemCode.EAM, UUID.fromString(GID_BILLING), "service", "billing service",
+        new Service("Billing Payments Service", null, null, null), Instant.parse("2026-01-02T10:00:00Z"));
 
     var result = search("billing service", null, null, null);
 
