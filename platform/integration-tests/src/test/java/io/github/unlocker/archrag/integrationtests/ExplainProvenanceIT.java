@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
-import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
-import io.github.unlocker.archrag.canonicalmodel.node.Criticality;
-import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventjournal.JournalMigrations;
@@ -31,19 +28,15 @@ import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.mcpserver.tools.ExplainProvenanceResult;
 import io.github.unlocker.archrag.mcpserver.tools.ExplainProvenanceTool;
-import io.github.unlocker.archrag.normalizer.CanonicalMapper;
 import io.github.unlocker.archrag.normalizer.CmdbMapper;
-import io.github.unlocker.archrag.normalizer.CommandSink;
 import io.github.unlocker.archrag.normalizer.DeployMapMapper;
 import io.github.unlocker.archrag.normalizer.EamMapper;
 import io.github.unlocker.archrag.normalizer.Normalizer;
-import io.github.unlocker.archrag.normalizer.ScmMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -89,37 +82,6 @@ class ExplainProvenanceIT {
   static AnnotationConfigApplicationContext mcp;
   static ExplainProvenanceTool tool;
 
-  /** SCM, присылающий ITSystem: в PoC такого пути в нормализаторе нет. */
-  private static final class ScmSystemMapper implements CanonicalMapper {
-    private final ScmMapper standard = new ScmMapper();
-
-    @Override
-    public SourceSystemCode source() {
-      return SourceSystemCode.SCM;
-    }
-
-    @Override
-    public Set<String> supportedSchemaVersions() {
-      return standard.supportedSchemaVersions();
-    }
-
-    @Override
-    public void map(Input input, CommandSink sink) {
-      if (!"IT_SYSTEM".equals(input.key().sourceType())) {
-        standard.map(input, sink);
-        return;
-      }
-      sink.add(
-          new UpsertNode(
-              input.record(),
-              new ITSystem(
-                  (String) input.payload().get("name"),
-                  null,
-                  Criticality.valueOf((String) input.payload().get("criticality")),
-                  null)));
-    }
-  }
-
   private static final class NoopRawStore implements RawPayloadStore {
     @Override
     public RawPayloadRef put(String source, byte[] content) {
@@ -150,7 +112,7 @@ class ExplainProvenanceIT {
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     var normalizer =
         new Normalizer(
-            List.of(new EamMapper(), new ScmSystemMapper(), new CmdbMapper(), new DeployMapMapper()), projector::isActive);
+            List.of(new EamMapper(), new ScmItSystemMapper(), new CmdbMapper(), new DeployMapMapper()), projector::isActive);
     reconciler = new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts);
     processor =
         new EventProcessor(
