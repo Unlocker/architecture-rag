@@ -47,6 +47,7 @@ public final class AssetTemplates {
           }
           WITH n, max(score) AS score, collect(matchType) AS matchTypes
           WHERE n.isCurrent = true
+            AND any(l IN labels(n) WHERE l IN %s)
             AND ($types IS NULL OR any(l IN labels(n) WHERE l IN $types))
             AND ($environment IS NULL OR (
               (n:Deployment AND EXISTS { (n)-[:IN_ENVIRONMENT]->%s })
@@ -72,6 +73,7 @@ public final class AssetTemplates {
                   LABELS,
                   EXACT_SCORE,
                   EXACT_SCORE,
+                  cypherList(SEARCHABLE_TYPES),
                   ENV,
                   ENV,
                   ENV,

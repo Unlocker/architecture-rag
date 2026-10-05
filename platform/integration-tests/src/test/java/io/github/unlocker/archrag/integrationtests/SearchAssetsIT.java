@@ -9,6 +9,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.Deployment;
 import io.github.unlocker.archrag.canonicalmodel.node.Environment;
 import io.github.unlocker.archrag.canonicalmodel.node.EnvironmentClass;
 import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
+import io.github.unlocker.archrag.canonicalmodel.node.Namespace;
 import io.github.unlocker.archrag.canonicalmodel.node.Repository;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
@@ -47,8 +48,7 @@ class SearchAssetsIT {
   @Container
   static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
 
-  // Таймаут с запасом: проверяется результат шаблона, а не его скорость (таймауты покрывает GraphQueryCoreIT).
-  static final QueryLimits LIMITS = new QueryLimits(6, 500, 50, Duration.ofSeconds(60), 512 * 1024);
+  static final QueryLimits LIMITS = new QueryLimits(6, 500, 50, Duration.ofSeconds(Long.getLong("archrag.it.queryTimeoutSeconds", 5)), 512 * 1024);
   static final String GID_PAY = "11111111-1111-1111-1111-111111111111";
   static final String GID_BILLING = "22222222-2222-2222-2222-222222222222";
   static final String GID_REPO = "33333333-3333-3333-3333-333333333333";
@@ -229,5 +229,15 @@ class SearchAssetsIT {
     assertThat(FulltextQuery.escape("()")).isNull();
     assertThat(gids(search("()", null, null, null))).isEmpty();
     assertThat(gids(search(GID_PAY, null, null, null))).containsExactly(GID_PAY);
+  }
+
+  @Test
+  void nodeOutsideSearchableTypesIsNotReturnedByExactSourceId() {
+    var ns = fixtures.node(UUID.fromString("99999999-9999-9999-9999-999999999999"), "namespace", "ns-1",
+        new Namespace("payments-ns"), Instant.parse("2026-01-01T10:00:00Z"));
+
+    assertThat(ns).isNotNull();
+    assertThat(gids(search("ns-1", null, null, null))).isEmpty();
+    assertThat(gids(search("99999999-9999-9999-9999-999999999999", null, null, null))).isEmpty();
   }
 }
