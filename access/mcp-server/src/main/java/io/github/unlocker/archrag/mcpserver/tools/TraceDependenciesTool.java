@@ -6,6 +6,7 @@ import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -116,9 +117,9 @@ public class TraceDependenciesTool {
   private static TraceDependenciesResult assemble(String gid, String direction, QueryResult result) {
     Map<String, TraceDependenciesResult.NodeRef> nodes = new LinkedHashMap<>();
     Map<TraceDependenciesResult.RelationKey, TraceDependenciesResult.RelationRef> relations = new LinkedHashMap<>();
-    List<TraceDependenciesResult.TracePath> paths = new java.util.ArrayList<>();
+    List<TraceDependenciesResult.TracePath> paths = new ArrayList<>();
     for (Map<String, Object> row : result.rows()) {
-      List<String> pathNodes = new java.util.ArrayList<>();
+      List<String> pathNodes = new ArrayList<>();
       for (Map<String, Object> n : (List<Map<String, Object>>) row.get("nodes")) {
         String nodeGid = (String) n.get("gid");
         pathNodes.add(nodeGid);
@@ -127,7 +128,7 @@ public class TraceDependenciesTool {
             new TraceDependenciesResult.NodeRef(
                 nodeGid, (String) n.get("label"), (String) n.get("name"), (String) n.get("lastSeenAt")));
       }
-      List<TraceDependenciesResult.RelationKey> pathRelations = new java.util.ArrayList<>();
+      List<TraceDependenciesResult.RelationKey> pathRelations = new ArrayList<>();
       for (Map<String, Object> r : (List<Map<String, Object>>) row.get("relations")) {
         var key = new TraceDependenciesResult.RelationKey((String) r.get("type"), (String) r.get("from"), (String) r.get("to"));
         pathRelations.add(key);
