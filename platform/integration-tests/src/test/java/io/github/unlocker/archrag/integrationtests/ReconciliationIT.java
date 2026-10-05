@@ -82,6 +82,9 @@ class ReconciliationIT {
   private Poller poller;
   private int runs;
 
+  static PostgresIdentityMapping identityMapping;
+  static PostgresSourceConflicts conflictStore;
+
   @BeforeAll
   static void setUp() {
     driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.basic("neo4j", NEO4J.getAdminPassword()));
@@ -94,9 +97,12 @@ class ReconciliationIT {
     pgJournal = new PostgresEventJournal(ds);
     journal = new RecordingJournal(pgJournal);
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
+    identityMapping = new PostgresIdentityMapping(ds);
+    conflictStore = new PostgresSourceConflicts(ds, AuthorityMatrix.defaults());
     processor = new EventProcessor(journal, Normalizer.standard(projector::isActive),
-        new PostgresIdentityMapping(ds), projector, new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC()),
-        new PostgresIdentityCandidates(ds), new PostgresSourceConflicts(ds, AuthorityMatrix.defaults()));
+        identityMapping, projector,
+        new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore),
+        new PostgresIdentityCandidates(ds), conflictStore);
   }
 
   @BeforeEach
@@ -250,7 +256,7 @@ class ReconciliationIT {
     drain();
     assertThat(active(gone)).isFalse();
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
-    var reconciler = new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC());
+    var reconciler = new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore);
 
     var again = reconciler.reconcile(SOURCE, r.syncRunId(), "snapshot-complete:" + r.syncRunId(), 0);
 

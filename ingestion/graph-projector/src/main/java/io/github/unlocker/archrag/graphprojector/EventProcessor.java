@@ -19,7 +19,6 @@ import io.github.unlocker.archrag.identityresolution.FeatureExtractor;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
-import io.github.unlocker.archrag.identityresolution.SourceConflict;
 import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
@@ -336,7 +335,7 @@ public final class EventProcessor {
         Map<String, String> values = new LinkedHashMap<>();
         NodeProperties.of(upsert.data()).forEach((name, value) -> values.put(name, String.valueOf(value)));
         UUID gid = gids.get(key);
-        return markers(gid, conflicts.assertProperties(key, gid, upsert.data().label(), values));
+        return ConflictMarkers.of(gid, conflicts.assertProperties(key, gid, upsert.data().label(), values));
       }
     }
     return ConflictMarkers.none();
@@ -344,15 +343,7 @@ public final class EventProcessor {
 
   /** Снимает утверждения удалённой записи; без {@code gid} (запись не приходила) маркеры не меняются. */
   private ConflictMarkers retractProperties(SourceKey key) {
-    return identity.find(key).map(gid -> markers(gid, conflicts.retract(key, gid))).orElseGet(ConflictMarkers::none);
-  }
-
-  private static ConflictMarkers markers(UUID gid, List<SourceConflict> open) {
-    Map<SourceKey, List<String>> byRecord = new LinkedHashMap<>();
-    for (SourceConflict conflict : open) {
-      byRecord.computeIfAbsent(conflict.dissent(), k -> new ArrayList<>()).add(conflict.property());
-    }
-    return ConflictMarkers.of(gid, byRecord);
+    return identity.find(key).map(gid -> ConflictMarkers.of(gid, conflicts.retract(key, gid))).orElseGet(ConflictMarkers::none);
   }
 
   /** {@code gid} всех ключей команд; вызывается до транзакции Neo4j. */

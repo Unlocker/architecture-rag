@@ -14,6 +14,9 @@ import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
+import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
+import io.github.unlocker.archrag.graphprojector.Reconciler;
+import java.time.Clock;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
@@ -70,6 +73,8 @@ class SourceConflictIT {
   static PostgresIdentityMapping identity;
   static PostgresSourceConflicts conflicts;
   static EventProcessor processor;
+  static PGSimpleDataSource pg;
+  static Reconciler reconciler;
 
   /** CMDB, присылающий ITSystem: в PoC такого пути в нормализаторе нет. */
   private static final class CmdbSystemMapper implements CanonicalMapper {
@@ -102,6 +107,18 @@ class SourceConflictIT {
     }
   }
 
+  private static final class NoopRawStore implements RawPayloadStore {
+    @Override
+    public RawPayloadRef put(String source, byte[] content) {
+      return new RawPayloadRef("raw/" + UUID.nameUUIDFromBytes(content), "sha256:" + UUID.nameUUIDFromBytes(content));
+    }
+
+    @Override
+    public byte[] get(RawPayloadRef ref) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
   @BeforeAll
   static void setUp() {
     driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.basic("neo4j", NEO4J.getAdminPassword()));
@@ -110,6 +127,7 @@ class SourceConflictIT {
     ds.setUrl(POSTGRES.getJdbcUrl());
     ds.setUser(POSTGRES.getUsername());
     ds.setPassword(POSTGRES.getPassword());
+    pg = ds;
     JournalMigrations.apply(ds);
     journal = new PostgresEventJournal(ds);
     identity = new PostgresIdentityMapping(ds);
@@ -118,6 +136,8 @@ class SourceConflictIT {
     var normalizer =
         new Normalizer(
             List.of(new EamMapper(), new ScmMapper(), new CmdbSystemMapper(), new DeployMapMapper()), projector::isActive);
+    reconciler =
+        new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts);
     processor =
         new EventProcessor(
             journal, normalizer, identity, projector, (source, run, id, count) -> {}, new PostgresIdentityCandidates(ds), conflicts);
@@ -256,6 +276,54 @@ class SourceConflictIT {
     assertThat(marker(cmdbKey(id))).isNull();
   }
 
+  @Test
+  void reconciliationTombstoneResolvesConflictAndClearsMarkers() throws Exception {
+    String id = uid();
+    UUID gid = link(id);
+    eam(id, "1", "HIGH");
+    cmdb(id, "1", "LOW");
+    assertThat(conflicts.openConflicts(gid)).hasSize(1);
+
+    // Snapshot CMDB без этой записи: в прогоне только посторонний объект; маркер snapshot-complete уже обработан.
+    String run = "run-" + uid();
+    var filler =
+        new CanonicalEvent(
+            "snap:" + run + ":other", "urn:corp:cmdb", CanonicalEvent.TYPE_ASSET_UPSERTED, "IT_SYSTEM/other", T1,
+            "urn:corp:schema:asset-upserted:1", null,
+            new AssetEventData("IT_SYSTEM", "other-" + id, new SourceVersion("1"), Map.of("name", "x", "criticality", "LOW")));
+    journal.append(filler, RAW, run);
+    var marker =
+        new CanonicalEvent(
+            "marker-" + run, "urn:corp:cmdb", CanonicalEvent.TYPE_ASSET_UPSERTED, "m", T1,
+            "urn:corp:schema:asset-upserted:1", null, new AssetEventData("IT_SYSTEM", run, new SourceVersion("1"), Map.of()));
+    journal.append(marker, RAW, run);
+
+    reconciler.reconcile("urn:corp:cmdb", run, marker.id(), 1);
+
+    assertThat(driver.executableQuery("MATCH (r:SourceRecord {source: 'CMDB', sourceId: $id}) RETURN r.active AS a")
+            .withParameters(Map.of("id", id)).execute().records().get(0).get("a").asBoolean()).isFalse();
+    assertThat(conflicts.openConflicts(gid)).isEmpty();
+    try (var c = pg.getConnection();
+        var ps = c.prepareStatement("select (select count(*) from property_assertion where source = 'CMDB' and source_id = ?),"
+            + " (select status from source_conflict where gid = ?)")) {
+      ps.setString(1, id);
+      ps.setObject(2, gid);
+      try (var rs = ps.executeQuery()) {
+        rs.next();
+        assertThat(rs.getLong(1)).isZero();
+        assertThat(rs.getString(2)).isEqualTo("RESOLVED");
+      }
+    }
+    assertThat(marker(cmdbKey(id))).isNull();
+    assertThat(marker(eamKey(id))).isNull();
+    assertThat(criticalityOf(gid)).isEqualTo("HIGH");
+  }
+
+  /**
+   * Rebuild смоделирован: {@code RebuildService} лишь стирает граф и переигрывает журнал через тот же
+   * {@code EventProcessor}, где вся конфликтная логика. Сам {@code RebuildService} (S3, порядок replay)
+   * покрыт {@code AdminEndpointIT} и {@code SyncAcceptanceIT}.
+   */
   @Test
   void rebuildKeepsNodeConflictAndMarker() {
     String id = uid();

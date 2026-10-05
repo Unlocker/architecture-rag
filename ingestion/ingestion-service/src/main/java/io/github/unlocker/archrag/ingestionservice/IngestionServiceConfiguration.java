@@ -80,8 +80,13 @@ public class IngestionServiceConfiguration {
 
   /** Reconciliation после маркера {@code snapshot-complete} (E1.6): missing set получает tombstone. */
   @Bean
-  Reconciler reconciler(EventJournal journal, RawPayloadStore rawStore, GraphProjector projector) {
-    return new Reconciler(journal, rawStore, projector, Clock.systemUTC());
+  Reconciler reconciler(
+      EventJournal journal,
+      RawPayloadStore rawStore,
+      GraphProjector projector,
+      IdentityMapping identity,
+      SourceConflicts conflicts) {
+    return new Reconciler(journal, rawStore, projector, Clock.systemUTC(), identity, conflicts);
   }
 
   @Bean

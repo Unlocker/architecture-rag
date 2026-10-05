@@ -13,6 +13,8 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -44,6 +46,13 @@ import java.util.Set;
  *       ({@code eventId = reconcile:<syncRunId>:<sourceType>/<sourceId>}, raw в {@link RawPayloadStore}), чтобы
  *       replay и rebuild из журнала воспроизводили удаление; повтор даёт ту же строку, а не дубль, и доводит
  *       незавершённую до конечного статуса.</li>
+ *   <li>утверждения свойств tombstone'нутой записи снимаются в {@link SourceConflicts} до записи в граф, как в
+ *       {@code EventProcessor} (replay того же tombstone из журнала даёт то же состояние PostgreSQL), а маркеры
+ *       конфликтов {@code gid} идут в том же {@link ProjectionRequest}; сбой хранилища не глушится: граф не тронут,
+ *       запись остаётся в {@code activeRecords}, следующий {@code snapshot-complete} повторит tombstone
+ *       ({@code retract} идемпотентен). Если после выбора записи применилась версия новее, {@code retract} не
+ *       вызывается. Остаточная гонка (событие применилось между проверкой и {@code retract}) принята: следующее
+ *       upsert-событие записи целиком восстановит утверждения.</li>
  * </ul>
  */
 public final class Reconciler implements ReconciliationTrigger {
@@ -55,12 +64,22 @@ public final class Reconciler implements ReconciliationTrigger {
   private final RawPayloadStore rawStore;
   private final GraphProjection projection;
   private final Clock clock;
+  private final IdentityMapping identity;
+  private final SourceConflicts conflicts;
 
-  public Reconciler(EventJournal journal, RawPayloadStore rawStore, GraphProjection projection, Clock clock) {
+  public Reconciler(
+      EventJournal journal,
+      RawPayloadStore rawStore,
+      GraphProjection projection,
+      Clock clock,
+      IdentityMapping identity,
+      SourceConflicts conflicts) {
     this.journal = Objects.requireNonNull(journal, "journal");
     this.rawStore = Objects.requireNonNull(rawStore, "rawStore");
     this.projection = Objects.requireNonNull(projection, "projection");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.identity = Objects.requireNonNull(identity, "identity");
+    this.conflicts = Objects.requireNonNull(conflicts, "conflicts");
   }
 
   /** Итог обработки missing set. */
@@ -109,10 +128,11 @@ public final class Reconciler implements ReconciliationTrigger {
         continue;
       }
       String tombstoneId = journalTombstone(source, key, record.version(), now, syncRunId);
+      ConflictMarkers markers = retract(key, record.version());
       ProjectionResult result =
           projection.project(
               new ProjectionRequest(
-                  key, record.version(), now, syncRunId, Map.of(), List.of(new TombstoneSourceRecord(key, now))));
+                  key, record.version(), now, syncRunId, Map.of(), List.of(new TombstoneSourceRecord(key, now)), markers));
       finishTombstone(source, tombstoneId, result.outcome());
       if (result.outcome() == ProjectionOutcome.APPLIED) {
         tombstoned++;
@@ -121,6 +141,16 @@ public final class Reconciler implements ReconciliationTrigger {
       }
     }
     return new Report(tombstoned, old, recent, inSnapshot);
+  }
+
+  /** Снимает утверждения записи; для записи без {@code gid} или с уже применённой более новой версией маркеры не меняются. */
+  private ConflictMarkers retract(SourceKey key, SourceVersion version) {
+    var applied = projection.applied(key);
+    if (applied.isPresent()
+        && VersionDecision.forTombstone(version, applied.get().version(), applied.get().active()) == VersionDecision.OLD) {
+      return ConflictMarkers.none();
+    }
+    return identity.find(key).map(gid -> ConflictMarkers.of(gid, conflicts.retract(key, gid))).orElseGet(ConflictMarkers::none);
   }
 
   /** Фиксирует tombstone в журнале до записи в граф; возвращает {@code eventId}. */
