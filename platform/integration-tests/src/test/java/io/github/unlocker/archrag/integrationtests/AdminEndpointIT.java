@@ -277,7 +277,11 @@ class AdminEndpointIT {
   @Test
   void rebuildReproducesRelationsThatWereDeferredUntilTheirEndpointsArrived() throws Exception {
     seed();
-    // EAM опрашивается раньше SCM: зависимости сервисов приходят раньше самих сервисов и достраиваются позже.
+    // Зависимость сервисов приходит в журнал раньше самих сервисов, значит, была отложена и достроена позже.
+    assertThat(scalarLong(
+        "select count(*) from inbox_event d where d.source_type = 'SERVICE_DEPENDENCY' and not exists ("
+            + "select 1 from inbox_event s where s.source_type = 'SERVICE' and s.received_at < d.received_at)"))
+        .isPositive();
     assertThat(driver.executableQuery("MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS c").execute().records().get(0).get("c").asLong())
         .isPositive();
     assertThat(driver.executableQuery("MATCH (p:PendingRelation) RETURN count(p) AS c").execute().records().get(0).get("c").asLong())

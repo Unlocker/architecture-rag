@@ -32,6 +32,8 @@ class PropertyJsonTest {
   @Test
   void rejectsMalformedAndUnsupported() {
     assertThatThrownBy(() -> PropertyJson.read("{\"a\":")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> PropertyJson.read("{\"a\":\"x\\")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> PropertyJson.read("{\"a\":\"\\u12")).isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> PropertyJson.read("[]")).isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> PropertyJson.write(Map.of("a", new Object()))).isInstanceOf(IllegalArgumentException.class);
   }

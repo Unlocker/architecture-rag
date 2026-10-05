@@ -128,18 +128,21 @@ final class PendingRelations {
     if (rows.isEmpty()) {
       return Optional.empty();
     }
+    Record row = rows.get(0);
     return Optional.of(
-        new UUID[] {UUID.fromString(rows.get(0).get("from").asString()), UUID.fromString(rows.get(0).get("to").asString())});
+        new UUID[] {UUID.fromString(row.get("from").asString()), UUID.fromString(row.get("to").asString())});
   }
 
   private static Pending read(Record row) {
-    SourceKey from = new SourceKey(SourceSystemCode.valueOf(row.get("fromSource").asString()), row.get("fromType").asString(), row.get("fromId").asString());
-    SourceKey to = new SourceKey(SourceSystemCode.valueOf(row.get("toSource").asString()), row.get("toType").asString(), row.get("toId").asString());
-    SourceKey by = new SourceKey(SourceSystemCode.valueOf(row.get("bySource").asString()), row.get("byType").asString(), row.get("byId").asString());
+    SourceKey from = keyOf(row, "from");
+    SourceKey to = keyOf(row, "to");
+    SourceKey by = keyOf(row, "by");
     Validity validity = null;
     if (!row.get("validFrom").isNull()) {
       OffsetDateTime validTo = row.get("validTo").isNull() ? null : row.get("validTo").asOffsetDateTime();
-      validity = new Validity(row.get("validFrom").asOffsetDateTime().toInstant(), validTo == null ? null : validTo.toInstant());
+      validity =
+          new Validity(
+              row.get("validFrom").asOffsetDateTime().toInstant(), validTo == null ? null : validTo.toInstant());
     }
     UpsertRelation relation =
         new UpsertRelation(
@@ -154,6 +157,13 @@ final class PendingRelations {
     return new Pending(row.get("key").asString(), relation, row.get("eventTime").asOffsetDateTime().toInstant());
   }
 
+  private static SourceKey keyOf(Record row, String prefix) {
+    return new SourceKey(
+        SourceSystemCode.valueOf(row.get(prefix + "Source").asString()),
+        row.get(prefix + "Type").asString(),
+        row.get(prefix + "Id").asString());
+  }
+
   private static void putEnd(Map<String, Object> props, String prefix, SourceKey key) {
     props.put(prefix + "Source", key.source().name());
     props.put(prefix + "Type", key.sourceType());
@@ -165,14 +175,22 @@ final class PendingRelations {
     StringBuilder sb = new StringBuilder();
     for (String part :
         List.of(
-            r.assertedBy().source().name(), r.assertedBy().sourceType(), r.assertedBy().sourceId(),
+            r.assertedBy().source().name(),
+            r.assertedBy().sourceType(),
+            r.assertedBy().sourceId(),
             r.type().name(),
-            r.from().source().name(), r.from().sourceType(), r.from().sourceId(),
-            r.to().source().name(), r.to().sourceType(), r.to().sourceId())) {
+            r.from().source().name(),
+            r.from().sourceType(),
+            r.from().sourceId(),
+            r.to().source().name(),
+            r.to().sourceType(),
+            r.to().sourceId())) {
       sb.append(part.length()).append(':').append(part).append('|');
     }
     try {
-      return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(sb.toString().getBytes(StandardCharsets.UTF_8)));
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256").digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(digest);
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 is not available", e);
     }

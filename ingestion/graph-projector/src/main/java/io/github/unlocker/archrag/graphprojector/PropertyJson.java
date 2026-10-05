@@ -195,12 +195,18 @@ final class PropertyJson {
           sb.append(c);
           continue;
         }
+        if (pos >= text.length()) {
+          throw error("unterminated escape");
+        }
         char e = text.charAt(pos++);
         switch (e) {
           case 'n' -> sb.append('\n');
           case 'r' -> sb.append('\r');
           case 't' -> sb.append('\t');
           case 'u' -> {
+            if (pos + 4 > text.length()) {
+              throw error("truncated unicode escape");
+            }
             sb.append((char) Integer.parseInt(text.substring(pos, pos + 4), 16));
             pos += 4;
           }
