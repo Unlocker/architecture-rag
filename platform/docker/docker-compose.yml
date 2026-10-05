@@ -1,0 +1,273 @@
+# Демо-стенд PoC (E5.1). Перед запуском: ./mvnw -B -ntp package -DskipTests && cp .env.example .env (см. README).
+# Одна сеть по умолчанию, наружу публикуется только reverse-proxy. Сети, TLS, Docker secrets, раздельные
+# креденшелы reader/writer — E5.2 (UNLOCKER-197).
+name: archrag
+
+x-demo-launcher: &demo-launcher
+  build:
+    context: ../..
+    dockerfile: platform/docker/Dockerfile
+    args:
+      JAR: platform/demo-launcher/target/demo-launcher-0.1.0-SNAPSHOT-exec.jar
+  image: archrag/demo-launcher:dev
+
+x-adapter-env: &adapter-env
+  ARCHRAG_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
+  ARCHRAG_PG_USER: ${POSTGRES_USER:?}
+  ARCHRAG_PG_PASSWORD: ${POSTGRES_PASSWORD:?}
+  ARCHRAG_S3_ENDPOINT: http://seaweedfs:8333
+  ARCHRAG_S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
+  ARCHRAG_S3_SECRET_KEY: ${S3_SECRET_KEY:?}
+  ARCHRAG_S3_BUCKET: ${S3_BUCKET:?}
+  ARCHRAG_WEBHOOK_SECRET: ${WEBHOOK_SECRET:?}
+
+x-adapter-depends: &adapter-depends
+  postgres: { condition: service_healthy }
+  seaweedfs: { condition: service_healthy }
+  # Миграции журнала (inbox, checkpoints) накатывает ingestion при старте: адаптер до него падает.
+  ingestion: { condition: service_healthy }
+
+services:
+  # ---- инфраструктура ------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?}
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#neo4j/}\" 'RETURN 1' >/dev/null"]
+      # cypher-shell стартует JVM и под нагрузкой стенда отвечает дольше 10 с: короткий timeout давал ложный unhealthy.
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    command: ["server", "-s3", "-dir=/data"]
+    environment:
+      # SeaweedFS берёт единственную identity S3 из этих переменных.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?}
+    volumes:
+      - s3-data:/data
+    healthcheck:
+      # Любой HTTP-ответ ниже 500 на S3-порту: так же ждёт контейнер ContainersSmokeIT.
+      test: ["CMD-SHELL", "wget -q -S -O /dev/null http://127.0.0.1:8333/ 2>&1 | grep -qE 'HTTP/[0-9.]+ [1-4][0-9][0-9]'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      # Фиксированный hostname: iss токена не зависит от того, через какой адрес его запросили (напрямую или
+      # через proxy), и совпадает с ARCHRAG_OIDC_ISSUER_URI сервисов.
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      # Подстановки в archrag-realm.json.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?}
+      ARCHRAG_MCP_RESOURCE_URI: http://localhost:${ARCHRAG_PUBLIC_PORT:-8080}/mcp
+    volumes:
+      - ./keycloak/archrag-realm.json:/opt/keycloak/data/import/archrag-realm.json:ro
+    healthcheck:
+      # В образе нет curl: запрос к management-порту 9000 через /dev/tcp.
+      test:
+        - CMD-SHELL
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/9000
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          grep -q '"status": *"UP"' <&3
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 60s
+
+  # ---- приложения ----------------------------------------------------------------------------
+  ingestion:
+    build:
+      context: ../..
+      dockerfile: platform/docker/Dockerfile
+      args:
+        JAR: ingestion/ingestion-service/target/ingestion-service-0.1.0-SNAPSHOT-exec.jar
+    image: archrag/ingestion:dev
+    environment:
+      ARCHRAG_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
+      ARCHRAG_PG_USER: ${POSTGRES_USER:?}
+      ARCHRAG_PG_PASSWORD: ${POSTGRES_PASSWORD:?}
+      ARCHRAG_NEO4J_URI: bolt://neo4j:7687
+      ARCHRAG_NEO4J_USER: neo4j
+      ARCHRAG_NEO4J_PASSWORD: ${NEO4J_PASSWORD:?}
+      ARCHRAG_S3_ENDPOINT: http://seaweedfs:8333
+      ARCHRAG_S3_ACCESS_KEY: ${S3_ACCESS_KEY:?}
+      ARCHRAG_S3_SECRET_KEY: ${S3_SECRET_KEY:?}
+      ARCHRAG_S3_BUCKET: ${S3_BUCKET:?}
+      ARCHRAG_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
+      ARCHRAG_EAM_CONTROL_URL: http://adapter-eam:8080/control/snapshot
+      ARCHRAG_SCM_CONTROL_URL: http://adapter-scm:8080/control/snapshot
+      ARCHRAG_CMDB_CONTROL_URL: http://adapter-cmdb:8080/control/snapshot
+      ARCHRAG_DEPLOYMAP_CONTROL_URL: http://adapter-deploymap:8080/control/snapshot
+    depends_on:
+      neo4j: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
+    healthcheck:
+      # У ingestion-service нет actuator, а всё кроме /admin закрыто denyAll (401 без токена). Boot открывает порт
+      # только после старта контекста (миграции и схема Neo4j уже применены), поэтому любой HTTP-ответ = готов.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:8081/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  mcp-server:
+    build:
+      context: ../..
+      dockerfile: platform/docker/Dockerfile
+      args:
+        JAR: access/mcp-server/target/mcp-server-0.1.0-SNAPSHOT-exec.jar
+    image: archrag/mcp-server:dev
+    # Без container_name и без published ports: сервис масштабируется `--scale mcp-server=2` за proxy.
+    environment:
+      ARCHRAG_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
+      ARCHRAG_MCP_RESOURCE_URI: http://localhost:${ARCHRAG_PUBLIC_PORT:-8080}/mcp
+      ARCHRAG_NEO4J_READER_URI: bolt://neo4j:7687
+      # Community не умеет роли: reader пока ходит под тем же пользователем, что и writer (разделение — E5.2).
+      ARCHRAG_NEO4J_READER_USERNAME: neo4j
+      ARCHRAG_NEO4J_READER_PASSWORD: ${NEO4J_PASSWORD:?}
+    depends_on:
+      neo4j: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      # Схему Neo4j создаёт ingestion при старте.
+      ingestion: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Адаптер каждого источника — ровно один экземпляр: замок snapshot в Poller действует только внутри процесса.
+  adapter-eam:
+    <<: *demo-launcher
+    command: ["adapter", "EAM"]
+    environment:
+      <<: *adapter-env
+      ARCHRAG_SOURCE_URL: http://stub-eam:8080
+    depends_on:
+      <<: *adapter-depends
+      stub-eam: { condition: service_healthy }
+    deploy: { replicas: 1 }
+    healthcheck: &adapter-health
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8090/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  adapter-scm:
+    <<: *demo-launcher
+    command: ["adapter", "SCM"]
+    environment:
+      <<: *adapter-env
+      ARCHRAG_SOURCE_URL: http://stub-scm:8080
+    depends_on:
+      <<: *adapter-depends
+      stub-scm: { condition: service_healthy }
+    deploy: { replicas: 1 }
+    healthcheck: *adapter-health
+
+  adapter-cmdb:
+    <<: *demo-launcher
+    command: ["adapter", "CMDB"]
+    environment:
+      <<: *adapter-env
+      ARCHRAG_SOURCE_URL: http://stub-cmdb:8080
+    depends_on:
+      <<: *adapter-depends
+      stub-cmdb: { condition: service_healthy }
+    deploy: { replicas: 1 }
+    healthcheck: *adapter-health
+
+  adapter-deploymap:
+    <<: *demo-launcher
+    command: ["adapter", "DEPLOY_MAP"]
+    environment:
+      <<: *adapter-env
+      ARCHRAG_SOURCE_URL: http://stub-deploymap:8080
+    depends_on:
+      <<: *adapter-depends
+      stub-deploymap: { condition: service_healthy }
+    deploy: { replicas: 1 }
+    healthcheck: *adapter-health
+
+  # ---- заглушки мастер-систем (seed из StubSources) -------------------------------------------
+  stub-eam:
+    <<: *demo-launcher
+    command: ["stub", "EAM"]
+    healthcheck: &stub-health
+      test: ["CMD-SHELL", "curl -fs 'http://127.0.0.1:8080/changes?limit=1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  stub-scm:
+    <<: *demo-launcher
+    command: ["stub", "SCM"]
+    healthcheck: *stub-health
+
+  stub-cmdb:
+    <<: *demo-launcher
+    command: ["stub", "CMDB"]
+    healthcheck: *stub-health
+
+  stub-deploymap:
+    <<: *demo-launcher
+    command: ["stub", "DEPLOY_MAP"]
+    healthcheck: *stub-health
+
+  # ---- единственная публикуемая точка ---------------------------------------------------------
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${ARCHRAG_PUBLIC_PORT:-8080}:8080"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      mcp-server: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      adapter-eam: { condition: service_healthy }
+      adapter-scm: { condition: service_healthy }
+      adapter-cmdb: { condition: service_healthy }
+      adapter-deploymap: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  neo4j-data:
+  pg-data:
+  s3-data:
