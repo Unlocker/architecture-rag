@@ -16,6 +16,11 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
+import io.github.unlocker.archrag.identityresolution.SourceConflict;
+import io.github.unlocker.archrag.identityresolution.SourceConflicts;
+import java.util.UUID;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -36,7 +41,11 @@ class ReconcilerTest {
   private final StubJournal journal = new StubJournal();
   private final StubRawStore rawStore = new StubRawStore();
   private final RecordingProjection projection = new RecordingProjection();
-  private final Reconciler reconciler = new Reconciler(journal, rawStore, projection, Clock.fixed(NOW, ZoneOffset.UTC));
+  private final List<String> calls = new ArrayList<>();
+  private final EventProcessorTest.FakeIdentity identity = new EventProcessorTest.FakeIdentity();
+  private final FakeConflicts conflicts = new FakeConflicts(calls);
+  private final Reconciler reconciler =
+      new Reconciler(journal, rawStore, projection, Clock.fixed(NOW, ZoneOffset.UTC), identity, conflicts);
 
   private static SourceKey team(String id) {
     return new SourceKey(SourceSystemCode.EAM, "TEAM", id);
@@ -111,13 +120,100 @@ class ReconcilerTest {
     assertThat(report).isEqualTo(new Reconciler.Report(0, 1, 0, 0));
   }
 
+  @Test
+  void retractsAssertionsBeforeProjectionAndPassesMarkers() {
+    projection.calls = calls;
+    var gone = team("gone");
+    var dissent = new SourceKey(SourceSystemCode.CMDB, "TEAM", "d1");
+    UUID gid = UUID.randomUUID();
+    identity.map.put(gone, gid);
+    conflicts.open =
+        List.of(new SourceConflict(gid, "name", dissent, "x", gone, "y", SourceConflict.Status.OPEN, NOW, NOW, null));
+    projection.active.add(new GraphProjection.ActiveRecord(gone, new SourceVersion("7")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(calls).containsExactly("retract", "project");
+    assertThat(projection.requests).singleElement().satisfies(r -> {
+      assertThat(r.conflicts().gid()).isEqualTo(gid);
+      assertThat(r.conflicts().byRecord()).containsExactly(Map.entry(dissent, List.of("name")));
+    });
+  }
+
+  @Test
+  void recordWithoutGidDoesNotCallConflictStore() {
+    projection.active.add(new GraphProjection.ActiveRecord(team("gone"), new SourceVersion("7")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(calls).isEmpty();
+    assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
+  }
+
+  @Test
+  void conflictStoreFailurePropagatesBeforeGraphIsTouched() {
+    identity.map.put(team("gone"), UUID.randomUUID());
+    conflicts.fail = true;
+    projection.active.add(new GraphProjection.ActiveRecord(team("gone"), new SourceVersion("7")));
+
+    assertThatThrownBy(() -> reconciler.reconcile(SOURCE, "run-1", "m", 0)).isInstanceOf(IdentityStoreException.class);
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void newerAppliedVersionSkipsRetract() {
+    var gone = team("gone");
+    identity.map.put(gone, UUID.randomUUID());
+    projection.applied.put(gone, new GraphProjection.AppliedRecord(new SourceVersion("8"), true));
+    projection.active.add(new GraphProjection.ActiveRecord(gone, new SourceVersion("7")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(calls).isEmpty();
+    assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
+  }
+
+  static final class FakeConflicts implements SourceConflicts {
+    final List<String> calls;
+    List<SourceConflict> open = List.of();
+    boolean fail;
+
+    FakeConflicts(List<String> calls) {
+      this.calls = calls;
+    }
+
+    @Override
+    public List<SourceConflict> assertProperties(SourceKey key, UUID gid, NodeLabel label, Map<String, String> values) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<SourceConflict> retract(SourceKey key, UUID gid) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      calls.add("retract");
+      return open;
+    }
+
+    @Override
+    public List<SourceConflict> openConflicts(UUID gid) {
+      return open;
+    }
+  }
+
   static final class RecordingProjection implements GraphProjection {
     final List<GraphProjection.ActiveRecord> active = new ArrayList<>();
     final List<ProjectionRequest> requests = new ArrayList<>();
+    final Map<SourceKey, AppliedRecord> applied = new HashMap<>();
+    List<String> calls;
     ProjectionOutcome outcome = ProjectionOutcome.APPLIED;
 
     @Override
     public ProjectionResult project(ProjectionRequest request) {
+      if (calls != null) {
+        calls.add("project");
+      }
       requests.add(request);
       return ProjectionResult.of(outcome);
     }
@@ -129,7 +225,7 @@ class ReconcilerTest {
 
     @Override
     public Optional<AppliedRecord> applied(SourceKey key) {
-      throw new UnsupportedOperationException();
+      return Optional.ofNullable(applied.get(key));
     }
 
     @Override
