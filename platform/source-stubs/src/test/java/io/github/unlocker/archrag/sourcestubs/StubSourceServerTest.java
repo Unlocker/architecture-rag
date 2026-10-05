@@ -2,6 +2,8 @@ package io.github.unlocker.archrag.sourcestubs;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -52,7 +54,7 @@ class StubSourceServerTest {
   @Test
   void explicitAddressOverloadServesOnChosenPort() throws Exception {
     try (var other = new StubSourceServer(source,
-        new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0))) {
+        new InetSocketAddress(InetAddress.getLoopbackAddress(), 0))) {
       assertThat(other.port()).isPositive();
       HttpRequest request = HttpRequest.newBuilder(URI.create(other.baseUri() + "/changes?limit=1")).GET().build();
       assertThat(http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
