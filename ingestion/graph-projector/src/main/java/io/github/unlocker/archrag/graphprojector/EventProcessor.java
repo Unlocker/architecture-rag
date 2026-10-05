@@ -175,6 +175,10 @@ public final class EventProcessor {
       // record идемпотентен: повтор безопасен. Значения признаков в причину не попадают.
       return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
     }
+    ProcessingResult stale = ignoreIfOlderOnRetry(event, entry, key, false);
+    if (stale != null) {
+      return stale;
+    }
     ConflictMarkers markers;
     try {
       markers = assertProperties(key, commands, gids);
@@ -206,6 +210,10 @@ public final class EventProcessor {
       candidates.forget(key);
     } catch (IdentityStoreException e) {
       return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
+    }
+    ProcessingResult stale = ignoreIfOlderOnRetry(event, entry, key, true);
+    if (stale != null) {
+      return stale;
     }
     ConflictMarkers markers;
     try {
@@ -250,6 +258,28 @@ public final class EventProcessor {
       case SAME -> finish(event, ProcessingStatus.DUPLICATE, null);
       case OLD -> finish(event, ProcessingStatus.IGNORED_OLD_VERSION, null);
     };
+  }
+
+  /**
+   * Повтор {@code RETRYING}-события мог пережить более новую версию: {@code decideBeforeWrite} его не проверяет
+   * (статус не {@code RECEIVED}), а запись в PostgreSQL затёрла бы свежие утверждения устаревшими. Старая версия
+   * отсекается до записи в PG; равная версия идёт дальше: запись идемпотентна, проектор вернёт {@code NOOP}.
+   */
+  private ProcessingResult ignoreIfOlderOnRetry(
+      CanonicalEvent event, JournalEntry entry, SourceKey key, boolean tombstone) {
+    if (entry.status() == ProcessingStatus.RECEIVED) {
+      return null;
+    }
+    Optional<AppliedRecord> applied = projection.applied(key);
+    if (applied.isEmpty()) {
+      return null;
+    }
+    var incoming = event.data().sourceVersion();
+    VersionDecision decision =
+        tombstone
+            ? VersionDecision.forTombstone(incoming, applied.get().version(), applied.get().active())
+            : VersionDecision.forUpsert(incoming, applied.get().version());
+    return decision == VersionDecision.OLD ? finish(event, ProcessingStatus.IGNORED_OLD_VERSION, null) : null;
   }
 
   private ProcessingResult write(

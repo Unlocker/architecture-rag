@@ -410,6 +410,24 @@ class EventProcessorTest {
   }
 
   @Test
+  void retriedOlderVersionDoesNotOverwriteAssertionsOfNewerOne() {
+    projection.failure = new ServiceUnavailableException("down");
+    var event = upsert("e1", "5", Map.of("name", "core"));
+    assertThat(run(event).status()).isEqualTo(ProcessingStatus.RETRYING);
+    conflicts.asserted.clear();
+    // Пока событие ждало повтора, применилась более новая версия.
+    projection.failure = null;
+    projection.applied = Optional.of(new AppliedRecord(new SourceVersion("6"), true));
+
+    var result = processor.process(event, RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
+    assertThat(conflicts.asserted).isEmpty();
+    assertThat(conflicts.retracted).isEmpty();
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
   void retryingEventIsReprocessedToProjected() {
     projection.failure = new ServiceUnavailableException("down");
     var event = upsert("e1", "5", Map.of("name", "core"));
