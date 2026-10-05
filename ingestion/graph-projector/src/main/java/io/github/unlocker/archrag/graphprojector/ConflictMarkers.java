@@ -2,9 +2,11 @@ package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.identityresolution.SourceConflict;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -43,14 +45,14 @@ public record ConflictMarkers(UUID gid, Map<SourceKey, List<String>> byRecord) {
 
   /** Полный набор для {@code gid}; пустая карта означает «конфликтов нет, снять все маркеры». */
   public static ConflictMarkers of(UUID gid, Map<SourceKey, List<String>> byRecord) {
-    return new ConflictMarkers(java.util.Objects.requireNonNull(gid, "gid"), byRecord);
+    return new ConflictMarkers(Objects.requireNonNull(gid, "gid"), byRecord);
   }
 
   /** Полный набор для {@code gid} из открытых конфликтов: запись-диссидент → имена свойств (значения не копируются). */
   public static ConflictMarkers of(UUID gid, List<SourceConflict> open) {
     Map<SourceKey, List<String>> byRecord = new LinkedHashMap<>();
     for (SourceConflict conflict : open) {
-      byRecord.computeIfAbsent(conflict.dissent(), k -> new java.util.ArrayList<>()).add(conflict.property());
+      byRecord.computeIfAbsent(conflict.dissent(), k -> new ArrayList<>()).add(conflict.property());
     }
     return of(gid, byRecord);
   }
