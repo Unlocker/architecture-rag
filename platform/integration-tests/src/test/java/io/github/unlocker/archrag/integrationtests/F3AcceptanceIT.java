@@ -273,6 +273,12 @@ class F3AcceptanceIT {
     var toLedger = r.paths().stream().filter(p -> p.nodes().getLast().equals(ledger)).findFirst().orElseThrow();
     assertThat(relationTypes(toLedger)).endsWith("DEPENDS_ON");
     assertThat(r.relations()).extracting(TraceDependenciesResult.RelationRef::type).doesNotContain("HOSTED_ON");
+
+    // Критерий 7 и в режиме trace: пути идут от старта, у связей есть источник; свежесть — где источник узел.
+    assertThat(r.paths()).allSatisfy(p -> assertThat(p.nodes().getFirst()).isEqualTo(r.startGid()));
+    assertThat(r.relations()).allSatisfy(x -> assertThat(x.assertedBySource()).isNotBlank());
+    assertThat(r.relations().stream().filter(x -> x.sourceFetchedAt() != null))
+        .isNotEmpty().allSatisfy(x -> assertThat(x.stale()).isFalse());
   }
 
   @Test
@@ -354,10 +360,13 @@ class F3AcceptanceIT {
   void s6_invalidInputIsToolErrorWithoutStacktrace() {
     String vm = vmGid();
 
-    assertToolError(Map.of("gid", UUID.randomUUID().toString()));
-    assertToolError(Map.of("gid", vm, "mode", "impact", "direction", "downstream"));
-    assertToolError(Map.of("gid", vm, "maxDepth", 7));
-    assertToolError(Map.of("gid", vm, "environment", "prod"));
+    assertToolError(Map.of("gid", UUID.randomUUID().toString()), "asset not found");
+    assertToolError(Map.of("gid", "not-a-uuid"), "gid must be a UUID");
+    assertToolError(Map.of("gid", vm, "mode", "foo"), "mode must be trace or impact");
+    assertToolError(Map.of("gid", vm, "mode", "impact", "direction", "downstream"),
+        "direction must be upstream for mode impact");
+    assertToolError(Map.of("gid", vm, "maxDepth", 7), "maxDepth must be in 1..6");
+    assertToolError(Map.of("gid", vm, "environment", "prod"), "environment is supported only for mode impact");
   }
 
   @Test
@@ -376,6 +385,7 @@ class F3AcceptanceIT {
   @Test
   @Order(8)
   void s8_latencyWithinBudget() {
+    // Зависит от s4: холодный вызов impact замеряется там (первый impact после старта MCP).
     String core = paymentsCoreGid();
     String vm = vmGid();
     assertThat(coldImpact).as("cold impact call is measured in s4").isNotNull();
@@ -450,12 +460,12 @@ class F3AcceptanceIT {
   }
 
   /** Вызов, который должен вернуть tool error без stacktrace. */
-  private void assertToolError(Map<String, Object> args) {
+  private void assertToolError(Map<String, Object> args, String expectedMessage) {
     try (McpSyncClient client = client(jwt.token(READ))) {
       var result = client.callTool(new McpSchema.CallToolRequest("trace_dependencies", args));
 
       assertThat(result.isError()).isTrue();
-      assertThat(text(result)).isNotBlank().doesNotContain("\tat ").doesNotContain("Exception");
+      assertThat(text(result)).contains(expectedMessage).doesNotContain("\tat ").doesNotContain("Exception");
     }
   }
 
