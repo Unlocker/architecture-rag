@@ -64,7 +64,6 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -351,7 +350,6 @@ class F2AcceptanceIT {
   /** Дефект E1: смена {@code hosts} не закрывает прежний {@code RUNS_ON}; сценарий не ослаблен, а выделен. */
   @Test
   @Order(5)
-  @Disabled("UNLOCKER-217: смена hosts в deploy map не закрывает старый RUNS_ON")
   void s4b_replacedHostIsNoLongerReturned() {
     DeploymentFootprint deployment = onlyDeployment(service(footprint(systemGid, PROD), "payments-api"));
 
