@@ -665,4 +665,145 @@ class GraphProjectorIT {
     assertThat(result.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD");
     assertThat(query("MATCH (n) RETURN n")).isEmpty();
   }
+
+  // ---- deferred relations (E1.14) -----------------------------------------------------------------
+
+  private static long pendingCount() {
+    return single("MATCH (p:PendingRelation) RETURN count(p) AS c").get("c").asLong();
+  }
+
+  private static long edgeCount(String type) {
+    return single("MATCH ()-[r:" + type + "]->() RETURN count(r) AS c").get("c").asLong();
+  }
+
+  private void dependency(String id, String version, String from, String to) {
+    assertThat(upsert("eam", "SERVICE_DEPENDENCY", id, version, Map.of("from", from, "to", to, "kind", "SYNC")).status())
+        .isEqualTo(ProcessingStatus.PROJECTED);
+  }
+
+  private void service(String id, String version, String name) {
+    assertThat(upsert("scm", "SERVICE", id, version, Map.of("name", name)).status()).isEqualTo(ProcessingStatus.PROJECTED);
+  }
+
+  @Test
+  void dependencyBeforeBothServicesAppearsAfterSecondService() {
+    String dep = "d-" + uid();
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    dependency(dep, "1", a, b);
+    assertThat(pendingCount()).isEqualTo(1);
+    assertThat(edgeCount("DEPENDS_ON")).isZero();
+
+    service(a, "1", "svc-a");
+
+    assertThat(edgeCount("DEPENDS_ON")).isZero();
+    assertThat(pendingCount()).isEqualTo(1);
+
+    service(b, "1", "svc-b");
+
+    var rel = single("MATCH (:Service {name: 'svc-a'})-[r:DEPENDS_ON]->(:Service {name: 'svc-b'}) RETURN r").get("r").asRelationship();
+    assertThat(rel.get("kind").asString()).isEqualTo("SYNC");
+    assertThat(rel.get("assertedBySource").asString()).isEqualTo("EAM");
+    assertThat(rel.get("assertedById").asString()).isEqualTo(dep);
+    assertThat(pendingCount()).isZero();
+    assertThat(query("MATCH (:SourceRecord)-[d:DEFERS]->() RETURN d")).isEmpty();
+  }
+
+  @Test
+  void scmServiceBeforeEamSystemGetsDecomposedInto() {
+    String sys = "sys-" + uid();
+    String svc = "s-" + uid();
+    assertThat(upsert("scm", "SERVICE", svc, "1", Map.of("name", "pay-api", "systemCode", sys)).status())
+        .isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(edgeCount("DECOMPOSED_INTO")).isZero();
+    assertThat(pendingCount()).isEqualTo(1);
+
+    assertThat(upsert("eam", "IT_SYSTEM", sys, "1", Map.of("name", "Payments")).status()).isEqualTo(ProcessingStatus.PROJECTED);
+
+    assertThat(edgeCount("DECOMPOSED_INTO")).isEqualTo(1);
+    single("MATCH (:ITSystem {name: 'Payments'})-[:DECOMPOSED_INTO]->(:Service {name: 'pay-api'}) RETURN 1 AS ok");
+    assertThat(pendingCount()).isZero();
+    // Узел сервиса достройка не трогала: его версия осталась прежней.
+    assertThat(sourceRecord("SCM", "SERVICE", svc).get("r").asNode().get("sourceVersion").asString()).isEqualTo("1");
+  }
+
+  @Test
+  void systemBeforeTeamGetsOwnedBy() {
+    String team = "t-" + uid();
+    String sys = "sys-" + uid();
+    assertThat(upsert("eam", "IT_SYSTEM", sys, "1", Map.of("name", "Payments", "ownerTeam", team)).status())
+        .isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(edgeCount("OWNED_BY")).isZero();
+
+    assertThat(upsert("eam", "TEAM", team, "1", Map.of("name", "Core")).status()).isEqualTo(ProcessingStatus.PROJECTED);
+
+    single("MATCH (:ITSystem {name: 'Payments'})-[:OWNED_BY]->(:Team {name: 'Core'}) RETURN 1 AS ok");
+    assertThat(pendingCount()).isZero();
+  }
+
+  @Test
+  void newReferrerVersionReplacesDeferredRelation() {
+    String dep = "d-" + uid();
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    String c = "c-" + uid();
+    dependency(dep, "1", a, b);
+    dependency(dep, "2", a, c);
+    assertThat(pendingCount()).isEqualTo(1);
+
+    service(a, "1", "svc-a");
+    service(b, "1", "svc-b");
+    assertThat(edgeCount("DEPENDS_ON")).isZero();
+    service(c, "1", "svc-c");
+
+    assertThat(edgeCount("DEPENDS_ON")).isEqualTo(1);
+    single("MATCH (:Service {name: 'svc-a'})-[:DEPENDS_ON]->(:Service {name: 'svc-c'}) RETURN 1 AS ok");
+  }
+
+  @Test
+  void tombstoneOfReferrerRemovesDeferredRelation() {
+    String dep = "d-" + uid();
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    dependency(dep, "1", a, b);
+    assertThat(pendingCount()).isEqualTo(1);
+
+    assertThat(handle(deleteEvent("e-" + uid(), "eam", "SERVICE_DEPENDENCY", dep, "2", T2)).status())
+        .isEqualTo(ProcessingStatus.PROJECTED);
+
+    assertThat(pendingCount()).isZero();
+    service(a, "1", "svc-a");
+    service(b, "1", "svc-b");
+    assertThat(edgeCount("DEPENDS_ON")).isZero();
+  }
+
+  @Test
+  void repeatedEndpointProjectionDoesNotDuplicateEdge() {
+    String dep = "d-" + uid();
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    dependency(dep, "1", a, b);
+    service(a, "1", "svc-a");
+    service(b, "1", "svc-b");
+    assertThat(edgeCount("DEPENDS_ON")).isEqualTo(1);
+
+    service(b, "2", "svc-b");
+    service(a, "2", "svc-a");
+
+    assertThat(edgeCount("DEPENDS_ON")).isEqualTo(1);
+    assertThat(pendingCount()).isZero();
+  }
+
+  @Test
+  void sameVersionReplayOfReferrerKeepsDeferredRelation() {
+    String dep = "d-" + uid();
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    dependency(dep, "1", a, b);
+
+    // Повтор той же версии (re-snapshot) — DUPLICATE, отложенная связь остаётся.
+    assertThat(upsert("eam", "SERVICE_DEPENDENCY", dep, "1", Map.of("from", a, "to", b, "kind", "SYNC")).status())
+        .isEqualTo(ProcessingStatus.DUPLICATE);
+    assertThat(pendingCount()).isEqualTo(1);
+  }
 }

@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
+import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
@@ -13,7 +14,8 @@ import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
-import java.time.OffsetDateTime;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -46,6 +48,13 @@ import org.neo4j.driver.TransactionContext;
  *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных MASTER-утверждений;</li>
  *   <li>время хранится как {@code datetime} в UTC.</li>
  * </ul>
+ *
+ * <p>Отложенные связи ({@code DeferRelation}, E1.14): связь с неизвестным концом хранится узлом
+ * {@code PendingRelation} (см. {@link PendingRelations}) и достраивается в транзакции проекции конечной точки.
+ * При каждой применённой проекции записи её отложенные связи заменяются целиком, tombstone их удаляет.
+ * Допущение о конкурентности: {@code JournalDispatcher} однопоточный, экземпляр сервиса один, страницы идут под
+ * {@code AdminLock}, поэтому запись {@code PendingRelation} и проекция её конечной точки не идут параллельно;
+ * повторной проверки после записи отложенной связи нет.
  *
  * <p>Дополнительные метки подтипов, свойства связей и метки в тексте Cypher берутся только из enum
  * {@link NodeLabel}/{@link RelationType}, а не из данных источника.
@@ -146,11 +155,25 @@ public final class GraphProjector implements GraphProjection {
     }
     List<String> skippedProperties = new ArrayList<>();
     List<String> skippedRelations = new ArrayList<>();
+    // Отложенные связи записи заменяются целиком: старые удаляются, текущие пишутся командами DeferRelation.
+    PendingRelations.deleteOf(tx, key);
     for (GraphCommand command : request.commands()) {
       switch (command) {
-        case UpsertNode upsert -> upsertNode(tx, request, upsert, skippedProperties);
+        case UpsertNode upsert -> {
+          upsertNode(tx, request, upsert, skippedProperties);
+          healPending(tx, upsert.record().key(), skippedRelations);
+        }
+        case DeferRelation defer ->
+            PendingRelations.store(tx, key, request.version().value(), request.eventTime(), defer.relation());
         case TombstoneSourceRecord tombstone -> tombstone(tx, request, tombstone);
-        case UpsertRelation relation -> upsertRelation(tx, request, relation, skippedRelations);
+        case UpsertRelation relation ->
+            upsertRelation(
+                tx,
+                relation,
+                request.gids().get(relation.from()),
+                request.gids().get(relation.to()),
+                request.eventTime(),
+                skippedRelations);
         case CloseAssertion close -> closeAssertion(tx, request, close);
       }
     }
@@ -159,6 +182,22 @@ public final class GraphProjector implements GraphProjection {
     }
     linkSyncRun(tx, request);
     return new ProjectionResult(ProjectionOutcome.APPLIED, skippedProperties, skippedRelations);
+  }
+
+  /**
+   * Достраивает отложенные связи, у которых {@code endpoint} — один из концов: каждая, у которой теперь известны
+   * все концы, применяется обычным {@code upsertRelation} (authority, temporal, {@code assertedBy*}) и удаляется.
+   * Узел самого {@code endpoint} не трогается. {@code gid} концов берутся из графа.
+   */
+  private void healPending(TransactionContext tx, SourceKey endpoint, List<String> skipped) {
+    for (PendingRelations.Pending pending : PendingRelations.candidates(tx, endpoint)) {
+      Optional<UUID[]> gids = PendingRelations.endpointGids(tx, pending.relation());
+      if (gids.isEmpty()) {
+        continue;
+      }
+      upsertRelation(tx, pending.relation(), gids.get()[0], gids.get()[1], pending.eventTime(), skipped);
+      PendingRelations.delete(tx, pending.key());
+    }
   }
 
   private void upsertNode(
@@ -271,13 +310,18 @@ public final class GraphProjector implements GraphProjection {
   }
 
   private void upsertRelation(
-      TransactionContext tx, ProjectionRequest request, UpsertRelation relation, List<String> skipped) {
+      TransactionContext tx,
+      UpsertRelation relation,
+      UUID fromGid,
+      UUID toGid,
+      Instant eventTime,
+      List<String> skipped) {
     RelationType type = relation.type();
     if (!matrix.isAuthoritative(type, relation.assertedBy().source())) {
       skipped.add(type.name());
       return;
     }
-    Map<String, Object> params = relationParams(request, relation.from(), relation.to(), relation.assertedBy());
+    Map<String, Object> params = relationParams(fromGid, toGid, eventTime, relation.assertedBy());
     params.put("props", NodeProperties.of(relation.properties()));
     String temporal = "";
     if (type.temporal()) {
@@ -316,7 +360,9 @@ public final class GraphProjector implements GraphProjection {
     if (!matrix.isAuthoritative(close.type(), close.assertedBy().source())) {
       return;
     }
-    Map<String, Object> params = relationParams(request, close.from(), close.to(), close.assertedBy());
+    Map<String, Object> params =
+        relationParams(
+            request.gids().get(close.from()), request.gids().get(close.to()), request.eventTime(), close.assertedBy());
     params.put("validTo", NodeProperties.utc(close.validTo()));
     // Нет подходящей открытой связи — ничего не меняется: повтор закрытия идемпотентен.
     tx.run(
@@ -347,12 +393,11 @@ public final class GraphProjector implements GraphProjection {
         .consume();
   }
 
-  private static Map<String, Object> relationParams(
-      ProjectionRequest request, SourceKey from, SourceKey to, SourceKey assertedBy) {
+  private static Map<String, Object> relationParams(UUID from, UUID to, Instant at, SourceKey assertedBy) {
     Map<String, Object> params = new HashMap<>(keyParams(assertedBy));
-    params.put("from", request.gids().get(from).toString());
-    params.put("to", request.gids().get(to).toString());
-    params.put("at", NodeProperties.utc(request.eventTime()));
+    params.put("from", from.toString());
+    params.put("to", to.toString());
+    params.put("at", NodeProperties.utc(at));
     return params;
   }
 
@@ -372,7 +417,7 @@ public final class GraphProjector implements GraphProjection {
     return labels.stream().map(l -> root(l).label()).distinct().sorted().reduce((x, y) -> x + "|" + y).orElseThrow();
   }
 
-  private static NodeLabel root(NodeLabel label) {
+  static NodeLabel root(NodeLabel label) {
     NodeLabel current = label;
     while (current.supertype() != null) {
       current = current.supertype();

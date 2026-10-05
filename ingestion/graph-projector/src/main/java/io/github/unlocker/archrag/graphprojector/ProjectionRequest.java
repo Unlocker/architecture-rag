@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
+import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
@@ -20,7 +21,8 @@ import java.util.UUID;
  * ({@code UpsertNode} либо {@code TombstoneSourceRecord}); запись только со связями и пустой список
  * допустимы; ключ узла-команды равен {@code key}, а версия {@code SourceRecord} равна {@code version};
  * все связи и закрытия утверждаются этой же записью; для узла записи и обоих концов каждой связи есть
- * {@code gid}. {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
+ * {@code gid}; исключение — {@code DeferRelation}: для неё {@code gid} не требуется (конец связи может быть
+ * ещё неизвестен, достраивание берёт {@code gid} из графа), но утверждает её эта же запись. {@code gid} выдаёт только {@code IdentityMapping}: проектор сам их не создаёт.
  *
  * @param key запись источника, к которой относится изменение
  * @param version версия объекта в источнике
@@ -62,6 +64,7 @@ public record ProjectionRequest(
           requireGid(gids, r.from());
           requireGid(gids, r.to());
         }
+        case DeferRelation d -> requireSame(key, d.relation().assertedBy(), "deferred relation assertedBy");
         case CloseAssertion c -> {
           requireSame(key, c.assertedBy(), "close assertedBy");
           requireGid(gids, c.from());

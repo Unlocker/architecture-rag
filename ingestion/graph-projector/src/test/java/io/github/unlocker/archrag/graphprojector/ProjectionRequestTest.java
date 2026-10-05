@@ -3,6 +3,7 @@ package io.github.unlocker.archrag.graphprojector;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
@@ -119,5 +120,26 @@ class ProjectionRequestTest {
 
     assertThat(props).containsOnlyKeys("name").containsEntry("name", "core");
     assertThat(NodeProperties.value(T)).isEqualTo(T.atOffset(java.time.ZoneOffset.UTC));
+  }
+
+  @Test
+  void deferredRelationNeedsNoGidForUnknownEndpoint() {
+    var relation =
+        new UpsertRelation(RelationType.OWNED_BY, SVC, NodeLabel.SERVICE, TEAM, NodeLabel.TEAM, Map.of(), null, SVC);
+
+    var req = request(Map.of(SVC, UUID.randomUUID()), service(), new DeferRelation(relation));
+
+    assertThat(req.commands()).anyMatch(DeferRelation.class::isInstance);
+    assertThat(req.isRelationOnly()).isFalse();
+    assertThat(request(Map.of(), new DeferRelation(relation)).isRelationOnly()).isTrue();
+  }
+
+  @Test
+  void deferredRelationMustBeAssertedByRequestRecord() {
+    var foreign =
+        new UpsertRelation(RelationType.OWNED_BY, SVC, NodeLabel.SERVICE, TEAM, NodeLabel.TEAM, Map.of(), null, TEAM);
+
+    assertThatThrownBy(() -> request(Map.of(), new DeferRelation(foreign)))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

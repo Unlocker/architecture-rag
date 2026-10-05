@@ -275,6 +275,21 @@ class AdminEndpointIT {
   }
 
   @Test
+  void rebuildReproducesRelationsThatWereDeferredUntilTheirEndpointsArrived() throws Exception {
+    seed();
+    // EAM опрашивается раньше SCM: зависимости сервисов приходят раньше самих сервисов и достраиваются позже.
+    assertThat(driver.executableQuery("MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS c").execute().records().get(0).get("c").asLong())
+        .isPositive();
+    assertThat(driver.executableQuery("MATCH (p:PendingRelation) RETURN count(p) AS c").execute().records().get(0).get("c").asLong())
+        .isZero();
+    List<String> before = dump();
+
+    assertThat(admin("/admin/rebuild?confirm=true", null).statusCode()).isEqualTo(200);
+
+    assertThat(dump()).isEqualTo(before);
+  }
+
+  @Test
   void rebuildWithoutConfirmIsRejectedAndGraphIsUntouched() throws Exception {
     seed();
     List<String> before = dump();

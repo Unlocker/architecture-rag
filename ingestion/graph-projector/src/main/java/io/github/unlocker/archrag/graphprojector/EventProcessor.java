@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
+import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
@@ -17,6 +18,8 @@ import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
+import io.github.unlocker.archrag.normalizer.UnresolvedReference;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,8 +57,9 @@ import org.neo4j.driver.exceptions.SessionExpiredException;
  *       пробрасываются вызывающему (событие остаётся в прежнем статусе, повтор безопасен).</li>
  * </ul>
  *
- * <p>Битые ссылки, которые normalizer не превратил в связи ({@code UnresolvedReference}), здесь не лечатся:
- * связь появится при reconciliation (E1.6).
+ * <p>Битые ссылки, которые normalizer не превратил в связи ({@code UnresolvedReference}), передаются проектору
+ * командой {@link DeferRelation}: он сохраняет их как отложенные связи и достраивает при появлении конечной
+ * точки (E1.14). Reconciliation (E1.6) их не лечит.
  */
 public final class EventProcessor {
 
@@ -133,7 +137,10 @@ public final class EventProcessor {
     if (normalized instanceof NormalizationResult.Quarantined q) {
       return quarantine(event, q.errorCode(), q.reason());
     }
-    var commands = ((NormalizationResult.Normalized) normalized).commands();
+    var result = (NormalizationResult.Normalized) normalized;
+    List<GraphCommand> commands = new ArrayList<>(result.commands());
+    // Связь с двумя неизвестными концами приходит дважды (по ссылке на каждый конец): откладываем один раз.
+    result.unresolved().stream().map(UnresolvedReference::relation).distinct().map(DeferRelation::new).forEach(commands::add);
     advance(event, ProcessingStatus.NORMALIZED);
     Map<SourceKey, UUID> gids;
     try {
@@ -247,6 +254,8 @@ public final class EventProcessor {
           endpoints.add(c.from());
           endpoints.add(c.to());
         }
+        // Отложенная связь gid не требует: неизвестный конец берётся из графа при достраивании.
+        case DeferRelation d -> {}
         case UpsertNode u -> {}
         case TombstoneSourceRecord t -> {}
       }

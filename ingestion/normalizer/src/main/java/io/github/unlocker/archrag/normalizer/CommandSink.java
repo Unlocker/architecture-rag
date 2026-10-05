@@ -47,11 +47,12 @@ public final class CommandSink {
       Validity validity,
       String field) {
     SourceKey other = from.equals(self) ? to : from;
+    UpsertRelation relation = new UpsertRelation(type, from, fromLabel, to, toLabel, Map.of(), validity, self);
     if (!resolver.exists(other)) {
-      unresolved.add(new UnresolvedReference(self, field, type, other));
+      unresolved.add(new UnresolvedReference(self, field, type, other, relation));
       return;
     }
-    commands.add(new UpsertRelation(type, from, fromLabel, to, toLabel, Map.of(), validity, self));
+    commands.add(relation);
   }
 
   /**
@@ -73,16 +74,17 @@ public final class CommandSink {
       Validity validity,
       String fromField,
       String toField) {
+    UpsertRelation relation = new UpsertRelation(type, from, fromLabel, to, toLabel, properties, validity, self);
     boolean fromKnown = resolver.exists(from);
     boolean toKnown = resolver.exists(to);
     if (!fromKnown) {
-      unresolved.add(new UnresolvedReference(self, fromField, type, from));
+      unresolved.add(new UnresolvedReference(self, fromField, type, from, relation));
     }
     if (!toKnown) {
-      unresolved.add(new UnresolvedReference(self, toField, type, to));
+      unresolved.add(new UnresolvedReference(self, toField, type, to, relation));
     }
     if (fromKnown && toKnown) {
-      commands.add(new UpsertRelation(type, from, fromLabel, to, toLabel, properties, validity, self));
+      commands.add(relation);
     }
   }
 
