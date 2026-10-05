@@ -2,10 +2,9 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -41,12 +40,24 @@ class ContainersSmokeIT {
   @Container
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 
+  /** Тестовые ключи S3: SeaweedFS берёт их из переменных окружения как единственную identity. */
+  static final String S3_ACCESS_KEY = "test-access-key";
+
+  static final String S3_SECRET_KEY = "test-secret-key";
+
   @Container
-  static final GenericContainer<?> S3 = new GenericContainer<>(S3_IMAGE)
-      .withCommand("server", "-s3", "-dir=/data")
-      .withExposedPorts(8333)
-      .waitingFor(Wait.forHttp("/").forPort(8333).forStatusCodeMatching(c -> c < 500))
-      .withStartupTimeout(Duration.ofSeconds(120));
+  static final GenericContainer<?> S3 = s3Container();
+
+  /** Контейнер SeaweedFS с S3 API и подписанными запросами; общий для всех IT. */
+  static GenericContainer<?> s3Container() {
+    return new GenericContainer<>(S3_IMAGE)
+        .withCommand("server", "-s3", "-dir=/data")
+        .withEnv("AWS_ACCESS_KEY_ID", S3_ACCESS_KEY)
+        .withEnv("AWS_SECRET_ACCESS_KEY", S3_SECRET_KEY)
+        .withExposedPorts(8333)
+        .waitingFor(Wait.forHttp("/").forPort(8333).forStatusCodeMatching(c -> c < 500))
+        .withStartupTimeout(Duration.ofSeconds(120));
+  }
 
   @Test
   void neo4jAnswersCypher() {
@@ -65,12 +76,12 @@ class ContainersSmokeIT {
   }
 
   @Test
-  void s3StorageAnswers() throws Exception {
-    var uri = URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333) + "/smoke-bucket");
-    var request = HttpRequest.newBuilder(uri).PUT(HttpRequest.BodyPublishers.noBody()).build();
-    try (var client = HttpClient.newHttpClient()) {
-      var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-      assertThat(response.statusCode()).isBetween(200, 299);
+  void s3StoragePutsAndGetsObject() {
+    try (var store = S3RawPayloadStore.create(
+        URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)), S3_ACCESS_KEY, S3_SECRET_KEY, "smoke-bucket")) {
+      store.ensureBucket();
+      var ref = store.put("urn:smoke", "hello".getBytes(StandardCharsets.UTF_8));
+      assertThat(store.get(ref)).isEqualTo("hello".getBytes(StandardCharsets.UTF_8));
     }
   }
 }

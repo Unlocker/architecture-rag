@@ -167,7 +167,7 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 (:ITSystem {gid: '...', name: 'Payments'})
 ```
 
-> **Открытый вопрос:** формат `sourceId` не зафиксирован: здесь `'1042'`, а в каноническом событии ниже — `'EAM-1042'`. Решение владельца не принято; до него оба примера остаются как есть.
+Решение владельца 2026-10-04: `sourceId` — сырой ID источника без префикса системы (например, `'1042'`); система определяется полем `source`.
 
 Такой паттерн позволяет нескольким системам подтверждать один canonical node, не смешивает источник с бизнес-сущностью и дает точку для tombstone, версии и hash. Узлы должны иметь уникальное свойство или набор свойств; специфические relationship types уменьшают лишние обходы.[^15][^16]
 
@@ -235,9 +235,10 @@ Operations:   SyncRun -- SourceEvent -- ProjectionResult
 | VM, physical host, serial number | CMDB/asset DB | Runtime discovery |
 | Deployment на стенде | Deploy map + Helm charts (отдельный `deploymap-adapter`) | SCM metadata |
 | Связь `DEPENDS_ON` между сервисами | EAM | SCM metadata |
+| Связь `DECOMPOSED_INTO` ITSystem→Service | SCM/catalog | EAM |
 | Описания и документы | EAM/docs | Репозиторий |
 
-Было: master для `Deployment` — «CD/Kubernetes или CMDB». Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
+Было: master для `Deployment` — «CD/Kubernetes или CMDB»; master для `DECOMPOSED_INTO` — EAM (UNLOCKER-171). Мастер-системы в PoC — заглушки; их контракты фиксируются, а реальные интеграции подключаются после PoC.
 
 `SourceRecord` сохраняет источник конкретного утверждения, время извлечения, версию и hash. Такая модель проще для аудита конфликтов, чем массив `sourceIds` на бизнес-узле, и концептуально согласуется с W3C PROV, где `Entity`, `Activity` и `Agent` позволяют описывать происхождение и цепочки преобразований.[^17]
 
@@ -265,13 +266,14 @@ CREATE CONSTRAINT source_record_key IF NOT EXISTS
 FOR (n:SourceRecord)
 REQUIRE (n.source, n.sourceType, n.sourceId) IS UNIQUE;
 
-CREATE RANGE INDEX deployment_env IF NOT EXISTS
-FOR (n:Deployment) ON (n.environmentKey);
+CREATE CONSTRAINT environment_code IF NOT EXISTS
+FOR (n:Environment) REQUIRE n.code IS UNIQUE;
 
 CREATE FULLTEXT INDEX asset_text IF NOT EXISTS
 FOR (n:ITSystem|Solution|Platform|Service|Document)
 ON EACH [n.name, n.description, n.title];
 
+// вне PoC: KnowledgeChunk и embeddings в срез не входят
 CREATE VECTOR INDEX chunk_embedding IF NOT EXISTS
 FOR (n:KnowledgeChunk) ON n.embedding
 OPTIONS {indexConfig: {
@@ -280,7 +282,7 @@ OPTIONS {indexConfig: {
 }};
 ```
 
-> **Открытый вопрос:** индекс `deployment_env` построен по `environmentKey`, которого нет в модели `Deployment` (см. «Основные узлы»: окружение задается связью `IN_ENVIRONMENT`). Нужно решить: добавить свойство в модель или перестроить индекс. Не решено.
+Решение владельца 2026-10-04: индекс `deployment_env` убран; окружение задаётся связью `IN_ENVIRONMENT`, а `Environment.code` защищён UNIQUE-constraint `environment_code`.
 
 Для `source_record_key` в Community Edition используется `IS UNIQUE`: ранее здесь стоял `IS NODE KEY`, который доступен только в Enterprise. `UNIQUE` не требует существования свойств, поэтому обязательность `source`, `sourceType`, `sourceId` проверяет приложение (Community), см. E2.
 
@@ -314,7 +316,7 @@ LLM или embedding similarity могут предлагать соответс
 | Duplicate event | Повторная доставка | Находит inbox по `source + eventId` | Возвращает прежний result без повторной мутации |
 | Out-of-order event | Версия/время меньше примененной | Сохраняет raw event с `IGNORED_OLD_VERSION` | Не откатывает состояние |
 | Partial object | API возвращает неполную запись | Помечает completeness и ставит retry | Не затирает известные authoritative поля `null`-значениями без явной семантики удаления |
-| Broken reference | Сервис ссылается на неизвестную систему | Публикует команду со source reference | Создает `UnresolvedReference` либо quarantine; не создает фиктивный business node без политики |
+| Broken reference | Сервис ссылается на неизвестную систему | Публикует команду со source reference | `UnresolvedReference` сохраняется как отложенная связь и достраивается при появлении конечной точки; фиктивный узел не создаётся |
 | Source outage/rate limit | 429/5xx/timeout | Backoff, jitter, Retry-After, circuit breaker | Сохраняет прежнюю витрину; обновляет freshness/lag, не объявляет данные удаленными |
 | Contract change | Неизвестная schema version | Сохраняет raw payload, отправляет в quarantine | Не выполняет best-effort запись неизвестной структуры |
 | Replay/backfill | Оператор задает диапазон/cursor | Повторно публикует raw events с новым replay ID | Дедупликация по business event ID/version; результат детерминирован |
@@ -410,7 +412,7 @@ RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
   "correlationid": "...",
   "data": {
     "sourceType": "IT_SYSTEM",
-    "sourceId": "EAM-1042",
+    "sourceId": "1042",
     "sourceVersion": "184",
     "payload": {}
   }
@@ -488,7 +490,7 @@ public interface CanonicalMapper {
 }
 
 public sealed interface GraphCommand
-        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord {}
+        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation {}
 ```
 
 Source DTO не должны проникать в graph projector. Маппинг следует тестировать contract fixtures, а операции проекции — integration tests с реальным Neo4j/Testcontainers.

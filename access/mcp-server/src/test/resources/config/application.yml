@@ -1,0 +1,7 @@
+# Фиктивные reader-свойства: драйвер ленивый, тесты стартуют без Neo4j и без env.
+archrag:
+  neo4j:
+    reader:
+      uri: bolt://localhost:7687
+      username: mcp-reader
+      password: test

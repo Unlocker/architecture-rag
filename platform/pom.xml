@@ -17,5 +17,6 @@
 
   <modules>
     <module>integration-tests</module>
+    <module>source-stubs</module>
   </modules>
 </project>
