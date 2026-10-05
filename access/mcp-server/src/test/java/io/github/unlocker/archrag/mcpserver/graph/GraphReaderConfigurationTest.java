@@ -43,4 +43,16 @@ class GraphReaderConfigurationTest {
             assertThat(ctx.getBean(GraphReaderProperties.class).toString())
                 .doesNotContain("s3cret"));
   }
+
+  @Test
+  void stalenessPrefixCoexistsWithLimitsAndDefaultsToSevenDays() {
+    runner.run(
+        ctx -> {
+          assertThat(ctx.getBean(StalenessProperties.class).staleAfter()).isEqualTo(Duration.ofDays(7));
+          assertThat(ctx.getBean(QueryLimits.class).maxNodes()).isEqualTo(7);
+        });
+    runner
+        .withPropertyValues("archrag.query.stale-after=PT1H")
+        .run(ctx -> assertThat(ctx.getBean(StalenessProperties.class).staleAfter()).isEqualTo(Duration.ofHours(1)));
+  }
 }

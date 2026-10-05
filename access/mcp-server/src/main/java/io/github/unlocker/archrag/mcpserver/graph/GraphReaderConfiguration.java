@@ -6,6 +6,7 @@ import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
+import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
 import java.time.Clock;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
@@ -85,6 +86,11 @@ public class GraphReaderConfiguration {
   @Bean
   GraphQueryExecutor graphQueryExecutor(Driver graphReaderDriver, QueryTemplateRegistry registry) {
     return new GraphQueryExecutor(graphReaderDriver, registry);
+  }
+
+  @Bean
+  QueryTemplate runtimeFootprintTemplate() {
+    return RuntimeTemplates.RUNTIME_FOOTPRINT;
   }
 
   @Bean
