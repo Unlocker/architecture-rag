@@ -3,61 +3,83 @@ package io.github.unlocker.archrag.mcpserver.tools;
 import java.util.List;
 
 /**
- * Ответ {@code find_runtime_footprint}: где развёрнута система.
+ * Ответ {@code find_runtime_footprint}: где развёрнута система и насколько фактам можно верить.
  *
- * <p>Содержит только действующие факты. Закрытая система даёт пустой {@code deployments} и
- * {@code isCurrent=false}.
+ * <p>Только действующие факты. Время — ISO-8601 UTC. Provenance узла — {@code lastSeenAt} и активные
+ * {@code sources}. У рёбер {@code lastSeenAt} нет: возвращается {@link EdgeProvenance} (кто
+ * утверждает связь, у темпоральных {@code RUNS_ON} ещё {@code validFrom}); свежесть связи оценивается
+ * по её конечному узлу.
  *
  * @param systemGid gid системы
  * @param systemName имя системы
- * @param isCurrent система действует
- * @param deployments развёртывания, отсортированные по окружению, сервису и имени
- * @param truncated список обрезан бюджетом
+ * @param systemLastSeenAt когда систему видели в последний раз
+ * @param systemStale система устарела
+ * @param systemSources активные утверждения источников о системе
+ * @param environment фильтр окружения после strip; {@code null} — все окружения
+ * @param services сервисы системы; сервис без развёртываний в окружении даёт пустые {@code deployments}
+ * @param staleAfter порог устаревания, ISO-8601 duration
+ * @param warnings по строке на устаревший узел
+ * @param truncated результат обрезан бюджетом (последняя группа может быть неполной)
  */
 public record FindRuntimeFootprintResult(
     String systemGid,
     String systemName,
-    boolean isCurrent,
-    List<Deployment> deployments,
+    String systemLastSeenAt,
+    boolean systemStale,
+    List<FactSource> systemSources,
+    String environment,
+    List<ServiceFootprint> services,
+    String staleAfter,
+    List<String> warnings,
     boolean truncated) {
 
-  /**
-   * Развёртывание сервиса в окружении.
-   *
-   * @param gid gid развёртывания
-   * @param name имя развёртывания
-   * @param version версия или {@code null}
-   * @param serviceGid gid сервиса
-   * @param serviceName имя сервиса
-   * @param environment код окружения
-   * @param instances вычислительные узлы, на которых работает развёртывание (может быть пуст)
-   */
-  public record Deployment(
+  /** Сервис и его действующие развёртывания. */
+  public record ServiceFootprint(
+      String gid,
+      String name,
+      String lastSeenAt,
+      boolean stale,
+      List<FactSource> sources,
+      List<DeploymentFootprint> deployments) {}
+
+  /** Развёртывание в окружении; {@code environment} — код окружения. */
+  public record DeploymentFootprint(
       String gid,
       String name,
       String version,
-      String serviceGid,
-      String serviceName,
+      String status,
       String environment,
-      List<Instance> instances) {}
+      String lastSeenAt,
+      boolean stale,
+      List<FactSource> sources,
+      EdgeProvenance hasDeployment,
+      List<ComputeFootprint> compute) {}
 
-  /**
-   * Вычислительный узел.
-   *
-   * @param gid gid узла
-   * @param type самая узкая метка: VirtualMachine, PhysicalServer или ComputeInstance
-   * @param hostname имя хоста
-   * @param state состояние или {@code null}
-   * @param hostedOn физический сервер, на котором размещена VM, или {@code null}
-   */
-  public record Instance(String gid, String type, String hostname, String state, HostedOn hostedOn) {}
+  /** Вычислительный узел; {@code type}: VirtualMachine, PhysicalServer или ComputeInstance. */
+  public record ComputeFootprint(
+      String gid,
+      String type,
+      String hostname,
+      String state,
+      String lastSeenAt,
+      boolean stale,
+      List<FactSource> sources,
+      EdgeProvenance runsOn,
+      HostFootprint hostedOn) {}
 
-  /**
-   * Физический сервер под VM.
-   *
-   * @param gid gid сервера
-   * @param hostname имя хоста
-   * @param serialNumber серийный номер или {@code null}
-   */
-  public record HostedOn(String gid, String hostname, String serialNumber) {}
+  /** Физический сервер под VM; {@code null} у ComputeInstance и у PhysicalServer как прямой цели. */
+  public record HostFootprint(
+      String gid,
+      String hostname,
+      String state,
+      String lastSeenAt,
+      boolean stale,
+      List<FactSource> sources,
+      EdgeProvenance hostedOn) {}
+
+  /** Кто утверждает связь; {@code validFrom} — только у темпоральных связей, иначе {@code null}. */
+  public record EdgeProvenance(String source, String sourceType, String sourceId, String validFrom) {}
+
+  /** Активное утверждение источника об узле. */
+  public record FactSource(String source, String sourceType, String sourceId, String authority) {}
 }
