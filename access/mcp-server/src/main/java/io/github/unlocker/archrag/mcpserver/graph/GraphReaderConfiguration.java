@@ -4,6 +4,7 @@ import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
+import io.github.unlocker.archrag.graphquerycore.templates.FootprintTemplates;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
@@ -47,5 +48,10 @@ public class GraphReaderConfiguration {
   @Bean
   GraphQueryExecutor graphQueryExecutor(Driver graphReaderDriver, QueryTemplateRegistry registry) {
     return new GraphQueryExecutor(graphReaderDriver, registry);
+  }
+
+  @Bean
+  QueryTemplate findRuntimeFootprintTemplate() {
+    return FootprintTemplates.FIND_RUNTIME_FOOTPRINT;
   }
 }
