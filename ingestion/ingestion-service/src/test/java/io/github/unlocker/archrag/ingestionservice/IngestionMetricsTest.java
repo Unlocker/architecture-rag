@@ -28,6 +28,30 @@ class IngestionMetricsTest {
   }
 
   @Test
+  void eventCounterIsRegisteredWithZeroBeforeFirstEvent() {
+    for (String[] pair : new String[][] {{"eam", "PROJECTED"}, {"unknown", IngestionMetrics.STATUS_ERROR}}) {
+      var c = registry.find(IngestionMetrics.EVENTS).tag("source", pair[0]).tag("status", pair[1]).counter();
+      assertThat(c).isNotNull();
+      assertThat(c.count()).isZero();
+    }
+  }
+
+  @Test
+  void eventCounterSeriesCountIsSourcesTimesStatuses() {
+    assertThat(registry.find(IngestionMetrics.EVENTS).counters())
+        .hasSize((SourceSystem.values().length + 1) * (ProcessingStatus.values().length + 1));
+  }
+
+  @Test
+  void recordingDoesNotCreateDuplicateSeries() {
+    int before = registry.find(IngestionMetrics.EVENTS).counters().size();
+    metrics.recordEvent("eam", ProcessingStatus.PROJECTED);
+    metrics.recordEvent("urn:corp:other-" + System.nanoTime(), null);
+
+    assertThat(registry.find(IngestionMetrics.EVENTS).counters()).hasSize(before);
+  }
+
+  @Test
   void journalSourceUrnIsTaggedWithShortCode() {
     metrics.recordEvent("urn:corp:cmdb", ProcessingStatus.PROJECTED);
 

@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.ingestionservice;
 
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.MultiGauge;
 import io.micrometer.core.instrument.Tags;
@@ -25,6 +26,8 @@ import org.springframework.scheduling.annotation.Scheduled;
  * ({@link ProcessingStatus} или {@code ERROR}); идентификаторы объектов и тексты ошибок в теги не попадают.
  * Gauges ({@code archrag.ingestion.sync.lag}, {@code archrag.ingestion.dlq.open}) пересчитываются
  * {@link #refresh()} по расписанию, а не при каждом сборе; источник без строк получает {@code 0}.
+ * Счётчик событий, как и gauges, существует с нулём до первого события: все пары {@code source} × {@code status}
+ * регистрируются в конструкторе, иначе перезапущенный процесс без событий не отдаёт ряд в OTLP.
  */
 public class IngestionMetrics {
 
@@ -68,6 +71,12 @@ public class IngestionMetrics {
         .description("Open (not replayed) DLQ entries per source").register(registry);
     register(lag, zeroes());
     register(dlqOpen, zeroes());
+    for (String source : zeroes().keySet()) {
+      for (ProcessingStatus status : ProcessingStatus.values()) {
+        eventCounter(source, status.name());
+      }
+      eventCounter(source, STATUS_ERROR);
+    }
   }
 
   /**
@@ -75,7 +84,12 @@ public class IngestionMetrics {
    * {@code null} (неожиданное исключение) учитывается как {@code ERROR}.
    */
   public void recordEvent(String source, ProcessingStatus status) {
-    registry.counter(EVENTS, "source", sourceTag(source), "status", status == null ? STATUS_ERROR : status.name()).increment();
+    eventCounter(sourceTag(source), status == null ? STATUS_ERROR : status.name()).increment();
+  }
+
+  /** Единая точка формирования тегов счётчика: имена и порядок совпадают у предрегистрации и у {@link #recordEvent}. */
+  private Counter eventCounter(String source, String status) {
+    return registry.counter(EVENTS, "source", source, "status", status);
   }
 
   /**
