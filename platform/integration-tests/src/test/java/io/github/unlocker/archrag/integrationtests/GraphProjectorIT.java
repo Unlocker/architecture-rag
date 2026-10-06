@@ -30,6 +30,8 @@ import io.github.unlocker.archrag.graphprojector.ProjectionResult;
 import io.github.unlocker.archrag.graphprojector.ReconciliationTrigger;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
+import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
+import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
@@ -77,6 +79,8 @@ class GraphProjectorIT {
   static Driver driver;
   static PostgresEventJournal journal;
   static PostgresIdentityMapping identity;
+  static PostgresIdentityCandidates candidates;
+  static PostgresSourceConflicts conflicts;
   static GraphProjector projector;
   static EventProcessor processor;
   static final List<String> snapshots = new ArrayList<>();
@@ -93,13 +97,16 @@ class GraphProjectorIT {
     JournalMigrations.apply(dataSource);
     journal = new PostgresEventJournal(dataSource);
     identity = new PostgresIdentityMapping(dataSource);
+    candidates = new PostgresIdentityCandidates(dataSource);
+    conflicts = new PostgresSourceConflicts(dataSource, AuthorityMatrix.defaults());
     projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor = processor(projector);
   }
 
   private static EventProcessor processor(GraphProjection projection) {
     ReconciliationTrigger trigger = (source, run, id, count) -> snapshots.add(run);
-    return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projection, trigger);
+    return new EventProcessor(journal, Normalizer.standard(projector::isActive), identity, projection, trigger, candidates,
+        conflicts);
   }
 
   @BeforeEach
@@ -343,6 +350,125 @@ class GraphProjectorIT {
     assertThat(second.get("validFrom").asZonedDateTime().toInstant()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
     assertThat(second.containsKey("validTo")).isFalse();
     assertThat(query("MATCH ()-[r:OWNED_BY]->() RETURN r")).hasSize(1);
+  }
+
+  // ---- замещающая семантика темпоральных связей (UNLOCKER-217) ------------------------------------
+
+  private static final String OPEN_RUNS_ON =
+      "MATCH (:Deployment)-[r:RUNS_ON]->(h:ComputeInstance) WHERE r.validTo IS NULL RETURN h.hostname AS host";
+
+  private static List<String> openHosts() {
+    return query(OPEN_RUNS_ON).stream().map(r -> r.get("host").asString()).sorted().toList();
+  }
+
+  private String host(String hostname) {
+    String id = "ci-" + uid();
+    upsert("cmdb", "COMPUTE_INSTANCE", id, "1", Map.of("hostname", hostname, "kind", "VIRTUAL_MACHINE"));
+    return id;
+  }
+
+  @Test
+  void replacedHostClosesOldRunsOnAtEventTimeAndKeepsNewOpen() {
+    String a = host("h-a");
+    String b = host("h-b");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of(b)));
+
+    assertThat(openHosts()).containsExactly("h-b");
+    var closed = single("MATCH (:Deployment)-[r:RUNS_ON]->(:ComputeInstance {hostname: 'h-a'}) RETURN r").get("r").asRelationship();
+    assertThat(closed.get("validTo").asZonedDateTime().toInstant()).isEqualTo(T1);
+  }
+
+  @Test
+  void changedOwnerTeamClosesOldOwnedBy() {
+    String t1 = "t-" + uid();
+    String t2 = "t-" + uid();
+    String system = "its-" + uid();
+    upsert("eam", "TEAM", t1, "1", Map.of("name", "One"));
+    upsert("eam", "TEAM", t2, "1", Map.of("name", "Two"));
+    upsert("eam", "IT_SYSTEM", system, "1", Map.of("name", "Payments", "ownerTeam", t1));
+
+    upsert("eam", "IT_SYSTEM", system, "2", Map.of("name", "Payments", "ownerTeam", t2));
+
+    assertThat(query("MATCH (:ITSystem)-[r:OWNED_BY]->(:Team {name: 'One'}) WHERE r.validTo IS NOT NULL RETURN r")).hasSize(1);
+    assertThat(query("MATCH (:ITSystem)-[r:OWNED_BY]->(:Team {name: 'Two'}) WHERE r.validTo IS NULL RETURN r")).hasSize(1);
+  }
+
+  @Test
+  void repeatedVersionClosesNothing() {
+    String a = host("h-a");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of()));
+
+    assertThat(openHosts()).containsExactly("h-a");
+  }
+
+  @Test
+  void partialRecordWithoutHostsClosesNothing() {
+    String a = host("h-a");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay"));
+
+    assertThat(openHosts()).containsExactly("h-a");
+  }
+
+  /** Известное ограничение: пустой список неотличим от отсутствующего поля, поэтому ничего не закрывает. */
+  @Test
+  void emptyHostsListClosesNothingKnownLimitation() {
+    String a = host("h-a");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of()));
+
+    assertThat(openHosts()).containsExactly("h-a");
+  }
+
+  @Test
+  void unknownNewHostStillClosesOldRunsOn() {
+    String a = host("h-a");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of("unknown-" + uid())));
+
+    assertThat(openHosts()).isEmpty();
+  }
+
+  @Test
+  void relationReassertedByAnotherRecordIsNotClosed() {
+    String a = host("h-a");
+    String b = host("h-b");
+    String dep1 = "dep-" + uid();
+    String dep2 = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep1, "1", Map.of("name", "one", "hosts", List.of(a)));
+    upsert("deploymap", "DEPLOYMENT", dep2, "1", Map.of("name", "two", "hosts", List.of(a)));
+
+    upsert("deploymap", "DEPLOYMENT", dep1, "2", Map.of("name", "one", "hosts", List.of(b)));
+
+    assertThat(query("MATCH (d:Deployment {name: 'one'})-[r:RUNS_ON]->(:ComputeInstance {hostname: 'h-a'}) "
+        + "WHERE r.validTo IS NULL RETURN r")).isEmpty();
+    assertThat(query("MATCH (d:Deployment {name: 'two'})-[r:RUNS_ON]->(:ComputeInstance {hostname: 'h-a'}) "
+        + "WHERE r.validTo IS NULL RETURN r")).hasSize(1);
+  }
+
+  @Test
+  void hostReturningInLaterVersionReopensRunsOn() {
+    String a = host("h-a");
+    String b = host("h-b");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of(b)));
+
+    upsert("deploymap", "DEPLOYMENT", dep, "3", Map.of("name", "pay", "hosts", List.of(a)));
+
+    assertThat(openHosts()).containsExactly("h-a");
+    assertThat(query("MATCH (:Deployment)-[r:RUNS_ON]->(:ComputeInstance {hostname: 'h-a'}) RETURN r")).hasSize(1);
   }
 
   @Test

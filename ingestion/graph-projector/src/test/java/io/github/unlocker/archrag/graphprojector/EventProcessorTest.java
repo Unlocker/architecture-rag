@@ -19,7 +19,16 @@ import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.identityresolution.Feature;
+import io.github.unlocker.archrag.identityresolution.FeatureKind;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
+import io.github.unlocker.archrag.identityresolution.SourceConflict;
+import io.github.unlocker.archrag.identityresolution.SourceConflicts;
+
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +53,8 @@ class EventProcessorTest {
   private FakeJournal journal;
   private FakeProjection projection;
   private FakeIdentity identity;
+  private FakeCandidates candidates;
+  private FakeConflicts conflicts;
   private final List<String> snapshots = new ArrayList<>();
   private EventProcessor processor;
 
@@ -51,13 +63,17 @@ class EventProcessorTest {
     journal = new FakeJournal();
     projection = new FakeProjection();
     identity = new FakeIdentity();
+    candidates = new FakeCandidates(projection);
+    conflicts = new FakeConflicts(projection);
     processor =
         new EventProcessor(
             journal,
             Normalizer.standard(key -> true),
             identity,
             projection,
-            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId));
+            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId),
+            candidates,
+            conflicts);
   }
 
   private static CanonicalEvent upsert(String id, String version, Map<String, Object> payload) {
@@ -94,6 +110,200 @@ class EventProcessorTest {
   }
 
   @Test
+  void recordsCandidateFeaturesAfterResolveAndBeforeGraphWrite() {
+    var result = run(upsert("e1", "5", Map.of("name", "Core  Team")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    var key = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    assertThat(identity.map).containsKey(key);
+    assertThat(candidates.recorded).containsExactly(key + "/TEAM/" + new Feature(FeatureKind.NAME, "core team"));
+    assertThat(candidates.graphUntouchedAtRecord).containsExactly(true);
+  }
+
+  @Test
+  void matchingDoesNotChangeGidsPassedToProjection() {
+    run(upsert("e1", "5", Map.of("name", "core")));
+
+    var key = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    assertThat(projection.requests.get(0).gids()).isEqualTo(Map.of(key, identity.map.get(key)));
+    assertThat(identity.map).hasSize(1);
+  }
+
+  @Test
+  void candidateStoreFailureRetriesBeforeGraphIsTouched() {
+    candidates.fail = true;
+
+    var result = run(upsert("e1", "5", Map.of("name", "core")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
+    assertThat(projection.requests).isEmpty();
+    assertThat(journal.checkpoint).isNull();
+  }
+
+  @Test
+  void tombstoneForgetsFeaturesOfKey() {
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(candidates.forgotten).containsExactly(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"));
+  }
+
+  @Test
+  void tombstoneCandidateStoreFailureRetriesBeforeGraphIsTouched() {
+    candidates.fail = true;
+
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void assertsPropertiesBeforeGraphWriteAndPassesMarkersToProjector() {
+    var team = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    var dissent = new SourceKey(SourceSystemCode.CMDB, "TEAM", "t9");
+    identity.map.put(team, UUID.randomUUID());
+    var gid = identity.map.get(team);
+    conflicts.open =
+        List.of(
+            new SourceConflict(
+                gid, "name", dissent, "x", team, "core", SourceConflict.Status.OPEN, T, T, null));
+
+    var result = run(upsert("e1", "5", Map.of("name", "core")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.asserted).containsExactly(team + "/TEAM/{name=core}");
+    assertThat(conflicts.graphUntouchedAtCall).containsExactly(true);
+    assertThat(projection.requests).singleElement().satisfies(r -> {
+      assertThat(r.conflicts().gid()).isEqualTo(gid);
+      assertThat(r.conflicts().byRecord()).containsExactly(Map.entry(dissent, List.of("name")));
+    });
+  }
+
+  @Test
+  void conflictStoreFailureRetriesWithoutTouchingGraphOrCheckpoint() {
+    conflicts.fail = true;
+
+    var result = run(upsert("e1", "5", Map.of("name", "core")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
+    assertThat(projection.requests).isEmpty();
+    assertThat(journal.checkpoint).isNull();
+  }
+
+  @Test
+  void tombstoneRetractsAssertionsOfKnownKey() {
+    var team = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
+    identity.map.put(team, UUID.randomUUID());
+
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.retracted).containsExactly(team);
+    assertThat(conflicts.graphUntouchedAtCall).containsExactly(true);
+    assertThat(projection.requests).singleElement().satisfies(r -> {
+      assertThat(r.conflicts().isNone()).isFalse();
+      assertThat(r.conflicts().gid()).isEqualTo(identity.map.get(team));
+    });
+  }
+
+  @Test
+  void tombstoneOfUnknownKeyDoesNotCallConflictStore() {
+    run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(conflicts.retracted).isEmpty();
+    assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
+  }
+
+  @Test
+  void tombstoneConflictStoreFailureRetriesBeforeGraphIsTouched() {
+    identity.map.put(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"), UUID.randomUUID());
+    conflicts.fail = true;
+
+    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
+    assertThat(projection.requests).isEmpty();
+  }
+
+  private static final class FakeConflicts implements SourceConflicts {
+    final List<String> asserted = new ArrayList<>();
+    final List<SourceKey> retracted = new ArrayList<>();
+    final List<Boolean> graphUntouchedAtCall = new ArrayList<>();
+    List<SourceConflict> open = List.of();
+    private final FakeProjection projection;
+    boolean fail;
+
+    FakeConflicts(FakeProjection projection) {
+      this.projection = projection;
+    }
+
+    @Override
+    public List<SourceConflict> assertProperties(SourceKey key, UUID gid, NodeLabel label, Map<String, String> values) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      graphUntouchedAtCall.add(projection.requests.isEmpty());
+      asserted.add(key + "/" + label.name() + "/" + new TreeMap<>(values));
+      return open;
+    }
+
+    @Override
+    public List<SourceConflict> retract(SourceKey key, UUID gid) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      graphUntouchedAtCall.add(projection.requests.isEmpty());
+      retracted.add(key);
+      return open;
+    }
+
+    @Override
+    public List<SourceConflict> openConflicts(UUID gid) {
+      return open;
+    }
+  }
+
+  private static final class FakeCandidates implements IdentityCandidates {
+    final List<String> recorded = new ArrayList<>();
+    final List<SourceKey> forgotten = new ArrayList<>();
+    final List<Boolean> graphUntouchedAtRecord = new ArrayList<>();
+    private final FakeProjection projection;
+    boolean fail;
+
+    FakeCandidates(FakeProjection projection) {
+      this.projection = projection;
+    }
+
+    @Override
+    public List<IdentityCandidate> record(SourceKey key, NodeLabel label, Set<Feature> features) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      graphUntouchedAtRecord.add(projection.requests.isEmpty());
+      features.forEach(f -> recorded.add(key + "/" + label.name() + "/" + f));
+      return List.of();
+    }
+
+    @Override
+    public void forget(SourceKey key) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      forgotten.add(key);
+    }
+
+    @Override
+    public List<IdentityCandidate> candidatesOf(SourceKey key) {
+      return List.of();
+    }
+  }
+
+  @Test
   void relationOnlyEventIsProjectedNotQuarantined() {
     var from = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-a");
     var to = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-b");
@@ -110,12 +320,15 @@ class EventProcessorTest {
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.isRelationOnly()).isTrue());
+    assertThat(conflicts.asserted).isEmpty();
+    assertThat(conflicts.retracted).isEmpty();
+    assertThat(projection.requests.get(0).conflicts().isNone()).isTrue();
   }
 
   @Test
   void unresolvedReferenceReachesProjectorAsDeferredRelationOnce() {
     var unknown = new EventProcessor(
-        journal, Normalizer.standard(key -> false), identity, projection, (source, run, eventId, count) -> {});
+        journal, Normalizer.standard(key -> false), identity, projection, (source, run, eventId, count) -> {}, candidates, conflicts);
     var event =
         new CanonicalEvent(
             "e-dep", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, "dep/d1", T,
@@ -194,6 +407,24 @@ class EventProcessorTest {
     var result = run(upsert("e3", "5", Map.of("name", "core")));
     assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
     assertThat(result.errorCode()).isEqualTo("GRAPH_REJECTED");
+  }
+
+  @Test
+  void retriedOlderVersionDoesNotOverwriteAssertionsOfNewerOne() {
+    projection.failure = new ServiceUnavailableException("down");
+    var event = upsert("e1", "5", Map.of("name", "core"));
+    assertThat(run(event).status()).isEqualTo(ProcessingStatus.RETRYING);
+    conflicts.asserted.clear();
+    // Пока событие ждало повтора, применилась более новая версия.
+    projection.failure = null;
+    projection.applied = Optional.of(new AppliedRecord(new SourceVersion("6"), true));
+
+    var result = processor.process(event, RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
+    assertThat(conflicts.asserted).isEmpty();
+    assertThat(conflicts.retracted).isEmpty();
+    assertThat(projection.requests).isEmpty();
   }
 
   @Test

@@ -15,7 +15,11 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.graphprojector.GraphProjection.AppliedRecord;
+import io.github.unlocker.archrag.identityresolution.FeatureExtractor;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
+import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.normalizer.UnresolvedReference;
@@ -52,6 +56,14 @@ import org.neo4j.driver.exceptions.SessionExpiredException;
  *   <li>checkpoint ({@value #CONSUMER}, ключ — {@code source}) сохраняется только после коммита Neo4j и
  *       перехода в конечный статус, курсором служит {@code eventId}; при {@code RETRYING}/{@code QUARANTINED}
  *       он не сдвигается;</li>
+ *   <li>matching кандидатов на совпадение ({@link IdentityCandidates}) идёт после {@code resolveGids} и до
+ *       транзакции Neo4j, не читает и не меняет карту {@code gids} и не вызывает
+ *       {@code IdentityMapping.resolve/approve}: узлы не объединяются ни при каком score; tombstone
+ *       убирает признаки ключа ({@code forget}); сбой хранилища — {@code RETRYING}/{@value #CANDIDATE_FAILED};</li>
+ *   <li>конфликты источников ({@link SourceConflicts}) считаются после {@code resolveGids} и до транзакции Neo4j:
+ *       upsert заменяет утверждения свойств записи, tombstone их снимает; открытые конфликты {@code gid}
+ *       передаются проектору как {@link ConflictMarkers}; запись только со связью конфликтов не меняет; сбой
+ *       хранилища — {@code RETRYING}/{@value #CONFLICT_FAILED}. Canonical-значение узла от конфликта не зависит;</li>
  *   <li>ошибки не глушатся: нормализация и отказ графа переводят событие в {@code QUARANTINED}/{@code RETRYING}
  *       с кодом и причиной без значений из источника; неожиданные исключения, а также ошибки журнала
  *       пробрасываются вызывающему (событие остаётся в прежнем статусе, повтор безопасен).</li>
@@ -66,6 +78,8 @@ public final class EventProcessor {
   /** Имя consumer в {@code consumer_checkpoint}. */
   public static final String CONSUMER = "projector";
 
+  static final String CANDIDATE_FAILED = "IDENTITY_CANDIDATE_FAILED";
+  static final String CONFLICT_FAILED = "SOURCE_CONFLICT_FAILED";
   static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
   static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
@@ -84,18 +98,24 @@ public final class EventProcessor {
   private final IdentityMapping identity;
   private final GraphProjection projection;
   private final ReconciliationTrigger reconciliation;
+  private final IdentityCandidates candidates;
+  private final SourceConflicts conflicts;
 
   public EventProcessor(
       EventJournal journal,
       Normalizer normalizer,
       IdentityMapping identity,
       GraphProjection projection,
-      ReconciliationTrigger reconciliation) {
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts) {
     this.journal = Objects.requireNonNull(journal, "journal");
     this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
     this.identity = Objects.requireNonNull(identity, "identity");
     this.projection = Objects.requireNonNull(projection, "projection");
     this.reconciliation = Objects.requireNonNull(reconciliation, "reconciliation");
+    this.candidates = Objects.requireNonNull(candidates, "candidates");
+    this.conflicts = Objects.requireNonNull(conflicts, "conflicts");
   }
 
   /**
@@ -148,8 +168,25 @@ public final class EventProcessor {
     } catch (ProjectionException e) {
       return retry(event, e.code(), e.getMessage());
     }
+    try {
+      recordCandidates(key, commands, gids);
+    } catch (IdentityStoreException e) {
+      // record идемпотентен: повтор безопасен. Значения признаков в причину не попадают.
+      return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
+    }
+    ProcessingResult stale = ignoreIfOlderOnRetry(event, entry, key, false);
+    if (stale != null) {
+      return stale;
+    }
+    ConflictMarkers markers;
+    try {
+      markers = assertProperties(key, commands, gids);
+    } catch (IdentityStoreException e) {
+      // Замена утверждений идемпотентна: повтор безопасен. Значения свойств в причину не попадают.
+      return retry(event, CONFLICT_FAILED, "source conflict store failed");
+    }
     advance(event, ProcessingStatus.RESOLVED);
-    return write(event, entry, key, commands, gids);
+    return write(event, entry, key, commands, gids, markers);
   }
 
   private ProcessingResult delete(CanonicalEvent event, JournalEntry entry) {
@@ -168,8 +205,23 @@ public final class EventProcessor {
     }
     advance(event, ProcessingStatus.VALIDATED);
     advance(event, ProcessingStatus.NORMALIZED);
+    try {
+      candidates.forget(key);
+    } catch (IdentityStoreException e) {
+      return retry(event, CANDIDATE_FAILED, "identity candidate store failed");
+    }
+    ProcessingResult stale = ignoreIfOlderOnRetry(event, entry, key, true);
+    if (stale != null) {
+      return stale;
+    }
+    ConflictMarkers markers;
+    try {
+      markers = retractProperties(key);
+    } catch (IdentityStoreException e) {
+      return retry(event, CONFLICT_FAILED, "source conflict store failed");
+    }
     advance(event, ProcessingStatus.RESOLVED);
-    return write(event, entry, key, List.of(new TombstoneSourceRecord(key, event.time())), Map.of());
+    return write(event, entry, key, List.of(new TombstoneSourceRecord(key, event.time())), Map.of(), markers);
   }
 
   private ProcessingResult snapshotComplete(CanonicalEvent event, JournalEntry entry) {
@@ -207,18 +259,41 @@ public final class EventProcessor {
     };
   }
 
+  /**
+   * Повтор {@code RETRYING}-события мог пережить более новую версию: {@code decideBeforeWrite} его не проверяет
+   * (статус не {@code RECEIVED}), а запись в PostgreSQL затёрла бы свежие утверждения устаревшими. Старая версия
+   * отсекается до записи в PG; равная версия идёт дальше: запись идемпотентна, проектор вернёт {@code NOOP}.
+   */
+  private ProcessingResult ignoreIfOlderOnRetry(
+      CanonicalEvent event, JournalEntry entry, SourceKey key, boolean tombstone) {
+    if (entry.status() == ProcessingStatus.RECEIVED) {
+      return null;
+    }
+    Optional<AppliedRecord> applied = projection.applied(key);
+    if (applied.isEmpty()) {
+      return null;
+    }
+    var incoming = event.data().sourceVersion();
+    VersionDecision decision =
+        tombstone
+            ? VersionDecision.forTombstone(incoming, applied.get().version(), applied.get().active())
+            : VersionDecision.forUpsert(incoming, applied.get().version());
+    return decision == VersionDecision.OLD ? finish(event, ProcessingStatus.IGNORED_OLD_VERSION, null) : null;
+  }
+
   private ProcessingResult write(
       CanonicalEvent event,
       JournalEntry entry,
       SourceKey key,
       List<GraphCommand> commands,
-      Map<SourceKey, UUID> gids) {
+      Map<SourceKey, UUID> gids,
+      ConflictMarkers markers) {
     ProjectionResult result;
     try {
       result =
           projection.project(
               new ProjectionRequest(
-                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands));
+                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands, markers));
     } catch (ProjectionException e) {
       return retry(event, e.code(), e.getMessage());
     } catch (IllegalArgumentException e) {
@@ -239,6 +314,36 @@ public final class EventProcessor {
             ? ProcessingStatus.IGNORED_OLD_VERSION
             : ProcessingStatus.PROJECTED;
     return finish(event, status, result);
+  }
+
+  /**
+   * Передаёт признаки узла самого события в {@link IdentityCandidates}; вне транзакции Neo4j. Карта
+   * {@code gids} только читается: matching не создаёт и не меняет {@code gid}.
+   */
+  private void recordCandidates(SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids) {
+    FeatureExtractor.labelOf(key, commands)
+        .ifPresent(label -> candidates.record(key, label, FeatureExtractor.extract(key, commands, Map.copyOf(gids))));
+  }
+
+  /**
+   * Заменяет утверждения свойств узла самого события и возвращает маркеры открытых конфликтов его {@code gid};
+   * вне транзакции Neo4j. Запись без {@code UpsertNode} утверждений не меняет.
+   */
+  private ConflictMarkers assertProperties(SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids) {
+    for (GraphCommand command : commands) {
+      if (command instanceof UpsertNode upsert) {
+        Map<String, String> values = new LinkedHashMap<>();
+        NodeProperties.of(upsert.data()).forEach((name, value) -> values.put(name, String.valueOf(value)));
+        UUID gid = gids.get(key);
+        return ConflictMarkers.of(gid, conflicts.assertProperties(key, gid, upsert.data().label(), values));
+      }
+    }
+    return ConflictMarkers.none();
+  }
+
+  /** Снимает утверждения удалённой записи; без {@code gid} (запись не приходила) маркеры не меняются. */
+  private ConflictMarkers retractProperties(SourceKey key) {
+    return identity.find(key).map(gid -> ConflictMarkers.of(gid, conflicts.retract(key, gid))).orElseGet(ConflictMarkers::none);
   }
 
   /** {@code gid} всех ключей команд; вызывается до транзакции Neo4j. */
