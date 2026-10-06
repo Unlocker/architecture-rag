@@ -232,8 +232,9 @@ log(f"C: ingestion burst, M={M}")
 run_id = uuid.uuid4().hex[:8]
 prefix = f"EAM-LOAD-{run_id}"
 lines = "".join(f"{prefix}-{i:05d}\n" for i in range(M))
+# Burst идёт без webhook (notify=false): сценарий сопоставим с замером #59, дубли webhook + polling не искажают throughput.
 script = ('while read -r id; do curl -sf -o /dev/null -X POST http://127.0.0.1:8091/control/upsert '
-          '-H "Content-Type: application/json" -d "{\\"type\\":\\"IT_SYSTEM\\",\\"id\\":\\"$id\\",'
+          '-H "Content-Type: application/json" -d "{\\"type\\":\\"IT_SYSTEM\\",\\"id\\":\\"$id\\",\\"notify\\":false,'
           '\\"payload\\":{\\"name\\":\\"load $id\\",\\"ownerTeam\\":\\"TEAM-PAY\\"}}" || exit 1; done')
 t_burst0 = time.time()
 dc("exec", "-T", "stub-eam", "sh", "-c", script, stdin=lines)

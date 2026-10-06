@@ -69,7 +69,10 @@ final class StubControl implements AutoCloseable {
           boolean notify = !Boolean.FALSE.equals(request.get("notify"));
           long version = source.upsert(type, id, payload).sourceVersion();
           status = 200;
-          String webhookField = webhooks != null && notify ? ",\"webhookStatus\":" + notifyAdapter(source, webhooks, type, id) : "";
+          String webhookField = "";
+          if (webhooks != null && notify) {
+            webhookField = ",\"webhookStatus\":" + notifyAdapter(source, webhooks, type, id);
+          }
           body = "{\"sourceVersion\":" + version + webhookField + "}";
         } catch (IllegalArgumentException e) {
           status = 400;
