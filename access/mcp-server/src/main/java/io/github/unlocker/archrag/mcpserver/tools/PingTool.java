@@ -16,8 +16,7 @@ public class PingTool {
               destructiveHint = false,
               idempotentHint = true,
               openWorldHint = false),
-      description =
-          "Проверка доступности сервера: возвращает {\"status\":\"ok\"}")
+      description = "Проверка доступности сервера: возвращает {\"status\":\"ok\"}")
   public String ping() {
     return "{\"status\":\"ok\"}";
   }
