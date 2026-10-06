@@ -27,6 +27,7 @@ public final class LauncherConfig {
   static final String POLL_INTERVAL_SECONDS = "ARCHRAG_POLL_INTERVAL_SECONDS";
   static final String RECONCILE_INTERVAL_SECONDS = "ARCHRAG_RECONCILE_INTERVAL_SECONDS";
   static final String STUB_PORT = "ARCHRAG_STUB_PORT";
+  static final String WEBHOOK_TARGET = "ARCHRAG_WEBHOOK_TARGET";
 
   private LauncherConfig() {}
 
@@ -60,8 +61,20 @@ public final class LauncherConfig {
     }
   }
 
-  /** Настройки заглушки источника: порт, на котором она слушает все интерфейсы контейнера. */
-  public record Stub(SourceSystem system, int port) {}
+  /**
+   * Настройки заглушки источника.
+   *
+   * @param port порт, на котором она слушает все интерфейсы контейнера
+   * @param webhookTarget webhook-endpoint адаптера или {@code null}: тогда заглушка webhook не шлёт
+   * @param webhookSecret секрет подписи; задан тогда и только тогда, когда задан {@code webhookTarget}
+   */
+  public record Stub(SourceSystem system, int port, URI webhookTarget, String webhookSecret) {
+
+    @Override
+    public String toString() {
+      return "Stub[system=" + system + ", port=" + port + ", webhookTarget=" + webhookTarget + ", secret=***]";
+    }
+  }
 
   /** Разбирает источник из аргумента командной строки: {@code EAM}, {@code SCM}, {@code CMDB}, {@code DEPLOY_MAP}. */
   public static SourceSystem parseSystem(String arg) {
@@ -94,7 +107,16 @@ public final class LauncherConfig {
 
   /** Настройки заглушки из env. */
   public static Stub stub(SourceSystem system, Map<String, String> env) {
-    return new Stub(system, port(env, STUB_PORT, 8080));
+    String target = env.get(WEBHOOK_TARGET);
+    if (target == null || target.isBlank()) {
+      return new Stub(system, port(env, STUB_PORT, 8080), null, null);
+    }
+    List<String> missing = new ArrayList<>();
+    String secret = required(env, WEBHOOK_SECRET, missing);
+    if (!missing.isEmpty()) {
+      throw new IllegalArgumentException(WEBHOOK_TARGET + " requires environment variables: " + missing);
+    }
+    return new Stub(system, port(env, STUB_PORT, 8080), URI.create(target.trim()), secret);
   }
 
   private static String required(Map<String, String> env, String name, List<String> missing) {

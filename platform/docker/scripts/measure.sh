@@ -4,9 +4,10 @@
 # стенд с профилем observability: ARCHRAG_OBSERVABILITY=true). На хосте нужны только Docker, bash и python3 (stdlib).
 #
 # Параметры (env): N=20 замеров «источник → граф», M=200 событий burst, K=100 вызовов каждого tool,
-# P=4 параллельных потока, E2E_JITTER_MAX=<интервал polling> задержка перед upsert (равномерная выборка фазы polling).
+# P=4 параллельных потока, E2E_PATH=webhook|poll|both (по умолчанию both) путь «источник → граф», E2E_JITTER_MAX=
+# <интервал polling> задержка перед upsert в режиме poll (равномерная выборка фазы polling).
 # Сырые данные: platform/docker/measurements/<UTC-штамп>/ (в .gitignore); итоговая markdown-таблица: stdout.
-# Код возврата 1, если p95 «источник → граф» > 30 с, вырос DLQ/QUARANTINED или любой tool вернул ошибку.
+# Код возврата 1, если p95 «источник → граф» по webhook > 30 с или по polling > интервал polling + 5 с, вырос DLQ/QUARANTINED или любой tool вернул ошибку.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -20,7 +21,9 @@ log "raw data: $out"
 
 export M_OUT="$out" M_CA="$tmp/ca.crt" M_BASE="https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}"
 export M_POLL="${poll:-30}" M_N="${N:-20}" M_M="${M:-200}" M_K="${K:-100}" M_P="${P:-4}"
-export M_JITTER="${E2E_JITTER_MAX:-${poll:-30}}" M_DOCKER_DIR="$DOCKER_DIR"
+e2e_path="${E2E_PATH:-both}"
+case "$e2e_path" in webhook|poll|both) ;; *) die "E2E_PATH must be webhook, poll or both" ;; esac
+export M_E2E_PATH="$e2e_path" M_JITTER="${E2E_JITTER_MAX:-${poll:-30}}" M_DOCKER_DIR="$DOCKER_DIR"
 export M_PG_USER="$POSTGRES_USER" M_PG_DB="$POSTGRES_DB" M_SECRET="$KEYCLOAK_CLIENT_SECRET"
 
 python3 - <<'PY'
@@ -31,7 +34,9 @@ E = os.environ
 OUT, BASE = E["M_OUT"], E["M_BASE"]
 N, M, K, P = int(E["M_N"]), int(E["M_M"]), int(E["M_K"]), int(E["M_P"])
 POLL, JITTER = int(E["M_POLL"]), float(E["M_JITTER"])
-E2E_LIMIT_S = 30.0
+E2E_PATHS = ["webhook", "poll"] if E["M_E2E_PATH"] == "both" else [E["M_E2E_PATH"]]
+# Гейт критерия 2 — webhook, 30 с; polling — страховка: интервал + 5 с.
+E2E_LIMITS = {"webhook": 30.0, "poll": POLL + 5.0}
 CTX = ssl.create_default_context(cafile=E["M_CA"])
 # Демо-CA выпущен без keyUsage; строгий режим X.509 (Python 3.13+) такой CA отвергает. Цепочка и имя хоста по-прежнему проверяются.
 CTX.verify_flags &= ~ssl.VERIFY_X509_STRICT
@@ -146,6 +151,7 @@ FIXTURES = {
     "get_asset": {"gid": GID},
     "find_runtime_footprint": {"systemGid": GID},
     "trace_dependencies": {"gid": GID},
+    "explain_provenance": {"gid": GID},
 }
 raw["fixtures"] = {"systemGid": GID, "sourceId": SEED_SOURCE_ID}
 dlq0 = prom_scalar("sum(archrag_ingestion_dlq_open)")
@@ -175,39 +181,51 @@ for name in tools:
 raw["tools"] = tool_rows
 
 # --- B. источник → граф --------------------------------------------------------------------------------------
-log(f"B: source -> graph latency, N={N}, jitter up to {JITTER:.0f}s")
+log(f"B: source -> graph latency, N={N}, paths={E2E_PATHS}, poll jitter up to {JITTER:.0f}s")
 
 
-def upsert(src_type, sid, name, stub="stub-eam"):
-    body = json.dumps({"type": src_type, "id": sid, "payload": {"name": name, "ownerTeam": "TEAM-PAY"}})
+def upsert(src_type, sid, name, notify, stub="stub-eam"):
+    body = json.dumps({"type": src_type, "id": sid, "notify": notify,
+                       "payload": {"name": name, "ownerTeam": "TEAM-PAY"}})
     out = dc("exec", "-T", stub, "curl", "-sf", "-X", "POST", "http://127.0.0.1:8091/control/upsert",
              "-H", "Content-Type: application/json", "--data-binary", "@-", stdin=body)
-    return int(re.search(r'"sourceVersion":(\d+)', out).group(1))
+    version = int(re.search(r'"sourceVersion":(\d+)', out).group(1))
+    wh = re.search(r'"webhookStatus":(\d+)', out)
+    return version, int(wh.group(1)) if wh else None
 
 
-e2e = []
-for i in range(N):
-    time.sleep(random.uniform(0, JITTER))
-    name = f"measure-{uuid.uuid4().hex[:8]}"
-    version = upsert("IT_SYSTEM", SEED_SOURCE_ID, name)
-    t0 = time.perf_counter()
-    deadline = t0 + 300
-    while True:
-        ms_, err, asset = call("get_asset", {"gid": GID, "includeRelations": False})
-        if err is None and asset and asset["properties"].get("name") == name:
-            break
-        if time.perf_counter() > deadline:
-            fail(f"change {name} (v{version}) did not reach the graph in 300 s")
-            t0 = None
-            break
-        time.sleep(0.25)
-    if t0 is not None:
-        e2e.append(time.perf_counter() - t0)
-        log(f"  {i + 1}/{N}: {e2e[-1]:.1f} s")
-e2e_s = stats(e2e)
-raw["e2e_seconds"] = e2e
-if e2e and e2e_s["p95"] > E2E_LIMIT_S:
-    fail(f"p95 source -> graph {e2e_s['p95']:.1f} s > {E2E_LIMIT_S:.0f} s")
+e2e_by_path, e2e_stats = {}, {}
+for path in E2E_PATHS:
+    notify = path == "webhook"
+    times = []
+    for i in range(N):
+        if not notify:
+            time.sleep(random.uniform(0, JITTER))  # равномерная выборка фазы polling; webhook идёт без задержки
+        name = f"measure-{path}-{uuid.uuid4().hex[:8]}"
+        version, wh = upsert("IT_SYSTEM", SEED_SOURCE_ID, name, notify)
+        if notify and not (wh and 200 <= wh < 300):
+            fail(f"webhook was not accepted by the adapter (webhookStatus={wh}) for {name}")
+        t0 = time.perf_counter()
+        deadline = t0 + 300
+        while True:
+            ms_, err, asset = call("get_asset", {"gid": GID, "includeRelations": False})
+            if err is None and asset and asset["properties"].get("name") == name:
+                break
+            if time.perf_counter() > deadline:
+                fail(f"{path}: change {name} (v{version}) did not reach the graph in 300 s")
+                t0 = None
+                break
+            time.sleep(0.25)
+        if t0 is not None:
+            times.append(time.perf_counter() - t0)
+            log(f"  {path} {i + 1}/{N}: {times[-1]:.1f} s")
+    e2e_by_path[path] = times
+    e2e_stats[path] = stats(times)
+    if times and e2e_stats[path]["p95"] > E2E_LIMITS[path]:
+        fail(f"{path}: p95 source -> graph {e2e_stats[path]['p95']:.1f} s > {E2E_LIMITS[path]:.0f} s")
+    if not times:
+        fail(f"{path}: no change reached the graph")
+raw["e2e_seconds"] = e2e_by_path
 
 # --- C. throughput ingestion ---------------------------------------------------------------------------------
 log(f"C: ingestion burst, M={M}")
@@ -297,15 +315,18 @@ print("|---|---|---|---|---|---|---|---|")
 for name in tools:
     r = tool_rows[name]
     if r is None:
-        print(f"| `{name}` | — | — | — | — | — | — | фикстура не определена (заполнить после вливания F4) |")
+        print(f"| `{name}` | — | — | — | — | — | — | фикстура не определена |")
         continue
     pp = prom_p95.get(name)
     print(f"| `{name}` | {fmt(r['seq']['p50'])} | {fmt(r['seq']['p95'])} | {fmt(r['seq']['max'])} | {fmt(r['par']['p95'])} "
           f"| {r['rps_par']:.1f} | {fmt(pp) if pp is not None else '—'} | {r['errors']} из {r['calls']} |")
 print("\n### Источник → граф (изменение в заглушке EAM → новое значение в `get_asset`)\n")
-print("| замеров | p50 | p95 | max | порог p95 | результат |\n|---|---|---|---|---|---|")
-verdict = "OK" if e2e and e2e_s["p95"] <= E2E_LIMIT_S else "FAIL"
-print(f"| {e2e_s['n']} | {e2e_s['p50']:.1f} с | {e2e_s['p95']:.1f} с | {e2e_s['max']:.1f} с | {E2E_LIMIT_S:.0f} с | {verdict} |")
+print("| путь | замеров | p50 | p95 | max | порог p95 | результат |\n|---|---|---|---|---|---|---|")
+for path in E2E_PATHS:
+    st, lim = e2e_stats[path], E2E_LIMITS[path]
+    verdict = "OK" if e2e_by_path[path] and st["p95"] <= lim else "FAIL"
+    label = "webhook" if path == "webhook" else f"polling (интервал {POLL} с)"
+    print(f"| {label} | {st['n']} | {st['p50']:.1f} с | {st['p95']:.1f} с | {st['max']:.1f} с | {lim:.0f} с | {verdict} |")
 print("\n### Ingestion\n")
 print("| показатель | значение |\n|---|---|")
 print(f"| burst | {burst['projected']} из {M} событий PROJECTED |")
