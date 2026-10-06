@@ -134,7 +134,25 @@ scripts/backup-restore-check.sh  # сквозной сценарий backup -> �
   `neo4j:5-community`, поэтому при смене минорной версии restore старой копии откажется работать.
 - Не делается: online/инкрементальный backup, PITR PostgreSQL, расписание, ротация.
 
+## Замеры
+
+```bash
+scripts/measure.sh | tee measure.md    # нужен стенд с профилем observability (ARCHRAG_OBSERVABILITY=true)
+```
+
+`measure.sh` снимает критерий 9: p95 каждого MCP tool (клиентский и из Prometheus), задержку «источник → граф»
+(`N=20` upsert в `stub-eam` и опрос `get_asset`, порог p95 ≤ 30 с), throughput ingestion (burst `M=200`), sync lag,
+долю ошибок и рост DLQ, поведение `trace_dependencies` при глубине 1…6 и за потолком. Параметры `N`, `M`, `K` (вызовов
+каждого tool, 100), `P` (потоков, 4) задаются через env. Нужны Docker, bash и python3; Prometheus читается через
+`docker compose exec`, порты не открываются. Код возврата 1: p95 больше 30 с, вырос DLQ/`QUARANTINED` или tool вернул
+ошибку. Сырые данные пишутся в `measurements/<штамп>/` (в `.gitignore`), таблица — в stdout.
+
+Результаты и методика — в [`docs/04-poc-measurements.md`](../../docs/04-poc-measurements.md), отличия от production —
+в [`docs/05-production-gap-list.md`](../../docs/05-production-gap-list.md).
+
 ## Допущения демо и gap list
+
+Полный список отличий от production — в [`docs/05-production-gap-list.md`](../../docs/05-production-gap-list.md).
 
 - `bolt+ssc` не проверяет цепочку сертификата: для production нужен доверенный CA и `bolt+s`. Демо-CA и сертификаты живут, пока жив volume `certs`.
 - Сертификаты выпускаются на 825 дней и сами не перевыпускаются: после истечения выполните `docker compose down -v` (или удалите volumes `certs` и `ca-key`).
