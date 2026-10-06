@@ -1,0 +1,26 @@
+{
+  "options": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "type": "select"
+    },
+    {
+      "name": "description",
+      "type": "text"
+    },
+    {
+      "name": "criticality",
+      "type": "select"
+    },
+    {
+      "name": "solution",
+      "type": "reference",
+      "target": "itproducts",
+      "multiple": true
+    }
+  ]
+}

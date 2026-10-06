@@ -1,0 +1,17 @@
+[
+  {
+    "id": 5103,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Settlement Hub",
+      "eam_id": "EAM-3003",
+      "status": "ACTIVE",
+      "criticality": "HIGH",
+      "description": "",
+      "solution": [
+        7299
+      ]
+    }
+  }
+]

@@ -11,6 +11,8 @@ import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.scmadapter.ScmAdapter;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
+import io.github.unlocker.archrag.sourcestubs.EamApiSeed;
+import io.github.unlocker.archrag.sourcestubs.EamApiStub;
 import io.github.unlocker.archrag.sourcestubs.StubSourceServer;
 import io.github.unlocker.archrag.sourcestubs.StubSources;
 import java.io.IOException;
@@ -24,6 +26,9 @@ import org.postgresql.ds.PGSimpleDataSource;
  * {@code DemoLauncher adapter <EAM|SCM|CMDB|DEPLOY_MAP>} или {@code DemoLauncher stub <...>}. Конфигурация только из
  * env ({@link LauncherConfig}); при неверных аргументах или пустых обязательных переменных процесс завершается с
  * кодом 2 и сообщением без значений секретов.
+ *
+ * <p>{@code DemoLauncher eam-api-stub}: заглушка EAM в формате реального API ({@link EamApiStub}) на
+ * {@code ARCHRAG_STUB_PORT}; токен из {@code ARCHRAG_EAM_API_TOKEN}. Работает рядом со старой заглушкой {@code stub EAM}.
  *
  * <p>Заглушка: источник на {@code ARCHRAG_STUB_PORT} и управляющий {@code POST /control/upsert} на порту
  * {@value #STUB_CONTROL_PORT} (только в режиме stub).
@@ -43,8 +48,17 @@ public final class DemoLauncher {
   private DemoLauncher() {}
 
   public static void main(String[] args) throws Exception {
+    if (args.length == 1 && args[0].equals("eam-api-stub")) {
+      try {
+        runEamApiStub(LauncherConfig.eamApiStub(System.getenv()));
+      } catch (IllegalArgumentException e) {
+        System.err.println("configuration error: " + e.getMessage());
+        System.exit(2);
+      }
+      return;
+    }
     if (args.length != 2 || !(args[0].equals("adapter") || args[0].equals("stub"))) {
-      System.err.println("usage: DemoLauncher <adapter|stub> <EAM|SCM|CMDB|DEPLOY_MAP>");
+      System.err.println("usage: DemoLauncher <adapter|stub> <EAM|SCM|CMDB|DEPLOY_MAP> | DemoLauncher eam-api-stub");
       System.exit(2);
     }
     try {
@@ -66,6 +80,14 @@ public final class DemoLauncher {
         var control = new StubControl(source, new InetSocketAddress(STUB_CONTROL_PORT))) {
       LOG.log(System.Logger.Level.INFO, "stub " + config.system() + " listens on " + server.port()
           + ", control on " + control.port());
+      awaitShutdown();
+    }
+  }
+
+  private static void runEamApiStub(LauncherConfig.EamApiStub config) throws InterruptedException {
+    try (var server = new EamApiStub(EamApiSeed.seeded(Clock.systemUTC()), config.token(),
+        new InetSocketAddress(config.port()))) {
+      LOG.log(System.Logger.Level.INFO, "EAM API stub listens on " + server.port());
       awaitShutdown();
     }
   }

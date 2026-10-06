@@ -332,6 +332,22 @@ services:
     networks: [edge]
     healthcheck: *stub-health
 
+  # Заглушка EAM в формате реального API (docs/eam-api.yaml): рядом со старой stub-eam, которую по-прежнему читает
+  # adapter-eam. К новой заглушке адаптер не подключён (переделка адаптера — отдельная задача). Порт на хост не
+  # публикуется: curl изнутри, см. README. Токен Authorization: Token приходит как Docker secret.
+  eam-api-stub:
+    <<: *demo-launcher
+    command: ["eam-api-stub"]
+    networks: [edge]
+    secrets:
+      - { source: eam_api_token, target: ARCHRAG_EAM_API_TOKEN }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -H \"Authorization: Token $$(cat /run/secrets/ARCHRAG_EAM_API_TOKEN)\" 'http://127.0.0.1:8080/api/platforms/?page_size=1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
   # ---- единственная публикуемая точка ---------------------------------------------------------
   reverse-proxy:
     image: nginx:1.27-alpine
@@ -444,6 +460,8 @@ secrets:
     environment: WEBHOOK_SECRET
   grafana_admin_password:
     environment: GRAFANA_ADMIN_PASSWORD
+  eam_api_token:
+    environment: EAM_API_TOKEN
 
 volumes:
   certs:

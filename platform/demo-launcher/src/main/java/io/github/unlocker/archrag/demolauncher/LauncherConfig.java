@@ -27,6 +27,7 @@ public final class LauncherConfig {
   static final String POLL_INTERVAL_SECONDS = "ARCHRAG_POLL_INTERVAL_SECONDS";
   static final String RECONCILE_INTERVAL_SECONDS = "ARCHRAG_RECONCILE_INTERVAL_SECONDS";
   static final String STUB_PORT = "ARCHRAG_STUB_PORT";
+  static final String EAM_API_TOKEN = "ARCHRAG_EAM_API_TOKEN";
 
   private LauncherConfig() {}
 
@@ -63,6 +64,15 @@ public final class LauncherConfig {
   /** Настройки заглушки источника: порт, на котором она слушает все интерфейсы контейнера. */
   public record Stub(SourceSystem system, int port) {}
 
+  /** Настройки заглушки EAM в формате реального API: порт и токен для {@code Authorization: Token ...}. */
+  public record EamApiStub(int port, String token) {
+
+    @Override
+    public String toString() {
+      return "EamApiStub[port=" + port + ", token=***]";
+    }
+  }
+
   /** Разбирает источник из аргумента командной строки: {@code EAM}, {@code SCM}, {@code CMDB}, {@code DEPLOY_MAP}. */
   public static SourceSystem parseSystem(String arg) {
     try {
@@ -95,6 +105,16 @@ public final class LauncherConfig {
   /** Настройки заглушки из env. */
   public static Stub stub(SourceSystem system, Map<String, String> env) {
     return new Stub(system, port(env, STUB_PORT, 8080));
+  }
+
+  /** Настройки заглушки EAM API из env; токен обязателен. */
+  public static EamApiStub eamApiStub(Map<String, String> env) {
+    List<String> missing = new ArrayList<>();
+    String token = required(env, EAM_API_TOKEN, missing);
+    if (!missing.isEmpty()) {
+      throw new IllegalArgumentException("required environment variables are not set: " + missing);
+    }
+    return new EamApiStub(port(env, STUB_PORT, 8080), token);
   }
 
   private static String required(Map<String, String> env, String name, List<String> missing) {

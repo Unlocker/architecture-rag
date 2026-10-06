@@ -91,4 +91,15 @@ class LauncherConfigTest {
     assertThat(LauncherConfig.stub(SourceSystem.CMDB, Map.of()).port()).isEqualTo(8080);
     assertThat(LauncherConfig.stub(SourceSystem.CMDB, Map.of("ARCHRAG_STUB_PORT", "8181")).port()).isEqualTo(8181);
   }
+
+  @Test
+  void eamApiStubRequiresTokenAndHidesItInToString() {
+    assertThatThrownBy(() -> LauncherConfig.eamApiStub(Map.of()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("ARCHRAG_EAM_API_TOKEN");
+    var c = LauncherConfig.eamApiStub(Map.of("ARCHRAG_EAM_API_TOKEN", "tok-secret", "ARCHRAG_STUB_PORT", "9100"));
+    assertThat(c.port()).isEqualTo(9100);
+    assertThat(c.token()).isEqualTo("tok-secret");
+    assertThat(c.toString()).doesNotContain("tok-secret");
+  }
 }
