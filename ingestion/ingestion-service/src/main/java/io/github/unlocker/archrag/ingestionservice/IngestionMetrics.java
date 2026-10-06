@@ -36,6 +36,9 @@ public class IngestionMetrics {
   static final String DLQ_OPEN = "archrag.ingestion.dlq.open";
 
   private static final String SOURCE_PREFIX = "urn:corp:";
+  static final String UNKNOWN_SOURCE = "unknown";
+  private static final Set<String> KNOWN_SOURCES =
+      Arrays.stream(SourceSystem.values()).map(SourceSystem::code).collect(Collectors.toUnmodifiableSet());
 
   private static final Logger LOG = LoggerFactory.getLogger(IngestionMetrics.class);
 
@@ -84,11 +87,11 @@ public class IngestionMetrics {
     try {
       Map<String, Double> lags = zeroes();
       jdbc.query(LAG_SQL, rs -> {
-        lags.put(sourceTag(rs.getString("source")), Math.max(0d, rs.getDouble("lag")));
+        lags.merge(sourceTag(rs.getString("source")), Math.max(0d, rs.getDouble("lag")), Math::max);
       });
       Map<String, Double> open = zeroes();
       jdbc.query(DLQ_SQL, rs -> {
-        open.put(sourceTag(rs.getString("source")), (double) rs.getLong("open"));
+        open.merge(sourceTag(rs.getString("source")), (double) rs.getLong("open"), Double::sum);
       });
       register(lag, lags);
       register(dlqOpen, open);
@@ -99,12 +102,15 @@ public class IngestionMetrics {
 
   /** {@code urn:corp:eam} (значение {@code source} в журнале) → {@code eam}: тег совпадает с {@link SourceSystem#code()}. */
   static String sourceTag(String source) {
-    return source.startsWith(SOURCE_PREFIX) ? source.substring(SOURCE_PREFIX.length()) : source;
+    String code = source.startsWith(SOURCE_PREFIX) ? source.substring(SOURCE_PREFIX.length()) : source;
+    // Значения вне SourceSystem не плодят серии: кардинальность ограничена перечислением.
+    return KNOWN_SOURCES.contains(code) ? code : UNKNOWN_SOURCE;
   }
 
   private static Map<String, Double> zeroes() {
     Map<String, Double> m = new HashMap<>();
-    Arrays.stream(SourceSystem.values()).forEach(s -> m.put(s.code(), 0d));
+    KNOWN_SOURCES.forEach(code -> m.put(code, 0d));
+    m.put(UNKNOWN_SOURCE, 0d);
     return m;
   }
 

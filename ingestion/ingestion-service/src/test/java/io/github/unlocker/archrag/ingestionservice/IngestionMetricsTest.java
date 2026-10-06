@@ -35,6 +35,13 @@ class IngestionMetricsTest {
   }
 
   @Test
+  void unknownSourceIsMappedToUnknownTag() {
+    metrics.recordEvent("urn:corp:random-" + System.nanoTime(), ProcessingStatus.PROJECTED);
+
+    assertThat(count("unknown", "PROJECTED")).isEqualTo(1);
+  }
+
+  @Test
   void nullStatusIsCountedAsError() {
     metrics.recordEvent("scm", null);
 
