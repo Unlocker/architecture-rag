@@ -33,24 +33,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.neo4j.driver.Driver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -58,7 +47,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
 
 /**
  * Админский эндпоинт ingestion-сервиса на реальных Neo4j, PostgreSQL и S3: rebuild на чистой БД даёт эквивалентный
@@ -66,10 +54,13 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
  */
 @Testcontainers
 @SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(AdminEndpointIT.TestJwt.class)
 class AdminEndpointIT {
 
-  private static final SecretKey KEY = new SecretKeySpec("0123456789abcdef0123456789abcdef".getBytes(), "HmacSHA256");
+  /** Admin-ресурс: issuer и audience токенов. */
+  private static final String ADMIN_RESOURCE = McpTestJwt.RESOURCE;
+
+  /** Подписанные тестовым ключом токены; публичный ключ отдаёт локальный JWKS, декодер собирает Spring Boot. */
+  private static final McpTestJwt JWT = new McpTestJwt();
 
   @Container
   static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
@@ -79,15 +70,6 @@ class AdminEndpointIT {
 
   @Container
   static final GenericContainer<?> S3 = ContainersSmokeIT.s3Container();
-
-  /** Подписанные тестовым ключом токены вместо внешнего IdP. */
-  @TestConfiguration
-  static class TestJwt {
-    @Bean
-    JwtDecoder jwtDecoder() {
-      return NimbusJwtDecoder.withSecretKey(KEY).macAlgorithm(MacAlgorithm.HS256).build();
-    }
-  }
 
   /** Порт, на котором тест поднимает control-контекст adapter-а eam (адрес нужен до старта приложения). */
   private static final int EAM_CONTROL_PORT = freePort();
@@ -112,8 +94,10 @@ class AdminEndpointIT {
     r.add("archrag.s3.access-key", () -> ContainersSmokeIT.S3_ACCESS_KEY);
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
     r.add("archrag.s3.bucket", () -> "admin-it-bucket");
-    // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
-    r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
+    // Декодер токенов собирает Spring Boot из этих свойств, как в проде: проверяются подпись, issuer и audience.
+    r.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", JWT::jwkSetUri);
+    r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> ADMIN_RESOURCE);
+    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> ADMIN_RESOURCE);
     // Обработкой журнала в этом тесте управляет он сам.
     r.add("archrag.dispatcher.enabled", () -> "false");
     r.add("archrag.adapters.eam.control-url", () -> "http://127.0.0.1:" + EAM_CONTROL_PORT + "/control/snapshot");
@@ -136,6 +120,11 @@ class AdminEndpointIT {
   /** Все четыре источника через настоящие адаптеры в журнал и S3, затем обработка в порядке приёма. */
   @BeforeAll
   static void noop() {}
+
+  @AfterAll
+  static void stopJwks() {
+    JWT.close();
+  }
 
   private synchronized void seed() throws Exception {
     if (seeded) {
@@ -197,12 +186,11 @@ class AdminEndpointIT {
   // ---- helpers -----------------------------------------------------------------------------
 
   private String token(String scope) {
-    var encoder = new NimbusJwtEncoder(new ImmutableSecret<>(KEY));
-    var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(600));
-    if (scope != null) {
-      claims.claim("scope", scope);
-    }
-    return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
+    return tokenFor(ADMIN_RESOURCE, scope);
+  }
+
+  private String tokenFor(String audience, String scope) {
+    return scope == null ? JWT.tokenFor("operator-1", audience) : JWT.tokenFor("operator-1", audience, scope);
   }
 
   private HttpResponse<String> post(String path, String token, String body) throws Exception {
@@ -374,6 +362,14 @@ class AdminEndpointIT {
         .isGreaterThanOrEqualTo(4);
     // Повтор того же crosswalk идемпотентен.
     assertThat(admin("/admin/crosswalks", body).body()).contains("\"index\":0,\"status\":\"APPLIED\"");
+  }
+
+  @Test
+  void tokenForForeignAudienceIsUnauthorized() throws Exception {
+    String foreign = tokenFor("https://other.test/api", "architecture.admin");
+
+    assertThat(post("/admin/rebuild?confirm=true", foreign, null).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/replay", foreign, "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(401);
   }
 
   @Test

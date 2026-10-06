@@ -41,6 +41,12 @@ public class GetAssetTool {
    */
   @McpTool(
       name = "get_asset",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
       description =
           "Карточка архитектурного актива по gid: свойства, firstSeenAt/lastSeenAt/isCurrent, записи"
               + " источников и действующие связи 1 уровня (gid соседей можно передавать в следующие"

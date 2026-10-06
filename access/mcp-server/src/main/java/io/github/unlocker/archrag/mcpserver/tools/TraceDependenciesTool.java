@@ -81,6 +81,12 @@ public class TraceDependenciesTool {
    */
   @McpTool(
       name = "trace_dependencies",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
       description =
           "Трассировка зависимостей актива по gid. mode=trace (по умолчанию): upstream идёт против направления связей,"
               + " downstream по направлению; связи из allowlist (DEPENDS_ON, DECOMPOSED_INTO, HAS_DEPLOYMENT, RUNS_ON,"

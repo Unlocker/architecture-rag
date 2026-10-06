@@ -108,7 +108,7 @@ flowchart LR
 
 ### 2.4. Tools
 
-Состав совпадает с выводом `tools/list` запущенного сервера (6 tools: `explain_provenance`, `find_runtime_footprint`, `get_asset`, `ping`, `search_assets`, `trace_dependencies`). Полный вывод `tools/list` приложен комментарием к PR. В `annotations` каждого tool сервер отдаёт значения по умолчанию (`readOnlyHint=false`, `destructiveHint=true`): подсказки клиенту не отражают read-only, защита реализуется приложением (раздел 8, п. 6).
+Состав совпадает с выводом `tools/list` запущенного сервера (6 tools: `explain_provenance`, `find_runtime_footprint`, `get_asset`, `ping`, `search_assets`, `trace_dependencies`). Полный вывод `tools/list` приложен комментарием к PR. В `annotations` каждого tool сервер отдаёт `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true`, `openWorldHint=false` (тест `McpSecurityTest.toolsListMarksAllToolsReadOnly`); сами подсказки защитой не служат, read-only обеспечивает приложение (`executeRead`).
 
 Запрос в примерах — тело `POST /mcp` с `Authorization: Bearer <JWT со scope architecture.read>`; ответ показан по `result.content[0].text`, с сокращениями (`…`).
 
@@ -372,7 +372,7 @@ flowchart LR
 Код: `ingestion/ingestion-service` (`AdminController`, `SecurityConfiguration`, `AdminOperations`, `AdminAudit`, `AdminLock`). Порт `server.port = ${ARCHRAG_ADMIN_PORT:8081}`. ADR [0013](adr/0013-operator-ops-via-admin-endpoint.md).
 
 - **Доступность:** только внутренняя сеть, в MCP и во внешний ingress не входит.
-- **Аутентификация:** OAuth2 resource server, JWT (`issuer-uri` = `ARCHRAG_OIDC_ISSUER_URI`). Все `/admin/**` требуют scope `architecture.admin`, остальные пути `denyAll`. Без токена или с невалидным — `401`, без scope (в том числе токен только с `architecture.read`) — `403`. **Audience токена не проверяется** (раздел 8, п. 7). Актор в аудите — `sub` токена.
+- **Аутентификация:** OAuth2 resource server, JWT (`issuer-uri` = `ARCHRAG_OIDC_ISSUER_URI`, `audiences` = `ARCHRAG_ADMIN_RESOURCE_URI`). Все `/admin/**` требуют scope `architecture.admin`, остальные пути `denyAll`. Без токена или с невалидным — `401`, без scope (в том числе токен только с `architecture.read`) — `403`. Audience токена проверяется (`aud` должен содержать `ARCHRAG_ADMIN_RESOURCE_URI`), токен для другого ресурса — `401`. Актор в аудите — `sub` токена.
 - **Выполнение:** все операции синхронные, `POST`, тело JSON. Выполняются под PostgreSQL advisory lock (`AdminLock`, без ожидания): одновременно идёт одна админская операция, а `JournalDispatcher` уступает ей. Занято — `409 {"error":"another admin operation is in progress"}`.
 - **Ошибки:** `400 {"error":"…"}` (сообщения без значений запроса), `409` (замок), `502 {"error":"adapter is unavailable"}` (адаптер недоступен); прочие сбои — `500` от Spring.
 
@@ -511,7 +511,7 @@ public interface CanonicalMapper {
 
 - **MCP:** OIDC resource server; проверяются подпись, issuer и audience; scope `architecture.read` на `tools/call`; Neo4j — отдельная read-only учётка (`archrag.neo4j.reader.*`), которой нет в writer-конфигурации ingestion (`access/*` не получает writer-учётных данных; Community Edition не поддерживает RBAC, read-only обеспечивает приложение, ADR [0004](adr/0004-neo4j-community-constraints.md), [0005](adr/0005-readonly-mcp-by-application.md)).
 - **Webhook:** JWT нет; подлинность — HMAC-SHA256 по `timestamp + "." + body`, replay window 5 минут, постоянное время сравнения; причина отказа наружу не раскрывается.
-- **Admin REST:** OIDC resource server, scope `architecture.admin`; audience не проверяется.
+- **Admin REST:** OIDC resource server, scope `architecture.admin`; проверяются подпись, issuer, срок и audience (`ARCHRAG_ADMIN_RESOURCE_URI`, обязательна: без неё сервис не стартует).
 - **Не защищено на уровне приложения:** `POST /control/snapshot` адаптера и источники заглушек (`/changes`, `/objects`). Их защита — сетевая граница (не публиковать).
 
 | Интерфейс | Аутентификация | Scope | Опубликован через proxy | Порт и путь в compose |
@@ -520,7 +520,7 @@ public interface CanonicalMapper {
 | `/.well-known/oauth-protected-resource`, `/actuator/health/**` | нет | не применяется | — (E5, не в `develop`) | — (E5); тот же порт приложения |
 | Webhook адаптеров | HMAC-SHA256 + timestamp | не применяется (подпись и timestamp) | — (E5, не в `develop`) | — (E5); приложение: `POST /webhook`, порт задаёт запускающий код |
 | `POST /control/snapshot` | нет | не применяется | должен остаться внутренним | — (E5); приложение: порт `/webhook` |
-| Admin REST | JWT (issuer) | `architecture.admin` | нет (только внутренняя сеть) | — (E5); приложение: порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081), `/admin/*` |
+| Admin REST | JWT (issuer, audience) | `architecture.admin` | нет (только внутренняя сеть) | — (E5); приложение: порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081), `/admin/*` |
 
 Реальная топология compose описывается после вливания E5 (см. [раздел 8](#8-расхождения-с-видением)).
 
@@ -602,19 +602,17 @@ sequenceDiagram
 
 | № | Тема | В видении | В коде | Причина / ADR |
 |---|---|---|---|---|
-| 1 | Режим MCP-транспорта | ADR [0017](adr/0017-mcp-streamable-http.md): `spring.ai.mcp.server.protocol=STREAMABLE` | `protocol=STATELESS` (Streamable HTTP без сессий; все ответы `application/json`) | Нужен stateless scale-out без sessions (ADR 0017: «без sessions»). Формулировку ADR следует уточнить: [вопрос архитектору](#вопросы-к-архитектору), в видении правок не делаем |
+| 1 | Режим MCP-транспорта | ADR [0017](adr/0017-mcp-streamable-http.md) уточнён: `protocol=STATELESS` | `protocol=STATELESS` (Streamable HTTP без сессий; все ответы `application/json`) | Для read-only tools сессия не нужна, нужен stateless scale-out. Расхождение закрыто уточнением ADR 0017 (UNLOCKER-224) |
 | 2 | Состав tools | `compare_environments`, `find_stale_assets`, `search_architecture_context`, `get_sync_status` в «Tools первого релиза» | Их нет; есть служебный `ping` (не в видении) | ADR [0022](adr/0022-out-of-poc-scope.md): вне PoC; `ping` — interop-проверка каркаса (E4) |
 | 3 | `find_runtime_footprint` | возвращает «Deployments, VM, clusters, namespaces» | Deployments, VM/ComputeInstance и физические серверы; кластеров и namespaces нет | ADR [0011](adr/0011-namespace-cluster-modeled-not-populated.md): `Namespace` и `KubernetesCluster` моделируются, но не наполняются |
 | 4 | Имена в SPI | `fetchChanges(cursor, limit)` → `SourcePage`, `SourceSnapshot`, `SourceCursor`; `map(SourceEnvelope)` | `fetchChanges(cursor, limit)` → `ChangePage`; snapshot — это `fetchChanges` с `cursor == null` и `snapshotComplete`; курсор — строка; `CanonicalMapper.map(Input, CommandSink)` | В документе используются фактические имена из `contracts/source-spi` и `normalizer` |
 | 5 | Admin: reconcile | операция в списке admin-эндпоинта | `POST /admin/reconcile/{source}` не сверяет сам, а вызывает `POST /control/snapshot` адаптера (без аутентификации, во внутренней сети) | ADR [0013](adr/0013-operator-ops-via-admin-endpoint.md); сетевую границу `/control/*` фиксирует E5 |
-| 6 | Read-only в MCP | read-only обеспечивает приложение (ADR [0005](adr/0005-readonly-mcp-by-application.md)) | Так и сделано (`executeRead`, `EXPLAIN`), но `tools/list` отдаёт для каждого tool `readOnlyHint=false`, `destructiveHint=true` (значения по умолчанию Spring AI) | Аннотации не настроены. Клиентам, которые полагаются на подсказки, tool выглядит как деструктивный. Предложение в [вопросах архитектору](#вопросы-к-архитектору) |
-| 7 | Audience токена admin | OIDC на границах | MCP проверяет `audience` (`archrag.mcp.security.resource-uri`); admin REST проверяет только issuer, подпись, срок и scope | Намеренно сформулировано в `SecurityConfiguration`; решение по audience для admin за архитектором |
+| 6 | Read-only в MCP | read-only обеспечивает приложение (ADR [0005](adr/0005-readonly-mcp-by-application.md)) | Так и сделано (`executeRead`, `EXPLAIN`); `tools/list` отдаёт для каждого tool `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true` | Расхождение закрыто (UNLOCKER-224). Подсказки носят справочный характер, защита — в приложении |
+| 7 | Audience токена admin | OIDC на границах | MCP и admin REST проверяют `audience` (admin: `ARCHRAG_ADMIN_RESOURCE_URI`, обязательна) | Расхождение закрыто (UNLOCKER-224). Compose в `epic/UNLOCKER-195` переменную пока не задаёт: после вливания в `develop` её нужно добавить в `platform/docker` |
 | 8 | Имя источника deploy map | — | Источник в разных местах: `DEPLOY_MAP` (enum `SourceSystem`), `deploymap` (код, `urn:corp:deploymap`), `DEPLOYMAP` (`source` в ответах MCP) | Причина в коде не зафиксирована; для клиентов MCP значение — `DEPLOYMAP` |
 | 9 | Источник CMDB | адаптер «CMDB» | Модуль называется `asset-adapter`, класс `AssetAdapter`, код источника `cmdb` | Имя модуля и класса отличается от имени источника; код источника `cmdb`. Причина в коде не зафиксирована |
-| 10 | Текст tool-ошибки | ошибка без значений ввода | Текст соблюдает правило, но в `get_asset` с невалидным `gid` приходит продублированным (`gid must be a UUID\ngid must be a UUID`) | Наблюдение на запущенном сервере; код не менялся. Задача на правку — на усмотрение архитектора |
+| 10 | Текст tool-ошибки | ошибка без значений ввода | Текст соблюдает правило, но любая ошибка tool приходит продублированной: `gid must be a UUID\ngid must be a UUID` | Известное ограничение Spring AI 2.0.1: `createSyncErrorResult` собирает `message` исключения + перевод строки + `message` корневой причины; у исключения без `cause` это один текст. Без обходного кода не убрать, не чиним; тест `GetAssetMcpTest` фиксирует поведение и упадёт, когда библиотека это исправит |
 
 ### Вопросы к архитектору
 
-1. Пункт 1: оставить `STATELESS` и поправить формулировку ADR 0017, или перейти на `STREAMABLE` (с сессиями)?
-2. Пункт 6: настроить `ToolAnnotations` (`readOnlyHint=true`, `destructiveHint=false`) для всех tools отдельной задачей?
-3. Пункт 7: нужна ли проверка audience в admin REST?
+Открытых вопросов нет: пункты 1, 6 и 7 закрыты в UNLOCKER-224, пункт 10 описан как известное ограничение.
