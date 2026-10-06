@@ -92,7 +92,7 @@ Grafana — единственное, что профиль публикует �
 | Error / DLQ rate | `rate(archrag_ingestion_events_total{status=~"QUARANTINED\|ERROR"}[5m])` и `archrag_ingestion_dlq_open` |
 | Throughput projection | `rate(archrag_ingestion_events_total{status="PROJECTED"}[5m])` |
 
-Метрики ingestion (теги только `source`, `status`): `archrag.ingestion.events` (счётчик по итоговому статусу, `ERROR` при неожиданном исключении), `archrag.ingestion.sync.lag` (секунды: возраст старейшего ожидающего события; 0 при пустой очереди), `archrag.ingestion.dlq.open`. Gauges пересчитываются раз в 15 с запросами к `inbox_event` и `dlq_entry`. `source` — короткий код (`eam`, `scm`, `cmdb`, `deploymap`). Ряд tool-латентности — `archrag.mcp.tool.call` (тег `tool`; Micrometer OTLP отдаёт время в миллисекундах).
+Метрики ingestion (теги только `source`, `status`): `archrag.ingestion.events` (счётчик по итоговому статусу, `ERROR` при неожиданном исключении; все пары `source` × `status` стартуют с нулей), `archrag.ingestion.sync.lag` (секунды: возраст старейшего ожидающего события; 0 при пустой очереди), `archrag.ingestion.dlq.open`. Gauges пересчитываются раз в 15 с запросами к `inbox_event` и `dlq_entry`. `source` — короткий код (`eam`, `scm`, `cmdb`, `deploymap`). Ряд tool-латентности — `archrag.mcp.tool.call` (тег `tool`; Micrometer OTLP отдаёт время в миллисекундах).
 
 Prometheus и collector на хост не публикуются; проверка изнутри:
 `docker compose exec prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=archrag_ingestion_events_total'`.
