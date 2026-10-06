@@ -42,6 +42,7 @@ flowchart LR
 | 5 | F3. Зависимости и impact (`trace_dependencies`, `mode=impact`) | UNLOCKER-188 | E4, E1, E3 | 5, 7 |
 | 5 | F4. Provenance (`explain_provenance`) | UNLOCKER-192 | E4, E1, E3 | 5 |
 | 6 | E5. Демо-стенд на Docker Compose, backup, замеры, gap list | UNLOCKER-195 | E1, E4 | 8, 9, 10 |
+| — | D. Документирование прототипа: ADR, модель данных, интерфейсы (сквозная фича, не блокирует остальные) | UNLOCKER-204 | D.1 — нет; D.2 — E2, E1; D.3 — E1, E4, F1–F4 | — |
 
 Шаги 3a и 3b идут параллельно. F1 и F2 могут стартовать сразу после E1 и E4, параллельно с E3. F3 и F4 ждут E3 (конфликты нужны для conflict markers). Среди готовых к работе фичи берутся в порядке F1 → F2 → F3 → F4, пока у разработчика есть свободные слоты.
 
@@ -61,6 +62,7 @@ flowchart LR
 | F3 | UNLOCKER-189 трассировка; UNLOCKER-190 режим `impact` | UNLOCKER-191 приёмочный MCP-тест | | | |
 | F4 | UNLOCKER-193 `explain_provenance` | UNLOCKER-194 приёмочный MCP-тест | | | |
 | E5 | UNLOCKER-196 образы и compose; UNLOCKER-197 сети, секреты, TLS | UNLOCKER-198 наблюдаемость; UNLOCKER-199 backup/restore | UNLOCKER-200 замеры и gap list | | |
+| D | UNLOCKER-208 шаблоны; UNLOCKER-205 реестр ADR (D.1) | UNLOCKER-206 модель данных (D.2); UNLOCKER-207 интерфейсы (D.3) | | | |
 
 В E0 дополнительно выполнены UNLOCKER-201 (координаты `akp` → `archrag`) и UNLOCKER-202 (S3 в тестах: MinIO → SeaweedFS).
 
