@@ -97,7 +97,7 @@ class SyncAcceptanceIT {
   /** Интервал опроса диспетчера (значение по умолчанию); пауза «ничего не изменилось» в К2б кратна ему. */
   private static final Duration DISPATCHER_POLL = Duration.ofSeconds(1);
 
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 

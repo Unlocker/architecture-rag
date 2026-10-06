@@ -23,7 +23,7 @@ import org.testcontainers.neo4j.Neo4jContainer;
 class Neo4jSchemaIT {
 
   @Container
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   static Driver driver;
 
