@@ -141,10 +141,11 @@ scripts/measure.sh | tee measure.md    # нужен стенд с профиле
 ```
 
 `measure.sh` снимает критерий 9: p95 каждого MCP tool (клиентский и из Prometheus), задержку «источник → граф»
-(`N=20` upsert в `stub-eam` и опрос `get_asset`, порог p95 ≤ 30 с), throughput ingestion (burst `M=200`), sync lag,
+(`N=20` upsert в `stub-eam` и опрос `get_asset`; путь задаёт `E2E_PATH=webhook|poll|both`, по умолчанию `both`: по
+webhook порог p95 ≤ 30 с, по polling — интервал + 5 с), throughput ingestion (burst `M=200`), sync lag,
 долю ошибок и рост DLQ, поведение `trace_dependencies` при глубине 1…6 и за потолком. Параметры `N`, `M`, `K` (вызовов
 каждого tool, 100), `P` (потоков, 4) задаются через env. Нужны Docker, bash и python3; Prometheus читается через
-`docker compose exec`, порты не открываются. Код возврата 1: p95 больше 30 с, вырос DLQ/`QUARANTINED` или tool вернул
+`docker compose exec`, порты не открываются. Код возврата 1: p95 «источник → граф» выше порога своего пути, вырос DLQ/`QUARANTINED` или tool вернул
 ошибку. Сырые данные пишутся в `measurements/<штамп>/` (в `.gitignore`), таблица — в stdout.
 
 Результаты и методика — в [`docs/04-poc-measurements.md`](../../docs/04-poc-measurements.md), отличия от production —
@@ -161,6 +162,12 @@ scripts/measure.sh | tee measure.md    # нужен стенд с профиле
 - Секрет клиента Keycloak в realm и демо-значения в `.env.example` — только для стенда; перед внешней публикацией смените их.
 - Разделение reader/writer Neo4j — только креденшелы (Community без RBAC); настоящие роли требуют Enterprise.
 - Сети `backend` и `graph` помечены `internal`; `edge` выход наружу не ограничивает.
+
+- **Webhook из заглушек идёт напрямую адаптеру внутри сети `edge`, мимо TLS-proxy** (`ARCHRAG_WEBHOOK_TARGET`, секрет —
+  Docker secret `webhook_secret`). Допущение демо: внешние мастер-системы здесь — те же контейнеры. `POST /control/upsert`
+  заглушки после изменения шлёт подписанный webhook и возвращает `webhookStatus` (HTTP-статус адаптера, `0` — не доставлен;
+  ошибка доставки upsert не отменяет, изменение догонит polling); `"notify": false` в теле отключает отправку.
+  Без `ARCHRAG_WEBHOOK_TARGET` заглушка webhook не шлёт.
 
 ## Ограничения E5.1
 
