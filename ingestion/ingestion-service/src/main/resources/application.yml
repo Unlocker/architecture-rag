@@ -41,3 +41,20 @@ archrag:
     batch-size: ${ARCHRAG_DISPATCHER_BATCH_SIZE:100}
     retry-delay: ${ARCHRAG_DISPATCHER_RETRY_DELAY:30s}
     shutdown-timeout: ${ARCHRAG_DISPATCHER_SHUTDOWN_TIMEOUT:30s}
+
+management:
+  # Метрики уходят в otel-collector по OTLP (E5.3); выключено по умолчанию, включает compose-флаг.
+  # Эндпоинты actuator наружу не открываем: порт 8081 админский, /actuator закрыт denyAll.
+  otlp:
+    metrics:
+      export:
+        enabled: false
+        step: 10s
+  opentelemetry:
+    resource-attributes:
+      service.name: ingestion
+      service.instance.id: ${HOSTNAME:local}
+  endpoints:
+    web:
+      exposure:
+        include: health

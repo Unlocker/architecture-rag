@@ -72,6 +72,31 @@ curl -s --cacert ca.crt -X POST https://localhost:8443/realms/archrag/protocol/o
 **TLS.** Сервис `certs` генерирует демо-CA (`ca.crt`) и сертификаты с SAN `localhost`, `reverse-proxy`, `neo4j` в volume `certs`.
 Proxy слушает только `8443 ssl`. Bolt: `server.bolt.tls_level=REQUIRED`, клиенты ходят по `bolt+ssc://neo4j:7687`.
 
+## Наблюдаемость
+
+Профиль `observability` добавляет otel-collector, Prometheus и Grafana. Без профиля стенд работает как раньше, а сервисы метрики не шлют.
+
+```
+ARCHRAG_OBSERVABILITY=true docker compose --profile observability up -d --wait
+./smoke.sh   # даёт вызов tool ping и трафик через proxy
+```
+
+`ARCHRAG_OBSERVABILITY` (в `.env`, по умолчанию `false`) включает OTLP-push `mcp-server` и `ingestion` в `otel-collector:4318`. Collector отдаёт метрики на `:8889`, Prometheus скрейпит только его, так что `--scale mcp-server=2` работает без service discovery. Экземпляры различаются по `service_instance_id` (hostname контейнера).
+
+Grafana — единственное, что профиль публикует на хост: `http://127.0.0.1:${GRAFANA_PORT:-3000}`, логин `admin`, пароль из `GRAFANA_ADMIN_PASSWORD` (Docker secret), анонимный доступ выключен. Дашборд «Arch RAG PoC» (папка Arch RAG) создаётся provisioning'ом:
+
+| Панель | Запрос (имена рядов после OTLP → Prometheus) |
+|---|---|
+| p95 latency по tool | `histogram_quantile(0.95, sum by (le, tool) (rate(archrag_mcp_tool_call_milliseconds_bucket[5m])))` |
+| Sync lag по источнику | `max by (source) (archrag_ingestion_sync_lag_seconds)` |
+| Error / DLQ rate | `rate(archrag_ingestion_events_total{status=~"QUARANTINED\|ERROR"}[5m])` и `archrag_ingestion_dlq_open` |
+| Throughput projection | `rate(archrag_ingestion_events_total{status="PROJECTED"}[5m])` |
+
+Метрики ingestion (теги только `source`, `status`): `archrag.ingestion.events` (счётчик по итоговому статусу, `ERROR` при неожиданном исключении), `archrag.ingestion.sync.lag` (секунды: возраст старейшего ожидающего события; 0 при пустой очереди), `archrag.ingestion.dlq.open`. Gauges пересчитываются раз в 15 с запросами к `inbox_event` и `dlq_entry`. `source` — короткий код (`eam`, `scm`, `cmdb`, `deploymap`). Ряд tool-латентности — `archrag.mcp.tool.call` (тег `tool`; Micrometer OTLP отдаёт время в миллисекундах).
+
+Prometheus и collector на хост не публикуются; проверка изнутри:
+`docker compose exec prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=archrag_ingestion_events_total'`.
+
 ## Остановка
 
 ```bash
@@ -126,6 +151,7 @@ scripts/backup-restore-check.sh  # сквозной сценарий backup -> �
 - `GET /health` адаптера остаётся UP после старта и не отслеживает падение потока polling/reconciliation. По SIGTERM
   адаптер не закрывается корректно (JVM завершается по hook'у): для демо принято.
 
-- У `ingestion-service` нет actuator: healthcheck считает сервис готовым, когда порт 8081 отвечает (Boot открывает
+- У `ingestion-service` actuator нужен только для метрик (эндпоинты наружу закрыты): healthcheck считает сервис готовым, когда порт 8081 отвечает (Boot открывает
   его после старта контекста, то есть после миграций и схемы Neo4j).
+- otel-collector без healthcheck: в образе нет shell и wget. Готовность проверяет healthcheck Prometheus (цель collector в состоянии up).
 - Адаптер каждого источника запускается ровно в одном экземпляре; `/control/snapshot` адаптера proxy не публикует.

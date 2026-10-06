@@ -24,6 +24,12 @@ token=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/realms/archrag/protocol/o
 code=$(mcp -H "Authorization: Bearer $token")
 [ "$code" = 200 ] || fail "expected 200 with token, got $code"
 
+# Вызов tool ping: даёт ряд archrag_mcp_tool_call (профиль observability, E5.3).
+ping=$(curl -s --cacert "$tmp/ca.crt" -X POST "$base/mcp" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $token" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}')
+echo "$ping" | grep -q '"result"' || fail "tools/call ping returned no result"
+
 # --- plain HTTP на TLS-порту не отвечает 200 ---
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$port/mcp" || true)
 [ "$code" != 200 ] || fail "plain HTTP to the TLS port answered 200"
