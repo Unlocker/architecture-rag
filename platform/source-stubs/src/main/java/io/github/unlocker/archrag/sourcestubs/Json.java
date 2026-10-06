@@ -78,7 +78,7 @@ final class Json {
       Map<String, Object> m = new LinkedHashMap<>();
       pos++;
       skipWs();
-      if (s.charAt(pos) == '}') {
+      if (peek() == '}') {
         pos++;
         return m;
       }
@@ -89,7 +89,7 @@ final class Json {
         expect(':');
         m.put(key, value());
         skipWs();
-        if (s.charAt(pos) == ',') {
+        if (peek() == ',') {
           pos++;
         } else {
           expect('}');
@@ -102,20 +102,27 @@ final class Json {
       List<Object> l = new ArrayList<>();
       pos++;
       skipWs();
-      if (s.charAt(pos) == ']') {
+      if (peek() == ']') {
         pos++;
         return l;
       }
       while (true) {
         l.add(value());
         skipWs();
-        if (s.charAt(pos) == ',') {
+        if (peek() == ',') {
           pos++;
         } else {
           expect(']');
           return l;
         }
       }
+    }
+
+    private char peek() {
+      if (pos >= s.length()) {
+        throw new IllegalArgumentException("unexpected end of JSON at " + pos);
+      }
+      return s.charAt(pos);
     }
 
     private void expect(char c) {

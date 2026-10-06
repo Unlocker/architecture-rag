@@ -10,6 +10,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -165,7 +167,7 @@ public final class EamApiStub implements AutoCloseable {
   private static Map<String, Object> archObject(EamApiStore.Entry e, String fields) {
     Map<String, Object> attrs = e.attrs();
     if (fields != null && !fields.isBlank()) {
-      Set<String> wanted = Set.of(fields.split(","));
+      Set<String> wanted = new HashSet<>(Arrays.asList(fields.split(",")));
       attrs = new LinkedHashMap<>();
       for (Map.Entry<String, Object> a : e.attrs().entrySet()) {
         if (wanted.contains(a.getKey())) {

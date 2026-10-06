@@ -52,7 +52,7 @@ public final class EamApiStore {
     return Optional.ofNullable(byType.getOrDefault(type, new TreeMap<>()).get(id));
   }
 
-  /** Страница списка: сортировка по списку ключей ({@code id}, {@code ctime}, {@code mtime}, поля attrs; {@code -} — убывание). */
+  /** Страница списка: сортировка по списку ключей ({@code id}, {@code ctime}, {@code mtime}, {@code -} — убывание; прочие ключи — {@link IllegalArgumentException}, допущение «не подтверждено»). */
   synchronized List<Entry> page(String type, String sort, int page, int pageSize) {
     List<Entry> all = new ArrayList<>(byType.getOrDefault(type, new TreeMap<>()).values());
     Comparator<Entry> order = Comparator.comparingLong(Entry::id);
@@ -75,7 +75,7 @@ public final class EamApiStore {
       case "id" -> Comparator.comparingLong(Entry::id);
       case "ctime" -> Comparator.comparing(Entry::ctime);
       case "mtime" -> Comparator.comparing(Entry::mtime);
-      default -> Comparator.comparing(e -> String.valueOf(e.attrs().get(key)));
+      default -> throw new IllegalArgumentException("sort supports only id, ctime, mtime");
     };
   }
 

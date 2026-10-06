@@ -171,6 +171,23 @@ class EamApiStubTest {
         .isInstanceOf(IllegalArgumentException.class);
   }
 
+  @Test
+  void duplicateFieldsAreAccepted() throws Exception {
+    var o = EamApiFormat.parseArchObjects(get("/api/itsystems/?fields=name,name").body()).get(0);
+    assertThat(EamApiFormat.attrs(o)).containsOnlyKeys("name");
+  }
+
+  @Test
+  void sortByUnsupportedKeyIsRejected() throws Exception {
+    assertThat(get("/api/platforms/?sort=name").statusCode()).isEqualTo(400);
+  }
+
+  @Test
+  void truncatedJsonFailsWithIllegalArgument() {
+    assertThatThrownBy(() -> EamApiFormat.parse("[{\"id\":1")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> EamApiFormat.parse("[")).isInstanceOf(IllegalArgumentException.class);
+  }
+
   private static final class TickingClock extends Clock {
     private Instant now = Instant.parse("2026-10-06T12:00:00Z");
 
