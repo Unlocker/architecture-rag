@@ -79,6 +79,36 @@ docker compose down        # данные в томах сохраняются
 docker compose down -v     # вместе с томами
 ```
 
+## Backup и restore
+
+Скрипты в `scripts/` запускаются с хоста (нужен только Docker и `.env`), работают через `docker compose`.
+
+```bash
+scripts/backup.sh [метка]      # метка по умолчанию: UTC-штамп YYYYMMDDTHHMMSSZ
+scripts/restore.sh <метка>
+scripts/graph-fingerprint.sh   # отпечаток графа для сравнения «до/после»
+scripts/backup-restore-check.sh  # сквозной сценарий backup -> изменения -> restore -> replay (приёмка E5.4)
+```
+
+- **backup.sh** останавливает `ingestion`, `mcp-server` и `neo4j` (Neo4j Community не умеет online backup), снимает
+  `neo4j-admin database dump`, поднимает сервисы обратно, затем делает `pg_dump -Fc` и пишет `manifest.json`
+  (метка, `backup_started_at`, версия Neo4j, sha256 файлов). Каталог из трёх файлов уходит в
+  `s3://$BACKUP_BUCKET/<метка>/` (по умолчанию `archrag-backups`, SeaweedFS). Пока Neo4j остановлен, MCP и ingestion
+  недоступны; адаптеры продолжают класть события в inbox.
+- **restore.sh** скачивает копию, сверяет sha256 и версию Neo4j (при расхождении выходит до остановки сервисов),
+  делает `neo4j-admin database load`, поднимает сервисы и вызывает `POST /admin/replay` по каждому источнику за
+  `[backup_started_at - 5 мин, сейчас + 1 мин)`. Вызов идёт изнутри контейнера `ingestion` (админка не публикуется) с
+  токеном `client_credentials` и scope `architecture.admin`. Уже применённые версии отсекает проверка версий.
+- **PostgreSQL при restore не восстанавливается**: журнал — источник replay, его откат потерял бы изменения. `pg_dump`
+  нужен для отдельного DR; вручную: остановить `ingestion` и адаптеры, затем
+  `docker compose exec -T postgres pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB" < postgres.dump`
+  (файл берётся из `s3://$BACKUP_BUCKET/<метка>/`).
+- **Известный пробел.** Удаления, сделанные reconciliation после backup, replay не повторяет (маркеры
+  `snapshot-complete` пропускаются). После restore выполните `POST /admin/reconcile/{source}` или запустите новый snapshot.
+- Dump и load выполняются одной версией образа Neo4j (она записана в manifest); образ в compose — плавающий тег
+  `neo4j:5-community`, поэтому при смене минорной версии restore старой копии откажется работать.
+- Не делается: online/инкрементальный backup, PITR PostgreSQL, расписание, ротация.
+
 ## Допущения демо и gap list
 
 - `bolt+ssc` не проверяет цепочку сертификата: для production нужен доверенный CA и `bolt+s`. Демо-CA и сертификаты живут, пока жив volume `certs`.

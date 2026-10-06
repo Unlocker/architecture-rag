@@ -69,6 +69,8 @@ services:
       - neo4j_password
     volumes:
       - neo4j-data:/data
+      # Каталог dump для scripts/backup.sh и restore.sh (E5.4); сам neo4j в него не пишет.
+      - backups:/backups
       - certs:/certs:ro
     networks: [graph]
     depends_on:
@@ -377,5 +379,6 @@ volumes:
   certs:
   ca-key:
   neo4j-data:
+  backups:
   pg-data:
   s3-data:
