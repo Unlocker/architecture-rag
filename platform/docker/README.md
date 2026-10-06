@@ -29,9 +29,22 @@ docker compose up -d --wait --wait-timeout 300
 | `mcp-server` | MCP на `/mcp`, масштабируется `--scale` |
 | `adapter-{eam,scm,cmdb,deploymap}` | по одному экземпляру на источник (`replicas: 1`), образ `demo-launcher` |
 | `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` |
+| `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); адаптер к ней пока не подключён |
 | `reverse-proxy` | nginx, только TLS: `/mcp`, `/webhooks/<eam|scm|cmdb|deploymap>`, токен-endpoint Keycloak |
 | `certs` | одноразовый: демо-CA и серверные сертификаты в volume `certs` (идемпотентно) |
 | `neo4j-init` | одноразовый: пользователь Neo4j `archrag_reader` для `mcp-server` |
+
+## Заглушка EAM API
+
+`eam-api-stub` отдаёт ИТ-системы, ИТ-решения и платформы так же, как реальный EAM (голый массив `ArchObject[]`, `page`/`page_size`/`sort`/`fields`).
+Порт наружу не публикуется; проверка изнутри контейнера:
+
+```bash
+docker compose exec eam-api-stub sh -c 'curl -s -H "Authorization: Token $(cat /run/secrets/ARCHRAG_EAM_API_TOKEN)" "http://127.0.0.1:8080/api/itsystems/?page=1&page_size=10"'
+```
+
+Без заголовка ответ 401. Типы: `platforms`, `itproducts` (ИТ-решение, допущение), `itsystems`; метаданные: `/api/types/`, `/api/types/{id}/options/?kind=fields|system`.
+`eam_id` ИТ-систем (`EAM-1042`, `EAM-2001`) совпадает с `systemCode` в SCM.
 
 ## Токен и проверка
 

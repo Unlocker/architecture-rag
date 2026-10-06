@@ -1,0 +1,24 @@
+[
+  {
+    "id": 3101,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Kubernetes Platform",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": ""
+    }
+  },
+  {
+    "id": 3103,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Kafka Platform",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": ""
+    }
+  }
+]

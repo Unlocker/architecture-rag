@@ -1,0 +1,32 @@
+[
+  {
+    "id": 5201,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Payments Gateway",
+      "eam_id": "EAM-5201",
+      "status": "ACTIVE",
+      "criticality": "HIGH",
+      "description": "",
+      "solution": [
+        7201
+      ]
+    }
+  },
+  {
+    "id": 5202,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Payments Gateway",
+      "eam_id": "EAM-5202",
+      "status": "ACTIVE",
+      "criticality": "HIGH",
+      "description": "",
+      "solution": [
+        7202
+      ]
+    }
+  }
+]

@@ -93,6 +93,17 @@ class LauncherConfigTest {
   }
 
   @Test
+  void eamApiStubRequiresTokenAndHidesItInToString() {
+    assertThatThrownBy(() -> LauncherConfig.eamApiStub(Map.of()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("ARCHRAG_EAM_API_TOKEN");
+    var c = LauncherConfig.eamApiStub(Map.of("ARCHRAG_EAM_API_TOKEN", "tok-secret", "ARCHRAG_STUB_PORT", "9100"));
+    assertThat(c.port()).isEqualTo(9100);
+    assertThat(c.token()).isEqualTo("tok-secret");
+    assertThat(c.toString()).doesNotContain("tok-secret");
+  }
+
+  @Test
   void stubWebhookTargetRequiresSecret() {
     var env = Map.of("ARCHRAG_WEBHOOK_TARGET", "http://adapter-eam:8080/webhook");
     assertThatThrownBy(() -> LauncherConfig.stub(SourceSystem.EAM, env))
