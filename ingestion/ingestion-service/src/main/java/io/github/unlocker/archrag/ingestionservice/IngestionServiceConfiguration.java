@@ -18,6 +18,7 @@ import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 import io.github.unlocker.archrag.normalizer.Normalizer;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
 import java.time.Clock;
 import javax.sql.DataSource;
@@ -27,12 +28,15 @@ import org.neo4j.driver.GraphDatabase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Явная сборка компонентов ingestion: журнал, raw storage, identity, projector. Миграции PostgreSQL применяются
  * только через {@link JournalMigrations#apply} (Flyway из Boot не подключён), схема Neo4j — {@link Neo4jSchema#apply}.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableScheduling
 public class IngestionServiceConfiguration {
 
   /** Применяет миграции до создания бинов, которым нужна схема. */
@@ -101,6 +105,13 @@ public class IngestionServiceConfiguration {
         journal, Normalizer.standard(projector::isActive), identity, projector, reconciliation, candidates, conflicts);
   }
 
+  /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */
+  @Bean
+  IngestionMetrics ingestionMetrics(MeterRegistry registry, JdbcTemplate jdbc, PostgresEventJournal migrated) {
+    // Зависимость от журнала гарантирует, что таблицы уже созданы миграциями.
+    return new IngestionMetrics(registry, jdbc);
+  }
+
   @Bean
   @ConditionalOnProperty(name = "archrag.dispatcher.enabled", havingValue = "true", matchIfMissing = true)
   JournalDispatcher journalDispatcher(
@@ -110,8 +121,10 @@ public class IngestionServiceConfiguration {
       StoredEventReader events,
       EventProcessor processor,
       AdminLock lock,
-      DispatcherProperties props) {
+      DispatcherProperties props,
+      IngestionMetrics metrics) {
     return new JournalDispatcher(
-        reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay());
+        reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay(),
+        metrics);
   }
 }

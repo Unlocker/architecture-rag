@@ -53,6 +53,21 @@
       <artifactId>spring-boot-starter-jdbc</artifactId>
     </dependency>
 
+    <!-- Метрики (E5.3): actuator без открытых эндпоинтов, экспорт в otel-collector по OTLP; версии из BOM Boot. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-otlp</artifactId>
+    </dependency>
+    <!-- Без него OtlpMetricsExportAutoConfiguration не включается (нужен OpenTelemetryProperties: resource-атрибуты). -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-opentelemetry</artifactId>
+    </dependency>
+
     <!-- Контрактный тест StoredEventReader сверяет его с EventMapper адаптеров; в compile адаптеры не нужны. -->
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
@@ -62,7 +77,6 @@
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>source-spi</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
