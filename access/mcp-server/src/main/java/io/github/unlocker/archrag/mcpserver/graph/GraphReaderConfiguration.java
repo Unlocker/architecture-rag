@@ -64,6 +64,11 @@ public class GraphReaderConfiguration {
   }
 
   @Bean
+  QueryTemplate explainProvenanceTemplate() {
+    return AssetTemplates.EXPLAIN_PROVENANCE;
+  }
+
+  @Bean
   QueryTemplate traceDownstreamTemplate() {
     return DependencyTemplates.TRACE_DOWNSTREAM;
   }
