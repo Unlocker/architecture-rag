@@ -102,4 +102,26 @@ class LauncherConfigTest {
     assertThat(c.token()).isEqualTo("tok-secret");
     assertThat(c.toString()).doesNotContain("tok-secret");
   }
+
+  @Test
+  void stubWebhookTargetRequiresSecret() {
+    var env = Map.of("ARCHRAG_WEBHOOK_TARGET", "http://adapter-eam:8080/webhook");
+    assertThatThrownBy(() -> LauncherConfig.stub(SourceSystem.EAM, env))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("ARCHRAG_WEBHOOK_SECRET");
+  }
+
+  @Test
+  void stubWebhookTargetWithSecretIsParsedAndSecretIsHidden() {
+    var c = LauncherConfig.stub(SourceSystem.EAM,
+        Map.of("ARCHRAG_WEBHOOK_TARGET", "http://adapter-eam:8080/webhook", "ARCHRAG_WEBHOOK_SECRET", "topsecret"));
+    assertThat(c.webhookTarget()).hasToString("http://adapter-eam:8080/webhook");
+    assertThat(c.webhookSecret()).isEqualTo("topsecret");
+    assertThat(c.toString()).doesNotContain("topsecret");
+  }
+
+  @Test
+  void stubWithoutTargetHasNoWebhook() {
+    var c = LauncherConfig.stub(SourceSystem.EAM, Map.of("ARCHRAG_WEBHOOK_SECRET", "x"));
+    assertThat(c.webhookTarget()).isNull();
+  }
 }

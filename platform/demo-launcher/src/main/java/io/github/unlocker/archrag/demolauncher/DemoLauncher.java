@@ -15,6 +15,7 @@ import io.github.unlocker.archrag.sourcestubs.EamApiSeed;
 import io.github.unlocker.archrag.sourcestubs.EamApiStub;
 import io.github.unlocker.archrag.sourcestubs.StubSourceServer;
 import io.github.unlocker.archrag.sourcestubs.StubSources;
+import io.github.unlocker.archrag.sourcestubs.StubWebhookSender;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.time.Clock;
@@ -31,7 +32,8 @@ import org.postgresql.ds.PGSimpleDataSource;
  * {@code ARCHRAG_STUB_PORT}; токен из {@code ARCHRAG_EAM_API_TOKEN}. Работает рядом со старой заглушкой {@code stub EAM}.
  *
  * <p>Заглушка: источник на {@code ARCHRAG_STUB_PORT} и управляющий {@code POST /control/upsert} на порту
- * {@value #STUB_CONTROL_PORT} (только в режиме stub).
+ * {@value #STUB_CONTROL_PORT} (только в режиме stub). Если задан {@code ARCHRAG_WEBHOOK_TARGET} (и
+ * {@code ARCHRAG_WEBHOOK_SECRET}), upsert через control дополнительно шлёт адаптеру webhook.
  *
  * <p>Адаптер: webhook ({@code POST /webhook}, {@code POST /control/snapshot}) на {@code ARCHRAG_WEBHOOK_PORT}, polling и
  * reconciliation. {@code GET /health} на {@code ARCHRAG_HEALTH_PORT} отвечает 200 только после старта всех трёх.
@@ -76,8 +78,10 @@ public final class DemoLauncher {
 
   private static void runStub(LauncherConfig.Stub config) throws IOException, InterruptedException {
     var source = StubSources.seeded(Clock.systemUTC()).get(config.system());
+    StubWebhookSender webhooks = config.webhookTarget() == null ? null
+        : new StubWebhookSender(config.webhookTarget(), config.webhookSecret(), Clock.systemUTC());
     try (var server = new StubSourceServer(source, new InetSocketAddress(config.port()));
-        var control = new StubControl(source, new InetSocketAddress(STUB_CONTROL_PORT))) {
+        var control = new StubControl(source, new InetSocketAddress(STUB_CONTROL_PORT), webhooks)) {
       LOG.log(System.Logger.Level.INFO, "stub " + config.system() + " listens on " + server.port()
           + ", control on " + control.port());
       awaitShutdown();

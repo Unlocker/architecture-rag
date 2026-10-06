@@ -307,6 +307,11 @@ services:
     <<: *demo-launcher
     command: ["stub", "EAM"]
     networks: [edge]
+    # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
+    environment:
+      ARCHRAG_WEBHOOK_TARGET: http://adapter-eam:8080/webhook
+    secrets:
+      - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: &stub-health
       test: ["CMD-SHELL", "curl -fs 'http://127.0.0.1:8080/changes?limit=1' >/dev/null"]
       interval: 3s
@@ -318,18 +323,33 @@ services:
     <<: *demo-launcher
     command: ["stub", "SCM"]
     networks: [edge]
+    # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
+    environment:
+      ARCHRAG_WEBHOOK_TARGET: http://adapter-scm:8080/webhook
+    secrets:
+      - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
 
   stub-cmdb:
     <<: *demo-launcher
     command: ["stub", "CMDB"]
     networks: [edge]
+    # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
+    environment:
+      ARCHRAG_WEBHOOK_TARGET: http://adapter-cmdb:8080/webhook
+    secrets:
+      - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
 
   stub-deploymap:
     <<: *demo-launcher
     command: ["stub", "DEPLOY_MAP"]
     networks: [edge]
+    # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
+    environment:
+      ARCHRAG_WEBHOOK_TARGET: http://adapter-deploymap:8080/webhook
+    secrets:
+      - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
 
   # Заглушка EAM в формате реального API (docs/eam-api.yaml): рядом со старой stub-eam, которую по-прежнему читает
