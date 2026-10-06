@@ -56,7 +56,7 @@ final class StubControl implements AutoCloseable {
           body = "{\"sourceVersion\":" + version + "}";
         } catch (IllegalArgumentException e) {
           status = 400;
-          body = "{\"error\":\"" + (e.getMessage() == null ? "bad request" : e.getMessage().replace("\"", "'")) + "\"}";
+          body = "{\"error\":\"invalid request\"}";
         }
       }
       byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

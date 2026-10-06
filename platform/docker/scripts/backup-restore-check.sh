@@ -2,16 +2,18 @@
 # Сквозной сценарий E5.4 (критерий 8): backup -> изменения в источнике -> restore -> replay => граф эквивалентен.
 # Запуск: platform/docker/scripts/backup-restore-check.sh на поднятом стенде (нужен .env). Приёмка задачи.
 #
-#   F0 = fingerprint -> backup -> upsert в заглушке EAM (новый и изменённый объект) -> адаптер забирает их polling'ом
+#   F0 = fingerprint -> backup -> upsert в заглушке EAM (новый или изменённый объект) -> адаптер забирает их polling'ом
 #   -> очередь пуста -> F1 (обязан отличаться от F0) -> restore (load + replay) -> очередь пуста -> F2 (обязан равняться F1).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 label="check-$(utc_stamp)"
 fp() { "$(dirname "$0")/graph-fingerprint.sh"; }
+# Печатает sourceVersion, присвоенную заглушкой (состояние заглушки живёт между прогонами сценария).
 upsert() { # <type> <id> <name>
   printf '{"type":"%s","id":"%s","payload":{"name":"%s","ownerTeam":"TEAM-PAY"}}' "$1" "$2" "$3" |
-    dc exec -T stub-eam curl -sf -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' --data-binary @- >/dev/null
+    dc exec -T stub-eam curl -sf -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' --data-binary @- |
+    sed -n 's/.*"sourceVersion":\([0-9]*\).*/\1/p'
 }
 # Адаптер забирает изменения polling'ом (по умолчанию раз в 30 с): ждём появления событий в inbox.
 wait_event() { # <source_id> <source_version>
@@ -30,10 +32,12 @@ log "F0 taken"
 "$(dirname "$0")/backup.sh" "$label" >/dev/null
 
 log "changes in the EAM stub: new EAM-9001, changed EAM-1042"
-upsert IT_SYSTEM EAM-9001 "Backup Probe"
-upsert IT_SYSTEM EAM-1042 "Payments Core (renamed after backup)"
-wait_event EAM-9001 1
-wait_event EAM-1042 2
+probe="EAM-9001"
+v_probe=$(upsert IT_SYSTEM "$probe" "Backup Probe $label")
+v_core=$(upsert IT_SYSTEM EAM-1042 "Payments Core $label")
+[ -n "$v_probe" ] && [ -n "$v_core" ] || die "stub /control/upsert did not return a version"
+wait_event "$probe" "$v_probe"
+wait_event EAM-1042 "$v_core"
 wait_queue_empty 300
 F1=$(fp)
 log "F1 taken"

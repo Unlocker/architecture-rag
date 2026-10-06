@@ -10,10 +10,11 @@
 # Свойства, которые проектор ставит временем обработки, а не данными источника, в отпечаток не входят: replay
 # проходит заново и даёт другое время (fetchedAt и lastSeenAt берутся у события, но SyncRun.startedAt/status и
 # отметки наблюдения зависят от порядка обработки). Список ниже — единственное место, где это зафиксировано.
+# `status`, `validFrom`, `validTo`, `deletedAt` — данные графа и сравниваются; исключается только SyncRun.status (процессное).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-EXCLUDED="['fetchedAt','lastSeenAt','firstSeenAt','observedAt','startedAt','finishedAt','status','validFrom','validTo','deletedAt','_lock']"
+EXCLUDED="['fetchedAt','lastSeenAt','firstSeenAt','observedAt','startedAt','finishedAt','_lock']"
 
 out=$(cypher --format plain <<CYPHER
 :param excluded => $EXCLUDED;
@@ -29,7 +30,7 @@ RETURN 'REL' AS kind, sk + ' ' + t + ' ' + ek AS a, '' AS b ORDER BY a;
 MATCH (n)
 WITH n, coalesce(n.gid, n.runId, n.code, n.source + '/' + n.sourceType + '/' + n.sourceId) AS k
 UNWIND keys(n) AS p
-WITH k, p, n[p] AS v WHERE NOT p IN \$excluded
+WITH k, p, n[p] AS v, n WHERE NOT p IN \$excluded AND NOT (p = 'status' AND 'SyncRun' IN labels(n))
 WITH k, p, CASE WHEN v IS :: LIST<ANY> THEN reduce(s = '', x IN v | s + toString(x) + ',') ELSE toString(v) END AS sv
 ORDER BY k, p
 RETURN 'NODEPROP' AS kind, k + '.' + p AS a, sv AS b;
