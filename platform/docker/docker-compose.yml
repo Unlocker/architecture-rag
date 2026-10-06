@@ -183,13 +183,15 @@ services:
       ARCHRAG_SCM_CONTROL_URL: http://adapter-scm:8080/control/snapshot
       ARCHRAG_CMDB_CONTROL_URL: http://adapter-cmdb:8080/control/snapshot
       ARCHRAG_DEPLOYMAP_CONTROL_URL: http://adapter-deploymap:8080/control/snapshot
+      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${ARCHRAG_OBSERVABILITY:-false}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
     secrets:
       - { source: pg_password, target: ARCHRAG_PG_PASSWORD }
       - { source: neo4j_password, target: ARCHRAG_NEO4J_PASSWORD }
       - { source: s3_access_key, target: ARCHRAG_S3_ACCESS_KEY }
       - { source: s3_secret_key, target: ARCHRAG_S3_SECRET_KEY }
     # Не в edge: админка ingestion недоступна с proxy.
-    networks: [backend, graph]
+    networks: [backend, graph, observability]
     depends_on:
       neo4j: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -216,10 +218,12 @@ services:
       ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
       ARCHRAG_NEO4J_READER_URI: bolt+ssc://neo4j:7687
       ARCHRAG_NEO4J_READER_USERNAME: archrag_reader
+      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${ARCHRAG_OBSERVABILITY:-false}
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
     # Только reader-пароль; ни writer-пароля, ни PostgreSQL/S3 у MCP нет.
     secrets:
       - { source: neo4j_reader_password, target: ARCHRAG_NEO4J_READER_PASSWORD }
-    networks: [edge, graph]
+    networks: [edge, graph, observability]
     depends_on:
       neo4j: { condition: service_healthy }
       neo4j-init: { condition: service_completed_successfully }
@@ -348,6 +352,64 @@ services:
       timeout: 3s
       retries: 20
 
+  # ---- наблюдаемость (профиль observability, E5.3) ---------------------------------------------
+  # Сервисы пушат метрики в collector по OTLP (включается ARCHRAG_OBSERVABILITY=true), Prometheus скрейпит
+  # только collector. На хост публикуется только Grafana (loopback).
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.140.1
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otelcol/config.yml:ro
+    networks: [observability]
+    # Образ без shell и wget: проверка изнутри невозможна. Готовность collector проверяет healthcheck prometheus
+    # (цель otel-collector:8889 в состоянии up), а prometheus ждёт его по depends_on: service_started.
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.7.3
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [observability]
+    depends_on:
+      otel-collector: { condition: service_started }
+    healthcheck:
+      # Цель collector должна быть up: так проверяется и сам collector.
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:9090/api/v1/targets?state=active' | grep -q '\"health\":\"up\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.2.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    secrets:
+      - grafana_admin_password
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    # observability: доступ к Prometheus; obs-edge не internal, иначе публикация порта не работает.
+    networks: [observability, obs-edge]
+    depends_on:
+      prometheus: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q '\"database\": *\"ok\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
 networks:
   # Proxy, MCP, Keycloak, адаптеры и заглушки (заглушки изображают внешние мастер-системы). Не internal.
   edge:
@@ -357,6 +419,11 @@ networks:
   # Сервисы <-> Neo4j. Без внешнего доступа.
   graph:
     internal: true
+  # Метрики: mcp-server, ingestion, collector, Prometheus, Grafana. Без внешнего доступа.
+  observability:
+    internal: true
+  # Только для публикации порта Grafana на loopback (internal-сеть порты не публикует).
+  obs-edge:
 
 # Значения берутся из .env (вне Git); внутри контейнера это файлы /run/secrets/<target>, а не переменные окружения.
 secrets:
@@ -372,6 +439,8 @@ secrets:
     environment: S3_SECRET_KEY
   webhook_secret:
     environment: WEBHOOK_SECRET
+  grafana_admin_password:
+    environment: GRAFANA_ADMIN_PASSWORD
 
 volumes:
   certs:
@@ -379,3 +448,5 @@ volumes:
   neo4j-data:
   pg-data:
   s3-data:
+  prometheus-data:
+  grafana-data:
