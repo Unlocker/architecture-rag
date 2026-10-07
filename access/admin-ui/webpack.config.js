@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 // Выход кладём в target/classes/META-INF/resources: Spring Boot отдаёт такую статику из jar.
 const outputPath = path.resolve(__dirname, 'target/classes/META-INF/resources');
@@ -19,10 +20,14 @@ module.exports = (env, argv) => ({
   module: {
     rules: [
       { test: /\.tsx?$/, loader: 'ts-loader', exclude: /node_modules/, options: { configFile: 'tsconfig.json' } },
-      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
+      { test: /\.css$/, use: [MiniCssExtractPlugin.loader, 'css-loader'] },
     ],
   },
-  plugins: [new HtmlWebpackPlugin({ template: './src/index.html' })],
+  // CSS выносим в файл: style-loader вставляет <style> в рантайме, а CSP консоли запрещает inline.
+  plugins: [
+    new HtmlWebpackPlugin({ template: './src/index.html' }),
+    new MiniCssExtractPlugin({ filename: '[name].[contenthash].css' }),
+  ],
   // Исходники в production-jar не публикуем.
   devtool: argv.mode === 'production' ? false : 'source-map',
   devServer: {

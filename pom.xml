@@ -151,6 +151,11 @@
         <artifactId>mcp-server</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.github.unlocker.archrag</groupId>
+        <artifactId>admin-console</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

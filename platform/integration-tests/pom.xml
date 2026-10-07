@@ -95,6 +95,12 @@
       <artifactId>mcp-server</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- После mcp-server: при совпадении application.yml на classpath прежний порядок сохраняется. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>admin-console</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
