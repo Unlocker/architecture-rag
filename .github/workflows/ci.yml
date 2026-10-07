@@ -22,12 +22,6 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
-      # Node/npm ставит frontend-maven-plugin в ~/.m2 (его кэширует cache: maven); здесь кэшируем загрузки npm.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ hashFiles('access/admin-ui/package-lock.json') }}
-          restore-keys: npm-
       - run: ./mvnw -B -ntp verify
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -48,12 +42,6 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
-      # Node/npm ставит frontend-maven-plugin в ~/.m2 (его кэширует cache: maven); здесь кэшируем загрузки npm.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ hashFiles('access/admin-ui/package-lock.json') }}
-          restore-keys: npm-
       - run: ./mvnw -B -ntp verify -Pintegration-tests
       - uses: actions/upload-artifact@v7
         if: failure()
