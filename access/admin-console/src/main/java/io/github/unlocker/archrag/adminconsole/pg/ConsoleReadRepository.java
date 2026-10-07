@@ -32,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class ConsoleReadRepository {
 
   static final int MAX_TEXT = 500;
-  /** Предел размера {@code result} в ответе аудита: больший jsonb не отдаётся, выставляется {@code resultTruncated}. */
+  /** Предел размера {@code request} и {@code result} в ответе аудита: больший jsonb не отдаётся, выставляется {@code requestTruncated}/{@code resultTruncated}. */
   static final int MAX_RESULT_CHARS = 4000;
 
   private static final String EVENT_COLUMNS =
@@ -237,7 +237,9 @@ public class ConsoleReadRepository {
     where.eq("started_at < :to", "to", to == null ? null : Timestamp.from(to));
     return page(
         "admin_audit",
-        "id, operation, actor, status, replay_id, request::text AS request,"
+        "id, operation, actor, status, replay_id,"
+            + " CASE WHEN length(request::text) > " + MAX_RESULT_CHARS + " THEN NULL ELSE request::text END AS request,"
+            + " length(request::text) > " + MAX_RESULT_CHARS + " AS request_truncated,"
             + " CASE WHEN length(result::text) > " + MAX_RESULT_CHARS + " THEN NULL ELSE result::text END AS result,"
             + " length(result::text) > " + MAX_RESULT_CHARS + " AS result_truncated, error, started_at, finished_at",
         where,
@@ -253,6 +255,7 @@ public class ConsoleReadRepository {
               rs.getString("status"),
               rs.getString("replay_id"),
               request == null ? null : JSON.readTree(request),
+              rs.getBoolean("request_truncated"),
               result == null ? null : JSON.readTree(result),
               rs.getBoolean("result_truncated"),
               truncate(rs.getString("error")),

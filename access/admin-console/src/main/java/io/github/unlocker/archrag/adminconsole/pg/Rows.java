@@ -85,6 +85,7 @@ public final class Rows {
       String status,
       String replayId,
       JsonNode request,
+      boolean requestTruncated,
       JsonNode result,
       boolean resultTruncated,
       String error,

@@ -98,7 +98,7 @@ class SyncConsoleIT {
     st.execute("INSERT INTO admin_audit (operation, actor, request, status, result, started_at, finished_at) VALUES"
         + " ('replay','alice','{\"secret\":\"x\"}'::jsonb,'OK','{\"replayed\":2}'::jsonb,'2026-01-05T00:00:00Z','2026-01-05T00:00:03Z'),"
         + " ('rebuild','bob','{}'::jsonb,'FAILED',NULL,'2026-01-06T00:00:00Z',NULL),"
-        + " ('bigop','carol','{}'::jsonb,'OK', jsonb_build_object('blob', repeat('x', 6000)), '2026-01-07T00:00:00Z', NULL)");
+        + " ('bigop','carol', jsonb_build_object('blob', repeat('y', 6000)),'OK', jsonb_build_object('blob', repeat('x', 6000)), '2026-01-07T00:00:00Z', NULL)");
   }
 
   private static void event(java.sql.Statement st, String source, String id, String status, String at, String code)
@@ -240,6 +240,8 @@ class SyncConsoleIT {
 
     assertThat(big.get("result").isNull()).isTrue();
     assertThat(big.get("resultTruncated").asBoolean()).isTrue();
+    assertThat(big.get("request").isNull()).isTrue();
+    assertThat(big.get("requestTruncated").asBoolean()).isTrue();
     assertThat(ok("/api/audit?operation=replay").get("items").get(0).get("resultTruncated").asBoolean()).isFalse();
   }
 
