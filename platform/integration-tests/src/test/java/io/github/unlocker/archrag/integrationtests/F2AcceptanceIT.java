@@ -2,15 +2,6 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.crypto.RSASSASigner;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.SignedJWT;
-import com.sun.net.httpserver.HttpServer;
 import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
@@ -34,26 +25,16 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -156,7 +137,7 @@ class F2AcceptanceIT {
   private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
   private final Map<SourceSystem, StubSource> stubs = new EnumMap<>(SourceSystem.class);
   private final List<StubSourceServer> servers = new ArrayList<>();
-  private final Jwt jwt = new Jwt();
+  private final McpTestJwt jwt = new McpTestJwt();
   private final HttpClient http = HttpClient.newHttpClient();
   private final JsonMapper json = new JsonMapper();
   private S3RawPayloadStore store;
@@ -223,9 +204,9 @@ class F2AcceptanceIT {
         "--spring.ai.mcp.server.protocol=STATELESS",
         "--spring.ai.mcp.server.streamable-http.mcp-endpoint=/mcp",
         "--spring.security.oauth2.resourceserver.jwt.jwk-set-uri=" + jwt.jwkSetUri(),
-        "--spring.security.oauth2.resourceserver.jwt.issuer-uri=" + Jwt.RESOURCE,
-        "--spring.security.oauth2.resourceserver.jwt.audiences=" + Jwt.RESOURCE,
-        "--archrag.mcp.security.resource-uri=" + Jwt.RESOURCE,
+        "--spring.security.oauth2.resourceserver.jwt.issuer-uri=" + McpTestJwt.RESOURCE,
+        "--spring.security.oauth2.resourceserver.jwt.audiences=" + McpTestJwt.RESOURCE,
+        "--archrag.mcp.security.resource-uri=" + McpTestJwt.RESOURCE,
         "--archrag.mcp.security.tool-scopes.ping=" + READ,
         "--archrag.mcp.security.tool-scopes." + TOOL + "=" + READ,
         "--archrag.neo4j.reader.uri=" + NEO4J.getBoltUrl(),
@@ -491,64 +472,6 @@ class F2AcceptanceIT {
         Thread.currentThread().interrupt();
         throw new AssertionError("interrupted", e);
       }
-    }
-  }
-
-  /**
-   * Подписанные тестовые JWT для MCP-сервера: RSA-ключ в памяти, публичный ключ отдаёт локальный JWKS.
-   * Копия {@code TestJwt} из mcp-server (его test-sources недоступны, test-jar не подключаем); issuer и audience
-   * совпадают с {@code archrag.mcp.security.resource-uri}. Вложенный класс, а не общий файл: F1 с отдельным
-   * хелпером ещё не влит в develop, второй top-level класс дал бы add/add-конфликт.
-   */
-  private static final class Jwt {
-
-    static final String RESOURCE = "https://mcp.test/mcp";
-
-    private final KeyPair keys;
-    private final HttpServer jwks;
-
-    Jwt() {
-      try {
-        var gen = KeyPairGenerator.getInstance("RSA");
-        gen.initialize(2048);
-        keys = gen.generateKeyPair();
-        byte[] body = new JWKSet(new RSAKey.Builder((RSAPublicKey) keys.getPublic()).keyID("test").build())
-            .toString().getBytes(StandardCharsets.UTF_8);
-        jwks = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        jwks.createContext("/jwks", exchange -> {
-          exchange.getResponseHeaders().add("Content-Type", "application/json");
-          exchange.sendResponseHeaders(200, body.length);
-          try (var out = exchange.getResponseBody()) {
-            out.write(body);
-          }
-        });
-        jwks.start();
-      } catch (NoSuchAlgorithmException | IOException e) {
-        throw new IllegalStateException(e);
-      }
-    }
-
-    String jwkSetUri() {
-      return "http://localhost:" + jwks.getAddress().getPort() + "/jwks";
-    }
-
-    /** Валидный токен с заданными scopes (может быть пустым). */
-    String token(String... scopes) {
-      try {
-        var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject("test-user").audience(RESOURCE)
-            .issueTime(Date.from(Instant.now().minusSeconds(60)))
-            .expirationTime(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
-            .claim("scope", String.join(" ", List.of(scopes))).build();
-        var signed = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
-        signed.sign(new RSASSASigner((RSAPrivateKey) keys.getPrivate()));
-        return signed.serialize();
-      } catch (JOSEException e) {
-        throw new IllegalStateException(e);
-      }
-    }
-
-    void close() {
-      jwks.stop(0);
     }
   }
 }
