@@ -41,7 +41,7 @@ public final class ConsoleTemplates {
 
   /**
    * Число узлов по меткам из {@link #STATS_LABELS}. Возвращает {@code label, count}; метки без узлов
-   * могут отсутствовать (планировщик отбрасывает ветки по неизвестным меткам), отсутствие означает ноль. Считает по
+   * присутствуют с нулём (агрегат считается до проекции литерала, иначе пустой вход не даёт строки). Считает по
    * счётчикам хранилища, а не обходом графа.
    */
   public static final QueryTemplate GRAPH_STATS_NODES =
@@ -57,12 +57,12 @@ public final class ConsoleTemplates {
           """
               .formatted(
                   STATS_LABELS.stream()
-                      .map(l -> "MATCH (n:" + l + ") RETURN '" + l + "' AS label, count(n) AS count")
+                      .map(l -> "MATCH (n:" + l + ") WITH count(n) AS count RETURN '" + l + "' AS label, count")
                       .collect(Collectors.joining("\n  UNION\n  "))),
           Set.of(),
           ResultKind.NODES);
 
-  /** Число связей по типам из {@link #STATS_RELATION_TYPES}. Возвращает {@code type, count}. */
+  /** Число связей по типам из {@link #STATS_RELATION_TYPES}. Возвращает {@code type, count}; типы без связей присутствуют с нулём. */
   public static final QueryTemplate GRAPH_STATS_RELATIONS =
       new QueryTemplate(
           "graph_stats_relations",
@@ -76,7 +76,7 @@ public final class ConsoleTemplates {
           """
               .formatted(
                   STATS_RELATION_TYPES.stream()
-                      .map(t -> "MATCH ()-[r:" + t + "]->() RETURN '" + t + "' AS type, count(r) AS count")
+                      .map(t -> "MATCH ()-[r:" + t + "]->() WITH count(r) AS count RETURN '" + t + "' AS type, count")
                       .collect(Collectors.joining("\n  UNION\n  "))),
           Set.of(),
           ResultKind.NODES);

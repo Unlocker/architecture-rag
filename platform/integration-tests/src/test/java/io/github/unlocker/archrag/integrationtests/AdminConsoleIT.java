@@ -176,7 +176,9 @@ class AdminConsoleIT {
 
     assertThat(count(stats.get("nodes"), "ITSystem")).isEqualTo(1);
     assertThat(count(stats.get("nodes"), "Service")).isEqualTo(1);
-    // Метка без узлов может отсутствовать в ответе: это ноль.
+    // Метка и тип без данных присутствуют с нулём.
+    assertThat(count(stats.get("nodes"), "Team")).isZero();
+    assertThat(count(stats.get("relations"), "DEPENDS_ON")).isZero();
     assertThat(count(stats.get("nodes"), "SourceRecord")).isGreaterThanOrEqualTo(4);
     assertThat(count(stats.get("relations"), "HAS_DEPLOYMENT")).isEqualTo(1);
     assertThat(count(stats.get("relations"), "DECOMPOSED_INTO")).isEqualTo(1);

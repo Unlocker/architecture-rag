@@ -54,7 +54,7 @@ class ConsoleTemplatesTest {
   @Test
   void statsCoverEveryAllowlistedLabelAndRelationType() {
     for (String label : ConsoleTemplates.STATS_LABELS) {
-      assertThat(ConsoleTemplates.GRAPH_STATS_NODES.cypher()).contains("MATCH (n:" + label + ")");
+      assertThat(ConsoleTemplates.GRAPH_STATS_NODES.cypher()).contains("MATCH (n:" + label + ") WITH count(n) AS count RETURN '" + label + "'");
     }
     for (String type : ConsoleTemplates.STATS_RELATION_TYPES) {
       assertThat(ConsoleTemplates.GRAPH_STATS_RELATIONS.cypher()).contains("[r:" + type + "]");
