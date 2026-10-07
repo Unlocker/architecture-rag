@@ -3,6 +3,8 @@ package io.github.unlocker.archrag.adminconsole.audit;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * Накопитель аудита одного запроса: ID шаблонов, число строк, признак усечения. Живёт в атрибуте
@@ -21,10 +23,9 @@ public final class ReadAuditContext {
    * Контекст текущего запроса или {@code null} вне запроса.
    */
   public static ReadAuditContext current() {
-    var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+    var attributes = RequestContextHolder.getRequestAttributes();
     return attributes != null
-            && attributes.getAttribute(
-                    ATTRIBUTE, org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST)
+            && attributes.getAttribute(ATTRIBUTE, RequestAttributes.SCOPE_REQUEST)
                 instanceof ReadAuditContext context
         ? context
         : null;
