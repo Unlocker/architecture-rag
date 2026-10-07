@@ -56,6 +56,28 @@ if mcp_exec timeout 3 bash -c 'exec 3<>/dev/tcp/postgres/5432' 2>/dev/null; then
 [ -n "$(docker compose exec -T reverse-proxy getent hosts mcp-server | tr -d '\r')" ] || fail "control: reverse-proxy cannot resolve mcp-server"
 if [ -n "$(docker compose exec -T reverse-proxy getent hosts ingestion | tr -d '\r')" ]; then fail "reverse-proxy resolves ingestion"; fi
 
+# --- admin REST ingestion (изнутри контейнера, порт наружу не публикуется): admin aud -> 200, чужой aud -> 401 ---
+# 401, а не 403: токен без admin scope несёт только MCP aud, отказ должен прийти от проверки audience.
+admin_replay() {
+  printf '%s' "$KEYCLOAK_CLIENT_SECRET" | docker compose exec -T ingestion sh -c '
+    set -eu
+    umask 077
+    scope=$1
+    hdr=$(mktemp); trap "rm -f \"$hdr\"" EXIT
+    token=$(curl -sf http://keycloak:8080/realms/archrag/protocol/openid-connect/token -d grant_type=client_credentials \
+      -d client_id=archrag-demo --data-urlencode "scope=$scope" --data-urlencode client_secret@- |
+      sed -n "s/.*\"access_token\":\"\([^\"]*\)\".*/\1/p")
+    [ -n "$token" ] || { echo "no access token" >&2; exit 1; }
+    printf "Authorization: Bearer %s\n" "$token" > "$hdr"
+    id=$(cat /proc/sys/kernel/random/uuid)
+    curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:8081/admin/replay -H @"$hdr" -H "Content-Type: application/json" \
+      -d "{\"source\":\"urn:corp:eam\",\"receivedFrom\":\"1970-01-01T00:00:00Z\",\"receivedTo\":\"1970-01-02T00:00:00Z\",\"replayId\":\"$id\"}"' admin "$1"
+}
+code=$(admin_replay architecture.admin)
+[ "$code" = 200 ] || fail "admin REST with admin audience: expected 200, got $code"
+code=$(admin_replay architecture.read)
+[ "$code" = 401 ] || fail "admin REST with foreign audience: expected 401, got $code"
+
 # --- plain Bolt к Neo4j отклоняется (tls_level=REQUIRED): соединение устанавливается, сервер закрывает его без ответа ---
 # Только встроенные команды bash. Исходы: CLOSED (EOF без данных) = отказ; REPLIED/TIMEOUT/UNREACHABLE = провал проверки.
 bolt=$(docker compose exec -T ingestion bash -c '
@@ -64,4 +86,4 @@ bolt=$(docker compose exec -T ingestion bash -c '
   if read -r -n 4 -t 5 -u 3 reply; then echo REPLIED; else rc=$?; [ "$rc" -gt 128 ] && echo TIMEOUT || { [ -z "$reply" ] && echo CLOSED || echo REPLIED; }; fi' | tr -d '\r')
 [ "$bolt" = CLOSED ] || fail "plain Bolt to neo4j must be closed without reply, got: ${bolt:-<no output>}"
 
-echo "smoke ok: TLS, 401 without token, 200 with token, network boundaries and secrets"
+echo "smoke ok: TLS, 401 without token, 200 with token, admin REST audience, network boundaries and secrets"

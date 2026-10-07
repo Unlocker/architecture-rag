@@ -148,6 +148,7 @@ services:
       # Подстановки в archrag-realm.json.
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?}
       ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
+      ARCHRAG_ADMIN_RESOURCE_URI: urn:archrag:admin
     volumes:
       - ./keycloak/archrag-realm.json:/opt/keycloak/data/import/archrag-realm.json:ro
     # edge: proxy отдаёт токен-endpoint; backend: ingestion проверяет JWT админки по issuer.
@@ -174,6 +175,8 @@ services:
         JAR: ingestion/ingestion-service/target/ingestion-service-0.1.0-SNAPSHOT-exec.jar
     image: archrag/ingestion:dev
     environment:
+      # Audience admin REST: совпадает с `aud`, который keycloak выдаёт токенам со scope architecture.admin.
+      ARCHRAG_ADMIN_RESOURCE_URI: urn:archrag:admin
       ARCHRAG_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
       ARCHRAG_PG_USER: ${POSTGRES_USER:?}
       # bolt+ssc: TLS без проверки цепочки (демо-допущение, см. README).

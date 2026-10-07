@@ -63,6 +63,9 @@ curl -s --cacert ca.crt -X POST https://localhost:8443/realms/archrag/protocol/o
 Токен содержит `iss=http://keycloak:8080/realms/archrag` (фиксируется `KC_HOSTNAME`) и audience
 `https://localhost:<порт>/mcp`; с этим же issuer и resource URI работает `mcp-server`.
 
+Admin REST ingestion проверяет audience `ARCHRAG_ADMIN_RESOURCE_URI` (в compose `urn:archrag:admin`, переменная обязательна). Keycloak кладёт этот `aud`
+только в токены со scope `architecture.admin` (mapper на client scope); токен по умолчанию (`architecture.read`) получает один MCP `aud`, и admin REST отвечает ему `401`.
+
 ## Сети и секреты
 
 | Сеть | Участники | Внешний доступ |

@@ -11,7 +11,20 @@
     {
       "name": "architecture.admin",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "admin-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "${ARCHRAG_ADMIN_RESOURCE_URI}",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clients": [
