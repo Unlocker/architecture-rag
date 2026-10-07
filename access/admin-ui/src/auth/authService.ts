@@ -53,16 +53,28 @@ export function createOidcAuthService(config: ConsoleConfig): AuthService {
     async init() {
       const params = new URLSearchParams(window.location.search);
       if (params.has('code') && params.has('state')) {
-        user = await manager.signinRedirectCallback();
-        // Убираем code/state из адреса, сохраняя hash-маршрут.
-        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+        // code/state одноразовые: убираем их из адреса в любом случае, иначе перезагрузка повторит ошибку.
+        const clean = () =>
+          window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+        try {
+          user = await manager.signinRedirectCallback();
+        } catch {
+          // Просроченный/потерянный state: сбрасываем и просим App начать вход заново.
+          user = null;
+          clean();
+          return false;
+        }
+        clean();
+        if (typeof user.state === 'string' && user.state.startsWith('#/')) {
+          window.location.hash = user.state;
+        }
       } else {
         user = await manager.getUser();
       }
       return user !== null && !user.expired;
     },
     getAccessToken: () => (user && !user.expired ? user.access_token : null),
-    login: () => manager.signinRedirect(),
+    login: () => manager.signinRedirect({ state: window.location.hash }),
     logout: () => manager.signoutRedirect(),
   };
 }

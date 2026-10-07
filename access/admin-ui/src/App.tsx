@@ -39,8 +39,11 @@ export function App({ auth }: { auth: AuthService }) {
     return <p>Вход…</p>;
   }
   return (
-    <ApiProvider auth={auth}>
-      <Layout route={route}>{route === 'graph' ? <GraphPage /> : <SyncPage />}</Layout>
-    </ApiProvider>
+    <Layout route={route}>
+      {/* key: 403 в одном разделе не блокирует навигацию и сбрасывается при смене раздела. */}
+      <ApiProvider key={route} auth={auth}>
+        {route === 'graph' ? <GraphPage /> : <SyncPage />}
+      </ApiProvider>
+    </Layout>
   );
 }

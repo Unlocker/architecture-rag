@@ -91,3 +91,40 @@ test('ApiProvider shows the 403 screen', async () => {
   expect(await screen.findByText('Нет прав')).toBeTruthy();
   expect(screen.queryByText('content')).toBeNull();
 });
+
+test('parallel 401 start login once', async () => {
+  globalThis.fetch = jest.fn().mockResolvedValue(response(401));
+  const auth = fakeAuth();
+  function Two() {
+    const api = useApi();
+    useEffect(() => {
+      api.get('/a').catch(() => undefined);
+      api.get('/b').catch(() => undefined);
+    }, [api]);
+    return null;
+  }
+
+  render(
+    <ApiProvider auth={auth}>
+      <Two />
+    </ApiProvider>,
+  );
+
+  await waitFor(() => expect(auth.login).toHaveBeenCalledTimes(1));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(auth.login).toHaveBeenCalledTimes(1);
+});
+
+test('ApiProvider shows error when login fails', async () => {
+  globalThis.fetch = jest.fn().mockResolvedValue(response(401));
+  const auth = fakeAuth();
+  auth.login.mockRejectedValue(new Error('idp down'));
+
+  render(
+    <ApiProvider auth={auth}>
+      <Probe />
+    </ApiProvider>,
+  );
+
+  expect(await screen.findByRole('alert')).toBeTruthy();
+});

@@ -7,7 +7,7 @@ const outputPath = path.resolve(__dirname, 'target/classes/META-INF/resources');
 // Для разработки: адрес локального admin-console, на который проксируются конфиг и API.
 const adminConsoleUrl = process.env.ADMIN_CONSOLE_URL || 'http://localhost:8082';
 
-module.exports = {
+module.exports = (env, argv) => ({
   entry: './src/index.tsx',
   output: {
     path: outputPath,
@@ -23,7 +23,8 @@ module.exports = {
     ],
   },
   plugins: [new HtmlWebpackPlugin({ template: './src/index.html' })],
-  devtool: 'source-map',
+  // Исходники в production-jar не публикуем.
+  devtool: argv.mode === 'production' ? false : 'source-map',
   devServer: {
     port: 3000,
     historyApiFallback: true,
@@ -35,4 +36,4 @@ module.exports = {
       },
     ],
   },
-};
+});
