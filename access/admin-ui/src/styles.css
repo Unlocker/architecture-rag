@@ -1,0 +1,6 @@
+body { margin: 0; font-family: system-ui, sans-serif; }
+.layout header { display: flex; align-items: center; gap: 2rem; padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+.layout header h1 { font-size: 1.1rem; margin: 0; }
+.layout nav { display: flex; gap: 1rem; }
+.layout nav a[aria-current='page'] { font-weight: 600; }
+.layout main, .forbidden { padding: 1rem; }

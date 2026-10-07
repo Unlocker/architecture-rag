@@ -16,7 +16,12 @@
   <description>Админ-консоль: статика SPA и read-only API графа.</description>
 
   <dependencies>
-    <!-- TODO(UNLOCKER-235): после влития U.1 добавить зависимость на admin-ui (бандл в META-INF/resources). -->
+    <!-- Бандл SPA (META-INF/resources) отдаёт Spring Boot как статику. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>admin-ui</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>graph-query-core</artifactId>

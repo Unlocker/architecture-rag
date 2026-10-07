@@ -17,6 +17,8 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -168,12 +170,25 @@ class ConsoleApiTest {
 
   @Test
   void staticFilesAndSpaRoutesArePublicAndFallBackToIndex() {
-    assertThat(get("/", null).getBody()).contains("arch-rag console test index");
-    assertThat(get("/graph/nodes/abc", null).getBody()).contains("arch-rag console test index");
-    var asset = get("/assets/app.js", null);
-    assertThat(asset.getStatusCode().value()).isEqualTo(200);
-    assertThat(asset.getBody()).contains("console.log");
-    assertThat(get("/assets/missing.js", null).getStatusCode().value()).isEqualTo(404);
+    String index = get("/", null).getBody();
+    assertThat(index).contains("id=\"root\"");
+    Matcher script = Pattern.compile("<script[^>]*\\ssrc=\"([^\"]+)\"").matcher(index);
+    assertThat(script.find()).as("бандл подключён <script src>").isTrue();
+    assertThat(get("/graph/nodes/abc", null).getBody()).contains("id=\"root\"").contains(script.group(1));
+    assertThat(get(script.group(1), null).getStatusCode().value()).isEqualTo(200);
+    assertThat(get("/missing.js", null).getStatusCode().value()).isEqualTo(404);
+  }
+
+  @Test
+  void bundleIndexIsServedWithCspAndHasNoInlineScriptsOrStyles() {
+    var res = get("/", null);
+
+    assertThat(res.getStatusCode().value()).isEqualTo(200);
+    assertThat(res.getHeaders().getFirst("Content-Security-Policy")).contains("default-src 'self'");
+    // default-src 'self' запрещает inline: разметка бандла не должна на него полагаться.
+    String index = res.getBody();
+    assertThat(index).doesNotContainPattern("(?s)<script(?![^>]*\\ssrc=)[^>]*>");
+    assertThat(index).doesNotContainPattern("<style[\\s>]").doesNotContainPattern("\\sstyle=");
   }
 
   @Test
