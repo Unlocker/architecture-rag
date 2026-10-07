@@ -77,13 +77,14 @@ public final class Rows {
       Instant firstSeenAt,
       Instant updatedAt) {}
 
-  /** Запись {@code admin_audit} без {@code request}; {@code result} длиннее лимита не отдаётся ({@code resultTruncated}). */
+  /** Запись {@code admin_audit} ({@code request} — параметры операции, не данные источника); {@code result} длиннее лимита не отдаётся ({@code resultTruncated}). */
   public record Audit(
       long id,
       String operation,
       String actor,
       String status,
       String replayId,
+      JsonNode request,
       JsonNode result,
       boolean resultTruncated,
       String error,

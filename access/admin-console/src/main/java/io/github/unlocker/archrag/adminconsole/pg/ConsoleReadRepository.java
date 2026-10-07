@@ -228,7 +228,7 @@ public class ConsoleReadRepository {
 
   // --- аудит ---
 
-  /** Страница {@code admin_audit}; {@code request} не читается. */
+  /** Страница {@code admin_audit}. */
   public Page<Audit> audit(String operation, String status, Instant from, Instant to, PageRequest page) {
     var where = new Where();
     where.eq("operation = :operation", "operation", operation);
@@ -237,7 +237,7 @@ public class ConsoleReadRepository {
     where.eq("started_at < :to", "to", to == null ? null : Timestamp.from(to));
     return page(
         "admin_audit",
-        "id, operation, actor, status, replay_id,"
+        "id, operation, actor, status, replay_id, request::text AS request,"
             + " CASE WHEN length(result::text) > " + MAX_RESULT_CHARS + " THEN NULL ELSE result::text END AS result,"
             + " length(result::text) > " + MAX_RESULT_CHARS + " AS result_truncated, error, started_at, finished_at",
         where,
@@ -245,12 +245,14 @@ public class ConsoleReadRepository {
         page,
         (rs, i) -> {
           String result = rs.getString("result");
+          String request = rs.getString("request");
           return new Audit(
               rs.getLong("id"),
               rs.getString("operation"),
               rs.getString("actor"),
               rs.getString("status"),
               rs.getString("replay_id"),
+              request == null ? null : JSON.readTree(request),
               result == null ? null : JSON.readTree(result),
               rs.getBoolean("result_truncated"),
               truncate(rs.getString("error")),

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Read-only API аудита админских операций ingestion ({@code admin_audit}); тело запроса не отдаётся. */
+/** Read-only API аудита админских операций ingestion ({@code admin_audit}). */
 @RestController
 @RequestMapping("/api/audit")
 public class AuditController {

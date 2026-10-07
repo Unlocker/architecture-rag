@@ -391,6 +391,21 @@ flowchart LR
 - **Crosswalk.** `approvedBy` и `approvedAt` из запроса не принимаются (это `sub` токена и серверное время). `APPLIED` идемпотентен; `CONFLICT` — ключи уже связаны с разными `gid` (слияние существующих `gid` не делается, `gid=null`); `INVALID` — неизвестный `source`, пустой `reason`. Применять crosswalk нужно до первого события любой из записей. Узлы графа под новый `gid` переписывает следующий replay или rebuild.
 - **Аудит** (таблица `admin_audit`, миграция `V3__admin_audit.sql`): `STARTED` до выполнения, затем `SUCCEEDED` или `FAILED` с простым именем класса исключения (текст исключения и payload источников не пишутся). Отклонённые валидацией запросы (`400`) и `409` в аудит не попадают.
 
+## 4a. Read-only API синхронизации админ-консоли
+
+`access/admin-console` читает PostgreSQL журнала ролью `archrag_console_ro` (V6, только `SELECT` на `inbox_event`, `consumer_checkpoint`, `dlq_entry`, `identity_candidate`, `source_conflict`, `admin_audit`) и граф через `GraphReads`. Все пути требуют scope `architecture.admin`; payload не отдаётся (только `payloadRef`, `contentHash`). Списки пагинируются: `page` ≥ 0 (по умолчанию 0), `size` 1..200 (по умолчанию 50), ответ `{items, page, size, total}`; неверные значения, неизвестные `source` (`eam|scm|cmdb|deploymap`) и `status` (`ProcessingStatus`) — 400. Время — ISO-8601 UTC.
+
+| Путь | Назначение |
+|---|---|
+| `GET /api/sync/sources` | всегда 4 источника: `checkpoints[]`, `lastSyncRun` (граф; `endedAt` и счётчики `null`, проектор их не пишет), `eventsByStatus`, `lastProjectedAt`, `lagSeconds` (по `Clock`) |
+| `GET /api/sync/events?source&status&from&to` | журнал `inbox_event`, `received_at` в `[from, to)` |
+| `GET /api/sync/events/{source}/{eventId}` | событие, `errorReason` и записи `dlq_entry` как история (отдельной истории статусов нет) |
+| `GET /api/sync/dlq?source&replayed` | `dlq_entry` с причиной |
+| `GET /api/identity/conflicts`, `/candidates` | `source_conflict`, `identity_candidate`; `status` по умолчанию `OPEN` |
+| `GET /api/audit?operation&status&from&to` | `admin_audit` по `started_at DESC`; `result` больше 4000 символов не отдаётся (`resultTruncated`) |
+
+SQL-чтения попадают в аудит чтения консоли как `sql:<таблица>`.
+
 ## 5. Внутренние контракты
 
 ### 5.1. `SourceConnector` (source-spi)

@@ -26,7 +26,7 @@ public class IdentityController {
     this.repository = repository;
   }
 
-  /** {@code source_conflict}: фильтры {@code status} ({@code OPEN}/{@code RESOLVED}) и {@code gid}. */
+  /** {@code source_conflict}: фильтры {@code status} (по умолчанию {@code OPEN}; {@code RESOLVED} — история) и {@code gid}. */
   @GetMapping("/conflicts")
   public Page<Conflict> conflicts(
       @RequestParam(name = "status", required = false) String status,
@@ -34,10 +34,10 @@ public class IdentityController {
       @RequestParam(name = "page", required = false) Integer page,
       @RequestParam(name = "size", required = false) Integer size) {
     PageRequest paging = PageRequest.of(page, size);
-    return repository.conflicts(token(status, "status"), gid(gid), paging);
+    return repository.conflicts(token(status, "status", "OPEN"), gid(gid), paging);
   }
 
-  /** {@code identity_candidate}: фильтры {@code status} и {@code labelFamily}. */
+  /** {@code identity_candidate}: фильтры {@code status} (по умолчанию {@code OPEN}) и {@code labelFamily}. */
   @GetMapping("/candidates")
   public Page<Candidate> candidates(
       @RequestParam(name = "status", required = false) String status,
@@ -45,12 +45,16 @@ public class IdentityController {
       @RequestParam(name = "page", required = false) Integer page,
       @RequestParam(name = "size", required = false) Integer size) {
     PageRequest paging = PageRequest.of(page, size);
-    return repository.candidates(token(status, "status"), token(labelFamily, "labelFamily"), paging);
+    return repository.candidates(token(status, "status", "OPEN"), token(labelFamily, "labelFamily"), paging);
   }
 
   static String token(String value, String name) {
+    return token(value, name, null);
+  }
+
+  static String token(String value, String name, String defaultValue) {
     if (value == null || value.isBlank()) {
-      return null;
+      return defaultValue;
     }
     if (!TOKEN.matcher(value).matches()) {
       throw new InvalidRequestException(name + " is malformed");

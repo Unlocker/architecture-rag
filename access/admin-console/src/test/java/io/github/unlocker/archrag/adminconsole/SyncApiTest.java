@@ -138,7 +138,7 @@ class SyncApiTest {
       if (type.isRecord()) {
         assertThat(Arrays.stream(type.getRecordComponents()).map(RecordComponent::getName))
             .as(type.getSimpleName())
-            .doesNotContain("payload", "data", "request");
+            .doesNotContain("payload", "payloadKey", "data");
       }
     }
   }

@@ -341,11 +341,13 @@ class SyncConsoleIT {
 
   @Test
   void conflictsAndCandidatesAreListedAndFiltered() {
-    assertThat(ok("/api/identity/conflicts").get("total").asLong()).isEqualTo(2);
+    // По умолчанию только OPEN; RESOLVED — явным фильтром.
+    assertThat(ok("/api/identity/conflicts").get("total").asLong()).isEqualTo(1);
+    assertThat(ok("/api/identity/conflicts?status=RESOLVED").get("total").asLong()).isEqualTo(1);
     JsonNode open = ok("/api/identity/conflicts?status=OPEN");
     assertThat(open.get("total").asLong()).isEqualTo(1);
     assertThat(open.get("items").get(0).get("property").asString()).isEqualTo("criticality");
-    assertThat(ok("/api/identity/conflicts?gid=22222222-2222-2222-2222-222222222222").get("total").asLong())
+    assertThat(ok("/api/identity/conflicts?status=RESOLVED&gid=22222222-2222-2222-2222-222222222222").get("total").asLong())
         .isEqualTo(1);
 
     JsonNode candidates = ok("/api/identity/candidates?status=OPEN");
@@ -356,14 +358,13 @@ class SyncConsoleIT {
   }
 
   @Test
-  void auditListsOperationsWithoutRequestBody() {
+  void auditListsOperationsWithRequestParameters() {
     JsonNode all = ok("/api/audit");
     assertThat(ids(all, "operation")).containsExactly("bigop", "rebuild", "replay");
     assertThat(ids(ok("/api/audit?operation=replay"), "actor")).containsExactly("alice");
     assertThat(ok("/api/audit?status=FAILED").get("total").asLong()).isEqualTo(1);
     JsonNode replay = ok("/api/audit?operation=replay").get("items").get(0);
     assertThat(replay.get("result").get("replayed").asInt()).isEqualTo(2);
-    assertThat(replay.propertyNames()).doesNotContain("request");
-    assertThat(replay.toString()).doesNotContain("secret");
+    assertThat(replay.get("request").get("secret").asString()).isEqualTo("x");
   }
 }
