@@ -88,7 +88,7 @@ class F3AcceptanceIT {
   private static final Duration TIMEOUT = Duration.ofSeconds(90);
   private static final String READ = "architecture.read";
 
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
   static final GenericContainer<?> S3 = ContainersSmokeIT.s3Container();
 

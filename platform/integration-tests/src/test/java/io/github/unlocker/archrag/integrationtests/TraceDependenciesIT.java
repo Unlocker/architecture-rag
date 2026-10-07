@@ -41,7 +41,7 @@ import org.testcontainers.neo4j.Neo4jContainer;
 class TraceDependenciesIT {
 
   @Container
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   static final QueryLimits LIMITS =
       new QueryLimits(6, 500, 50, Duration.ofSeconds(Long.getLong("archrag.it.queryTimeoutSeconds", 5)), 512 * 1024);

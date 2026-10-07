@@ -71,7 +71,7 @@ class GraphProjectorIT {
   private static final Instant T2 = Instant.parse("2026-10-02T10:00:00Z");
 
   @Container
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   @Container
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");

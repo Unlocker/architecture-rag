@@ -65,7 +65,7 @@ class JournalDispatcherIT {
   private static final SecretKey KEY = new SecretKeySpec("0123456789abcdef0123456789abcdef".getBytes(), "HmacSHA256");
 
   @Container
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   @Container
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
