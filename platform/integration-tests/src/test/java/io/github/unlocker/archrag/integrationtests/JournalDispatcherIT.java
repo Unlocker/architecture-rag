@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
@@ -128,7 +129,7 @@ class JournalDispatcherIT {
 
     poller(eam).pollOnce();
 
-    awaitTrue(() -> Boolean.TRUE.equals(active(a)) && Boolean.TRUE.equals(active(b)) && Boolean.TRUE.equals(active(c)));
+    awaitTrue("a, b, c projected", () -> Boolean.TRUE.equals(active(a)) && Boolean.TRUE.equals(active(b)) && Boolean.TRUE.equals(active(c)));
   }
 
   @Test
@@ -146,12 +147,12 @@ class JournalDispatcherIT {
 
     poller(eam).pollOnce();
 
-    awaitTrue(() -> status(badId) == ProcessingStatus.QUARANTINED);
+    awaitTrue("bad event quarantined", () -> status(badId) == ProcessingStatus.QUARANTINED);
     JournalEntry quarantined = journal.find(SOURCE, badId).orElseThrow();
     assertThat(quarantined.errorCode()).isEqualTo("INVALID_RAW_PAYLOAD");
     assertThat(quarantined.errorReason()).doesNotContain("SECRET");
     assertThat(openDlqRows(badId)).isEqualTo(1);
-    awaitTrue(() -> Boolean.TRUE.equals(active(after1)) && Boolean.TRUE.equals(active(after2)));
+    awaitTrue("events after bad one projected", () -> Boolean.TRUE.equals(active(after1)) && Boolean.TRUE.equals(active(after2)));
   }
 
   @Test
@@ -162,7 +163,7 @@ class JournalDispatcherIT {
     String id = "unknown-" + uid();
     journal.append(event(id, "TEAM", "X-" + uid(), "architecture.unknown.v1", Map.of()), raw, null);
 
-    awaitTrue(() -> status(id) == ProcessingStatus.QUARANTINED);
+    awaitTrue("event quarantined", () -> status(id) == ProcessingStatus.QUARANTINED);
     assertThat(journal.find(SOURCE, id).orElseThrow().errorCode()).isEqualTo("UNSUPPORTED_EVENT_TYPE");
   }
 
@@ -175,7 +176,7 @@ class JournalDispatcherIT {
     eam.upsert("TEAM", gone, team("Gone"));
     Poller poller = poller(eam);
     poller.pollOnce();
-    awaitTrue(() -> Boolean.TRUE.equals(active(keep)) && Boolean.TRUE.equals(active(gone)));
+    awaitTrue("keep and gone projected", () -> Boolean.TRUE.equals(active(keep)) && Boolean.TRUE.equals(active(gone)));
 
     // Удаление без webhook: узнать о нём можно только из полного snapshot.
     eam.suppressWebhooks(true);
@@ -183,18 +184,18 @@ class JournalDispatcherIT {
     PollResult run = poller.snapshotOnce();
 
     assertThat(run.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
-    awaitTrue(() -> Boolean.FALSE.equals(active(gone)));
+    awaitTrue("gone tombstoned", () -> Boolean.FALSE.equals(active(gone)));
     assertThat(active(keep)).isTrue();
-    awaitTrue(() -> status("snapshot-complete:" + run.syncRunId()) == ProcessingStatus.PROJECTED);
+    awaitTrue("snapshot marker projected", () -> status("snapshot-complete:" + run.syncRunId()) == ProcessingStatus.PROJECTED);
   }
 
   @Test
-  void markerClaimingMoreObjectsThanJournalHoldsDeletesNothing() throws Exception {
+  void markerClaimingMoreObjectsThanJournalHoldsDeletesNothing() {
     StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
     String victim = "victim-" + uid();
     eam.upsert("TEAM", victim, team("Victim"));
     poller(eam).pollOnce();
-    awaitTrue(() -> Boolean.TRUE.equals(active(victim)));
+    awaitTrue("victim projected", () -> Boolean.TRUE.equals(active(victim)));
 
     // Адаптер записал 5 событий прогона, в журнале их 0: прогон неполон.
     String runId = "incomplete-" + uid();
@@ -203,9 +204,13 @@ class JournalDispatcherIT {
         + Instant.now() + "\"}").getBytes(StandardCharsets.UTF_8));
     journal.append(marker, raw, runId);
 
-    awaitTrue(() -> status(marker.id()) == ProcessingStatus.RETRYING);
-    Thread.sleep(1500);
-    assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("RECONCILIATION_TRIGGER_FAILED");
+    // RETRYING переходный (диспетчер снова берёт маркер через retry-delay), поэтому ждём устойчивый признак:
+    // attempts растёт на каждом переходе в RETRYING, errorCode сохраняется. Два прохода без удаления.
+    awaitTrue("marker failed twice with RECONCILIATION_TRIGGER_FAILED", () -> {
+      var entry = journal.find(SOURCE, marker.id());
+      return entry.isPresent() && entry.get().attempts() >= 2
+          && "RECONCILIATION_TRIGGER_FAILED".equals(entry.get().errorCode());
+    }, () -> journal.find(SOURCE, marker.id()).map(e -> e.status() + "/" + e.attempts() + "/" + e.errorCode()).orElse("absent"));
     assertThat(active(victim)).isTrue();
   }
 
@@ -215,7 +220,7 @@ class JournalDispatcherIT {
     CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 0L);
     journal.append(marker, null, runId);
 
-    awaitTrue(() -> status(marker.id()) == ProcessingStatus.QUARANTINED);
+    awaitTrue("marker without raw quarantined", () -> status(marker.id()) == ProcessingStatus.QUARANTINED);
     assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("MARKER_NO_RAW");
     assertThat(openDlqRows(marker.id())).isEqualTo(1);
   }
@@ -269,12 +274,16 @@ class JournalDispatcherIT {
     }
   }
 
+  private static void awaitTrue(String what, BooleanSupplier condition) {
+    awaitTrue(what, condition, () -> "n/a");
+  }
+
   /** Опрос с таймаутом: Awaitility в проект не входит, новую зависимость в задаче не вводим. */
-  private static void awaitTrue(BooleanSupplier condition) {
+  private static void awaitTrue(String what, BooleanSupplier condition, Supplier<String> lastState) {
     long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
     while (!condition.getAsBoolean()) {
       if (System.nanoTime() > deadline) {
-        throw new AssertionError("condition not reached within 30s");
+        throw new AssertionError(what + " not reached within 30s; last=" + lastState.get());
       }
       try {
         Thread.sleep(100);
