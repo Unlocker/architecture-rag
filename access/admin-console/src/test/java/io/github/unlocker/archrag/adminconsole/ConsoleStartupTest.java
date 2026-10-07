@@ -37,13 +37,15 @@ class ConsoleStartupTest {
   }
 
   @Test
-  void configurationHasReaderCredentialsOnly() throws Exception {
+  void configurationHasReadOnlyCredentialsOnly() throws Exception {
     String yml;
     try (var in = AdminConsoleApplication.class.getResourceAsStream("/application.yml")) {
       yml = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     assertThat(yml).contains("reader:").contains("ARCHRAG_NEO4J_READER_PASSWORD");
-    assertThat(yml.toLowerCase()).doesNotContain("writer").doesNotContain("datasource").doesNotContain("postgres");
+    // PostgreSQL: только роль archrag_console_ro (по умолчанию) и пароль из env; ни писателя, ни Flyway.
+    assertThat(yml).contains("ARCHRAG_CONSOLE_PG_PASSWORD").contains("archrag_console_ro");
+    assertThat(yml.toLowerCase()).doesNotContain("writer").doesNotContain("flyway").doesNotContain("datasource");
   }
 }

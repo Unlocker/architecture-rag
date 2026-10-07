@@ -29,7 +29,8 @@ class ConsoleTemplatesTest {
             "graph_stats_relations",
             "graph_last_update",
             "console_neighborhood_nodes",
-            "console_neighborhood_edges");
+            "console_neighborhood_edges",
+            "console_latest_sync_runs");
   }
 
   @Test
