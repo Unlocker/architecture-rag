@@ -32,13 +32,14 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Эндпоинты синхронизации, identity и аудита: безопасность, валидация, формы ответов. PostgreSQL и граф подменены. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@org.springframework.context.annotation.Import(SyncApiTest.FixedClock.class)
 class SyncApiTest {
 
   static final List<String> ROUTES =
       List.of(
           "/api/sync/sources",
           "/api/sync/events",
-          "/api/sync/events/e-1",
+          "/api/sync/events/eam/e-1",
           "/api/sync/dlq",
           "/api/identity/conflicts",
           "/api/identity/candidates",
@@ -163,14 +164,36 @@ class SyncApiTest {
   }
 
   @Test
-  void unknownEventIsNotFoundAndAmbiguousEventAsksForSource() {
+  void unknownEventIsNotFoundAndUnknownSourceIsRejected() {
     String token = TestJwt.token("architecture.admin");
     when(repository.eventsById(any(), any())).thenReturn(List.of());
-    assertThat(get("/api/sync/events/e-1", token).getStatusCode().value()).isEqualTo(404);
 
-    var e = new Event("eam", "e-1", "t", null, "T", "1", "1", null, null, "1", "RECEIVED", 0, null, null, null,
-        Instant.now(), Instant.now());
-    when(repository.eventsById(any(), any())).thenReturn(List.of(e, e));
-    assertThat(get("/api/sync/events/e-1", token).getStatusCode().value()).isEqualTo(400);
+    assertThat(get("/api/sync/events/eam/e-1", token).getStatusCode().value()).isEqualTo(404);
+    assertThat(get("/api/sync/events/bogus/e-1", token).getStatusCode().value()).isEqualTo(400);
+  }
+
+  @Test
+  void lagIsComputedFromInjectedClock() {
+    when(repository.checkpoints()).thenReturn(Map.of());
+    when(repository.eventCounts()).thenReturn(Map.of());
+    when(repository.lastProjected()).thenReturn(Map.of("eam", NOW.minusSeconds(90)));
+    when(executor.execute(any(), any(), any()))
+        .thenReturn(new QueryResult("console_latest_sync_runs", List.of(), false, 0, Duration.ZERO));
+
+    JsonNode body = json(get("/api/sync/sources", TestJwt.token("architecture.admin")));
+
+    assertThat(body.get(0).get("lagSeconds").asLong()).isEqualTo(90);
+    assertThat(body.get(1).get("lagSeconds").isNull()).isTrue();
+  }
+
+  static final Instant NOW = Instant.parse("2026-03-01T12:00:00Z");
+
+  @org.springframework.boot.test.context.TestConfiguration
+  static class FixedClock {
+    @org.springframework.context.annotation.Bean
+    @org.springframework.context.annotation.Primary
+    java.time.Clock fixedClock() {
+      return java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC);
+    }
   }
 }

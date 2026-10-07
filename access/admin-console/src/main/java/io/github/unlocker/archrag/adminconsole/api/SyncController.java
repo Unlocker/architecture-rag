@@ -13,6 +13,7 @@ import io.github.unlocker.archrag.adminconsole.pg.Rows.SyncRunInfo;
 import io.github.unlocker.archrag.adminconsole.pg.SyncSources;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.graphquerycore.templates.ConsoleTemplates;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -40,10 +41,12 @@ public class SyncController {
 
   private final ConsoleReadRepository repository;
   private final GraphReads graph;
+  private final Clock clock;
 
-  SyncController(ConsoleReadRepository repository, GraphReads graph) {
+  SyncController(ConsoleReadRepository repository, GraphReads graph, Clock clock) {
     this.repository = repository;
     this.graph = graph;
+    this.clock = clock;
   }
 
   /**
@@ -56,7 +59,7 @@ public class SyncController {
     Map<String, Map<String, Long>> counts = repository.eventCounts();
     Map<String, Instant> projected = repository.lastProjected();
     Map<String, SyncRunInfo> runs = latestRuns();
-    Instant now = Instant.now();
+    Instant now = clock.instant();
     return SyncSources.CODES.stream()
         .map(
             code -> {
@@ -88,22 +91,20 @@ public class SyncController {
   }
 
   /**
-   * Событие по {@code eventId}. Ключ события составной {@code (source, eventId)}, поэтому при совпадении
-   * {@code eventId} у нескольких источников нужен параметр {@code source}.
+   * Событие по ключу {@code (source, eventId)}; {@code eventId} с символом {@code /} в путь не помещается.
+   * Истории статусов в хранилище нет, вместо неё отдаются записи DLQ события.
    */
-  @GetMapping("/events/{eventId}")
-  public EventDetail event(
-      @PathVariable("eventId") String eventId,
-      @RequestParam(name = "source", required = false) String source) {
-    List<Event> found = repository.eventsById(eventId, SyncSources.toStored(source));
+  @GetMapping("/events/{source}/{eventId}")
+  public EventDetail event(@PathVariable("source") String source, @PathVariable("eventId") String eventId) {
+    String stored = SyncSources.toStored(source);
+    if (stored == null) {
+      throw new InvalidRequestException("source must not be blank");
+    }
+    List<Event> found = repository.eventsById(eventId, stored);
     if (found.isEmpty()) {
       throw new NotFoundException("event not found");
     }
-    if (found.size() > 1) {
-      throw new InvalidRequestException("eventId is ambiguous; specify source");
-    }
     Event event = found.getFirst();
-    String stored = SyncSources.toStored(event.source());
     String reason = repository.errorReason(stored, eventId).orElse(null);
     return new EventDetail(event, reason, repository.dlqOfEvent(stored, eventId), HISTORY_NOTE);
   }

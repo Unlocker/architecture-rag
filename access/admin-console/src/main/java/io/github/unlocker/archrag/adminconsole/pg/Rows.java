@@ -77,7 +77,7 @@ public final class Rows {
       Instant firstSeenAt,
       Instant updatedAt) {}
 
-  /** Запись {@code admin_audit} без {@code request}. */
+  /** Запись {@code admin_audit} без {@code request}; {@code result} длиннее лимита не отдаётся ({@code resultTruncated}). */
   public record Audit(
       long id,
       String operation,
@@ -85,6 +85,7 @@ public final class Rows {
       String status,
       String replayId,
       JsonNode result,
+      boolean resultTruncated,
       String error,
       Instant startedAt,
       Instant finishedAt) {}

@@ -97,7 +97,8 @@ class SyncConsoleIT {
         + "'RESOLVED','2026-01-01T00:00:00Z','2026-01-02T00:00:00Z')");
     st.execute("INSERT INTO admin_audit (operation, actor, request, status, result, started_at, finished_at) VALUES"
         + " ('replay','alice','{\"secret\":\"x\"}'::jsonb,'OK','{\"replayed\":2}'::jsonb,'2026-01-05T00:00:00Z','2026-01-05T00:00:03Z'),"
-        + " ('rebuild','bob','{}'::jsonb,'FAILED',NULL,'2026-01-06T00:00:00Z',NULL)");
+        + " ('rebuild','bob','{}'::jsonb,'FAILED',NULL,'2026-01-06T00:00:00Z',NULL),"
+        + " ('bigop','carol','{}'::jsonb,'OK', jsonb_build_object('blob', repeat('x', 6000)), '2026-01-07T00:00:00Z', NULL)");
   }
 
   private static void event(java.sql.Statement st, String source, String id, String status, String at, String code)
@@ -214,6 +215,45 @@ class SyncConsoleIT {
         .isEqualTo(403);
   }
 
+  @Test
+  void sqlReadsAreRecordedInReadAudit() {
+    var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    appender.start();
+    var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("archrag.audit.console");
+    logger.addAppender(appender);
+    try {
+      ok("/api/sync/events?source=eam&size=2");
+    } finally {
+      logger.detachAppender(appender);
+    }
+
+    var kv = new java.util.HashMap<String, Object>();
+    appender.list.getLast().getKeyValuePairs().forEach(p -> kv.put(p.key, p.value));
+    assertThat(kv.get("endpoint")).isEqualTo("GET /api/sync/events");
+    assertThat(kv.get("templates")).isEqualTo(List.of("sql:inbox_event"));
+    assertThat(kv.get("rows")).isEqualTo(2L);
+  }
+
+  @Test
+  void oversizedAuditResultIsNotReturned() {
+    JsonNode big = ok("/api/audit?operation=bigop").get("items").get(0);
+
+    assertThat(big.get("result").isNull()).isTrue();
+    assertThat(big.get("resultTruncated").asBoolean()).isTrue();
+    assertThat(ok("/api/audit?operation=replay").get("items").get(0).get("resultTruncated").asBoolean()).isFalse();
+  }
+
+  @Test
+  void connectionsDefaultToReadOnlyTransactions() throws SQLException {
+    // init-SQL пула консоли: второй рубеж поверх GRANT.
+    var ds = console.getBean(javax.sql.DataSource.class);
+    try (Connection pooled = ds.getConnection();
+        var rs = pooled.createStatement().executeQuery("SHOW default_transaction_read_only")) {
+      rs.next();
+      assertThat(rs.getString(1)).isEqualTo("on");
+    }
+  }
+
   // --- журнал ---
 
   @Test
@@ -255,12 +295,12 @@ class SyncConsoleIT {
 
   @Test
   void eventDetailCarriesDlqHistoryAndUnknownIsNotFound() {
-    JsonNode detail = ok("/api/sync/events/eam-4?source=eam");
+    JsonNode detail = ok("/api/sync/events/eam/eam-4");
 
     assertThat(detail.get("event").get("status").asString()).isEqualTo("QUARANTINED");
     assertThat(detail.get("dlqEntries")).hasSize(1);
     assertThat(detail.get("dlqEntries").get(0).get("reason").asString()).isEqualTo("cannot map");
-    assertThat(get("/api/sync/events/nope", jwt.tokenFor("u", AUDIENCE, ADMIN)).getStatusCode().value())
+    assertThat(get("/api/sync/events/eam/nope", jwt.tokenFor("u", AUDIENCE, ADMIN)).getStatusCode().value())
         .isEqualTo(404);
   }
 
@@ -318,7 +358,7 @@ class SyncConsoleIT {
   @Test
   void auditListsOperationsWithoutRequestBody() {
     JsonNode all = ok("/api/audit");
-    assertThat(ids(all, "operation")).containsExactly("rebuild", "replay");
+    assertThat(ids(all, "operation")).containsExactly("bigop", "rebuild", "replay");
     assertThat(ids(ok("/api/audit?operation=replay"), "actor")).containsExactly("alice");
     assertThat(ok("/api/audit?status=FAILED").get("total").asLong()).isEqualTo(1);
     JsonNode replay = ok("/api/audit?operation=replay").get("items").get(0);

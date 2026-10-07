@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.adminconsole.pg;
 
+import io.github.unlocker.archrag.adminconsole.audit.ReadAuditContext;
 import io.github.unlocker.archrag.adminconsole.pg.Rows.Audit;
 import io.github.unlocker.archrag.adminconsole.pg.Rows.Candidate;
 import io.github.unlocker.archrag.adminconsole.pg.Rows.Checkpoint;
@@ -31,6 +32,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class ConsoleReadRepository {
 
   static final int MAX_TEXT = 500;
+  /** Предел размера {@code result} в ответе аудита: больший jsonb не отдаётся, выставляется {@code resultTruncated}. */
+  static final int MAX_RESULT_CHARS = 4000;
 
   private static final String EVENT_COLUMNS =
       "source, event_id, type, subject, source_type, source_id, source_version, correlation_id, sync_run_id,"
@@ -57,6 +60,7 @@ public class ConsoleReadRepository {
               return 0;
             })
         .list();
+    audit("consumer_checkpoint", out.values().stream().mapToInt(List::size).sum());
     return out;
   }
 
@@ -71,6 +75,7 @@ public class ConsoleReadRepository {
               return 0;
             })
         .list();
+    audit("inbox_event_counts", out.values().stream().mapToInt(Map::size).sum());
     return out;
   }
 
@@ -84,6 +89,7 @@ public class ConsoleReadRepository {
               return 0;
             })
         .list();
+    audit("inbox_event_last_projected", out.size());
     return out;
   }
 
@@ -110,29 +116,36 @@ public class ConsoleReadRepository {
     var where = new Where();
     where.eq("event_id = :eventId", "eventId", eventId);
     where.eq("source = :source", "source", source);
-    return where.apply(jdbc.sql("SELECT " + EVENT_COLUMNS + " FROM inbox_event" + where.clause() + " ORDER BY source LIMIT 2"))
-        .query((rs, i) -> event(rs))
-        .list();
+    List<Event> events =
+        where.apply(jdbc.sql("SELECT " + EVENT_COLUMNS + " FROM inbox_event" + where.clause() + " ORDER BY source LIMIT 2"))
+            .query((rs, i) -> event(rs))
+            .list();
+    audit("inbox_event_by_id", events.size());
+    return events;
   }
 
   /** {@code error_reason} события. */
   public Optional<String> errorReason(String source, String eventId) {
-    return jdbc.sql("SELECT error_reason FROM inbox_event WHERE source = :source AND event_id = :eventId")
+    Optional<String> reason = jdbc.sql("SELECT error_reason FROM inbox_event WHERE source = :source AND event_id = :eventId")
         .param("source", source)
         .param("eventId", eventId)
         .query((rs, i) -> truncate(rs.getString("error_reason")))
         .optional();
+    audit("inbox_event_error_reason", reason.isPresent() ? 1 : 0);
+    return reason;
   }
 
   /** Записи DLQ события, старые первыми. */
   public List<DlqEntry> dlqOfEvent(String source, String eventId) {
-    return jdbc.sql(
+    List<DlqEntry> entries = jdbc.sql(
             "SELECT id, source, event_id, error_code, reason, payload_key, created_at, replayed_at FROM dlq_entry"
                 + " WHERE source = :source AND event_id = :eventId ORDER BY created_at, id")
         .param("source", source)
         .param("eventId", eventId)
         .query((rs, i) -> dlq(rs))
         .list();
+    audit("dlq_entry_of_event", entries.size());
+    return entries;
   }
 
   // --- DLQ ---
@@ -224,7 +237,9 @@ public class ConsoleReadRepository {
     where.eq("started_at < :to", "to", to == null ? null : Timestamp.from(to));
     return page(
         "admin_audit",
-        "id, operation, actor, status, replay_id, result::text AS result, error, started_at, finished_at",
+        "id, operation, actor, status, replay_id,"
+            + " CASE WHEN length(result::text) > " + MAX_RESULT_CHARS + " THEN NULL ELSE result::text END AS result,"
+            + " length(result::text) > " + MAX_RESULT_CHARS + " AS result_truncated, error, started_at, finished_at",
         where,
         "started_at DESC, id DESC",
         page,
@@ -237,6 +252,7 @@ public class ConsoleReadRepository {
               rs.getString("status"),
               rs.getString("replay_id"),
               result == null ? null : JSON.readTree(result),
+              rs.getBoolean("result_truncated"),
               truncate(rs.getString("error")),
               instant(rs, "started_at"),
               instant(rs, "finished_at"));
@@ -263,7 +279,16 @@ public class ConsoleReadRepository {
             .param("offset", page.offset())
             .query(mapper)
             .list();
+    audit(table, items.size());
     return new Page<>(items, page.page(), page.size(), total);
+  }
+
+  /** Сообщает аудиту чтения текущего запроса, какая выборка выполнена и сколько строк вернула. */
+  private static void audit(String queryId, long rows) {
+    ReadAuditContext context = ReadAuditContext.current();
+    if (context != null) {
+      context.recordSql(queryId, rows);
+    }
   }
 
   private static Event event(ResultSet rs) throws SQLException {

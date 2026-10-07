@@ -17,6 +17,25 @@ public final class ReadAuditContext {
   private long rows;
   private boolean truncated;
 
+  /**
+   * Контекст текущего запроса или {@code null} вне запроса.
+   */
+  public static ReadAuditContext current() {
+    var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+    return attributes != null
+            && attributes.getAttribute(
+                    ATTRIBUTE, org.springframework.web.context.request.RequestAttributes.SCOPE_REQUEST)
+                instanceof ReadAuditContext context
+        ? context
+        : null;
+  }
+
+  /** Учитывает SQL-чтение: в {@code templates} попадает {@code sql:<queryId>}, строки суммируются. */
+  public void recordSql(String queryId, long rowCount) {
+    templates.add("sql:" + queryId);
+    rows += rowCount;
+  }
+
   /** Учитывает результат исполнения шаблона. */
   public void record(QueryResult result) {
     templates.add(result.templateId());
