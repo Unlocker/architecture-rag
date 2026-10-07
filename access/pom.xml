@@ -18,5 +18,6 @@
   <modules>
     <module>graph-query-core</module>
     <module>mcp-server</module>
+    <module>admin-ui</module>
   </modules>
 </project>
