@@ -13,6 +13,8 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${ARCHRAG_OIDC_ISSUER_URI}
+          # Без значения по умолчанию: без переменной сервис не стартует (токен для чужого ресурса не принимается).
+          audiences: ${ARCHRAG_ADMIN_RESOURCE_URI}
 
 archrag:
   neo4j:

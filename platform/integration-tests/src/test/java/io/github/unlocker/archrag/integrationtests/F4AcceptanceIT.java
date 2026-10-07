@@ -108,7 +108,7 @@ class F4AcceptanceIT {
   private static final String READ = "architecture.read";
   private static final String IT_SYSTEM = "IT_SYSTEM";
 
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
   static final GenericContainer<?> S3 = ContainersSmokeIT.s3Container();
 
@@ -161,6 +161,7 @@ class F4AcceptanceIT {
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
     r.add("archrag.s3.bucket", () -> BUCKET);
     r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
+    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> "http://unused.invalid");
     // Адреса control-эндпоинтов нужны только для разрешения плейсхолдеров; reconcile здесь не вызывается.
     for (String s : List.of("eam", "scm", "cmdb", "deploymap")) {
       r.add("archrag.adapters." + s + ".control-url", () -> "http://127.0.0.1:1/control/snapshot");

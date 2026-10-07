@@ -45,6 +45,12 @@ public class FindRuntimeFootprintTool {
    */
   @McpTool(
       name = "find_runtime_footprint",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
       description =
           "Где развёрнута система: сервисы, их deployments по окружениям и вычислительные узлы"
               + " (VM, физические серверы) с provenance и признаком stale. Только действующие факты.")

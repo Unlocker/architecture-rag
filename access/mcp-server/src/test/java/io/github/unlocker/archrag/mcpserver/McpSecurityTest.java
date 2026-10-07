@@ -108,6 +108,22 @@ class McpSecurityTest {
   }
 
   @Test
+  void toolsListMarksAllToolsReadOnly() {
+    var list = post(TestJwt.token(), "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+    var tools = new JsonMapper().readTree(list.getBody()).get("result").get("tools");
+    assertThat(tools).hasSize(6);
+    for (var tool : tools) {
+      var annotations = tool.get("annotations");
+      assertThat(annotations).as(tool.get("name").asString()).isNotNull();
+      assertThat(annotations.get("readOnlyHint").asBoolean()).as(tool.get("name").asString()).isTrue();
+      assertThat(annotations.get("destructiveHint").asBoolean()).as(tool.get("name").asString()).isFalse();
+      assertThat(annotations.get("idempotentHint").asBoolean()).as(tool.get("name").asString()).isTrue();
+      assertThat(annotations.get("openWorldHint").asBoolean()).as(tool.get("name").asString()).isFalse();
+    }
+  }
+
+  @Test
   void toolCallWithoutScopeIsForbiddenWithScopeChallenge() {
     var res = post(TestJwt.token(), CALL_PING);
     assertThat(res.getStatusCode().value()).isEqualTo(403);

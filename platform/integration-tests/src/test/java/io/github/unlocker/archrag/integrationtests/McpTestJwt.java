@@ -62,8 +62,13 @@ final class McpTestJwt {
 
   /** Валидный токен с заданными scopes (может быть пустым). */
   String token(String... scopes) {
+    return tokenFor("test-user", RESOURCE, scopes);
+  }
+
+  /** Токен с заданными subject и audience; issuer тот же {@link #RESOURCE}. */
+  String tokenFor(String subject, String audience, String... scopes) {
     try {
-      var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject("test-user").audience(RESOURCE)
+      var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject(subject).audience(audience)
           .issueTime(Date.from(Instant.now().minusSeconds(60)))
           .expirationTime(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
           .claim("scope", String.join(" ", List.of(scopes))).build();

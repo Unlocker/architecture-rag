@@ -8,7 +8,15 @@ import org.springframework.stereotype.Component;
 public class PingTool {
 
   /** Возвращает {@code {"status":"ok"}}; аргументов нет. */
-  @McpTool(name = "ping", description = "Проверка доступности сервера: возвращает {\"status\":\"ok\"}")
+  @McpTool(
+      name = "ping",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
+      description = "Проверка доступности сервера: возвращает {\"status\":\"ok\"}")
   public String ping() {
     return "{\"status\":\"ok\"}";
   }

@@ -10,7 +10,8 @@
 | `ARCHRAG_PG_URL`, `ARCHRAG_PG_USER`, `ARCHRAG_PG_PASSWORD` | PostgreSQL (inbox, identity, аудит); миграции применяются при старте |
 | `ARCHRAG_NEO4J_URI`, `ARCHRAG_NEO4J_USER`, `ARCHRAG_NEO4J_PASSWORD` | Neo4j с правами записи |
 | `ARCHRAG_S3_ENDPOINT`, `ARCHRAG_S3_ACCESS_KEY`, `ARCHRAG_S3_SECRET_KEY`, `ARCHRAG_S3_BUCKET` | S3-совместимое хранилище raw payload |
-| `ARCHRAG_OIDC_ISSUER_URI` | издатель токенов (проверяются подпись, срок и scope) |
+| `ARCHRAG_OIDC_ISSUER_URI` | издатель токенов (проверяются подпись, срок, audience и scope) |
+| `ARCHRAG_ADMIN_RESOURCE_URI` | audience admin REST: ожидаемый `aud` токена; обязательна, значения по умолчанию нет |
 
 Необязательные: `ARCHRAG_ADMIN_PORT` (по умолчанию 8081) и `ARCHRAG_<EAM|SCM|CMDB|DEPLOYMAP>_CONTROL_URL` — полный URL
 `/control/snapshot` adapter-сервиса источника; без него `POST /admin/reconcile/<source>` отвечает 404.

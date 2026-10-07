@@ -97,7 +97,7 @@ class SyncAcceptanceIT {
   /** Интервал опроса диспетчера (значение по умолчанию); пауза «ничего не изменилось» в К2б кратна ему. */
   private static final Duration DISPATCHER_POLL = Duration.ofSeconds(1);
 
-  static final Neo4jContainer NEO4J = new Neo4jContainer("neo4j:5-community");
+  static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 
@@ -155,6 +155,7 @@ class SyncAcceptanceIT {
     r.add("archrag.s3.bucket", () -> BUCKET);
     // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
     r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
+    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> "http://unused.invalid");
     r.add("archrag.adapters.eam.control-url", () -> controlUrl(SourceSystem.EAM));
     r.add("archrag.adapters.scm.control-url", () -> controlUrl(SourceSystem.SCM));
     r.add("archrag.adapters.cmdb.control-url", () -> controlUrl(SourceSystem.CMDB));

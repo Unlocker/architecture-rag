@@ -10,9 +10,9 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Защита админского эндпоинта: {@code /admin/**} доступен только токену со scope {@value #ADMIN_SCOPE}; всё
  * остальное закрыто. Без токена — 401, без scope — 403. Издателя токенов задаёт
- * {@code spring.security.oauth2.resourceserver.jwt.issuer-uri}. Для PoC проверяются издатель, подпись, срок и scope;
- * audience не проверяется (токен того же издателя со scope {@value #ADMIN_SCOPE}, выданный для другого ресурса, будет
- * принят).
+ * {@code spring.security.oauth2.resourceserver.jwt.issuer-uri}, ожидаемый audience —
+ * {@code spring.security.oauth2.resourceserver.jwt.audiences}. Проверяются издатель, подпись, срок, audience и scope;
+ * токен того же издателя, выданный для другого ресурса, отклоняется с 401.
  */
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
