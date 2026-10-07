@@ -97,6 +97,7 @@ class JournalDispatcherIT {
     r.add("archrag.s3.bucket", () -> "dispatcher-it-bucket");
     // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
     r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
+    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> "http://unused.invalid");
     r.add("archrag.dispatcher.poll-interval", () -> "100ms");
     r.add("archrag.dispatcher.batch-size", () -> "1");
     r.add("archrag.dispatcher.retry-delay", () -> "1s");

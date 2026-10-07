@@ -138,6 +138,10 @@ class GetAssetMcpTest {
 
     assertThat(res.getStatusCode().value()).isEqualTo(200);
     assertThat(res.getBody()).contains("\"isError\":true").contains("gid must be a UUID").doesNotContain("leaky-value");
+    // Известное ограничение Spring AI 2.0.1: createSyncErrorResult склеивает message исключения и message
+    // корневой причины; у исключения без cause это один и тот же текст, поэтому он идёт дважды.
+    // Если тест упал на этой строке, дубль устранён в библиотеке: поправьте docs/03-interfaces.md.
+    assertThat(res.getBody().split("gid must be a UUID", -1)).as("message occurrences").hasSize(3);
   }
 
   @Test

@@ -11,7 +11,7 @@
 
 ## Решение
 
-Сервер на `spring-ai-starter-mcp-server-webmvc` с `spring.ai.mcp.server.protocol=STREAMABLE`. Legacy HTTP+SSE и WebSocket не используются. `stdio` допустим для разработки.
+Сервер на `spring-ai-starter-mcp-server-webmvc` с `spring.ai.mcp.server.protocol=STATELESS` (Streamable HTTP в stateless-режиме: без sessions, все ответы `application/json`; для read-only tools сессия не нужна). Legacy HTTP+SSE и WebSocket не используются. `stdio` допустим для разработки.
 
 ## Рассмотренные варианты
 
@@ -30,3 +30,5 @@
 ## Связанные ADR
 
 [0005](0005-readonly-mcp-by-application.md), [0018](0018-domain-tools-not-arbitrary-cypher.md)
+
+Уточнено 2026-10-07 (UNLOCKER-224): в коде используется `protocol=STATELESS`; ранее в «Решении» было `STREAMABLE`.

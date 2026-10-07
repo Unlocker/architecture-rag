@@ -38,6 +38,12 @@ public class SearchAssetsTool {
    */
   @McpTool(
       name = "search_assets",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
       description =
           "Поиск архитектурных активов. Сначала точное совпадение по gid или sourceId, затем полнотекстовый"
               + " поиск по имени и описанию (только ITSystem и Service). Остальные типы находятся"

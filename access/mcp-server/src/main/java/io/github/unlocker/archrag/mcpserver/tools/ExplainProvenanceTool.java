@@ -40,6 +40,12 @@ public class ExplainProvenanceTool {
    */
   @McpTool(
       name = "explain_provenance",
+      annotations =
+          @McpTool.McpAnnotations(
+              readOnlyHint = true,
+              destructiveHint = false,
+              idempotentHint = true,
+              openWorldHint = false),
       description =
           "Происхождение актива по gid (опционально для свойства property): записи источников с"
               + " версией, fetchedAt, contentHash, confidence/authority ребра ASSERTS, признак"
