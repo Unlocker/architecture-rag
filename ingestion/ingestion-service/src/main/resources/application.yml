@@ -17,6 +17,9 @@ spring:
           audiences: ${ARCHRAG_ADMIN_RESOURCE_URI}
 
 archrag:
+  admin:
+    # Клиенты (azp), токены которых принимает admin REST; консольный клиент сюда не входит.
+    allowed-clients: ${ARCHRAG_ADMIN_ALLOWED_CLIENTS:archrag-demo}
   neo4j:
     uri: ${ARCHRAG_NEO4J_URI}
     username: ${ARCHRAG_NEO4J_USER}

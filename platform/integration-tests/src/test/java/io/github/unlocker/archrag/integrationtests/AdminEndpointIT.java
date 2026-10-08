@@ -373,6 +373,16 @@ class AdminEndpointIT {
   }
 
   @Test
+  void tokenOfForeignClientIsUnauthorizedEvenWithAdminAudienceAndScope() throws Exception {
+    String consoleToken = JWT.tokenForClient("archrag-admin-console", "operator-1", ADMIN_RESOURCE, "architecture.admin");
+    assertThat(post("/admin/rebuild?confirm=true", consoleToken, null).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/replay", consoleToken, "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(401);
+    String allowed = JWT.tokenForClient("archrag-demo", "operator-1", ADMIN_RESOURCE, "architecture.admin");
+    assertThat(post("/admin/replay", allowed, "{\"source\":\"urn:corp:eam\",\"receivedTo\":\"1970-01-02T00:00:00Z\"}")
+        .statusCode()).isEqualTo(200);
+  }
+
+  @Test
   void scopeIsEnforced() throws Exception {
     assertThat(post("/admin/rebuild?confirm=true", null, null).statusCode()).isEqualTo(401);
     assertThat(post("/admin/rebuild?confirm=true", token(null), null).statusCode()).isEqualTo(403);

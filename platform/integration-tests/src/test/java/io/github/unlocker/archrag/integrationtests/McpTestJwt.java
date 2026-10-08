@@ -67,8 +67,13 @@ final class McpTestJwt {
 
   /** Токен с заданными subject и audience; issuer тот же {@link #RESOURCE}. */
   String tokenFor(String subject, String audience, String... scopes) {
+    return tokenForClient("archrag-demo", subject, audience, scopes);
+  }
+
+  /** Как {@link #tokenFor}, но с заданным клиентом (claim {@code azp}); по умолчанию токены выданы {@code archrag-demo}. */
+  String tokenForClient(String azp, String subject, String audience, String... scopes) {
     try {
-      var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject(subject).audience(audience)
+      var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject(subject).audience(audience).claim("azp", azp)
           .issueTime(Date.from(Instant.now().minusSeconds(60)))
           .expirationTime(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
           .claim("scope", String.join(" ", List.of(scopes))).build();
