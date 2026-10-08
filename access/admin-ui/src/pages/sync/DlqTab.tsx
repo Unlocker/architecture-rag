@@ -38,7 +38,7 @@ export function DlqTab() {
               setPage(0);
             }}
           />{' '}
-          Показать повторённые
+          Включая повторённые
         </label>
       </div>
       <Loadable state={state} isEmpty={(p) => p.items.length === 0} emptyText="Записей DLQ нет">

@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useApi } from '../../api/ApiContext';
 import { endpoints } from '../../api/endpoints';
-import { Loadable, Pager, text, Time } from '../../components/common';
+import { Loadable, Select, Pager, text, Time } from '../../components/common';
 import { useAsync } from '../../hooks/useAsync';
 
 const PAGE_SIZE = 50;
 
+const STATUSES = ['OPEN', 'RESOLVED'] as const;
+
 function Conflicts() {
   const api = endpoints(useApi());
+  const [status, setStatus] = useState('OPEN');
   const [page, setPage] = useState(0);
-  const { state } = useAsync(() => api.conflicts({ page, size: PAGE_SIZE }), [page]);
+  const { state } = useAsync(() => api.conflicts({ status, page, size: PAGE_SIZE }), [status, page]);
   return (
     <section aria-label="Конфликты">
       <h3>Конфликты</h3>
-      <Loadable state={state} isEmpty={(p) => p.items.length === 0} emptyText="Открытых конфликтов нет">
+      <Select label="Статус конфликтов" value={status} options={STATUSES} allowAll={false} onChange={(v) => { setStatus(v); setPage(0); }} />
+      <Loadable state={state} isEmpty={(p) => p.items.length === 0} emptyText="Конфликтов с таким статусом нет">
         {(p) => (
           <>
             <table aria-label="Конфликты источников">
@@ -56,12 +60,14 @@ function Conflicts() {
 
 function Candidates() {
   const api = endpoints(useApi());
+  const [status, setStatus] = useState('OPEN');
   const [page, setPage] = useState(0);
-  const { state } = useAsync(() => api.candidates({ page, size: PAGE_SIZE }), [page]);
+  const { state } = useAsync(() => api.candidates({ status, page, size: PAGE_SIZE }), [status, page]);
   return (
     <section aria-label="Кандидаты">
       <h3>Кандидаты</h3>
-      <Loadable state={state} isEmpty={(p) => p.items.length === 0} emptyText="Кандидатов нет">
+      <Select label="Статус кандидатов" value={status} options={STATUSES} allowAll={false} onChange={(v) => { setStatus(v); setPage(0); }} />
+      <Loadable state={state} isEmpty={(p) => p.items.length === 0} emptyText="Кандидатов с таким статусом нет">
         {(p) => (
           <>
             <table aria-label="Кандидаты identity">

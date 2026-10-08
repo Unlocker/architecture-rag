@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApi } from '../../api/ApiContext';
 import { endpoints } from '../../api/endpoints';
-import { Loadable, Pager, text, Time } from '../../components/common';
+import { Badge, Loadable, Pager, text, Time } from '../../components/common';
 import { useAsync } from '../../hooks/useAsync';
 
 const PAGE_SIZE = 50;
@@ -24,6 +24,7 @@ export function AuditTab() {
                   <th>Инициатор</th>
                   <th>Статус</th>
                   <th>Ошибка</th>
+                  <th>Данные</th>
                 </tr>
               </thead>
               <tbody>
@@ -36,6 +37,7 @@ export function AuditTab() {
                     <td>{text(a.actor)}</td>
                     <td>{a.status}</td>
                     <td>{text(a.error)}</td>
+                    <td>{a.requestTruncated || a.resultTruncated ? <Badge kind="warn">обрезано</Badge> : '—'}</td>
                   </tr>
                 ))}
               </tbody>

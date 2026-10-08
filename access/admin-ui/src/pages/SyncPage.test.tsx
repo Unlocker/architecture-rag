@@ -82,6 +82,11 @@ test('health rules', () => {
   expect(health(sources[3])).toBe('bad');
 });
 
+test('lag raises the traffic light', () => {
+  expect(health(source('x', { lagSeconds: 20 * 60 }))).toBe('warn');
+  expect(health(source('x', { lagSeconds: 24 * 3600 }))).toBe('bad');
+});
+
 test('sources refresh every 30 seconds and manually', async () => {
   jest.useFakeTimers();
   const mock = api();
@@ -173,7 +178,7 @@ test('DLQ shows reasons and asks only for open entries by default', async () => 
   expect(within(table).getByText('<b>bad</b> field')).toBeTruthy();
   expect(mock.get).toHaveBeenCalledWith('/api/sync/dlq?replayed=false&page=0&size=50');
 
-  fireEvent.click(screen.getByLabelText('Показать повторённые'));
+  fireEvent.click(screen.getByLabelText('Включая повторённые'));
   await waitFor(() => expect(mock.get).toHaveBeenLastCalledWith('/api/sync/dlq?page=0&size=50'));
 });
 
@@ -198,6 +203,27 @@ test('audit shows admin operations', async () => {
   const table = await screen.findByRole('table', { name: 'Аудит админ-операций' });
   expect(within(table).getByText('reconcile')).toBeTruthy();
   expect(within(table).getByText('admin')).toBeTruthy();
+});
+
+test('audit marks truncated records', async () => {
+  const row = (id: number, t: boolean) => ({ id, operation: 'op' + id, actor: 'a', status: 'SUCCEEDED', replayId: null, request: {}, requestTruncated: false, result: {}, resultTruncated: t, error: null, startedAt: '2026-10-01T10:00:00Z', finishedAt: null });
+  open(api({ '/api/audit': () => page([row(1, true), row(2, false)]) }), 'Аудит');
+
+  const table = await screen.findByRole('table', { name: 'Аудит админ-операций' });
+  expect(within(table).getAllByText('обрезано')).toHaveLength(1);
+});
+
+test('identity status filter requests RESOLVED history', async () => {
+  const mock = api();
+  open(mock, 'Identity');
+  await screen.findByRole('table', { name: 'Конфликты источников' });
+  expect(mock.get).toHaveBeenCalledWith('/api/identity/conflicts?status=OPEN&page=0&size=50');
+
+  fireEvent.change(screen.getByLabelText('Статус конфликтов'), { target: { value: 'RESOLVED' } });
+  fireEvent.change(screen.getByLabelText('Статус кандидатов'), { target: { value: 'RESOLVED' } });
+
+  await waitFor(() => expect(mock.get).toHaveBeenCalledWith('/api/identity/conflicts?status=RESOLVED&page=0&size=50'));
+  await waitFor(() => expect(mock.get).toHaveBeenCalledWith('/api/identity/candidates?status=RESOLVED&page=0&size=50'));
 });
 
 test('audit shows empty state', async () => {

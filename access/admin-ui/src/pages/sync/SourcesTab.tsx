@@ -1,5 +1,5 @@
 import { useApi } from '../../api/ApiContext';
-import { SOURCES_REFRESH_MS } from '../../api/constants';
+import { LAG_BAD_SECONDS, LAG_WARN_SECONDS, SOURCES_REFRESH_MS } from '../../api/constants';
 import { endpoints } from '../../api/endpoints';
 import { SourceStatus } from '../../api/types';
 import { Badge, Loadable, Time } from '../../components/common';
@@ -7,12 +7,13 @@ import { useAsync } from '../../hooks/useAsync';
 
 const PROBLEM_STATUSES = ['QUARANTINED', 'RETRYING'];
 
-/** Светофор источника: красный — есть проблемные события или упавший прогон, жёлтый — нет данных. */
+/** Светофор источника: красный — проблемные события, упавший прогон или большой lag; жёлтый — нет данных или заметный lag. */
 export function health(s: SourceStatus): 'ok' | 'warn' | 'bad' {
   const problems = PROBLEM_STATUSES.some((st) => (s.eventsByStatus[st] ?? 0) > 0);
   const failedRun = s.lastSyncRun?.status === 'FAILED' || (s.lastSyncRun?.failed ?? 0) > 0;
-  if (problems || failedRun) return 'bad';
-  if (s.lastProjectedAt === null || s.lastSyncRun === null) return 'warn';
+  const lag = s.lagSeconds ?? 0;
+  if (problems || failedRun || lag > LAG_BAD_SECONDS) return 'bad';
+  if (s.lastProjectedAt === null || s.lastSyncRun === null || lag > LAG_WARN_SECONDS) return 'warn';
   return 'ok';
 }
 

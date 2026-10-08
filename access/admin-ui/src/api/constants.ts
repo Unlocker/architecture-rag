@@ -56,3 +56,7 @@ export const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Период автообновления раздела «Источники». */
 export const SOURCES_REFRESH_MS = 30_000;
+
+/** Отставание проекции источника: выше — жёлтый, выше второго порога — красный. */
+export const LAG_WARN_SECONDS = 15 * 60;
+export const LAG_BAD_SECONDS = 60 * 60;

@@ -73,18 +73,21 @@ export function Select({
   label,
   value,
   options,
+  allowAll = true,
   onChange,
 }: {
   label: string;
   value: string;
   options: ReadonlyArray<string>;
+  /** Показывать пункт «все» (пустое значение). */
+  allowAll?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <label>
       {label}{' '}
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">все</option>
+        {allowAll && <option value="">все</option>}
         {options.map((o) => (
           <option key={o} value={o}>
             {o}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import cytoscape from 'cytoscape';
 import { ApiError } from '../api/apiClient';
 import { Handler, mockApi, withApi } from '../testing/mockApi';
@@ -197,4 +197,27 @@ test('complete neighborhood has no truncated banner', async () => {
   await screen.findByTestId('graph-canvas');
 
   expect(screen.queryByText(/показана не полностью/)).toBeNull();
+});
+
+test('stale search response does not overwrite a newer one', async () => {
+  let release: (v: unknown) => void = () => undefined;
+  let calls = 0;
+  const mock = api({
+    '/api/graph/search': () => {
+      calls += 1;
+      if (calls === 1) return new Promise((r) => (release = r));
+      return { items: [{ ...hit, name: 'Newer' }], truncated: false };
+    },
+  });
+  render(withApi(mock, <GraphPage />));
+  fireEvent.change(screen.getByLabelText('Запрос'), { target: { value: 'a' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Найти' }));
+  fireEvent.change(screen.getByLabelText('Запрос'), { target: { value: 'b' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Найти' }));
+  await screen.findByRole('button', { name: 'Newer' });
+
+  await act(async () => release({ items: [{ ...hit, name: 'Older' }], truncated: false }));
+
+  expect(screen.queryByRole('button', { name: 'Older' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Newer' })).toBeTruthy();
 });

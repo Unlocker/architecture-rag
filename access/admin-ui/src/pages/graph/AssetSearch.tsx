@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useApi } from '../../api/ApiContext';
 import { ASSET_TYPES } from '../../api/constants';
 import { endpoints } from '../../api/endpoints';
@@ -11,15 +11,18 @@ export function AssetSearch({ onSelect }: { onSelect: (gid: string) => void }) {
   const api = endpoints(useApi());
   const [q, setQ] = useState('');
   const [types, setTypes] = useState<string[]>([]);
+  const latest = useRef(0);
   const [state, setState] = useState<AsyncState<SearchResponse> | null>(null);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!q.trim()) return;
+    // Ответ устаревшего запроса не должен затирать результат более нового.
+    const id = ++latest.current;
     setState({ status: 'loading' });
     api.search(q.trim(), types).then(
-      (data) => setState({ status: 'ready', data }),
-      (error) => setState({ status: 'error', message: describeError(error) }),
+      (data) => id === latest.current && setState({ status: 'ready', data }),
+      (error) => id === latest.current && setState({ status: 'error', message: describeError(error) }),
     );
   }
 
