@@ -18,6 +18,10 @@ flowchart LR
     ing -->|"Bolt, writer-учётка"| neo
     op([Оператор]) -->|"/admin/*, JWT architecture.admin"| ing
     ing -->|"POST /control/snapshot"| adp
+
+    adm([Оператор, браузер 127.0.0.1]) -->|"UI + /api/*, JWT architecture.admin, aud консоли"| con[access/admin-console]
+    con -->|"Bolt, read-only учётка"| neo
+    con -->|"SELECT, роль archrag_console_ro"| pg
 ```
 
 | Интерфейс | Тип | Кто вызывает | Кто обслуживает | Доступность | Аутентификация |
@@ -28,6 +32,7 @@ flowchart LR
 | Webhook адаптеров `POST /webhook` | HTTP | мастер-система (заглушка) | `adapters/*` через `WebhookServer` | внешний; порт задаёт код, который запускает адаптер | HMAC-SHA256 + timestamp, JWT нет |
 | `POST /control/snapshot` | HTTP | ingestion-сервис (`/admin/reconcile`) | `adapters/*` через `WebhookServer`, тот же порт, что `/webhook` | только внутренняя сеть | **нет** |
 | Admin REST `/admin/*` | HTTP | оператор | `ingestion/ingestion-service`, порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081) | только внутренняя сеть | JWT, scope `architecture.admin` |
+| Админ-консоль: UI и `/api/graph/*`, `/api/sync/*`, `/api/identity/*`, `/api/audit` | HTTP | оператор (браузер) | `access/admin-console`, порт 8080 в контейнере | только `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; через proxy не публикуется | JWT (issuer, audience `urn:archrag:console`), scope `architecture.admin`; UI и `/console-config.json` публичны |
 | Источники `GET /changes`, `GET /objects/{type}/{id}` | HTTP | адаптеры | заглушки `platform/source-stubs` | внутренний | нет |
 
 Что публикуется через reverse proxy демо-стенда, определит E5 (compose и proxy в `develop` нет): см. [раздел 6](#6-безопасность-на-границах).
@@ -372,7 +377,7 @@ flowchart LR
 Код: `ingestion/ingestion-service` (`AdminController`, `SecurityConfiguration`, `AdminOperations`, `AdminAudit`, `AdminLock`). Порт `server.port = ${ARCHRAG_ADMIN_PORT:8081}`. ADR [0013](adr/0013-operator-ops-via-admin-endpoint.md).
 
 - **Доступность:** только внутренняя сеть, в MCP и во внешний ingress не входит.
-- **Аутентификация:** OAuth2 resource server, JWT (`issuer-uri` = `ARCHRAG_OIDC_ISSUER_URI`, `audiences` = `ARCHRAG_ADMIN_RESOURCE_URI`). Все `/admin/**` требуют scope `architecture.admin`, остальные пути `denyAll`. Без токена или с невалидным — `401`, без scope (в том числе токен только с `architecture.read`) — `403`. Audience токена проверяется (`aud` должен содержать `ARCHRAG_ADMIN_RESOURCE_URI`), токен для другого ресурса — `401`. Актор в аудите — `sub` токена.
+- **Аутентификация:** OAuth2 resource server, JWT (`issuer-uri` = `ARCHRAG_OIDC_ISSUER_URI`, `audiences` = `ARCHRAG_ADMIN_RESOURCE_URI`). Все `/admin/**` требуют scope `architecture.admin`, остальные пути `denyAll`. Без токена или с невалидным — `401`, без scope (в том числе токен только с `architecture.read`) — `403`. Audience токена проверяется (`aud` должен содержать `ARCHRAG_ADMIN_RESOURCE_URI`), токен для другого ресурса — `401`. Claim `azp` должен входить в `archrag.admin.allowed-clients` (по умолчанию `archrag-demo`, env `ARCHRAG_ADMIN_ALLOWED_CLIENTS`): токен другого клиента (например, консоли) с admin audience и scope — `401`; claim отсутствует — `401`. Актор в аудите — `sub` токена.
 - **Выполнение:** все операции синхронные, `POST`, тело JSON. Выполняются под PostgreSQL advisory lock (`AdminLock`, без ожидания): одновременно идёт одна админская операция, а `JournalDispatcher` уступает ей. Занято — `409 {"error":"another admin operation is in progress"}`.
 - **Ошибки:** `400 {"error":"…"}` (сообщения без значений запроса), `409` (замок), `502 {"error":"adapter is unavailable"}` (адаптер недоступен); прочие сбои — `500` от Spring.
 
@@ -405,6 +410,15 @@ flowchart LR
 | `GET /api/audit?operation&status&from&to` | `admin_audit` по `started_at DESC`; `result` больше 4000 символов не отдаётся (`resultTruncated`, `request` — аналогично, `requestTruncated`) |
 
 SQL-чтения попадают в аудит чтения консоли как `sql:<таблица>`.
+
+## 4b. Админ-консоль: безопасность и доступ на стенде
+
+ADR [0026](adr/0026-admin-console-readonly-loopback.md). Консоль только читает; все `/api/**` требуют scope `architecture.admin` и audience `urn:archrag:console` (`ARCHRAG_CONSOLE_RESOURCE_URI`), статика, `/console-config.json` и `/actuator/health/**` публичны, остальное закрыто. Ответы несут CSP (`connect-src` — `'self'` и origin issuer).
+
+- **Вход:** публичный клиент Keycloak `archrag-admin-console`, Authorization Code + PKCE S256, `directAccessGrantsEnabled=false`; redirect URI и web origin только `http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}`. Scope `architecture.admin` у клиента optional (UI запрашивает его явно); без него API отвечает `403`, токен без audience консоли (например, агентский `archrag-demo`) — `401`.
+- **Отказы:** без токена `401`; с audience консоли без `architecture.admin` `403`; с `architecture.admin` `200`. Токен консоли в admin REST ingestion — `401` (проверка `azp`, раздел 4).
+- **Секреты контейнера:** только `ARCHRAG_NEO4J_READER_PASSWORD` и `ARCHRAG_CONSOLE_PG_PASSWORD`; сети `backend`, `graph` и `console-edge` (только для публикации порта).
+- **Доступ на стенде:** `http://127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; логин и пароль демо-администратора — `KEYCLOAK_CONSOLE_USER` и `KEYCLOAK_CONSOLE_PASSWORD` из `.env`. Браузеру нужна запись `127.0.0.1 keycloak` в `hosts` (issuer токенов — `http://keycloak:8080/realms/archrag`), Keycloak публикуется на `127.0.0.1:${ARCHRAG_KEYCLOAK_PORT:-8080}`; браузер ходит на `keycloak:8080`, поэтому для UI порт на хосте должен быть 8080 (другое значение годится только для `console-smoke.sh`, который подменяет адрес через `curl --connect-to`). Проверка стенда: `platform/docker/console-smoke.sh`.
 
 ## 5. Внутренние контракты
 
@@ -527,6 +541,7 @@ public interface CanonicalMapper {
 - **MCP:** OIDC resource server; проверяются подпись, issuer и audience; scope `architecture.read` на `tools/call`; Neo4j — отдельная read-only учётка (`archrag.neo4j.reader.*`), которой нет в writer-конфигурации ingestion (`access/*` не получает writer-учётных данных; Community Edition не поддерживает RBAC, read-only обеспечивает приложение, ADR [0004](adr/0004-neo4j-community-constraints.md), [0005](adr/0005-readonly-mcp-by-application.md)).
 - **Webhook:** JWT нет; подлинность — HMAC-SHA256 по `timestamp + "." + body`, replay window 5 минут, постоянное время сравнения; причина отказа наружу не раскрывается.
 - **Admin REST:** OIDC resource server, scope `architecture.admin`; проверяются подпись, issuer, срок и audience (`ARCHRAG_ADMIN_RESOURCE_URI`, обязательна: без неё сервис не стартует).
+- **Админ-консоль:** OIDC resource server, scope `architecture.admin`, audience `urn:archrag:console`; граф только через `executeRead` reader-учёткой, PostgreSQL только ролью `archrag_console_ro`; подробности — [раздел 4b](#4b-админ-консоль-безопасность-и-доступ-на-стенде).
 - **Не защищено на уровне приложения:** `POST /control/snapshot` адаптера и источники заглушек (`/changes`, `/objects`). Их защита — сетевая граница (не публиковать).
 
 | Интерфейс | Аутентификация | Scope | Опубликован через proxy | Порт и путь в compose |

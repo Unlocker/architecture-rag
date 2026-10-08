@@ -32,7 +32,9 @@ docker compose up -d --wait --wait-timeout 300
 | `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); адаптер к ней пока не подключён |
 | `reverse-proxy` | nginx, только TLS: `/mcp`, `/webhooks/<eam|scm|cmdb|deploymap>`, токен-endpoint Keycloak |
 | `certs` | одноразовый: демо-CA и серверные сертификаты в volume `certs` (идемпотентно) |
-| `neo4j-init` | одноразовый: пользователь Neo4j `archrag_reader` для `mcp-server` |
+| `neo4j-init` | одноразовый: пользователь Neo4j `archrag_reader` для `mcp-server` и `admin-console` |
+| `console-pg-init` | одноразовый: пароль read-only роли PostgreSQL `archrag_console_ro` (роль создаёт миграция V6 ingestion); идемпотентен |
+| `admin-console` | админ-консоль (read-only), только `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; секреты: reader Neo4j и `archrag_console_ro` |
 
 ## Заглушка EAM API
 
@@ -72,7 +74,8 @@ Admin REST ingestion проверяет audience `ARCHRAG_ADMIN_RESOURCE_URI` (�
 |---|---|---|
 | `edge` | `reverse-proxy`, `mcp-server`, `keycloak`, адаптеры, заглушки | да |
 | `backend` | `ingestion`, адаптеры, `keycloak`, `postgres`, `seaweedfs`, `certs` | `internal` |
-| `graph` | `neo4j`, `neo4j-init`, `ingestion`, `mcp-server` | `internal` |
+| `graph` | `neo4j`, `neo4j-init`, `ingestion`, `mcp-server`, `admin-console` | `internal` |
+| `console-edge` | `admin-console` | только публикация порта на `127.0.0.1` |
 
 Сеть `default` не используется. `mcp-server` = `edge` + `graph`: PostgreSQL и SeaweedFS ему не видны. `ingestion` не в `edge`:
 его админка недоступна с proxy. С хоста доступен только `127.0.0.1:${ARCHRAG_PUBLIC_PORT}` (proxy); 7474, 7687, 5432, 8333 не публикуются.
@@ -87,6 +90,18 @@ Admin REST ingestion проверяет audience `ARCHRAG_ADMIN_RESOURCE_URI` (�
 
 **TLS.** Сервис `certs` генерирует демо-CA (`ca.crt`) и сертификаты с SAN `localhost`, `reverse-proxy`, `neo4j` в volume `certs`.
 Proxy слушает только `8443 ssl`. Bolt: `server.bolt.tls_level=REQUIRED`, клиенты ходят по `bolt+ssc://neo4j:7687`.
+
+## Админ-консоль
+
+ADR [0026](../../docs/adr/0026-admin-console-readonly-loopback.md). Как открыть:
+
+1. Запись `127.0.0.1 keycloak` в `/etc/hosts`: `iss` токенов — `http://keycloak:8080/realms/archrag`, и браузер должен дойти до Keycloak по этому имени. Keycloak публикуется на `127.0.0.1:${ARCHRAG_KEYCLOAK_PORT:-8080}` (так же открывается его master-админка: граница как у Grafana). Для UI порт на хосте должен быть 8080.
+2. `http://127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}` (не `localhost`: PKCE S256 требует secure context).
+3. Логин `KEYCLOAK_CONSOLE_USER` / `KEYCLOAK_CONSOLE_PASSWORD` из `.env`.
+
+Проверка: `./console-smoke.sh` (вход Authorization Code + PKCE на curl; 401 без токена, 403 без `architecture.admin`, 200 на `/api/graph/stats` и `/api/sync/sources`; токен консоли в admin REST ingestion — 401; консоль недоступна по внешнему IP хоста; в контейнере только reader- и `archrag_console_ro`-секреты). Он не зависит от `hosts` и подменяет адрес Keycloak через `curl --connect-to` по `ARCHRAG_KEYCLOAK_PORT`. Admin REST ingestion принимает токены только клиентов из `ARCHRAG_ADMIN_ALLOWED_CLIENTS` (по умолчанию `archrag-demo`).
+
+Realm: клиент `archrag-admin-console` (публичный, PKCE S256, redirect только `127.0.0.1:${ARCHRAG_CONSOLE_PORT}`), роль `archrag-console-admin`, демо-пользователь из `.env`. Realm импортируется только при первом старте Keycloak: после правки `archrag-realm.json` пересоздайте контейнер (`docker compose up -d --force-recreate keycloak`).
 
 ## Наблюдаемость
 
