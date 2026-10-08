@@ -4,3 +4,17 @@ body { margin: 0; font-family: system-ui, sans-serif; }
 .layout nav { display: flex; gap: 1rem; }
 .layout nav a[aria-current='page'] { font-weight: 600; }
 .layout main, .forbidden { padding: 1rem; }
+table { border-collapse: collapse; margin: 0.5rem 0; }
+th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }
+.columns { display: flex; gap: 2rem; }
+.filters { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0.5rem 0; }
+.pager { display: flex; gap: 1rem; align-items: center; }
+.graph-canvas { height: 480px; border: 1px solid #ddd; }
+.banner { background: #fff3cd; border: 1px solid #ffe69c; padding: 0.5rem; }
+.badge { display: inline-block; padding: 0 0.4rem; margin-right: 0.25rem; border-radius: 3px; background: #eee; }
+.badge.ok { background: #d1e7dd; }
+.badge.warn { background: #fff3cd; }
+.badge.bad { background: #f8d7da; }
+button.link { background: none; border: 0; padding: 0; color: #0645ad; cursor: pointer; text-decoration: underline; }
+[role='tablist'] { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+[role='tab'][aria-selected='true'] { font-weight: 600; }

@@ -3,7 +3,7 @@ import { ApiClient, createApiClient } from './apiClient';
 import { AuthService } from '../auth/authService';
 import { ForbiddenScreen } from '../components/ForbiddenScreen';
 
-const ApiContext = createContext<ApiClient | null>(null);
+export const ApiContext = createContext<ApiClient | null>(null);
 
 /**
  * Даёт дочерним компонентам API-клиент. На 401 перезапускает вход,
