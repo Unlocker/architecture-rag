@@ -53,6 +53,18 @@ server:
   shutdown: graceful
 
 management:
+  # OTLP push в otel-collector (E5.3). Выключен по умолчанию: без профиля observability collector'а нет.
+  # Включение и адрес приходят из compose: MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED / ..._URL.
+  otlp:
+    metrics:
+      export:
+        enabled: false
+        step: 10s
+  opentelemetry:
+    resource-attributes:
+      service.name: mcp-server
+      # Два экземпляра за --scale иначе сольются в одну серию.
+      service.instance.id: ${HOSTNAME:local}
   metrics:
     distribution:
       # Гистограмма нужна для p95 latency по tool (критерий 9).

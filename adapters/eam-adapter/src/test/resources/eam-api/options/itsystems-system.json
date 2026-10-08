@@ -1,0 +1,16 @@
+{
+  "options": [
+    {
+      "name": "eam_id",
+      "type": "string"
+    },
+    {
+      "name": "eam_name",
+      "type": "string"
+    },
+    {
+      "name": "eam_permalink",
+      "type": "string"
+    }
+  ]
+}

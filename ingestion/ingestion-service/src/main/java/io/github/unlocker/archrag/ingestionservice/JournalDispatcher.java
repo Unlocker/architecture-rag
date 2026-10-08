@@ -59,6 +59,7 @@ public class JournalDispatcher {
   private final Clock clock;
   private final int batchSize;
   private final Duration retryDelay;
+  private final IngestionMetrics metrics;
   private volatile boolean stopped;
 
   public JournalDispatcher(
@@ -70,7 +71,8 @@ public class JournalDispatcher {
       AdminLock lock,
       Clock clock,
       int batchSize,
-      Duration retryDelay) {
+      Duration retryDelay,
+      IngestionMetrics metrics) {
     this.reader = reader;
     this.journal = journal;
     this.rawStore = rawStore;
@@ -80,6 +82,7 @@ public class JournalDispatcher {
     this.clock = clock;
     this.batchSize = batchSize;
     this.retryDelay = retryDelay;
+    this.metrics = metrics;
   }
 
   /** Просит текущий проход закончиться после обрабатываемого события. */
@@ -128,6 +131,12 @@ public class JournalDispatcher {
 
   /** Итоговый статус события; {@code null}, если обработка не удалась неожиданным исключением. */
   private ProcessingStatus dispatch(StoredEvent stored) {
+    ProcessingStatus status = process(stored);
+    metrics.recordEvent(stored.entry().source(), status);
+    return status;
+  }
+
+  private ProcessingStatus process(StoredEvent stored) {
     JournalEntry entry = stored.entry();
     try {
       RawPayloadRef ref = entry.payloadRef();

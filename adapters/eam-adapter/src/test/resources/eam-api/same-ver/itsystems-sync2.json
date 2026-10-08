@@ -1,0 +1,17 @@
+[
+  {
+    "id": 5101,
+    "ver": 3,
+    "datetime": "2026-10-03T10:30:00Z",
+    "attrs": {
+      "name": "Payments Core",
+      "eam_id": "EAM-1042",
+      "status": "ACTIVE",
+      "criticality": "HIGH",
+      "description": "",
+      "solution": [
+        7201
+      ]
+    }
+  }
+]

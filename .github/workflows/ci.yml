@@ -51,3 +51,51 @@ jobs:
             **/target/surefire-reports
             **/target/failsafe-reports
           if-no-files-found: ignore
+  
+  
+  # Job для .github/workflows/ci.yml (секция jobs:). Не добавлен автоматически: у токена агента нет scope `workflow`.
+  # Вставить как есть рядом с jobs build и integration-tests.
+  # Демо-стенд E5.1: образы, `up --wait`, `--scale mcp-server=2`, 401/200 через proxy. Параллельно остальным job.
+  # Если станет узким местом — запускать только при изменениях platform/docker/**, **/pom.xml и workflow.
+  docker-stand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: platform/docker
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - run: ../../mvnw -B -ntp -f ../../pom.xml package -DskipTests
+      - run: cp .env.example .env
+      - run: docker compose build
+      - run: docker compose up -d --wait --wait-timeout 300
+      - run: docker compose ps
+      - run: ./smoke.sh
+      - run: docker compose up -d --scale mcp-server=2 --wait --wait-timeout 300
+      - run: test "$(docker compose ps -q mcp-server | wc -l)" = 2
+      - run: ./smoke.sh
+      # E5.4: backup/restore Neo4j и replay
+      - run: shellcheck -S warning scripts/*.sh   # SC2016 (info) намеренный
+      - run: scripts/backup-restore-check.sh      # два перезапуска Neo4j, несколько минут
+      - run: ./smoke.sh
+      # E5.3: профиль observability, метрики доходят до Prometheus через collector
+      - name: observability profile
+        env:
+          ARCHRAG_OBSERVABILITY: "true"
+        run: |
+          docker compose --profile observability up -d --wait --wait-timeout 300
+          ./smoke.sh
+          sleep 30
+          for q in 'archrag_mcp_tool_call_milliseconds_count' 'archrag_ingestion_events_total'; do
+            out=$(docker compose exec -T prometheus wget -qO- --post-data="query=$q" http://localhost:9090/api/v1/query)
+            echo "$out" | grep -q '"result":\[{' || { echo "no series for $q: $out"; exit 1; }
+          done
+      - if: failure()
+        run: docker compose ps -a && docker compose logs --no-color --tail 200
+      - if: always()
+        run: docker compose --profile observability down -v

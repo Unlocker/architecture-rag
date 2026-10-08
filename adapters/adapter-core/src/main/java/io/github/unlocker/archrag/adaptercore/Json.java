@@ -13,7 +13,7 @@ import java.util.Map;
  * IllegalArgumentException} без содержимого документа. Запись детерминирована: порядок ключей
  * сохраняется, поэтому одинаковое состояние даёт одинаковые байты (raw payload адресуется SHA-256).
  */
-final class Json {
+public final class Json {
 
   private static final int MAX_DEPTH = 64;
 
@@ -37,7 +37,7 @@ final class Json {
 
   /** Разбирает документ, корнем которого обязан быть объект. */
   @SuppressWarnings("unchecked")
-  static Map<String, Object> parseObject(String text) {
+  public static Map<String, Object> parseObject(String text) {
     if (parse(text) instanceof Map<?, ?> m) {
       return (Map<String, Object>) m;
     }

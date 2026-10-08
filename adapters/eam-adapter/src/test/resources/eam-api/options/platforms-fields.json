@@ -1,0 +1,20 @@
+{
+  "options": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "type": "select"
+    },
+    {
+      "name": "description",
+      "type": "text"
+    },
+    {
+      "name": "lifecycle",
+      "type": "select"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "options": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "type": "select"
+    },
+    {
+      "name": "description",
+      "type": "text"
+    },
+    {
+      "name": "lifecycle",
+      "type": "select"
+    },
+    {
+      "name": "platform",
+      "type": "reference",
+      "target": "platforms",
+      "multiple": true
+    }
+  ]
+}
