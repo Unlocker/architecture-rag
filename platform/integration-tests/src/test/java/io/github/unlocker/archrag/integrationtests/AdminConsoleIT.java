@@ -138,6 +138,10 @@ class AdminConsoleIT {
         "--spring.security.oauth2.resourceserver.jwt.issuer-uri=" + McpTestJwt.RESOURCE,
         "--spring.security.oauth2.resourceserver.jwt.audiences=" + AUDIENCE,
         "--archrag.console.resource-uri=" + AUDIENCE,
+        // PostgreSQL журнала проверяет SyncConsoleIT; здесь пул ленивый и не используется.
+        "--archrag.console-pg.url=jdbc:postgresql://localhost:1/none",
+        "--archrag.console-pg.username=archrag_console_ro",
+        "--archrag.console-pg.password=unused",
         "--archrag.neo4j.reader.uri=" + NEO4J.getBoltUrl(),
         "--archrag.neo4j.reader.username=console-reader",
         "--archrag.neo4j.reader.password=reader-pass",
@@ -273,7 +277,7 @@ class AdminConsoleIT {
         continue;
       }
       var params = new LinkedHashMap<String, Object>();
-      template.parameters().forEach(p -> params.put(p, p.equals("gids") || p.equals("relTypes") || p.equals("types") ? List.of() : "x"));
+      template.parameters().forEach(p -> params.put(p, p.equals("gids") || p.equals("relTypes") || p.equals("types") || p.equals("adapters") ? List.of() : "x"));
       // Исполнение первым делом проверяет EXPLAIN: IllegalStateException означало бы не read-only шаблон.
       executor.execute(template.id(), params, null);
     }

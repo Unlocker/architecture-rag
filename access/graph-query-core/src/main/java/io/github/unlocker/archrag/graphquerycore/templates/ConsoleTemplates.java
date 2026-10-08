@@ -151,6 +151,33 @@ public final class ConsoleTemplates {
           Set.of("gids", "relTypes"),
           ResultKind.NODES);
 
+  /**
+   * Последний прогон адаптера для каждого из {@code adapters} (по {@code startedAt}). Параметр: {@code adapters}
+   * (значения {@code SourceSystemCode}, как в {@code SyncRun.adapter}). Возвращает {@code adapter, runId, startedAt,
+   * endedAt, status, fetched, applied, failed}; не записанные проектором свойства приходят {@code null}.
+   */
+  public static final QueryTemplate LATEST_SYNC_RUNS =
+      new QueryTemplate(
+          "console_latest_sync_runs",
+          """
+          MATCH (s:SyncRun)
+          WHERE s.adapter IN $adapters
+          WITH s ORDER BY s.startedAt DESC
+          WITH s.adapter AS adapter, collect(s)[0] AS run
+          RETURN adapter,
+                 run.runId AS runId,
+                 toString(run.startedAt) AS startedAt,
+                 toString(run.endedAt) AS endedAt,
+                 run.status AS status,
+                 run.fetched AS fetched,
+                 run.applied AS applied,
+                 run.failed AS failed
+          ORDER BY adapter
+          LIMIT $limit
+          """,
+          Set.of("adapters"),
+          ResultKind.NODES);
+
   /** Все шаблоны, которые консоль регистрирует сверх шаблонов {@link AssetTemplates}. */
   public static final List<QueryTemplate> ALL =
       List.of(
@@ -158,7 +185,8 @@ public final class ConsoleTemplates {
           GRAPH_STATS_RELATIONS,
           GRAPH_LAST_UPDATE,
           NEIGHBORHOOD_NODES,
-          NEIGHBORHOOD_EDGES);
+          NEIGHBORHOOD_EDGES,
+          LATEST_SYNC_RUNS);
 
   private ConsoleTemplates() {}
 

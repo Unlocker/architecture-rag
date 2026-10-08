@@ -3,6 +3,8 @@ package io.github.unlocker.archrag.adminconsole.audit;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * Накопитель аудита одного запроса: ID шаблонов, число строк, признак усечения. Живёт в атрибуте
@@ -16,6 +18,24 @@ public final class ReadAuditContext {
   private final List<String> templates = new ArrayList<>();
   private long rows;
   private boolean truncated;
+
+  /**
+   * Контекст текущего запроса или {@code null} вне запроса.
+   */
+  public static ReadAuditContext current() {
+    var attributes = RequestContextHolder.getRequestAttributes();
+    return attributes != null
+            && attributes.getAttribute(ATTRIBUTE, RequestAttributes.SCOPE_REQUEST)
+                instanceof ReadAuditContext context
+        ? context
+        : null;
+  }
+
+  /** Учитывает SQL-чтение: в {@code templates} попадает {@code sql:<queryId>}, строки суммируются. */
+  public void recordSql(String queryId, long rowCount) {
+    templates.add("sql:" + queryId);
+    rows += rowCount;
+  }
 
   /** Учитывает результат исполнения шаблона. */
   public void record(QueryResult result) {

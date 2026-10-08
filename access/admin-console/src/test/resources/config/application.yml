@@ -5,3 +5,8 @@ archrag:
       uri: bolt://localhost:7687
       username: console-reader
       password: test
+  console-pg:
+    # Пул ленивый: тесты без PostgreSQL стартуют; репозиторий в них подменён.
+    url: jdbc:postgresql://localhost:1/none
+    username: archrag_console_ro
+    password: test
