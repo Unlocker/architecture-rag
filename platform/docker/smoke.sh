@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Проверка поднятого стенда: TLS на proxy, 401/200 на /mcp, сетевые границы и секреты (критерий 6, инфраструктурная часть).
+# Запуск из platform/docker: ./smoke.sh (нужен .env рядом). Сертификат демо-CA берётся из volume certs, `-k` не используется.
+set -euo pipefail
+cd "$(dirname "$0")"
+set -a; . ./.env; set +a
+port="${ARCHRAG_PUBLIC_PORT:-8443}"
+base="https://localhost:$port"
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+fail() { echo "smoke FAILED: $*" >&2; exit 1; }
+
+docker compose cp certs:/certs/ca.crt "$tmp/ca.crt" >/dev/null
+init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
+mcp() { curl -s --cacert "$tmp/ca.crt" -o /dev/null -w '%{http_code}' -X POST "$base/mcp" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' "$@" -d "$init"; }
+
+# --- аутентификация поверх TLS ---
+code=$(mcp)
+[ "$code" = 401 ] || fail "expected 401 without token, got $code"
+
+token=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/realms/archrag/protocol/openid-connect/token" \
+  -d grant_type=client_credentials -d client_id=archrag-demo -d "client_secret=$KEYCLOAK_CLIENT_SECRET" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+code=$(mcp -H "Authorization: Bearer $token")
+[ "$code" = 200 ] || fail "expected 200 with token, got $code"
+
+# Вызов tool ping: даёт ряд archrag_mcp_tool_call (профиль observability, E5.3).
+ping=$(curl -s --cacert "$tmp/ca.crt" -X POST "$base/mcp" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $token" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ping","arguments":{}}}')
+echo "$ping" | grep -q '"result"' || fail "tools/call ping returned no result"
+
+# --- plain HTTP на TLS-порту не отвечает 200 ---
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$port/mcp" || true)
+[ "$code" != 200 ] || fail "plain HTTP to the TLS port answered 200"
+
+# --- с хоста закрыты Neo4j (7474, 7687) и PostgreSQL (5432) ---
+for p in 7474 7687 5432; do
+  if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then fail "host port $p is open"; fi
+done
+
+# --- MCP не видит writer-креденшелы и PostgreSQL ---
+mcp_exec() { docker compose exec -T --index 1 mcp-server "$@"; }
+if mcp_exec env | grep -qE '^(ARCHRAG_PG_|NEO4J_PASSWORD=|ARCHRAG_NEO4J_PASSWORD=|ARCHRAG_NEO4J_USER=|ARCHRAG_S3_|ARCHRAG_WEBHOOK_SECRET=)'; then
+  fail "mcp-server environment contains writer/PostgreSQL/S3 settings"
+fi
+secrets=$(mcp_exec ls /run/secrets | tr -d '\r')
+[ "$secrets" = ARCHRAG_NEO4J_READER_PASSWORD ] || fail "mcp-server /run/secrets must hold only the reader password, got: $secrets"
+# Положительный контроль в том же контейнере: neo4j резолвится и достижим, иначе отсутствие postgres ничего не доказывает.
+[ -n "$(mcp_exec getent hosts neo4j | tr -d '\r')" ] || fail "control: mcp-server cannot resolve neo4j (getent missing or graph network broken)"
+mcp_exec timeout 3 bash -c 'exec 3<>/dev/tcp/neo4j/7687' 2>/dev/null || fail "control: mcp-server cannot reach neo4j:7687"
+if [ -n "$(mcp_exec getent hosts postgres | tr -d '\r')" ]; then fail "mcp-server resolves postgres"; fi
+if mcp_exec timeout 3 bash -c 'exec 3<>/dev/tcp/postgres/5432' 2>/dev/null; then fail "mcp-server reaches postgres:5432"; fi
+
+# --- с proxy не видна админка ingestion (контроль: mcp-server из той же сети edge резолвится) ---
+[ -n "$(docker compose exec -T reverse-proxy getent hosts mcp-server | tr -d '\r')" ] || fail "control: reverse-proxy cannot resolve mcp-server"
+if [ -n "$(docker compose exec -T reverse-proxy getent hosts ingestion | tr -d '\r')" ]; then fail "reverse-proxy resolves ingestion"; fi
+
+# --- admin REST ingestion (изнутри контейнера, порт наружу не публикуется): admin aud -> 200, чужой aud -> 401 ---
+# 401, а не 403: токен без admin scope несёт только MCP aud, отказ должен прийти от проверки audience.
+admin_replay() {
+  printf '%s' "$KEYCLOAK_CLIENT_SECRET" | docker compose exec -T ingestion sh -c '
+    set -eu
+    umask 077
+    scope=$1
+    hdr=$(mktemp); trap "rm -f \"$hdr\"" EXIT
+    token=$(curl -sf http://keycloak:8080/realms/archrag/protocol/openid-connect/token -d grant_type=client_credentials \
+      -d client_id=archrag-demo --data-urlencode "scope=$scope" --data-urlencode client_secret@- |
+      sed -n "s/.*\"access_token\":\"\([^\"]*\)\".*/\1/p")
+    [ -n "$token" ] || { echo "no access token" >&2; exit 1; }
+    printf "Authorization: Bearer %s\n" "$token" > "$hdr"
+    id=$(cat /proc/sys/kernel/random/uuid)
+    curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:8081/admin/replay -H @"$hdr" -H "Content-Type: application/json" \
+      -d "{\"source\":\"urn:corp:eam\",\"receivedFrom\":\"1970-01-01T00:00:00Z\",\"receivedTo\":\"1970-01-02T00:00:00Z\",\"replayId\":\"$id\"}"' admin "$1"
+}
+code=$(admin_replay architecture.admin)
+[ "$code" = 200 ] || fail "admin REST with admin audience: expected 200, got $code"
+code=$(admin_replay architecture.read)
+[ "$code" = 401 ] || fail "admin REST with foreign audience: expected 401, got $code"
+
+# --- plain Bolt к Neo4j отклоняется (tls_level=REQUIRED): соединение устанавливается, сервер закрывает его без ответа ---
+# Только встроенные команды bash. Исходы: CLOSED (EOF без данных) = отказ; REPLIED/TIMEOUT/UNREACHABLE = провал проверки.
+bolt=$(docker compose exec -T ingestion bash -c '
+  exec 3<>/dev/tcp/neo4j/7687 || { echo UNREACHABLE; exit 0; }
+  printf "\x60\x60\xb0\x17\x00\x00\x05\x04\x00\x00\x04\x04\x00\x00\x03\x04\x00\x00\x00\x00" >&3
+  if read -r -n 4 -t 5 -u 3 reply; then echo REPLIED; else rc=$?; [ "$rc" -gt 128 ] && echo TIMEOUT || { [ -z "$reply" ] && echo CLOSED || echo REPLIED; }; fi' | tr -d '\r')
+[ "$bolt" = CLOSED ] || fail "plain Bolt to neo4j must be closed without reply, got: ${bolt:-<no output>}"
+
+echo "smoke ok: TLS, 401 without token, 200 with token, admin REST audience, network boundaries and secrets"

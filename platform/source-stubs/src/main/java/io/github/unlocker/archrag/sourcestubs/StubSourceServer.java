@@ -39,10 +39,14 @@ public final class StubSourceServer implements AutoCloseable {
   private int calls;
 
   public StubSourceServer(StubSource source) {
+    this(source, new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+  }
+
+  /** Заглушка на заданном адресе, например {@code 0.0.0.0:8080} для контейнера демо-стенда. */
+  public StubSourceServer(StubSource source, InetSocketAddress address) {
     this.source = source;
     try {
-      this.server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
-          0);
+      this.server = HttpServer.create(address, 0);
     } catch (IOException e) {
       throw new IllegalStateException("cannot start stub source server", e);
     }
@@ -53,7 +57,12 @@ public final class StubSourceServer implements AutoCloseable {
 
   /** Базовый URL сервера, например {@code http://127.0.0.1:41234}. */
   public URI baseUri() {
-    return URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+    return URI.create("http://127.0.0.1:" + port());
+  }
+
+  /** Фактический порт (для адреса с портом 0 — выбранный системой). */
+  public int port() {
+    return server.getAddress().getPort();
   }
 
   /**

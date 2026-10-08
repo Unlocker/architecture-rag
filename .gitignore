@@ -27,3 +27,6 @@ target/
 .idea/
 *.iml
 .DS_Store
+
+platform/docker/.env
+platform/docker/measurements/

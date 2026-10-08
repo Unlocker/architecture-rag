@@ -1,0 +1,29 @@
+[
+  {
+    "id": 11,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "ИТ-платформы",
+      "typeurl": "platforms"
+    }
+  },
+  {
+    "id": 12,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "ИТ-системы",
+      "typeurl": "itsystems"
+    }
+  },
+  {
+    "id": 13,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "ИТ-решения",
+      "typeurl": "itproducts"
+    }
+  }
+]

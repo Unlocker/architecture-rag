@@ -1,0 +1,31 @@
+[
+  {
+    "id": 7201,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Card Processing",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": "Card payments processing solution",
+      "platform": [
+        3101
+      ]
+    }
+  },
+  {
+    "id": 7202,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Ledger Engine",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": "Double-entry ledger solution",
+      "platform": [
+        3101,
+        3102
+      ]
+    }
+  }
+]

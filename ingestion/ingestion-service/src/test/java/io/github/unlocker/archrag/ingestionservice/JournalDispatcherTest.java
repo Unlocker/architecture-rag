@@ -32,9 +32,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Диспетчер на фейках журнала, raw storage и процессора: порядок, пропуск объекта, DLQ, замок, остановка. */
 class JournalDispatcherTest {
@@ -52,12 +54,14 @@ class JournalDispatcherTest {
   private final AdminLock lock = mock(AdminLock.class);
   private final AdminLock.Lease lease = mock(AdminLock.Lease.class);
   private final List<StoredEvent> journalRows = new ArrayList<>();
+  private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+  private final IngestionMetrics metrics = new IngestionMetrics(registry, mock(JdbcTemplate.class));
   private JournalDispatcher dispatcher;
 
   @BeforeEach
   void setUp() {
     dispatcher = new JournalDispatcher(reader, journal, rawStore, events, processor, lock,
-        Clock.fixed(NOW, ZoneOffset.UTC), 2, RETRY_DELAY);
+        Clock.fixed(NOW, ZoneOffset.UTC), 2, RETRY_DELAY, metrics);
     when(lock.tryAcquire()).thenReturn(Optional.of(lease));
     // keyset по списку журнальных строк, страницы по 2
     when(reader.pending(any(), any(), anyInt())).thenAnswer(inv -> {
@@ -109,6 +113,20 @@ class JournalDispatcherTest {
 
     verify(processor, never()).process(argEvent("a2"), any());
     verify(processor).process(argEvent("b1"), any());
+  }
+
+  @Test
+  void metricsCountFinalStatusAndErrorForUnexpectedException() {
+    add("a1", "A", UPSERT, true);
+    add("b1", "B", UPSERT, true);
+    when(rawStore.get(rawRef("a1"))).thenThrow(new IllegalStateException("S3 down"));
+
+    dispatcher.runOnce();
+
+    assertThat(registry.get(IngestionMetrics.EVENTS).tag("source", "eam").tag("status", "ERROR").counter().count())
+        .isEqualTo(1);
+    assertThat(registry.get(IngestionMetrics.EVENTS).tag("source", "eam").tag("status", "PROJECTED").counter().count())
+        .isEqualTo(1);
   }
 
   @Test

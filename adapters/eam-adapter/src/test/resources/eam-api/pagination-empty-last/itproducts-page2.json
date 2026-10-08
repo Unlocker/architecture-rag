@@ -1,0 +1,30 @@
+[
+  {
+    "id": 7203,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Reporting",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": "",
+      "platform": [
+        3102
+      ]
+    }
+  },
+  {
+    "id": 7204,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Notifications",
+      "status": "ACTIVE",
+      "lifecycle": "PRODUCTION",
+      "description": "",
+      "platform": [
+        3101
+      ]
+    }
+  }
+]
