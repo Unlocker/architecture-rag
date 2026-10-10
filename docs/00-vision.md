@@ -282,7 +282,7 @@ OPTIONS {indexConfig: {
 }};
 ```
 
-Решение владельца 2026-10-04: индекс `deployment_env` убран; окружение задаётся связью `IN_ENVIRONMENT`, а `Environment.code` защищён UNIQUE-constraint `environment_code`.
+Решение владельца 2026-10-04, ADR 0025 (принят 2026-10-10): индекс `deployment_env` не создаётся; окружение задаётся связью `IN_ENVIRONMENT`, а `Environment.code` защищён UNIQUE-constraint `environment_code`.
 
 Для `source_record_key` в Community Edition используется `IS UNIQUE`: ранее здесь стоял `IS NODE KEY`, который доступен только в Enterprise. `UNIQUE` не требует существования свойств, поэтому обязательность `source`, `sourceType`, `sourceId` проверяет приложение (Community), см. E2.
 
@@ -406,7 +406,7 @@ RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
   "id": "01J...",
   "source": "urn:corp:eam",
   "type": "architecture.asset.upserted.v1",
-  "subject": "it-system/EAM-1042",
+  "subject": "it-system/1042",
   "time": "2026-09-30T17:20:00Z",
   "dataschema": "urn:corp:schema:asset-upserted:1",
   "correlationid": "...",
@@ -418,6 +418,8 @@ RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
   }
 }
 ```
+
+Пример приведён к ADR 0024, 2026-10-10: `sourceId` без префикса системы, `subject` строится от него.
 
 CloudEvents задает vendor-neutral envelope; комбинация `source + id` должна быть уникальной и может использоваться consumer для распознавания повторной доставки. Event-контракты полезно вести в AsyncAPI, которая является protocol-agnostic машинно-читаемой спецификацией message-driven API.[^21][^22]
 
