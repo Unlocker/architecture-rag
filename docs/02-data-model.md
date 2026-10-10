@@ -67,10 +67,10 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 
 | Тип | Откуда → куда | Свойства | Версионируется (validFrom/validTo) | Авторитетный источник |
 |---|---|---|---|---|
-| `DECOMPOSED_INTO` | `ITSystem` → `Service` | — | нет | SCM |
-| `IMPLEMENTED_IN` | `Service` → `Repository` | — | нет | SCM |
-| `HAS_DEPLOYMENT` | `Service` → `Deployment` | — | нет | DEPLOYMAP |
-| `IN_ENVIRONMENT` | `Deployment` → `Environment` | — | нет | DEPLOYMAP |
+| `DECOMPOSED_INTO` | `ITSystem` → `Service` | — | **да** ([ADR 0028](adr/0028-structural-relations-temporal.md)) | SCM |
+| `IMPLEMENTED_IN` | `Service` → `Repository` | — | **да** | SCM |
+| `HAS_DEPLOYMENT` | `Service` → `Deployment` | — | **да** | DEPLOYMAP |
+| `IN_ENVIRONMENT` | `Deployment` → `Environment` | — | **да** | DEPLOYMAP |
 | `RUNS_ON` | `Deployment` → `ComputeInstance` \| `Namespace` | — | **да** | DEPLOYMAP |
 | `PART_OF` | `Namespace` → `KubernetesCluster` | — | нет | DEPLOYMAP (в PoC не наполняется) |
 | `HOSTED_ON` | `VirtualMachine` → `PhysicalServer` | — | нет | CMDB (нормализатор связь не строит: есть только свойство `hypervisorRef`) |
@@ -81,7 +81,7 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 | `PROCESSED` | `SyncRun` → `SourceRecord` | — | нет | пишет проектор |
 | `DEFERS` | `SourceRecord` → `PendingRelation` | — | нет | служебная, пишет проектор; в `RelationType` нет |
 
-На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта).
+На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта). Структурные связи `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` тоже темпоральные ([ADR 0028](adr/0028-structural-relations-temporal.md), уточняет 0020): новая версия записи закрывает не подтверждённые ею рёбра, tombstone закрывает рёбра записи. Живой граф, где у них нет `validFrom`, догоняет `TemporalRelationMigration` при старте ingestion-сервиса (`validFrom = firstSeenAt записи-источника`, иначе время миграции); rebuild из журнала миграции не требует. Нетемпоральными остаются только `PART_OF`, `HOSTED_ON` и служебные связи проектора.
 
 ### 2.3. Жизненный цикл и provenance
 

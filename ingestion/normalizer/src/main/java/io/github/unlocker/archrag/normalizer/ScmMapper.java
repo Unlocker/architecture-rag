@@ -7,6 +7,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.Service;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
+import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
 import java.util.Set;
 
 /**
@@ -61,7 +62,7 @@ public final class ScmMapper implements CanonicalMapper {
                         NodeLabel.IT_SYSTEM,
                         key,
                         NodeLabel.SERVICE,
-                        null,
+                        validity(p),
                         "systemCode"));
         p.optional("repositoryId")
             .ifPresent(
@@ -72,10 +73,15 @@ public final class ScmMapper implements CanonicalMapper {
                         NodeLabel.SERVICE,
                         new SourceKey(SourceSystemCode.SCM, REPOSITORY, repo),
                         NodeLabel.REPOSITORY,
-                        null,
+                        validity(p),
                         "repositoryId"));
       }
       default -> throw new NormalizationException("UNKNOWN_SOURCE_TYPE", "unknown SCM sourceType");
     }
+  }
+
+  /** {@code validFrom} из источника; без него validity не задаётся, и проектор открывает связь на время события. */
+  private static Validity validity(Payload p) {
+    return p.optionalInstant("validFrom").map(from -> new Validity(from, null)).orElse(null);
   }
 }

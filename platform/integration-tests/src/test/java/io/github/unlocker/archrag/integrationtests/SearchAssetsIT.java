@@ -200,6 +200,18 @@ class SearchAssetsIT {
   }
 
   @Test
+  void closedStructuralEdgesDoNotMatchEnvironmentFilter() {
+    try (var session = driver.session()) {
+      session.run("MATCH (:Deployment)-[r:IN_ENVIRONMENT]->(:Environment) SET r.validTo = datetime('2026-01-01T00:00:00Z')")
+          .consume();
+    }
+    assertThat(gids(search("payments", null, "prod", null))).isEmpty();
+    assertThat(gids(search(GID_VM, null, "prod", null))).isEmpty();
+    // Без фильтра окружения узлы по-прежнему находятся.
+    assertThat(gids(search("payments", null, null, null))).contains(GID_PAY, GID_BILLING);
+  }
+
+  @Test
   void limitAndTruncated() {
     var one = search("payments", null, null, 1);
     assertThat(one.rows()).hasSize(1);

@@ -40,8 +40,9 @@ class RuntimeTemplatesTest {
     assertThat(T.cypher())
         .contains("s.isCurrent = true", "svc.isCurrent = true", "d.isCurrent = true")
         .contains("e.isCurrent = true", "ro.validTo IS NULL", "c.isCurrent = true")
-        .containsPattern("(?s)OPTIONAL MATCH \\(s\\)-\\[:DECOMPOSED_INTO\\]->\\(svc:Service\\)"
-            + " WHERE svc.isCurrent = true\\s+OPTIONAL MATCH \\(svc\\)-\\[hd:HAS_DEPLOYMENT\\]");
+        .contains("dc.validTo IS NULL", "hd.validTo IS NULL", "ie.validTo IS NULL")
+        .containsPattern("(?s)OPTIONAL MATCH \\(s\\)-\\[dc:DECOMPOSED_INTO\\]->\\(svc:Service\\)"
+            + " WHERE dc.validTo IS NULL AND svc.isCurrent = true\\s+OPTIONAL MATCH \\(svc\\)-\\[hd:HAS_DEPLOYMENT\\]");
   }
 
   @Test

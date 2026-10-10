@@ -43,6 +43,7 @@
 | [0023](0023-branching-process.md) | Процесс: `develop → epic/<parent> → feature/<child>`; вливает архитектор, в `develop` — владелец | Принято | 2026-10-03 | владелец 2026-10-03; [`01-development-order.md`](../01-development-order.md) |
 | [0026](0026-admin-console-readonly-loopback.md) | Админ-консоль — отдельный read-only сервис, доступ только с loopback (расширяет 0013) | Принято | 2026-10-08 | владелец 2026-10-08, по предложению архитектора; UNLOCKER-234; UNLOCKER-239 |
 | [0027](0027-frontend-react-typescript-webpack.md) | Фронтенд: React + TypeScript + Webpack, сборка отдельным Maven-модулем (расширяет 0015) | Принято | 2026-10-08 | владелец, постановка в UNLOCKER-234; UNLOCKER-240 |
+| [0028](0028-structural-relations-temporal.md) | Структурные связи `HAS_DEPLOYMENT`/`IN_ENVIRONMENT`/`DECOMPOSED_INTO`/`IMPLEMENTED_IN` — темпоральные (уточняет 0020) | Принято | 2026-10-10 | владелец 2026-10-10; UNLOCKER-218; UNLOCKER-217; UNLOCKER-219 |
 
 ## Открытые вопросы
 
