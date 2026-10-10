@@ -532,7 +532,7 @@ public interface CanonicalMapper {
 
 **Отправка webhook** — `StubWebhookSender(target, secret, clock)`: `send`, `sendAt(event, timestamp)` (проверка replay window), `sendWithBadSignature`; тело — `WebhookEvent` в JSON, заголовки из раздела 3.
 
-**Начальные данные** — `StubSources.seeded(clock)`: EAM — старая заглушка `StubSources.eam`, у реального EAM `sourceId` — целочисленный `id` (ADR 0024) (`TEAM-PAY`, `EAM-1042` Payments Core, `EAM-2001` Ledger, зависимость `svc-payments-api` → `svc-ledger-api`), SCM (`svc-payments-api`, `svc-ledger-api`, `repo-payments-api`), CMDB (`vm-pay-01`), deploy map (`ENVIRONMENT/prod`, `DEPLOYMENT/dep-payments-api-prod`). `addServiceWithBrokenReference` добавляет сервис с несуществующей системой (сценарий unresolved reference).
+**Начальные данные** — `StubSources.seeded(clock)`: EAM (`TEAM-PAY`, `EAM-1042` Payments Core, `EAM-2001` Ledger, зависимость `svc-payments-api` → `svc-ledger-api`), SCM (`svc-payments-api`, `svc-ledger-api`, `repo-payments-api`), CMDB (`vm-pay-01`), deploy map (`ENVIRONMENT/prod`, `DEPLOYMENT/dep-payments-api-prod`). `addServiceWithBrokenReference` добавляет сервис с несуществующей системой (сценарий unresolved reference). Заглушка EAM здесь — старая `StubSources.eam`; у реального EAM `sourceId` — целочисленный `id` (ADR 0024).
 
 > **Временный формат.** Формат заглушки deploy map (`DeployMapFormat`, `format=deploymap-poc-0`: `ENVIRONMENT` с `name`, `class`; `DEPLOYMENT` с `service`, `environment`, `chart`, `chartVersion`, `hosts`, `validFrom`) **временный**: владелец ещё не решил, где хранятся deploy map и Helm charts и в каком формате. После решения формат и адаптер заменяются, а не расширяются (ADR [0009](adr/0009-deployment-from-deploymap.md)). Не опираться на него как на контракт.
 

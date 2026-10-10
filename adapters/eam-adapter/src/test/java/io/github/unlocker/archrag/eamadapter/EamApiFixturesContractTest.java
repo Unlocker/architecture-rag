@@ -164,6 +164,8 @@ class EamApiFixturesContractTest {
   void systemReferencesAreSingleIds() {
     Set<Long> solutions = ids(load("baseline/itproducts.json"));
     Set<Long> platforms = ids(load("baseline/platforms.json"));
+    var solutionPlatforms = load("baseline/itproducts.json").stream()
+        .collect(java.util.stream.Collectors.toMap(EamApiFormat::id, o -> refs(o, "platform")));
     var systems = load("baseline/itsystems.json");
     assertThat(systems).isNotEmpty().allSatisfy(s -> {
       var attrs = EamApiFormat.attrs(s);
@@ -171,6 +173,8 @@ class EamApiFixturesContractTest {
       assertThat(attrs.get("platform")).isInstanceOf(Number.class);
       assertThat(solutions).contains(((Number) attrs.get("solution")).longValue());
       assertThat(platforms).contains(((Number) attrs.get("platform")).longValue());
+      assertThat(solutionPlatforms.get(((Number) attrs.get("solution")).longValue()))
+          .contains(((Number) attrs.get("platform")).longValue());
     });
   }
 
