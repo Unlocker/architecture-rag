@@ -325,7 +325,7 @@ stateDiagram-v2
 | Тема | В видении | В коде | Причина / ADR |
 |---|---|---|---|
 | Ключ `SourceRecord` | `IS NODE KEY` | `IS UNIQUE` на `(source, sourceType, sourceId)`; обязательность полей проверяет приложение | Community, [ADR 0004](adr/0004-neo4j-community-constraints.md) |
-| Индекс `deployment_env` | в ранней версии по `environmentKey` | не создаётся; окружение — связь `IN_ENVIRONMENT`, `Environment.code` под UNIQUE `environment_code` | решение владельца 2026-10-04; ADR [0025](adr/0025-open-deployment-env-index.md) числится «Предложено», хотя вопрос закрыт: нужна правка ADR (вне этой задачи) |
+| Индекс `deployment_env` | в ранней версии по `environmentKey` | не создаётся; окружение — связь `IN_ENVIRONMENT`, `Environment.code` под UNIQUE `environment_code` | ADR [0025](adr/0025-open-deployment-env-index.md), принят 2026-10-10 |
 | `gid`-constraints | примеры для `ITSystem`, `Service` | `<label>_gid` на каждую каноническую метку, генерируются из `NodeLabel` | чтобы новая метка не осталась без constraint (инвариант `Neo4jSchema`); `gid` как ключ — [ADR 0003](adr/0003-gid-and-source-record-identity.md) |
 | Служебные constraints | нет | `source_system_code`, `sync_run_id`, `pending_relation_key` | `MERGE` только по ключу под constraint |
 | Fulltext `asset_text` | `ITSystem\|Solution\|Platform\|Service\|Document` по `name`, `description`, `title` | `ITSystem\|Service` по `name`, `description` | остальных узлов нет в срезе PoC (`NodeLabel`) |
