@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: arch-rag-admin-console
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  web:
+    resources:
+      # Статику и SPA fallback обслуживает SpaWebConfiguration; дефолтные маппинги Boot отключены.
+      add-mappings: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ARCHRAG_OIDC_ISSUER_URI}
+          audiences: ${archrag.console.resource-uri}
+
+archrag:
+  console:
+    # Обязателен: это audience токена. Без значения сервис не стартует.
+    resource-uri: ${ARCHRAG_CONSOLE_RESOURCE_URI}
+    client-id: archrag-admin-console
+    scope: openid architecture.admin
+
+  neo4j:
+    reader:
+      # Только read-only учётка (reader); записывающих учёток в консоли нет. Пароль только из env/Docker secret.
+      uri: ${ARCHRAG_NEO4J_READER_URI}
+      username: ${ARCHRAG_NEO4J_READER_USERNAME}
+      password: ${ARCHRAG_NEO4J_READER_PASSWORD}
+  console-pg:
+    # Роль archrag_console_ro (SELECT на журнал, V6 ingestion-service). Пароль только из env/Docker secret.
+    url: ${ARCHRAG_CONSOLE_PG_URL}
+    username: ${ARCHRAG_CONSOLE_PG_USERNAME:archrag_console_ro}
+    password: ${ARCHRAG_CONSOLE_PG_PASSWORD}
+  query:
+    limits:
+      max-depth: 6
+      max-nodes: 500
+      max-paths: 50
+      timeout: 5s
+      max-response-bytes: 512KB
+
+server:
+  shutdown: graceful
+
+management:
+  health:
+    # Консоль жива и без PostgreSQL (граф и статика работают); DB-проба сделала бы /actuator/health зависимым от него.
+    db:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

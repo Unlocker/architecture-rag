@@ -149,9 +149,17 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?}
       ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
       ARCHRAG_ADMIN_RESOURCE_URI: urn:archrag:admin
+      ARCHRAG_CONSOLE_PORT: ${ARCHRAG_CONSOLE_PORT:-8090}
+      ARCHRAG_CONSOLE_RESOURCE_URI: urn:archrag:console
+      KEYCLOAK_CONSOLE_USER: ${KEYCLOAK_CONSOLE_USER:?}
+      KEYCLOAK_CONSOLE_PASSWORD: ${KEYCLOAK_CONSOLE_PASSWORD:?}
     volumes:
       - ./keycloak/archrag-realm.json:/opt/keycloak/data/import/archrag-realm.json:ro
-    # edge: proxy отдаёт токен-endpoint; backend: ingestion проверяет JWT админки по issuer.
+    # Только loopback: браузер консоли доходит до Keycloak по iss токенов (`keycloak` в /etc/hosts -> 127.0.0.1, см. README).
+    # Тот же порт открывает master-админку Keycloak на 127.0.0.1; граница та же, что у Grafana.
+    ports:
+      - "127.0.0.1:${ARCHRAG_KEYCLOAK_PORT:-8080}:8080"
+    # edge: proxy отдаёт токен-endpoint; backend: ingestion и консоль проверяют JWT по issuer.
     networks: [edge, backend]
     healthcheck:
       # В образе нет curl: запрос к management-порту 9000 через /dev/tcp.
@@ -235,6 +243,59 @@ services:
       neo4j-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
       # Схему Neo4j создаёт ingestion при старте.
+      ingestion: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Одноразовый сервис: пароль read-only роли PostgreSQL archrag_console_ro для admin-console. Роль создаёт миграция V6
+  # ingestion, поэтому ждём его готовности. Идемпотентен.
+  console-pg-init:
+    image: postgres:16
+    entrypoint: ["/bin/bash", "/init-console-ro.sh"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+    secrets:
+      - pg_password
+      - console_pg_password
+    volumes:
+      - ./postgres/init-console-ro.sh:/init-console-ro.sh:ro
+    networks: [backend]
+    restart: "no"
+    depends_on:
+      ingestion: { condition: service_healthy }
+
+  # Админ-консоль (read-only): граф под reader-учёткой и журнал под archrag_console_ro. Writer-секретов нет. Порт только
+  # на loopback и не публикуется через reverse-proxy (ADR 0026).
+  admin-console:
+    build:
+      context: ../..
+      dockerfile: platform/docker/Dockerfile
+      args:
+        JAR: access/admin-console/target/admin-console-0.1.0-SNAPSHOT-exec.jar
+    image: archrag/admin-console:dev
+    environment:
+      ARCHRAG_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
+      ARCHRAG_CONSOLE_RESOURCE_URI: urn:archrag:console
+      ARCHRAG_NEO4J_READER_URI: bolt+ssc://neo4j:7687
+      ARCHRAG_NEO4J_READER_USERNAME: archrag_reader
+      ARCHRAG_CONSOLE_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
+    secrets:
+      - { source: neo4j_reader_password, target: ARCHRAG_NEO4J_READER_PASSWORD }
+      - { source: console_pg_password, target: ARCHRAG_CONSOLE_PG_PASSWORD }
+    # backend: PostgreSQL и JWKS Keycloak; graph: Neo4j; console-edge: только публикация порта на loopback.
+    networks: [backend, graph, console-edge]
+    ports:
+      - "127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}:8080"
+    depends_on:
+      neo4j: { condition: service_healthy }
+      neo4j-init: { condition: service_completed_successfully }
+      console-pg-init: { condition: service_completed_successfully }
+      keycloak: { condition: service_healthy }
       ingestion: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/actuator/health"]
@@ -466,6 +527,8 @@ networks:
     internal: true
   # Только для публикации порта Grafana на loopback (internal-сеть порты не публикует).
   obs-edge:
+  # Только для публикации порта админ-консоли на loopback (internal-сеть порты не публикует).
+  console-edge:
 
 # Значения берутся из .env (вне Git); внутри контейнера это файлы /run/secrets/<target>, а не переменные окружения.
 secrets:
@@ -485,6 +548,8 @@ secrets:
     environment: GRAFANA_ADMIN_PASSWORD
   eam_api_token:
     environment: EAM_API_TOKEN
+  console_pg_password:
+    environment: CONSOLE_PG_PASSWORD
 
 volumes:
   certs:

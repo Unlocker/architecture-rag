@@ -302,6 +302,8 @@ stateDiagram-v2
 
 Аудит админских операций (V3): таблица `admin_audit` — `id bigserial`, `operation`, `actor`, `request jsonb`, `replay_id`, `status`, `result jsonb`, `error`, `started_at`, `finished_at`; индексы `ix_admin_audit_started`, `ix_admin_audit_replay`. Запись `STARTED` делается до операции.
 
+Роль консоли (V6): `archrag_console_ro` (LOGIN, без пароля, создаётся идемпотентно; пароль задаёт стенд). Права: `USAGE` на схему `public` и `SELECT` на `inbox_event`, `consumer_checkpoint`, `dlq_entry`, `identity_candidate`, `source_conflict`, `admin_audit`; остальные таблицы (`identity_mapping`, `approved_crosswalk`, `identity_feature`, `property_assertion`) недоступны. Для `CREATE ROLE` пользователю миграции нужно `CREATEROLE`.
+
 ## 6. Raw storage (S3)
 
 `S3RawPayloadStore` (`ingestion/event-journal`): S3-совместимое хранилище, path-style, регион-заглушка `us-east-1`; бакет задаётся `ARCHRAG_S3_BUCKET` и создаётся при старте (`ensureBucket`). Целостность держит SHA-256, а не доп. checksum SDK. Во всех тестах и на стенде — SeaweedFS ([ADR 0007](adr/0007-s3-raw-storage-seaweedfs.md)).

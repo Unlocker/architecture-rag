@@ -41,6 +41,8 @@
 | [0021](0021-compose-demo-stand.md) | Демо-стенд на Docker Compose вместо Kubernetes; backup Neo4j через `dump/load` | Принято | 2026-10-03 | владелец 2026-10-03; UNLOCKER-195; [`00-vision.md`, «PoC topology»](../00-vision.md#poc-topology) |
 | [0022](0022-out-of-poc-scope.md) | Вне PoC: semantic retrieval, resources/prompts, `compare_environments`, `find_stale_assets`, `get_sync_status` | Принято | 2026-10-03 | [`00-vision.md`, «Критерии готовности PoC»](../00-vision.md#критерии-готовности-poc); [`00-vision.md`, «Tools первого релиза»](../00-vision.md#tools-первого-релиза); [`00-vision.md`, «Resources и prompts»](../00-vision.md#resources-и-prompts) |
 | [0023](0023-branching-process.md) | Процесс: `develop → epic/<parent> → feature/<child>`; вливает архитектор, в `develop` — владелец | Принято | 2026-10-03 | владелец 2026-10-03; [`01-development-order.md`](../01-development-order.md) |
+| [0026](0026-admin-console-readonly-loopback.md) | Админ-консоль — отдельный read-only сервис, доступ только с loopback (расширяет 0013) | Принято | 2026-10-08 | владелец 2026-10-08, по предложению архитектора; UNLOCKER-234; UNLOCKER-239 |
+| [0027](0027-frontend-react-typescript-webpack.md) | Фронтенд: React + TypeScript + Webpack, сборка отдельным Maven-модулем (расширяет 0015) | Принято | 2026-10-08 | владелец, постановка в UNLOCKER-234; UNLOCKER-240 |
 
 ## Открытые вопросы
 

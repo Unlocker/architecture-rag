@@ -1,0 +1,44 @@
+const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+// Выход кладём в target/classes/META-INF/resources: Spring Boot отдаёт такую статику из jar.
+const outputPath = path.resolve(__dirname, 'target/classes/META-INF/resources');
+
+// Для разработки: адрес локального admin-console, на который проксируются конфиг и API.
+const adminConsoleUrl = process.env.ADMIN_CONSOLE_URL || 'http://localhost:8082';
+
+module.exports = (env, argv) => ({
+  entry: './src/index.tsx',
+  output: {
+    path: outputPath,
+    filename: '[name].[contenthash].js',
+    publicPath: '/',
+    clean: true,
+  },
+  resolve: { extensions: ['.tsx', '.ts', '.js'] },
+  module: {
+    rules: [
+      { test: /\.tsx?$/, loader: 'ts-loader', exclude: /node_modules/, options: { configFile: 'tsconfig.json' } },
+      { test: /\.css$/, use: [MiniCssExtractPlugin.loader, 'css-loader'] },
+    ],
+  },
+  // CSS выносим в файл: style-loader вставляет <style> в рантайме, а CSP консоли запрещает inline.
+  plugins: [
+    new HtmlWebpackPlugin({ template: './src/index.html' }),
+    new MiniCssExtractPlugin({ filename: '[name].[contenthash].css' }),
+  ],
+  // Исходники в production-jar не публикуем.
+  devtool: argv.mode === 'production' ? false : 'source-map',
+  devServer: {
+    port: 3000,
+    historyApiFallback: true,
+    proxy: [
+      {
+        context: ['/console-config.json', '/api'],
+        target: adminConsoleUrl,
+        changeOrigin: true,
+      },
+    ],
+  },
+});

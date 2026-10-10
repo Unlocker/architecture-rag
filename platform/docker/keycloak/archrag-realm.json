@@ -27,6 +27,25 @@
       ]
     }
   ],
+  "roles": {
+    "realm": [
+      { "name": "archrag-console-admin", "description": "Администратор админ-консоли (read-only)" }
+    ]
+  },
+  "users": [
+    {
+      "username": "${KEYCLOAK_CONSOLE_USER}",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "${KEYCLOAK_CONSOLE_USER}@archrag.invalid",
+      "firstName": "Console",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "${KEYCLOAK_CONSOLE_PASSWORD}", "temporary": false }
+      ],
+      "realmRoles": ["archrag-console-admin"]
+    }
+  ],
   "clients": [
     {
       "clientId": "archrag-demo",
@@ -51,6 +70,42 @@
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
+        }
+      ]
+    },
+    {
+      "clientId": "archrag-admin-console",
+      "name": "Arch RAG admin console (read-only)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "redirectUris": ["http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}/*"],
+      "webOrigins": ["http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}"],
+      "defaultClientScopes": [],
+      "optionalClientScopes": ["architecture.admin", "architecture.read"],
+      "protocolMappers": [
+        {
+          "name": "console-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "${ARCHRAG_CONSOLE_RESOURCE_URI}",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": { "access.token.claim": "true", "introspection.token.claim": "true" }
         }
       ]
     }

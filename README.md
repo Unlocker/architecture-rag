@@ -45,7 +45,15 @@ Maven multi-module, Java 21. Версии задаются в корневом [
 
 ## Демо-стенд
 
-Инструкция по запуску появится после вливания E5 (UNLOCKER-195).
+Запуск и проверка стенда: [`platform/docker/README.md`](platform/docker/README.md).
+
+**Как открыть админ-консоль (read-only)** на поднятом стенде:
+
+1. Добавьте в `/etc/hosts` запись `127.0.0.1 keycloak` (issuer токенов — `http://keycloak:8080/realms/archrag`).
+2. Откройте `http://127.0.0.1:8090` (порт — `ARCHRAG_CONSOLE_PORT`; именно `127.0.0.1`, а не `localhost`: PKCE требует secure context).
+3. Войдите демо-администратором: `KEYCLOAK_CONSOLE_USER` / `KEYCLOAK_CONSOLE_PASSWORD` из `.env` (демо-значения — в `.env.example`).
+
+Консоль и Keycloak слушают только `127.0.0.1`; через reverse proxy консоль не публикуется ([ADR 0026](docs/adr/0026-admin-console-readonly-loopback.md)). Автопроверка: `platform/docker/console-smoke.sh`.
 
 ## Как вносить изменения
 

@@ -1,0 +1,12 @@
+# Фиктивные reader-свойства: драйвер ленивый, тесты стартуют без Neo4j и без env.
+archrag:
+  neo4j:
+    reader:
+      uri: bolt://localhost:7687
+      username: console-reader
+      password: test
+  console-pg:
+    # Пул ленивый: тесты без PostgreSQL стартуют; репозиторий в них подменён.
+    url: jdbc:postgresql://localhost:1/none
+    username: archrag_console_ro
+    password: test
