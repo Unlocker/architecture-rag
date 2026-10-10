@@ -53,10 +53,10 @@ public final class EamApiSeed {
         "platform", List.of(PLATFORM_KUBERNETES, PLATFORM_POSTGRES)));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_PAYMENTS_CORE, fields("name", "Payments Core", "eam_id", "EAM-1042",
         "status", "ACTIVE", "criticality", "HIGH", "description", "Payments processing system",
-        "solution", List.of(SOLUTION_CARD_PROCESSING)));
+        "solution", SOLUTION_CARD_PROCESSING, "platform", PLATFORM_KUBERNETES));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_LEDGER, fields("name", "Ledger", "eam_id", "EAM-2001",
         "status", "ACTIVE", "criticality", "HIGH", "description", "General ledger system",
-        "solution", List.of(SOLUTION_LEDGER_ENGINE)));
+        "solution", SOLUTION_LEDGER_ENGINE, "platform", PLATFORM_POSTGRES));
     return s;
   }
 }

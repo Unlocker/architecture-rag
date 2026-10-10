@@ -20,7 +20,13 @@
       "name": "solution",
       "type": "reference",
       "target": "itproducts",
-      "multiple": true
+      "multiple": false
+    },
+    {
+      "name": "platform",
+      "type": "reference",
+      "target": "platforms",
+      "multiple": false
     }
   ]
 }

@@ -98,7 +98,8 @@ class EamApiFixturesContractTest {
   void typeMetadataDescribesReferenceFieldsAndSystemFields() {
     assertThat(load("types.json")).extracting(o -> EamApiFormat.attrs(o).get("typeurl"))
         .containsExactlyInAnyOrder("platforms", "itsystems", "itproducts");
-    assertThat(fieldsOf("options/itsystems-fields.json")).contains("\"solution\"", "\"itproducts\"", "\"multiple\": true");
+    assertThat(fieldsOf("options/itsystems-fields.json")).contains("\"solution\"", "\"itproducts\"", "\"platform\"", "\"platforms\"")
+        .doesNotContain("\"multiple\": true");
     assertThat(fieldsOf("options/itproducts-fields.json")).contains("\"platform\"", "\"platforms\"");
     assertThat(fieldsOf("options/itsystems-system.json")).contains("eam_id", "eam_name", "eam_permalink");
   }
@@ -160,10 +161,24 @@ class EamApiFixturesContractTest {
   }
 
   @Test
+  void systemReferencesAreSingleIds() {
+    Set<Long> solutions = ids(load("baseline/itproducts.json"));
+    Set<Long> platforms = ids(load("baseline/platforms.json"));
+    var systems = load("baseline/itsystems.json");
+    assertThat(systems).isNotEmpty().allSatisfy(s -> {
+      var attrs = EamApiFormat.attrs(s);
+      assertThat(attrs.get("solution")).isInstanceOf(Number.class);
+      assertThat(attrs.get("platform")).isInstanceOf(Number.class);
+      assertThat(solutions).contains(((Number) attrs.get("solution")).longValue());
+      assertThat(platforms).contains(((Number) attrs.get("platform")).longValue());
+    });
+  }
+
+  @Test
   void referenceToNotYetLoadedObjectIsDetectable() {
     var systems = load("deferred-reference/itsystems.json");
     Set<Long> knownSolutions = ids(load("deferred-reference/itproducts.json"));
-    List<Long> unresolved = systems.stream().flatMap(s -> refs(s, "solution").stream())
+    List<Long> unresolved = systems.stream().map(s -> ((Number) EamApiFormat.attrs(s).get("solution")).longValue())
         .filter(id -> !knownSolutions.contains(id)).toList();
     assertThat(unresolved).containsExactly(7299L);
   }

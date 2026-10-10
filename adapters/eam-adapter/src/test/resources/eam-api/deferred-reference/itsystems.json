@@ -9,9 +9,8 @@
       "status": "ACTIVE",
       "criticality": "HIGH",
       "description": "",
-      "solution": [
-        7299
-      ]
+      "solution": 7299,
+      "platform": 3101
     }
   }
 ]

@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -139,6 +140,19 @@ class EamApiStubTest {
     var system = (Map<?, ?>) parseOne("/api/types/12/options/?kind=system");
     assertThat(system.get("options").toString()).contains("eam_id");
     assertThat(get("/api/types/12/options/?kind=groups").statusCode()).isEqualTo(400);
+  }
+
+  @Test
+  void systemReferencesToSolutionAndPlatformAreSingleIds() throws Exception {
+    var systems = EamApiFormat.parseArchObjects(get("/api/itsystems/").body());
+    assertThat(systems).isNotEmpty().allSatisfy(o -> {
+      var attrs = EamApiFormat.attrs(o);
+      assertThat(attrs.get("solution")).isInstanceOf(Number.class);
+      assertThat(attrs.get("platform")).isInstanceOf(Number.class);
+    });
+    var fields = (List<?>) ((Map<?, ?>) parseOne("/api/types/itsystems/options/?kind=fields")).get("options");
+    assertThat(fields).filteredOn(f -> Set.of("solution", "platform").contains(((Map<?, ?>) f).get("name")))
+        .hasSize(2).allSatisfy(f -> assertThat(((Map<?, ?>) f).get("multiple")).isEqualTo(false));
   }
 
   @Test
