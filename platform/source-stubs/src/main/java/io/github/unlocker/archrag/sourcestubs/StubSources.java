@@ -80,6 +80,13 @@ public final class StubSources {
     return s;
   }
 
+  /**
+   * Deploy map в формате {@link DeployMapFormat#FORMAT_V1}. Позитивный сценарий согласован с SCM и
+   * EAM: аннотация {@code eam-system-id} {@code 5101} — это {@link EamApiSeed#SYSTEM_PAYMENTS_CORE}
+   * ({@code eam_id} {@code EAM-1042}), то есть {@code systemCode} сервиса SCM {@code
+   * svc-payments-api}; {@code git-repo-url} в ssh-форме нормализуется в {@code url} репозитория
+   * SCM {@code repo-payments-api}. Негативные сценарии — отдельными хелперами {@code addDeployment*}.
+   */
   public static StubSource deployMap(Clock clock) {
     StubSource s = new StubSource(SourceSystem.DEPLOY_MAP, clock);
     s.upsert(DeployMapFormat.ENVIRONMENT, "prod", fields("format", DeployMapFormat.FORMAT, "name",
@@ -87,15 +94,109 @@ public final class StubSources {
     s.upsert(
         DeployMapFormat.DEPLOYMENT,
         "dep-payments-api-prod",
-        fields(
-            "format", DeployMapFormat.FORMAT,
-            "name", "payments-api",
-            "service", "svc-payments-api",
-            "environment", "prod",
-            "chart", "payments-api",
-            "chartVersion", "1.4.2",
-            "hosts", List.of("vm-pay-01")));
+        deploymentV1(
+            "payments-api",
+            "svc-payments-api",
+            "1.4.2",
+            String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE),
+            PAYMENTS_API_SSH_URL,
+            PAYMENTS_API_COMMIT));
     return s;
+  }
+
+  /** Commit seed-деплоя {@code dep-payments-api-prod}: 40 hex в нижнем регистре. */
+  public static final String PAYMENTS_API_COMMIT = "9fceb02d0ae598e95dc970b74767f19372d61af8";
+
+  /** URL репозитория seed-деплоя в ssh-форме; нормализуется в {@code url} репозитория SCM. */
+  public static final String PAYMENTS_API_SSH_URL = "git@git.example.org:pay/payments-api.git";
+
+  /** Сменённый commit для {@link #addDeploymentRedeploy}. */
+  public static final String PAYMENTS_API_NEW_COMMIT = "1b4f0e9851971998e732078544c96b36c3d01ced";
+
+  /**
+   * Добавляет деплой репозитория, которого нет в SCM.
+   *
+   * @return идентификатор добавленного деплоя
+   */
+  public static String addDeploymentWithUnknownRepository(StubSource deployMap) {
+    String id = "dep-unknown-repo-prod";
+    deployMap.upsert(
+        DeployMapFormat.DEPLOYMENT,
+        id,
+        deploymentV1("unknown-repo", "svc-payments-api", "0.1.0",
+            String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE),
+            "https://git.example.org/pay/unknown-repo.git", PAYMENTS_API_COMMIT));
+    return id;
+  }
+
+  /**
+   * Добавляет деплой репозитория {@code payments-api} с системой {@code 5102} (Ledger), хотя
+   * сервис репозитория принадлежит {@code 5101}.
+   *
+   * @return идентификатор добавленного деплоя
+   */
+  public static String addDeploymentWithSystemMismatch(StubSource deployMap) {
+    String id = "dep-payments-api-mismatch";
+    deployMap.upsert(
+        DeployMapFormat.DEPLOYMENT,
+        id,
+        deploymentV1("payments-api", "svc-payments-api", "1.4.2",
+            String.valueOf(EamApiSeed.SYSTEM_LEDGER), PAYMENTS_API_SSH_URL, PAYMENTS_API_COMMIT));
+    return id;
+  }
+
+  /**
+   * Добавляет деплой с commit, не являющимся 40 hex.
+   *
+   * @return идентификатор добавленного деплоя
+   */
+  public static String addDeploymentWithInvalidCommit(StubSource deployMap) {
+    String id = "dep-payments-api-bad-commit";
+    deployMap.upsert(
+        DeployMapFormat.DEPLOYMENT,
+        id,
+        deploymentV1("payments-api", "svc-payments-api", "1.4.2",
+            String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE), PAYMENTS_API_SSH_URL, "not-a-commit"));
+    return id;
+  }
+
+  /**
+   * Передеплой seed-записи {@code dep-payments-api-prod}: тот же {@code sourceId}, новый commit
+   * ({@link #PAYMENTS_API_NEW_COMMIT}); {@code sourceVersion} записи растёт.
+   *
+   * @return идентификатор переданной записи
+   */
+  public static String addDeploymentRedeploy(StubSource deployMap) {
+    String id = "dep-payments-api-prod";
+    deployMap.upsert(
+        DeployMapFormat.DEPLOYMENT,
+        id,
+        deploymentV1("payments-api", "svc-payments-api", "1.4.3",
+            String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE), PAYMENTS_API_SSH_URL,
+            PAYMENTS_API_NEW_COMMIT));
+    return id;
+  }
+
+  /** Payload {@code DEPLOYMENT} формата {@link DeployMapFormat#FORMAT_V1} в окружении {@code prod}. */
+  private static Map<String, Object> deploymentV1(
+      String chart, String service, String chartVersion, String systemId, String repoUrl,
+      String commit) {
+    Map<String, Object> annotations =
+        fields(
+            DeployMapFormat.ANNOTATION_EAM_SYSTEM_ID, systemId,
+            DeployMapFormat.ANNOTATION_GIT_REPO_URL, repoUrl,
+            DeployMapFormat.ANNOTATION_GIT_COMMIT, commit);
+    return fields(
+        "format", DeployMapFormat.FORMAT_V1,
+        "name", chart,
+        "service", service,
+        "environment", "prod",
+        "chart", chart,
+        "chartVersion", chartVersion,
+        DeployMapFormat.CHART_META,
+        fields("name", chart, "version", chartVersion, "appVersion", chartVersion, "annotations",
+            annotations),
+        "hosts", List.of("vm-pay-01"));
   }
 
   /**

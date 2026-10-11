@@ -1,0 +1,27 @@
+[
+  {
+    "sourceId": "dep-payments-api-prod",
+    "sourceVersion": 2,
+    "payload": {
+      "format": "deploymap-poc-1",
+      "name": "payments-api",
+      "service": "svc-payments-api",
+      "environment": "prod",
+      "chart": "payments-api",
+      "chartVersion": "1.4.3",
+      "chartMeta": {
+        "name": "payments-api",
+        "version": "1.4.3",
+        "appVersion": "1.4.3",
+        "annotations": {
+          "archrag.io/eam-system-id": "5101",
+          "archrag.io/git-repo-url": "git@git.example.org:pay/payments-api.git",
+          "archrag.io/git-commit": "1b4f0e9851971998e732078544c96b36c3d01ced"
+        }
+      },
+      "hosts": [
+        "vm-pay-01"
+      ]
+    }
+  }
+]

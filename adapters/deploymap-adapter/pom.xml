@@ -27,6 +27,12 @@
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>event-schemas</artifactId>
     </dependency>
+    <!-- Нормализация Git URL (GitUrls) нужна только контрактному тесту fixtures. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>canonical-model</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!-- Заглушка источника нужна только contract-тестам. -->
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>

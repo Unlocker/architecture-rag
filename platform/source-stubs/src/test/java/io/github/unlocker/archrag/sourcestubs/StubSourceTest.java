@@ -34,7 +34,50 @@ class StubSourceTest {
     SourceChange deployment =
         all.get(SourceSystem.DEPLOY_MAP).fetchById(DeployMapFormat.DEPLOYMENT,
             "dep-payments-api-prod").orElseThrow();
-    assertThat(deployment.payload()).containsEntry("format", DeployMapFormat.FORMAT);
+    assertThat(deployment.payload()).containsEntry("format", DeployMapFormat.FORMAT_V1);
+    assertThat(deployment.payload()).containsKey(DeployMapFormat.CHART_META);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void seededDeploymentCarriesChartMetaWithThreeAnnotations() {
+    StubSource deployMap = StubSources.deployMap(clock);
+    Map<String, Object> payload =
+        deployMap.fetchById(DeployMapFormat.DEPLOYMENT, "dep-payments-api-prod").orElseThrow()
+            .payload();
+    Map<String, Object> meta = (Map<String, Object>) payload.get(DeployMapFormat.CHART_META);
+    assertThat(meta).containsEntry("name", payload.get("chart"))
+        .containsEntry("version", payload.get("chartVersion")).containsKey("appVersion");
+    assertThat((Map<String, String>) meta.get("annotations"))
+        .containsOnlyKeys(DeployMapFormat.ANNOTATION_EAM_SYSTEM_ID,
+            DeployMapFormat.ANNOTATION_GIT_REPO_URL, DeployMapFormat.ANNOTATION_GIT_COMMIT)
+        .containsEntry(DeployMapFormat.ANNOTATION_EAM_SYSTEM_ID,
+            String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE))
+        .containsEntry(DeployMapFormat.ANNOTATION_GIT_COMMIT, StubSources.PAYMENTS_API_COMMIT);
+    assertThat(StubSources.PAYMENTS_API_COMMIT).matches("[0-9a-f]{40}");
+  }
+
+  @Test
+  void negativeDeployMapScenariosAreSeparateFromSeed() {
+    StubSource deployMap = StubSources.deployMap(clock);
+    assertThat(deployMap.fetchById(DeployMapFormat.DEPLOYMENT, "dep-unknown-repo-prod")).isEmpty();
+    for (String id : List.of(StubSources.addDeploymentWithUnknownRepository(deployMap),
+        StubSources.addDeploymentWithSystemMismatch(deployMap),
+        StubSources.addDeploymentWithInvalidCommit(deployMap))) {
+      assertThat(deployMap.fetchById(DeployMapFormat.DEPLOYMENT, id)).isPresent();
+    }
+  }
+
+  @Test
+  void redeployChangesCommitAndBumpsSourceVersion() {
+    StubSource deployMap = StubSources.deployMap(clock);
+    long v1 = deployMap.fetchById(DeployMapFormat.DEPLOYMENT, "dep-payments-api-prod")
+        .orElseThrow().sourceVersion();
+    String id = StubSources.addDeploymentRedeploy(deployMap);
+    SourceChange after = deployMap.fetchById(DeployMapFormat.DEPLOYMENT, id).orElseThrow();
+    assertThat(after.sourceVersion()).isEqualTo(v1 + 1);
+    assertThat(after.payload().toString()).contains(StubSources.PAYMENTS_API_NEW_COMMIT)
+        .doesNotContain(StubSources.PAYMENTS_API_COMMIT);
   }
 
   @Test
