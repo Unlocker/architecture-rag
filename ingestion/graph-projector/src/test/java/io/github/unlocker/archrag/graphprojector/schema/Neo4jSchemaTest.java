@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class Neo4jSchemaTest {
 
-  private static final Pattern NAME = Pattern.compile("^CREATE (?:CONSTRAINT|FULLTEXT INDEX) (\\w+) ");
+  private static final Pattern NAME = Pattern.compile("^CREATE (?:CONSTRAINT|FULLTEXT INDEX|INDEX) (\\w+) ");
 
   @Test
   void everyCanonicalLabelHasGidConstraint() {
@@ -26,7 +26,7 @@ class Neo4jSchemaTest {
   void gidConstraintNamesMatchFixedList() {
     assertThat(NodeLabel.canonical().stream().sorted(java.util.Comparator.comparingInt(NodeLabel::ordinal))
         .map(Neo4jSchema::gidConstraintName).toList())
-        .containsExactly("it_system_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid");
+        .containsExactly("it_system_gid", "solution_gid", "platform_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid");
   }
 
   @Test
@@ -44,6 +44,12 @@ class Neo4jSchemaTest {
     assertThat(Neo4jSchema.statements()).anyMatch(s -> s.contains("sync_run_id") && s.contains("n.runId IS UNIQUE"));
     assertThat(Neo4jSchema.statements()).anyMatch(s -> s.contains("environment_code") && s.contains("n.code IS UNIQUE"));
     assertThat(Neo4jSchema.statements()).anyMatch(s -> s.contains("asset_text") && s.contains("FOR (n:ITSystem|Service)"));
+  }
+
+  @Test
+  void itSystemEamCodeIsIndexedForSystemCodeLookup() {
+    assertThat(Neo4jSchema.statements())
+        .anyMatch(s -> s.contains("it_system_eam_code") && s.contains("FOR (n:ITSystem) ON (n.eamCode)"));
   }
 
   @Test

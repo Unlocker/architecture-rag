@@ -53,6 +53,7 @@ public final class Neo4jSchema {
       + "REQUIRE n.key IS UNIQUE");
     statements.add("CREATE CONSTRAINT environment_code IF NOT EXISTS FOR (n:Environment) "
       + "REQUIRE n.code IS UNIQUE");
+    statements.add("CREATE INDEX it_system_eam_code IF NOT EXISTS FOR (n:ITSystem) ON (n.eamCode)");
     statements.add("CREATE FULLTEXT INDEX asset_text IF NOT EXISTS FOR (n:ITSystem|Service) "
       + "ON EACH [n.name, n.description]");
     return List.copyOf(statements);
