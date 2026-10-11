@@ -47,7 +47,8 @@ public final class GitUrls {
       try {
         uri = new URI(value);
       } catch (URISyntaxException e) {
-        throw new IllegalArgumentException("unrecognized git url", e);
+        // Без cause: сообщение URISyntaxException содержит весь вход, включая учётные данные.
+        throw new IllegalArgumentException("unrecognized git url");
       }
       String s = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
       switch (s) {

@@ -67,6 +67,14 @@ class GitUrlsTest {
         .hasMessageNotContaining("pw123");
   }
 
+  @Test
+  void syntaxErrorDoesNotLeakInputThroughMessageOrCause() {
+    assertThatThrownBy(() -> GitUrls.normalize("https://u:pw123@git.example.org/a b"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageNotContaining("pw123")
+        .hasNoCause();
+  }
+
   @ParameterizedTest
   @NullAndEmptySource
   @ValueSource(

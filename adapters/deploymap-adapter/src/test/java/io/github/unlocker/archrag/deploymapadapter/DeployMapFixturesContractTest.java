@@ -72,12 +72,10 @@ class DeployMapFixturesContractTest {
     SourceChange service =
         StubSources.scm(CLOCK).fetchById(StubSources.SERVICE, "svc-payments-api").orElseThrow();
     String systemCode = (String) service.payload().get("systemCode");
-    SourceChange system =
-        StubSources.eam(CLOCK).fetchById(StubSources.IT_SYSTEM, systemCode).orElseThrow();
-    assertThat(system.sourceId()).isEqualTo(systemCode);
-    // seed EamApiSeed: EAM-1042 <-> 5101, EAM-2001 <-> 5102
-    return Map.of("EAM-1042", String.valueOf(EamApiSeed.SYSTEM_PAYMENTS_CORE), "EAM-2001",
-            String.valueOf(EamApiSeed.SYSTEM_LEDGER)).get(systemCode);
+    return String.valueOf(
+        EamApiSeed.seeded(CLOCK)
+            .findIdByAttr(EamApiSeed.IT_SYSTEM_TYPE, "eam_id", systemCode)
+            .orElseThrow());
   }
 
   @Test
