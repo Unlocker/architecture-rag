@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.demolauncher;
 
+import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import java.net.URI;
 import java.time.Duration;
@@ -29,6 +30,10 @@ public final class LauncherConfig {
   static final String STUB_PORT = "ARCHRAG_STUB_PORT";
   static final String EAM_API_TOKEN = "ARCHRAG_EAM_API_TOKEN";
   static final String WEBHOOK_TARGET = "ARCHRAG_WEBHOOK_TARGET";
+  static final String EAM_MODE = "ARCHRAG_EAM_MODE";
+  static final String EAM_API_URL = "ARCHRAG_EAM_API_URL";
+  static final String EAM_MODE_LEGACY = "legacy";
+  static final String EAM_MODE_API = "eam-api";
 
   private LauncherConfig() {}
 
@@ -38,6 +43,8 @@ public final class LauncherConfig {
    * @param webhookPort порт webhook и {@code /control/snapshot}; внутри compose-сети, наружу публикуется только
    *     {@code /webhook} через proxy
    * @param healthPort порт {@code GET /health}
+   * @param eamApi адрес и токен {@code eam-api} для адаптера EAM в режиме {@code ARCHRAG_EAM_MODE=eam-api}; {@code null}
+   *     в режиме {@code legacy} (по умолчанию) и для остальных источников
    */
   public record Adapter(
       SourceSystem system,
@@ -53,12 +60,13 @@ public final class LauncherConfig {
       int webhookPort,
       int healthPort,
       Duration pollInterval,
-      Duration reconcileInterval) {
+      Duration reconcileInterval,
+      EamAdapter.EamApi eamApi) {
 
     @Override
     public String toString() {
       return "Adapter[system=" + system + ", sourceUrl=" + sourceUrl + ", webhookPort=" + webhookPort
-          + ", healthPort=" + healthPort + ", secrets=***]";
+          + ", healthPort=" + healthPort + ", eamApi=" + eamApi + ", secrets=***]";
     }
   }
 
@@ -107,12 +115,27 @@ public final class LauncherConfig {
     String s3Bucket = required(env, S3_BUCKET, missing);
     String sourceUrl = required(env, SOURCE_URL, missing);
     String secret = required(env, WEBHOOK_SECRET, missing);
+    EamAdapter.EamApi eamApi = system == SourceSystem.EAM ? eamApi(env, missing) : null;
     if (!missing.isEmpty()) {
       throw new IllegalArgumentException("required environment variables are not set: " + missing);
     }
     return new Adapter(system, pgUrl, pgUser, pgPassword, URI.create(s3Endpoint), s3AccessKey, s3SecretKey, s3Bucket,
         URI.create(sourceUrl), secret, port(env, WEBHOOK_PORT, 8080), port(env, HEALTH_PORT, 8090),
-        seconds(env, POLL_INTERVAL_SECONDS, 30), seconds(env, RECONCILE_INTERVAL_SECONDS, 6 * 3600));
+        seconds(env, POLL_INTERVAL_SECONDS, 30), seconds(env, RECONCILE_INTERVAL_SECONDS, 6 * 3600), eamApi);
+  }
+
+  /** {@code ARCHRAG_EAM_MODE}: {@code legacy} (по умолчанию) либо {@code eam-api}; во втором нужны URL и токен. */
+  private static EamAdapter.EamApi eamApi(Map<String, String> env, List<String> missing) {
+    String mode = env.get(EAM_MODE);
+    if (mode == null || mode.isBlank() || mode.strip().equals(EAM_MODE_LEGACY)) {
+      return null;
+    }
+    if (!mode.strip().equals(EAM_MODE_API)) {
+      throw new IllegalArgumentException(EAM_MODE + " must be " + EAM_MODE_LEGACY + " or " + EAM_MODE_API);
+    }
+    String url = required(env, EAM_API_URL, missing);
+    String token = required(env, EAM_API_TOKEN, missing);
+    return url == null || token == null ? null : new EamAdapter.EamApi(URI.create(url.strip()), token);
   }
 
   /** Настройки заглушки из env. */

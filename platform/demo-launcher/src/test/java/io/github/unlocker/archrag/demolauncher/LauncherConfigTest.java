@@ -124,4 +124,36 @@ class LauncherConfigTest {
     var c = LauncherConfig.stub(SourceSystem.EAM, Map.of("ARCHRAG_WEBHOOK_SECRET", "x"));
     assertThat(c.webhookTarget()).isNull();
   }
+
+  @Test
+  void eamAdapterDefaultsToLegacyModeWithoutEamApi() {
+    assertThat(LauncherConfig.adapter(SourceSystem.EAM, fullEnv()).eamApi()).isNull();
+    var env = fullEnv();
+    env.put("ARCHRAG_EAM_MODE", "legacy");
+    assertThat(LauncherConfig.adapter(SourceSystem.EAM, env).eamApi()).isNull();
+  }
+
+  @Test
+  void eamApiModeRequiresUrlAndTokenAndHidesToken() {
+    var env = fullEnv();
+    env.put("ARCHRAG_EAM_MODE", "eam-api");
+    env.put("ARCHRAG_EAM_API_URL", "http://eam-api-stub:8080");
+    env.put("ARCHRAG_EAM_API_TOKEN", "api-token-value");
+    var c = LauncherConfig.adapter(SourceSystem.EAM, env);
+    assertThat(c.eamApi().baseUri()).hasToString("http://eam-api-stub:8080");
+    assertThat(c.eamApi().token()).isEqualTo("api-token-value");
+    assertThat(c.toString()).doesNotContain("api-token-value");
+
+    env.remove("ARCHRAG_EAM_API_TOKEN");
+    assertThatThrownBy(() -> LauncherConfig.adapter(SourceSystem.EAM, env))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("ARCHRAG_EAM_API_TOKEN");
+  }
+
+  @Test
+  void unknownEamModeIsRejectedAndOtherSourcesIgnoreIt() {
+    var env = fullEnv();
+    env.put("ARCHRAG_EAM_MODE", "bogus");
+    assertThatThrownBy(() -> LauncherConfig.adapter(SourceSystem.EAM, env)).isInstanceOf(IllegalArgumentException.class);
+    assertThat(LauncherConfig.adapter(SourceSystem.SCM, env).eamApi()).isNull();
+  }
 }

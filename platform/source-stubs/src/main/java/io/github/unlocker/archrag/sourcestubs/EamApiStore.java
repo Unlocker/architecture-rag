@@ -52,6 +52,11 @@ public final class EamApiStore {
         .findFirst();
   }
 
+  /** {@code ver} объекта или пусто, если его нет (не создан либо архивирован). */
+  public synchronized Optional<Long> version(String type, long id) {
+    return find(type, id).map(Entry::ver);
+  }
+
   synchronized boolean hasType(String type) {
     return byType.containsKey(type);
   }

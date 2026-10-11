@@ -11,7 +11,8 @@
       "description": "Payments processing system",
       "solution": [
         7201
-      ]
+      ],
+      "ownerTeam": "TEAM-PAY"
     }
   },
   {
@@ -26,7 +27,8 @@
       "description": "General ledger system",
       "solution": [
         7202
-      ]
+      ],
+      "ownerTeam": "TEAM-PAY"
     }
   }
 ]
