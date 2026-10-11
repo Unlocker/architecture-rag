@@ -9,8 +9,8 @@
       "status": "ACTIVE",
       "criticality": "HIGH",
       "description": "",
-      "solution": 7299,
-      "platform": 3101
+      "product_id": 7299,
+      "platform_id": 3101
     }
   }
 ]

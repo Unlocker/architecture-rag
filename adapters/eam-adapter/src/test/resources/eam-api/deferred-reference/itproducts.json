@@ -8,9 +8,7 @@
       "status": "ACTIVE",
       "lifecycle": "PRODUCTION",
       "description": "",
-      "platform": [
-        3101
-      ]
+      "platform_id": 3101
     }
   }
 ]

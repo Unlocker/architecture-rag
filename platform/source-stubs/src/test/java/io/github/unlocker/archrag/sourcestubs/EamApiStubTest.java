@@ -147,11 +147,11 @@ class EamApiStubTest {
     var systems = EamApiFormat.parseArchObjects(get("/api/itsystems/").body());
     assertThat(systems).isNotEmpty().allSatisfy(o -> {
       var attrs = EamApiFormat.attrs(o);
-      assertThat(attrs.get("solution")).isInstanceOf(Number.class);
-      assertThat(attrs.get("platform")).isInstanceOf(Number.class);
+      assertThat(attrs.get("product_id")).isInstanceOf(Number.class);
+      assertThat(attrs.get("platform_id")).isInstanceOf(Number.class);
     });
     var fields = (List<?>) ((Map<?, ?>) parseOne("/api/types/itsystems/options/?kind=fields")).get("options");
-    assertThat(fields).filteredOn(f -> Set.of("solution", "platform").contains(((Map<?, ?>) f).get("name")))
+    assertThat(fields).filteredOn(f -> Set.of("product_id", "platform_id").contains(((Map<?, ?>) f).get("name")))
         .hasSize(2).allSatisfy(f -> assertThat(((Map<?, ?>) f).get("multiple")).isEqualTo(false));
   }
 

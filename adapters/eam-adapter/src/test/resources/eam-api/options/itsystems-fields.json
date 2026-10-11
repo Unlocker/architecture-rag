@@ -17,13 +17,13 @@
       "type": "select"
     },
     {
-      "name": "solution",
+      "name": "product_id",
       "type": "reference",
       "target": "itproducts",
       "multiple": false
     },
     {
-      "name": "platform",
+      "name": "platform_id",
       "type": "reference",
       "target": "platforms",
       "multiple": false

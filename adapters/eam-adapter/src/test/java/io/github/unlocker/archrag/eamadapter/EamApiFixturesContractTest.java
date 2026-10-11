@@ -50,9 +50,11 @@ class EamApiFixturesContractTest {
     return page.stream().collect(Collectors.toMap(EamApiFormat::id, o -> o));
   }
 
-  @SuppressWarnings("unchecked")
-  private static List<Long> refs(Map<String, Object> object, String field) {
-    return (List<Long>) EamApiFormat.attrs(object).getOrDefault(field, List.of());
+  /** Одиночная ссылка (`product_id`, `platform_id`): одно целочисленное значение, не список. */
+  private static long ref(Map<String, Object> object, String field) {
+    Object value = EamApiFormat.attrs(object).get(field);
+    assertThat(value).as(field).isInstanceOf(Number.class);
+    return ((Number) value).longValue();
   }
 
   /** Читает страницы подряд как адаптер: до первой страницы короче {@code pageSize}. */
@@ -98,9 +100,10 @@ class EamApiFixturesContractTest {
   void typeMetadataDescribesReferenceFieldsAndSystemFields() {
     assertThat(load("types.json")).extracting(o -> EamApiFormat.attrs(o).get("typeurl"))
         .containsExactlyInAnyOrder("platforms", "itsystems", "itproducts");
-    assertThat(fieldsOf("options/itsystems-fields.json")).contains("\"solution\"", "\"itproducts\"", "\"platform\"", "\"platforms\"")
+    assertThat(fieldsOf("options/itsystems-fields.json")).contains("\"product_id\"", "\"itproducts\"", "\"platform_id\"", "\"platforms\"")
         .doesNotContain("\"multiple\": true");
-    assertThat(fieldsOf("options/itproducts-fields.json")).contains("\"platform\"", "\"platforms\"");
+    assertThat(fieldsOf("options/itproducts-fields.json")).contains("\"platform_id\"", "\"platforms\"")
+        .doesNotContain("\"multiple\": true");
     assertThat(fieldsOf("options/itsystems-system.json")).contains("eam_id", "eam_name", "eam_permalink");
   }
 
@@ -152,37 +155,39 @@ class EamApiFixturesContractTest {
     var after = load("ref-change/itproducts-sync2.json").get(0);
     assertThat(EamApiFormat.id(after)).isEqualTo(EamApiFormat.id(before));
     assertThat(EamApiFormat.ver(after)).isGreaterThan(EamApiFormat.ver(before));
-    Set<Long> closed = new LinkedHashSet<>(refs(before, "platform"));
-    closed.removeAll(refs(after, "platform"));
-    Set<Long> opened = new LinkedHashSet<>(refs(after, "platform"));
-    opened.removeAll(refs(before, "platform"));
-    assertThat(closed).containsExactly(3102L);
-    assertThat(opened).containsExactly(3103L);
+    assertThat(ref(before, "platform_id")).isEqualTo(3102L);
+    assertThat(ref(after, "platform_id")).isEqualTo(3103L);
   }
 
   @Test
   void systemReferencesAreSingleIds() {
     Set<Long> solutions = ids(load("baseline/itproducts.json"));
     Set<Long> platforms = ids(load("baseline/platforms.json"));
-    var solutionPlatforms = load("baseline/itproducts.json").stream()
-        .collect(java.util.stream.Collectors.toMap(EamApiFormat::id, o -> refs(o, "platform")));
+    var solutionPlatform = load("baseline/itproducts.json").stream()
+        .collect(java.util.stream.Collectors.toMap(EamApiFormat::id, o -> ref(o, "platform_id")));
     var systems = load("baseline/itsystems.json");
     assertThat(systems).isNotEmpty().allSatisfy(s -> {
-      var attrs = EamApiFormat.attrs(s);
-      assertThat(attrs.get("solution")).isInstanceOf(Number.class);
-      assertThat(attrs.get("platform")).isInstanceOf(Number.class);
-      assertThat(solutions).contains(((Number) attrs.get("solution")).longValue());
-      assertThat(platforms).contains(((Number) attrs.get("platform")).longValue());
-      assertThat(solutionPlatforms.get(((Number) attrs.get("solution")).longValue()))
-          .contains(((Number) attrs.get("platform")).longValue());
+      assertThat(solutions).contains(ref(s, "product_id"));
+      assertThat(platforms).contains(ref(s, "platform_id"));
+      // строгая иерархия: платформа системы совпадает с платформой её решения
+      assertThat(ref(s, "platform_id")).isEqualTo(solutionPlatform.get(ref(s, "product_id")));
     });
+    assertThat(solutionPlatform.values()).allSatisfy(p -> assertThat(platforms).contains(p));
+  }
+
+  @Test
+  void platformMismatchFixtureHasSystemAndSolutionOnDifferentPlatforms() {
+    var system = load("platform-mismatch/itsystems.json").get(0);
+    var solution = load("platform-mismatch/itproducts.json").get(0);
+    assertThat(EamApiFormat.id(solution)).isEqualTo(ref(system, "product_id"));
+    assertThat(ref(system, "platform_id")).isNotEqualTo(ref(solution, "platform_id"));
   }
 
   @Test
   void referenceToNotYetLoadedObjectIsDetectable() {
     var systems = load("deferred-reference/itsystems.json");
     Set<Long> knownSolutions = ids(load("deferred-reference/itproducts.json"));
-    List<Long> unresolved = systems.stream().map(s -> ((Number) EamApiFormat.attrs(s).get("solution")).longValue())
+    List<Long> unresolved = systems.stream().map(s -> ((Number) EamApiFormat.attrs(s).get("product_id")).longValue())
         .filter(id -> !knownSolutions.contains(id)).toList();
     assertThat(unresolved).containsExactly(7299L);
   }

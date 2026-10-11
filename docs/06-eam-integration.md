@@ -72,9 +72,9 @@ Webhook-путь заглушки на реальный EAM не перенос�
 | объект платформы | `UpsertNode(Platform{name, type, version})` |
 | объект решения | `UpsertNode(Solution{name, lifecycle, description})` |
 | объект ИТ-системы | `UpsertNode(ITSystem{name, status, criticality, description})` |
-| поле-ссылка `solution` ИТ-системы → решение | `UpsertRelation(USES_SOLUTION)` |
-| поле-ссылка `platform` ИТ-системы → платформа | вид связи не определён (открытый вопрос ниже) |
-| поле-ссылка `platform` решения → платформа | `UpsertRelation(USES_PLATFORM)`; сохраняется до ответа на открытый вопрос |
+| поле-ссылка `product_id` ИТ-системы → решение | `UpsertRelation(USES_SOLUTION)` |
+| поле-ссылка `platform_id` решения (`itproducts`) → платформа | `UpsertRelation(USES_PLATFORM)` |
+| поле-ссылка `platform_id` ИТ-системы | связь не строится; только проверка инварианта: расхождение с `platform_id` решения → `Conflict`, запись помечается для разбора |
 
 Правила:
 
@@ -89,8 +89,8 @@ Webhook-путь заглушки на реальный EAM не перенос�
 Доступа к реальному EAM и к выгрузке метаданных нет (решение владельца 2026-10-06). Владелец ответил на вопросы 2026-10-10; ответы ниже подтверждены, fixtures ([`eam-api/README.md`](../adapters/eam-adapter/src/test/resources/eam-api/README.md)) и заглушка `EamApiSeed` приведены к ним. Когда появится доступ к EAM, ответы сверяются с реальными ответами API, а fixtures перегенерируются записью.
 
 1. **Где «ИТ-решение»: тип `itproducts`** (подтверждено владельцем 2026-10-10). Кандидаты `itproducts`, `msys`, `okita`, `aknsd`. В заглушке тип задан константой `EamApiSeed.SOLUTION_TYPE`, в нормализаторе его тоже держать константой.
-2. **Поля `attrs`** (подтверждено 2026-10-10). Общие: `name` (строка), `status` (словарь, `ACTIVE`/…), `description`. Платформа и решение: `lifecycle` (словарь, `PRODUCTION`/…). ИТ-система: `criticality` (словарь, `HIGH`/`MEDIUM`/`LOW`), системное поле `eam_id` (`EAM-1042`; приходит в `attrs`, а в `options?kind=system` описано). Поля-ссылки: у ИТ-системы `solution` (→ `itproducts`) и `platform` (→ `platforms`), у решения `platform` (→ `platforms`, см. открытый вопрос). Словари значений не выгружены: неизвестное значение сохраняется как есть и помечается для разбора (правило из раздела «Нормализация»).
-3. **Ссылки: у ИТ-системы одиночные `solution` и `platform`** (решение владельца 2026-10-10, заменяет прежнее допущение «список id»). Карточка ИТ-системы всегда содержит ссылки (целочисленные `id`) на объемлющее решение (`solution` → `itproducts`) и на объемлющую платформу (`platform` → `platforms`). Это одно значение, не список: `solution: 7201`, `platform: 3101`; в метаданных `multiple: false`. Обратных списков на решении и платформе нет, связи восстанавливаются по полям-ссылкам системы. Поле `platform` у решения (`itproducts.platform`, в fixtures и seed список id) остаётся как было, пока открыт вопрос ниже.
+2. **Поля `attrs`** (подтверждено 2026-10-10). Общие: `name` (строка), `status` (словарь, `ACTIVE`/…), `description`. Платформа и решение: `lifecycle` (словарь, `PRODUCTION`/…). ИТ-система: `criticality` (словарь, `HIGH`/`MEDIUM`/`LOW`), системное поле `eam_id` (`EAM-1042`; приходит в `attrs`, а в `options?kind=system` описано). Поля-ссылки (одиночные целочисленные `id`): у ИТ-системы `product_id` (→ `itproducts`) и `platform_id` (→ `platforms`), у решения `platform_id` (→ `platforms`). Словари значений не выгружены: неизвестное значение сохраняется как есть и помечается для разбора (правило из раздела «Нормализация»).
+3. **Ссылки: строгая иерархия «платформа → решение → система»** (решения владельца 2026-10-10 и 2026-10-11). Карточка ИТ-системы всегда содержит одиночные ссылки (целочисленные `id`) на решение (`product_id` → `itproducts`) и на платформу (`platform_id` → `platforms`); у решения есть своя одиночная `platform_id` (→ `platforms`). Все три поля — одно значение, не список (`multiple: false`): `product_id: 7201`, `platform_id: 3101`. Платформа системы всегда совпадает с платформой её решения. Обратных списков на решении и платформе нет, связи восстанавливаются по полям-ссылкам. Граф строится так: `USES_SOLUTION` — по `itsystems.product_id`, `USES_PLATFORM` — по `itproducts.platform_id`. `itsystems.platform_id` избыточно: прямой связи «система → платформа» нет, платформа системы получается обходом через решение в 2 перехода. Поле служит проверкой инварианта: при расхождении с `platform_id` решения создаётся `Conflict`, запись помечается для разбора, граф при этом строится по решению. Fixture сценария — `platform-mismatch/`; тест нормализатора появится вместе с переделкой `EamAdapter`.
 4. **Исчезновение объекта — логическое удаление** (подтверждено 2026-10-10). «Архивировать» в EAM означает существующий tombstone: `TombstoneSourceRecord`, у узла `isCurrent=false` и `deletedAt`, связи закрываются через `validTo`; физического удаления нет (ADR 0020). Архивный объект не возвращается из `GET /api/<type>/`, `GET /{id}/` отвечает 404 (так ведёт себя заглушка); пропажа `id` из полного snapshot даёт tombstone ([Схема синхронизации](#схема-синхронизации)).
 5. **Версионирование** (подтверждено 2026-10-10): `ver` растёт при **каждом** изменении `attrs`, повторное чтение без изменений даёт ту же `ver` (no-op, идемпотентность по `(id, ver)` и `contentHash`). Выборка по версии `GET /{id}/` не используется: параметр в спеке не объявлен. Страховка — `contentHash` от канонизированного `attrs`.
 6. **Лимиты** (подтверждено 2026-10-10): `page_size` по умолчанию 50, максимум 500 (заглушка зажимает до 500); адаптер ограничивается 10 запросами в секунду и повтором по `Retry-After` при 429. Порядок при `sort=-mtime` во время записи нестабилен: пропуски при сдвиге страниц компенсирует периодический полный snapshot. Допустимые ключи сортировки — `id`, `ctime`, `mtime` (заглушка на прочие отвечает 400). Конец выборки — страница короче `page_size` (в том числе пустая; страница за концом — `[]`, не 404).
@@ -99,7 +99,7 @@ Webhook-путь заглушки на реальный EAM не перенос�
 
 ### Открытые вопросы
 
-- **Хранит ли решение собственную ссылку на платформу, и что делать при расхождении с `platform` у системы?** Ответа нет. Известно: у системы всегда есть одиночные `solution` и `platform`. Не хватает: остаётся ли `itproducts.platform` и какой источник главный при расхождении. Пока fixtures и seed построены без расхождений (платформа системы входит в список платформ её решения); `itproducts.platform` и сценарий `ref-change` не менялись. От ответа зависят вид связи «система → платформа» в таблице нормализации и судьба `USES_PLATFORM` у решения. Если модель изменится (кратность, источник связей), вопрос уйдёт в отдельную задачу.
+Открытых вопросов по EAM нет. Вопрос «хранит ли решение собственную ссылку на платформу» закрыт решением владельца 2026-10-11 (п. 3).
 
 ### Сопоставление ключей
 
@@ -111,12 +111,12 @@ SCM Service.systemCode  ("EAM-1042")
   → ArchObject.id (5101) = sourceId ITSystem
 ```
 
-Адаптер строит индекс `eam_id → id` по списку `itsystems` и отдаёт его в crosswalk; данные SCM менять не нужно. Seed заглушки: `Payments Core` — `id 5101`, `eam_id EAM-1042`, `solution 7201`, `platform 3101`; `Ledger` — `id 5102`, `eam_id EAM-2001`, `solution 7202`, `platform 3102`.
+Адаптер строит индекс `eam_id → id` по списку `itsystems` и отдаёт его в crosswalk; данные SCM менять не нужно. Seed заглушки: `Payments Core` — `id 5101`, `eam_id EAM-1042`, `product_id 7201`, `platform_id 3101`; `Ledger` — `id 5102`, `eam_id EAM-2001`, `product_id 7202`, `platform_id 3102`.
 
 ## Заглушки и fixtures
 
 - **Старая заглушка** `StubSources.eam` (`/changes`, `/objects/…`, строковые id `EAM-1042`) не меняется: демо F1–F4 и текущий `eam-adapter` работают через неё. Расширять её типами `PLATFORM`/`SOLUTION` не нужно.
-- **Новая заглушка** `EamApiStub` (`platform/source-stubs`, в compose — `eam-api-stub`) отдаёт формат реального API: `GET /api/<type>/` с `page`/`page_size`/`sort`/`fields`, `GET /api/<type>/{id}/`, `GET /api/types/…`, проверка `Authorization: Token …`, только чтение. Seed `EamApiSeed`: срез `Payments Core → Card Processing → Kubernetes Platform` и `Ledger → Ledger Engine → Kubernetes Platform, PostgreSQL Platform`; у систем одиночные `solution` и `platform` (Payments Core → Kubernetes Platform, Ledger → PostgreSQL Platform). Адаптер к ней подключит задача переделки `EamAdapter`.
+- **Новая заглушка** `EamApiStub` (`platform/source-stubs`, в compose — `eam-api-stub`) отдаёт формат реального API: `GET /api/<type>/` с `page`/`page_size`/`sort`/`fields`, `GET /api/<type>/{id}/`, `GET /api/types/…`, проверка `Authorization: Token …`, только чтение. Seed `EamApiSeed`: срез `Payments Core → Card Processing → Kubernetes Platform` и `Ledger → Ledger Engine → Kubernetes Platform, PostgreSQL Platform`; у решений и систем одиночные ссылки: `Card Processing` → `platform_id` Kubernetes Platform, `Ledger Engine` → PostgreSQL Platform; `Payments Core` — `product_id` Card Processing, `platform_id` Kubernetes Platform; `Ledger` — `product_id` Ledger Engine, `platform_id` PostgreSQL Platform (платформа системы совпадает с платформой её решения). Адаптер к ней подключит задача переделки `EamAdapter`.
 - **Fixtures** — `adapters/eam-adapter/src/test/resources/eam-api`, тесты `EamApiFixturesContractTest`. Каждая fixture собрана по спеке и ответам владельца, допущения перечислены в `eam-api/README.md`.
 
 ## Тестирование

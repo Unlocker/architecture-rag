@@ -47,16 +47,16 @@ public final class EamApiSeed {
         "lifecycle", "PRODUCTION", "description", "Managed relational database"));
     s.upsert(SOLUTION_TYPE, SOLUTION_CARD_PROCESSING, fields("name", "Card Processing", "status", "ACTIVE",
         "lifecycle", "PRODUCTION", "description", "Card payments processing solution",
-        "platform", List.of(PLATFORM_KUBERNETES)));
+        "platform_id", PLATFORM_KUBERNETES));
     s.upsert(SOLUTION_TYPE, SOLUTION_LEDGER_ENGINE, fields("name", "Ledger Engine", "status", "ACTIVE",
         "lifecycle", "PRODUCTION", "description", "Double-entry ledger solution",
-        "platform", List.of(PLATFORM_KUBERNETES, PLATFORM_POSTGRES)));
+        "platform_id", PLATFORM_POSTGRES));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_PAYMENTS_CORE, fields("name", "Payments Core", "eam_id", "EAM-1042",
         "status", "ACTIVE", "criticality", "HIGH", "description", "Payments processing system",
-        "solution", SOLUTION_CARD_PROCESSING, "platform", PLATFORM_KUBERNETES));
+        "product_id", SOLUTION_CARD_PROCESSING, "platform_id", PLATFORM_KUBERNETES));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_LEDGER, fields("name", "Ledger", "eam_id", "EAM-2001",
         "status", "ACTIVE", "criticality", "HIGH", "description", "General ledger system",
-        "solution", SOLUTION_LEDGER_ENGINE, "platform", PLATFORM_POSTGRES));
+        "product_id", SOLUTION_LEDGER_ENGINE, "platform_id", PLATFORM_POSTGRES));
     return s;
   }
 }

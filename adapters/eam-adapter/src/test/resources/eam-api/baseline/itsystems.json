@@ -9,8 +9,8 @@
       "status": "ACTIVE",
       "criticality": "HIGH",
       "description": "Payments processing system",
-      "solution": 7201,
-      "platform": 3101
+      "product_id": 7201,
+      "platform_id": 3101
     }
   },
   {
@@ -23,8 +23,8 @@
       "status": "ACTIVE",
       "criticality": "HIGH",
       "description": "General ledger system",
-      "solution": 7202,
-      "platform": 3102
+      "product_id": 7202,
+      "platform_id": 3102
     }
   }
 ]

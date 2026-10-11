@@ -38,12 +38,12 @@ final class EamApiTypeMeta {
       case EamApiSeed.PLATFORM_TYPE -> out.add(field("lifecycle", "select", null, false));
       case EamApiSeed.IT_SYSTEM_TYPE -> {
         out.add(field("criticality", "select", null, false));
-        out.add(field("solution", "reference", EamApiSeed.SOLUTION_TYPE, false));
-        out.add(field("platform", "reference", EamApiSeed.PLATFORM_TYPE, false));
+        out.add(field("product_id", "reference", EamApiSeed.SOLUTION_TYPE, false));
+        out.add(field("platform_id", "reference", EamApiSeed.PLATFORM_TYPE, false));
       }
       default -> {
         out.add(field("lifecycle", "select", null, false));
-        out.add(field("platform", "reference", EamApiSeed.PLATFORM_TYPE, true));
+        out.add(field("platform_id", "reference", EamApiSeed.PLATFORM_TYPE, false));
       }
     }
     return out;
