@@ -155,6 +155,37 @@ class FindRuntimeFootprintToolTest {
   }
 
   @Test
+  void deploymentSourceCodeFieldsAreMappedAndAbsentForPoc0() {
+    Map<String, Object> svc = node("s1", FRESH, Map.of("name", "billing-api"));
+    Map<String, Object> withCode = deployment("d1", FRESH);
+    withCode.put("sourceCommit", "a".repeat(40));
+    withCode.put("repositoryUrl", "https://git.example/org/billing");
+    withCode.put("repository", Map.of("gid", "r1", "name", "billing", "url", "https://git.example/org/billing"));
+    Map<String, Object> df = new HashMap<>(edge("2026-02-01T00:00:00Z"));
+    df.put("commit", "a".repeat(40));
+    withCode.put("deployedFrom", df);
+    Map<String, Object> poc0 = deployment("d2", FRESH);
+    when(graph.execute(any(), any(), any()))
+        .thenReturn(
+            result(
+                false,
+                row(system(FRESH), svc, withCode, null, null),
+                row(system(FRESH), svc, poc0, null, null)));
+
+    var ds = tool.findRuntimeFootprint(GID, null).services().get(0).deployments();
+
+    assertThat(ds.get(0).sourceCommit()).isEqualTo("a".repeat(40));
+    assertThat(ds.get(0).repositoryUrl()).isEqualTo("https://git.example/org/billing");
+    assertThat(ds.get(0).repository().gid()).isEqualTo("r1");
+    assertThat(ds.get(0).deployedFrom().commit()).isEqualTo("a".repeat(40));
+    assertThat(ds.get(0).deployedFrom().validFrom()).isEqualTo("2026-02-01T00:00:00Z");
+    assertThat(ds.get(1).sourceCommit()).isNull();
+    assertThat(ds.get(1).repositoryUrl()).isNull();
+    assertThat(ds.get(1).repository()).isNull();
+    assertThat(ds.get(1).deployedFrom()).isNull();
+  }
+
+  @Test
   void serviceWithoutDeploymentsIsReturnedWithEmptyList() {
     Map<String, Object> svc = node("s1", FRESH, Map.of("name", "billing-api"));
     when(graph.execute(any(), any(), any()))

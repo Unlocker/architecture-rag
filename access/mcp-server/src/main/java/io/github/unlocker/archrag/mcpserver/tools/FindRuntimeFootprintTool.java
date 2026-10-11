@@ -53,7 +53,8 @@ public class FindRuntimeFootprintTool {
               openWorldHint = false),
       description =
           "Где развёрнута система: сервисы, их deployments по окружениям и вычислительные узлы"
-              + " (VM, физические серверы) с provenance и признаком stale. Только действующие факты.")
+              + " (VM, физические серверы) с provenance и признаком stale. У deployment: sourceCommit, repositoryUrl,"
+              + " repository и deployedFrom (из Helm chart; null, если не заданы). Только действующие факты.")
   public FindRuntimeFootprintResult findRuntimeFootprint(
       @McpToolParam(description = "gid узла ITSystem (UUID)") String systemGid,
       @McpToolParam(description = "Код окружения для фильтра, например PROD; без него все", required = false)
@@ -182,8 +183,11 @@ public class FindRuntimeFootprintTool {
     DeploymentFootprint build() {
       return new DeploymentFootprint(
           (String) node.get("gid"), (String) node.get("name"), (String) node.get("version"),
-          (String) node.get("status"), (String) node.get("environment"), seen, stale,
-          sources(node), edge(node.get("hasDeployment")), List.copyOf(compute.values()));
+          (String) node.get("status"), (String) node.get("environment"),
+          (String) node.get("sourceCommit"), (String) node.get("repositoryUrl"),
+          repository(node.get("repository")), seen, stale, sources(node),
+          edge(node.get("hasDeployment")), deployedFrom(node.get("deployedFrom")),
+          List.copyOf(compute.values()));
     }
   }
 
@@ -224,6 +228,20 @@ public class FindRuntimeFootprintTool {
         : new EdgeProvenance(
             (String) m.get("source"), (String) m.get("sourceType"), (String) m.get("sourceId"),
             (String) m.get("validFrom"));
+  }
+
+  private static RepositoryRef repository(Object o) {
+    Map<String, Object> m = map(o);
+    return m == null ? null : new RepositoryRef((String) m.get("gid"), (String) m.get("name"), (String) m.get("url"));
+  }
+
+  private static DeployedFromRef deployedFrom(Object o) {
+    Map<String, Object> m = map(o);
+    return m == null
+        ? null
+        : new DeployedFromRef(
+            (String) m.get("source"), (String) m.get("sourceType"), (String) m.get("sourceId"),
+            (String) m.get("validFrom"), (String) m.get("commit"));
   }
 
   @SuppressWarnings("unchecked")

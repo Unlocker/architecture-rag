@@ -49,7 +49,8 @@ class DependencyTemplatesTest {
   @Test
   void allowlistIsExactlyTheTraceRelations() {
     assertThat(DependencyTemplates.TRACE_RELATION_TYPES)
-        .containsExactly("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY");
+        .containsExactly("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY",
+            "DEPLOYED_FROM");
   }
 
   @Test
@@ -80,7 +81,7 @@ class DependencyTemplatesTest {
   void impactAllowlistIsExactAndSubsetOfTraceAllowlist() {
     assertThat(DependencyTemplates.IMPACT_RELATION_TYPES)
         .containsExactly("RUNS_ON", "HOSTED_ON", "HAS_DEPLOYMENT", "DECOMPOSED_INTO", "DEPENDS_ON")
-        .doesNotContain("OWNED_BY")
+        .doesNotContain("OWNED_BY", "DEPLOYED_FROM")
         .isSubsetOf(DependencyTemplates.TRACE_RELATION_TYPES);
     assertThat(DependencyTemplates.IMPACT_TARGET_LABELS).containsExactly("Service", "ITSystem");
   }

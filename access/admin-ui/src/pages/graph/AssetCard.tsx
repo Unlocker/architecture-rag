@@ -12,6 +12,21 @@ export function isStale(card: NodeCard, now: number = Date.now()): boolean {
   return !Number.isNaN(seen) && now - seen > STALE_AFTER_MS;
 }
 
+/** Блок «Исходный код» у Deployment: commit и репозиторий из Helm chart. URL внешний, поэтому текстом, без ссылки. */
+function SourceCode({ card }: { card: NodeCard }) {
+  const commit = card.properties.sourceCommit;
+  if (card.type !== 'Deployment' || typeof commit !== 'string' || commit === '') return null;
+  return (
+    <section aria-label="Исходный код">
+      <h4>Исходный код</h4>
+      <p>
+        commit: <code title={commit}>{commit.slice(0, 7)}</code> (<code>{commit}</code>)
+      </p>
+      <p>репозиторий: {text(card.properties.repositoryUrl)}</p>
+    </section>
+  );
+}
+
 /** Карточка актива: свойства, жизненный цикл и provenance (записи источников). */
 export function AssetCard({ gid }: { gid: string }) {
   const api = endpoints(useApi());
@@ -25,6 +40,7 @@ export function AssetCard({ gid }: { gid: string }) {
             <p>
               <strong>{card.type}</strong> <code>{card.gid}</code>
             </p>
+            <SourceCode card={card} />
             <h4>Свойства</h4>
             <table aria-label="Свойства">
               <tbody>

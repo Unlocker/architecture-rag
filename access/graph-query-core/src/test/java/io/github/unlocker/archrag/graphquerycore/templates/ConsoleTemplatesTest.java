@@ -48,7 +48,7 @@ class ConsoleTemplatesTest {
           .doesNotContain("CREATE ", "MERGE ", " SET ", "DELETE ", "REMOVE ");
     }
     assertThat(ConsoleTemplates.NEIGHBORHOOD_RELATION_TYPES)
-        .contains("DEPENDS_ON", "HOSTED_ON")
+        .contains("DEPENDS_ON", "HOSTED_ON", "DEPLOYED_FROM")
         .doesNotContain("ASSERTS", "OWNS_RECORD");
   }
 

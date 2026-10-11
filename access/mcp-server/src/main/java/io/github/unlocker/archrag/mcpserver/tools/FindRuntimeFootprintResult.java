@@ -42,18 +42,32 @@ public record FindRuntimeFootprintResult(
       List<FactSource> sources,
       List<DeploymentFootprint> deployments) {}
 
-  /** Развёртывание в окружении; {@code environment} — код окружения. */
+  /**
+   * Развёртывание в окружении; {@code environment} — код окружения. {@code sourceCommit}, {@code repositoryUrl},
+   * {@code repository} и {@code deployedFrom} — источник кода из Helm chart; {@code null}, если у развёртывания
+   * нет открытой связи {@code DEPLOYED_FROM} (например, формат {@code deploymap-poc-0}).
+   */
   public record DeploymentFootprint(
       String gid,
       String name,
       String version,
       String status,
       String environment,
+      String sourceCommit,
+      String repositoryUrl,
+      RepositoryRef repository,
       String lastSeenAt,
       boolean stale,
       List<FactSource> sources,
       EdgeProvenance hasDeployment,
+      DeployedFromRef deployedFrom,
       List<ComputeFootprint> compute) {}
+
+  /** Репозиторий, из которого собран релиз. */
+  public record RepositoryRef(String gid, String name, String url) {}
+
+  /** Связь {@code DEPLOYED_FROM}: кто её утверждает, с какого момента и для какого commit. */
+  public record DeployedFromRef(String source, String sourceType, String sourceId, String validFrom, String commit) {}
 
   /** Вычислительный узел; {@code type}: VirtualMachine, PhysicalServer или ComputeInstance. */
   public record ComputeFootprint(

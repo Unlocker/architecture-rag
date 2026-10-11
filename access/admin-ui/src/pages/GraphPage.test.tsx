@@ -134,6 +134,38 @@ test('asset card shows properties as text, lifecycle and provenance with tombsto
   expect(within(records).getByText('расхождения: owner')).toBeTruthy();
 });
 
+const COMMIT = 'a'.repeat(39) + 'b';
+
+test('deployment card shows short and full commit and repository url as text', async () => {
+  const deployment = {
+    ...card,
+    type: 'Deployment',
+    properties: { name: 'billing-prod', sourceCommit: COMMIT, repositoryUrl: 'https://git.example/org/billing' },
+  };
+  await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : deployment) }));
+
+  const block = await screen.findByRole('region', { name: 'Исходный код' });
+  expect(within(block).getByText(COMMIT.slice(0, 7)).getAttribute('title')).toBe(COMMIT);
+  expect(within(block).getByText(COMMIT)).toBeTruthy();
+  expect(within(block).getByText(/https:\/\/git\.example\/org\/billing/)).toBeTruthy();
+  // URL из внешнего источника не становится ссылкой.
+  expect(block.querySelector('a')).toBeNull();
+});
+
+test('card without commit has no source code block', async () => {
+  const deployment = { ...card, type: 'Deployment', properties: { name: 'billing-poc' } };
+  await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : deployment) }));
+
+  await screen.findByRole('table', { name: 'Свойства' });
+  expect(screen.queryByRole('region', { name: 'Исходный код' })).toBeNull();
+});
+
+test('neighborhood relation filter offers DEPLOYED_FROM', async () => {
+  await openCard(api());
+  await screen.findByTestId('graph-canvas');
+  expect(screen.getByLabelText('DEPLOYED_FROM')).toBeTruthy();
+});
+
 test('card marks closed and stale assets', () => {
   const base = card as unknown as NodeCard;
   expect(isStale(base, Date.parse('2026-01-03T00:00:00Z'))).toBe(false);
