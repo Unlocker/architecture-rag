@@ -357,8 +357,8 @@ class SyncAcceptanceIT {
     assertThat(adapters.get(SourceSystem.EAM).poller().pollOnce().outcome()).isEqualTo(PollResult.Outcome.ADVANCED);
 
     awaitTrue(() -> count("MATCH (n:ITSystem {name: '" + name + "'}) RETURN count(n) AS c") > 0, Duration.ofSeconds(60));
-    assertThat(count("MATCH (:ITSystem {name: '" + name + "'})-[:DECOMPOSED_INTO]->(:Service {name: 'ledger-api'}) "
-        + "RETURN count(*) AS c")).as("связь с SCM сохранилась после обновления ITSystem").isEqualTo(1);
+    assertThat(count("MATCH (:ITSystem {name: '" + name + "'})-[:DECOMPOSED_INTO]->(:Service) "
+        + "RETURN count(*) AS c")).as("связь с сервисом SCM (k2a переименовал его) сохранилась после обновления ITSystem").isEqualTo(1);
   }
 
   // ---- К3: повтор и out-of-order -------------------------------------------------------------
