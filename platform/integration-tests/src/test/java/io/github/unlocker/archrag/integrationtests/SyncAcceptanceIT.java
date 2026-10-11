@@ -364,7 +364,7 @@ class SyncAcceptanceIT {
   // ---- К3: повтор и out-of-order -------------------------------------------------------------
 
   @Test
-  @Order(7)
+  @Order(8)
   void k3a_repeatedEventChangesNothing() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-DUP-" + uid();
@@ -383,7 +383,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(8)
+  @Order(9)
   void k3b_reversedWebhooks() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-REV-" + uid();
@@ -405,7 +405,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(9)
+  @Order(10)
   void k3c_reorderedPolling() throws Exception {
     StubSource scm = stubs.get(SourceSystem.SCM);
     // Курсор incremental polling сдвигаем сначала к концу журнала, чтобы страница содержала только наши изменения.
@@ -434,7 +434,7 @@ class SyncAcceptanceIT {
   // ---- К4: rebuild ---------------------------------------------------------------------------
 
   @Test
-  @Order(10)
+  @Order(11)
   void k4_rebuildGivesEquivalentCanonicalGraph() throws Exception {
     awaitJournalDrained();
     List<String> before = CanonicalGraph.dump(driver);
