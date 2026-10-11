@@ -178,7 +178,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
     }
   }
 
-  /** Активная запись EAM {@code IT_SYSTEM} с заданным {@code eamCode}; при нескольких выбирается наименьший {@code sourceId}. */
+  /** Активная запись EAM {@code IT_SYSTEM} с заданным {@code eamCode}; при нескольких выбирается наименьший числовой {@code sourceId}. */
   @Override
   public Optional<SourceKey> itSystemByEamCode(String eamCode) {
     try (Session session = driver.session()) {
@@ -187,7 +187,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
               tx.run(
                       "MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true})"
                           + "-[:ASSERTS]->(n:ITSystem) WHERE n.eamCode = $code "
-                          + "RETURN r.sourceId AS sourceId ORDER BY sourceId LIMIT 1",
+                          + "RETURN r.sourceId AS sourceId ORDER BY toInteger(r.sourceId), sourceId LIMIT 1",
                       Map.of("code", eamCode))
                   .stream()
                   .findFirst()

@@ -1,11 +1,11 @@
 package io.github.unlocker.archrag.eamadapter;
 
 import io.github.unlocker.archrag.adaptercore.AdapterConfig;
+import io.github.unlocker.archrag.adaptercore.HttpSourceConnector;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
-import io.github.unlocker.archrag.adaptercore.HttpSourceConnector;
 import java.net.URI;
 
 /**

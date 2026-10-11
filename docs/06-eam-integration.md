@@ -113,6 +113,8 @@ SCM Service.systemCode  ("EAM-1042")
 - `GraphProjector` по таблице alias-правил достраивает отложенную связь, когда приходит `ITSystem` с этим `eamCode` (в любом порядке прихода SCM и EAM);
 - точный поиск `search_assets` находит систему и по `eamCode` (`EAM-1042`).
 
+Если у двух активных `ITSystem` один `eamCode` (реальный EAM это допускает), связь SCM уходит на наименьший числовой `id`; неоднозначность не логируется.
+
 Данные SCM менять не нужно. Seed заглушки: `Payments Core` — `id 5101`, `eam_id EAM-1042`; `Ledger` — `id 5102`, `eam_id EAM-2001`.
 
 ## Заглушки и fixtures
