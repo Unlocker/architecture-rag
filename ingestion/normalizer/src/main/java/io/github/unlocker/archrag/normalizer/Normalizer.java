@@ -43,7 +43,7 @@ public final class Normalizer {
   /** То же, но deploy map привязывает {@code Deployment} к репозиторию и сервису через {@code lookup}. */
   public static Normalizer standard(ReferenceResolver resolver, DeploymentLookup lookup) {
     return new Normalizer(
-        List.of(new EamMapper(), new ScmMapper(), new CmdbMapper(), new DeployMapMapper(lookup)), resolver);
+        List.of(new EamMapper(), new ScmMapper(lookup), new CmdbMapper(), new DeployMapMapper(lookup)), resolver);
   }
 
   /**
