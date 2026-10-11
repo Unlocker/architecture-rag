@@ -25,7 +25,7 @@ public final class ScmMapper implements CanonicalMapper {
    * Тип alias-ключа репозитория: {@code SourceKey(SCM, REPOSITORY_URL, <нормализованный url>)}. Записи с таким
    * ключом нет; он нужен, чтобы отложить связь на репозиторий, известный только по URL (см. {@code DeployMapMapper}).
    */
-  static final String REPOSITORY_URL = "REPOSITORY_URL";
+  public static final String REPOSITORY_URL = "REPOSITORY_URL";
 
   @Override
   public SourceSystemCode source() {
