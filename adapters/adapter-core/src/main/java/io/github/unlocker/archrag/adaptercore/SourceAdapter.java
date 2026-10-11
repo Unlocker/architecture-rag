@@ -19,7 +19,7 @@ public final class SourceAdapter implements AutoCloseable {
   private static final System.Logger LOG = System.getLogger(SourceAdapter.class.getName());
 
   private final AdapterConfig config;
-  private final HttpSourceConnector connector;
+  private final SourceConnector connector;
   private final WebhookHandler webhook;
   private final Poller poller;
   private WebhookServer server;
@@ -27,8 +27,20 @@ public final class SourceAdapter implements AutoCloseable {
   private ScheduledExecutorService reconciler;
 
   public SourceAdapter(AdapterConfig config, EventJournal journal, RawPayloadStore rawStore) {
+    this(config, new HttpSourceConnector(config.system(), config.sourceBaseUri()), journal, rawStore);
+  }
+
+  /**
+   * Адаптер со своим коннектором (источник с нестандартным API). Если коннектор {@link
+   * AutoCloseable}, адаптер закроет его в {@link #close()}.
+   */
+  public SourceAdapter(
+      AdapterConfig config,
+      SourceConnector connector,
+      EventJournal journal,
+      RawPayloadStore rawStore) {
     this.config = config;
-    this.connector = new HttpSourceConnector(config.system(), config.sourceBaseUri());
+    this.connector = connector;
     this.webhook = new WebhookHandler(config, connector, journal, rawStore, Clock.systemUTC());
     this.poller = Poller.create(config, connector, journal, rawStore);
   }
@@ -113,6 +125,13 @@ public final class SourceAdapter implements AutoCloseable {
     if (server != null) {
       server.close();
     }
-    connector.close();
+    if (connector instanceof AutoCloseable c) {
+      try {
+        c.close();
+      } catch (Exception e) {
+        LOG.log(System.Logger.Level.WARNING,
+            config.system().code() + " connector close failed: " + e.getClass().getName());
+      }
+    }
   }
 }
