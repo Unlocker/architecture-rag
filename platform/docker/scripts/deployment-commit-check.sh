@@ -29,7 +29,7 @@ token=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/realms/archrag/protocol/o
 # tools/call <name> <arguments-json> -> текст result.content[0].text (JSON ответа tool). Ошибка tool (isError) — короткий
 # текст без значений запроса в stderr и код 1; три попытки: сразу после старта стенда индексы Neo4j могут быть не готовы.
 mcp() {
-  local attempt out
+  local out
   for _ in 1 2 3; do
     if out=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/mcp" -H 'Content-Type: application/json'         -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $token"         -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" |
         python3 -I -c '
