@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
@@ -52,16 +53,22 @@ class DeploymentCommitReadIT {
     try (var system = driver.session(SessionConfig.forDatabase("system"))) {
       system.run("CREATE USER `mcp-reader` SET PASSWORD 'reader-pass' CHANGE NOT REQUIRED").consume();
     }
+    // Схема ставится тем же кодом, что и в проде: уникальность gid проверяется самим сидированием.
+    Neo4jSchema.apply(driver);
     var reader = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.basic("mcp-reader", "reader-pass"));
-    executor =
-        new GraphQueryExecutor(
-            reader,
-            QueryTemplateRegistry.of(
-                List.of(
-                    RuntimeTemplates.RUNTIME_FOOTPRINT,
-                    AssetTemplates.ASSET_RELATIONS,
-                    DependencyTemplates.TRACE_DOWNSTREAM),
-                LIMITS));
+    var templates = List.of(
+        RuntimeTemplates.RUNTIME_FOOTPRINT, AssetTemplates.ASSET_RELATIONS, DependencyTemplates.TRACE_DOWNSTREAM);
+    executor = new GraphQueryExecutor(reader, QueryTemplateRegistry.of(templates, LIMITS));
+    // Прогрев холодного Neo4j (планирование запросов) с запасом по времени: проверяемый таймаут 5 с остаётся.
+    var warmLimits = new QueryLimits(6, 500, 50, Duration.ofSeconds(120), 512 * 1024);
+    var warm = new GraphQueryExecutor(reader, QueryTemplateRegistry.of(templates, warmLimits));
+    var none = new HashMap<String, Object>();
+    none.put("systemGid", SYS);
+    none.put("environment", null);
+    warm.execute(RuntimeTemplates.RUNTIME_FOOTPRINT_ID, none, null);
+    var budget = new ResultBudget(2, 100, 50, warmLimits.timeout(), warmLimits.maxResponseBytes());
+    warm.execute("asset_relations", Map.of("gid", DEP), budget);
+    warm.execute("trace_downstream", Map.of("gid", DEP, "relationTypes", List.of("DEPLOYED_FROM")), budget);
   }
 
   @BeforeEach
@@ -111,8 +118,9 @@ class DeploymentCommitReadIT {
     assertThat(r.rows()).hasSize(1);
     Map<String, Object> d = map(r.rows().get(0).get("deployment"));
     assertThat(d).containsEntry("sourceCommit", COMMIT_B).containsEntry("repositoryUrl", URL);
-    assertThat(map(d.get("repository"))).containsEntry("gid", REPO).containsEntry("url", URL);
-    assertThat(map(d.get("deployedFrom")))
+    Map<String, Object> source = map(d.get("source"));
+    assertThat(map(source.get("repository"))).containsEntry("gid", REPO).containsEntry("url", URL);
+    assertThat(map(source.get("deployedFrom")))
         .containsEntry("commit", COMMIT_B)
         .containsEntry("source", "deploymap")
         .containsEntry("sourceId", "dep-1");
@@ -128,8 +136,7 @@ class DeploymentCommitReadIT {
     assertThat(r.rows()).hasSize(1);
     Map<String, Object> d = map(r.rows().get(0).get("deployment"));
     assertThat(d.get("sourceCommit")).isNull();
-    assertThat(d.get("repository")).isNull();
-    assertThat(d.get("deployedFrom")).isNull();
+    assertThat(d.get("source")).isNull();
   }
 
   @Test

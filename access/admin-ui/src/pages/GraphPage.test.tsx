@@ -152,6 +152,15 @@ test('deployment card shows short and full commit and repository url as text', a
   expect(block.querySelector('a')).toBeNull();
 });
 
+test('deployment card with a short commit shows it whole', async () => {
+  const deployment = { ...card, type: 'Deployment', properties: { name: 'x', sourceCommit: 'abc' } };
+  await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : deployment) }));
+
+  const block = await screen.findByRole('region', { name: 'Исходный код' });
+  expect(block.querySelectorAll('code')).toHaveLength(2);
+  expect(within(block).getAllByText('abc')).toHaveLength(2);
+});
+
 test('card without commit has no source code block', async () => {
   const deployment = { ...card, type: 'Deployment', properties: { name: 'billing-poc' } };
   await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : deployment) }));

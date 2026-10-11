@@ -160,10 +160,13 @@ class FindRuntimeFootprintToolTest {
     Map<String, Object> withCode = deployment("d1", FRESH);
     withCode.put("sourceCommit", "a".repeat(40));
     withCode.put("repositoryUrl", "https://git.example/org/billing");
-    withCode.put("repository", Map.of("gid", "r1", "name", "billing", "url", "https://git.example/org/billing"));
     Map<String, Object> df = new HashMap<>(edge("2026-02-01T00:00:00Z"));
     df.put("commit", "a".repeat(40));
-    withCode.put("deployedFrom", df);
+    withCode.put(
+        "source",
+        Map.of(
+            "repository", Map.of("gid", "r1", "name", "billing", "url", "https://git.example/org/billing"),
+            "deployedFrom", df));
     Map<String, Object> poc0 = deployment("d2", FRESH);
     when(graph.execute(any(), any(), any()))
         .thenReturn(
