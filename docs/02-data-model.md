@@ -46,7 +46,7 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 | `Service` | Сервис | `gid` | `name`\*, `serviceType`, `language`, `status` | SCM (`ScmMapper`, `SERVICE`) | `node/Service` |
 | `Repository` | Репозиторий | `gid` | `url`\*, `defaultBranch`, `archived` (Boolean; `null` = неизвестно) | SCM (`ScmMapper`, `REPOSITORY`) | `node/Repository` |
 | `Environment` | Контур | `gid`; `code` под UNIQUE `environment_code` | `code`\* (= `sourceId`), `name`\*, `environmentClass`\* (`DEV/TEST/PREPROD/PROD`) | DeployMap (`DeployMapMapper`, `ENVIRONMENT`) | `node/Environment` |
-| `Deployment` | Развёртывание сервиса | `gid` | `deploymentKey`\* (= `sourceId`), `name`\*, `version`, `status`, `observedAt` (datetime) | DeployMap (`DeployMapMapper`, `DEPLOYMENT`) | `node/Deployment` |
+| `Deployment` | Развёртывание сервиса | `gid` | `deploymentKey`\* (= `sourceId`), `name`\*, `version`, `status`, `sourceCommit` (40 hex, нижний регистр), `repositoryUrl` (нормализованный, `GitUrls`), `eamSystemId` (положительное целое `id` EAM, не `eam_id`), `observedAt` (datetime) | DeployMap (`DeployMapMapper`, `DEPLOYMENT`) | `node/Deployment` |
 | `ComputeInstance` | Вычислительный ресурс; корневая метка | `gid` | `hostname`\*, `kind`\* (`VIRTUAL_MACHINE/PHYSICAL_SERVER/UNSPECIFIED`), `ip`, `os`, `state`, `hypervisorRef` (только VM), `serialNumber` (только PhysicalServer) | CMDB (`CmdbMapper`, `COMPUTE_INSTANCE`) | `node/ComputeInstance` |
 | `VirtualMachine` | Подтип `ComputeInstance` | `gid` | как у `ComputeInstance` | CMDB, `kind=VIRTUAL_MACHINE` | `node/ComputeInstance`, `node/NodeLabel` |
 | `PhysicalServer` | Подтип `ComputeInstance` | `gid` | как у `ComputeInstance` | CMDB, `kind=PHYSICAL_SERVER` | `node/ComputeInstance`, `node/NodeLabel` |
@@ -71,6 +71,7 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 | `IMPLEMENTED_IN` | `Service` → `Repository` | — | **да** | SCM |
 | `HAS_DEPLOYMENT` | `Service` → `Deployment` | — | **да** | DEPLOYMAP |
 | `IN_ENVIRONMENT` | `Deployment` → `Environment` | — | **да** | DEPLOYMAP |
+| `DEPLOYED_FROM` | `Deployment` → `Repository` | `commit` (identity property) | **да** ([ADR 0029](adr/0029-helm-chart-system-repo-commit.md)) | DEPLOYMAP |
 | `RUNS_ON` | `Deployment` → `ComputeInstance` \| `Namespace` | — | **да** | DEPLOYMAP |
 | `PART_OF` | `Namespace` → `KubernetesCluster` | — | нет | DEPLOYMAP (в PoC не наполняется) |
 | `HOSTED_ON` | `VirtualMachine` → `PhysicalServer` | — | нет | CMDB (нормализатор связь не строит: есть только свойство `hypervisorRef`) |
@@ -81,7 +82,9 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 | `PROCESSED` | `SyncRun` → `SourceRecord` | — | нет | пишет проектор |
 | `DEFERS` | `SourceRecord` → `PendingRelation` | — | нет | служебная, пишет проектор; в `RelationType` нет |
 
-На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта). Структурные связи `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` тоже темпоральные ([ADR 0028](adr/0028-structural-relations-temporal.md), уточняет 0020): новая версия записи закрывает не подтверждённые ею рёбра, tombstone закрывает рёбра записи. Живой граф, где у них нет `validFrom`, догоняет `TemporalRelationMigration` при старте ingestion-сервиса (`validFrom = firstSeenAt записи-источника`, иначе время миграции); rebuild из журнала миграции не требует. Нетемпоральными остаются только `PART_OF`, `HOSTED_ON` и служебные связи проектора.
+На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта). Структурные связи `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` тоже темпоральные ([ADR 0028](adr/0028-structural-relations-temporal.md), уточняет 0020): новая версия записи закрывает не подтверждённые ею рёбра, tombstone закрывает рёбра записи. Живой граф, где у них нет `validFrom`, догоняет `TemporalRelationMigration` при старте ingestion-сервиса (`validFrom = firstSeenAt записи-источника`, иначе время миграции); rebuild из журнала миграции не требует. `DEPLOYED_FROM` тоже темпоральна, и её свойство `commit` входит в identity связи (`RelationType.identityProperties()`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)): проектор сравнивает тройку `(from, to, commit)`, поэтому смена commit у развёртывания открывает новое ребро, а прежнее закрывается (`validTo`). Нетемпоральными остаются только `PART_OF`, `HOSTED_ON` и служебные связи проектора.
+
+**Привязка развёртывания к репозиторию** (`DeployMapMapper`, формат `deploymap-poc-1`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)). Нормализованный `repositoryUrl` ищется среди `Repository` через порт `DeploymentLookup`. Репозиторий найден — `DEPLOYED_FROM {commit}` ведёт на него. Репозитория ещё нет — связь откладывается (`DeferRelation`) на alias-ключ `SourceKey(SCM, REPOSITORY_URL, url)` (`LookupKeys.repositoryUrl`); записи с таким ключом нет, проектор достраивает связь при проекции записи SCM `REPOSITORY` с тем же `url`. `HAS_DEPLOYMENT` строится к сервису репозитория: сначала `service` из payload, если он среди сервисов репозитория; затем единственный сервис репозитория; затем `service` из payload как есть (отложенная связь при неизвестном ключе); иначе связи нет и пишется предупреждение `DEPLOYMENT_SERVICE_UNRESOLVED`. Коды карантина записи: `MISSING_REQUIRED_FIELD` (нет `chartMeta` или одной из трёх аннотаций), `INVALID_PAYLOAD` (commit не 40 hex в нижнем регистре, `archrag.io/eam-system-id` не положительное целое, `archrag.io/git-repo-url` не распознан, неизвестный `format`); причина называет аннотацию, но не значение. Проверки системы (`eamSystemId` против системы сервиса) нет: `eamSystemId` только сохраняется на узле, `Conflict` по этой паре — UNLOCKER-254.
 
 ### 2.3. Жизненный цикл и provenance
 
@@ -106,6 +109,7 @@ erDiagram
     Service }o--o{ Repository : IMPLEMENTED_IN
     Service ||--o{ Deployment : HAS_DEPLOYMENT
     Deployment }o--|| Environment : IN_ENVIRONMENT
+    Deployment }o--o{ Repository : "DEPLOYED_FROM (commit, validFrom/validTo)"
     Deployment }o--o{ ComputeInstance : "RUNS_ON (validFrom/validTo)"
     Deployment }o--o{ Namespace : "RUNS_ON (не наполняется)"
     Namespace }o--|| KubernetesCluster : "PART_OF (не наполняется)"
@@ -170,7 +174,7 @@ erDiagram
 |---|---|
 | `DEPENDS_ON`, `OWNED_BY` | EAM |
 | `DECOMPOSED_INTO`, `IMPLEMENTED_IN` | SCM |
-| `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `RUNS_ON`, `PART_OF` | DEPLOYMAP |
+| `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DEPLOYED_FROM`, `RUNS_ON`, `PART_OF` | DEPLOYMAP |
 | `HOSTED_ON` | CMDB |
 | `ASSERTS`, `OWNS_RECORD`, `PROCESSED` | вне матрицы |
 
@@ -333,7 +337,7 @@ stateDiagram-v2
 | `Namespace`, `KubernetesCluster`, `PART_OF` | моделируются | типы есть, никто не наполняет | [ADR 0011](adr/0011-namespace-cluster-modeled-not-populated.md) |
 | `HOSTED_ON` | VM → PhysicalServer | тип есть, нормализатор связь не строит (только свойство `hypervisorRef`) | пробел E1, в PoC данные не требуют |
 | Свойство `Environment.class` | `class` | `environmentClass` | `class` — служебное слово Java |
-| Тип `Deployment` | `gid, name, version, status, observedAt` | дополнительно `deploymentKey` (= `sourceId`) | ключ идентичности для `deploymap` |
+| Тип `Deployment` | `gid, name, version, status, observedAt` | дополнительно `deploymentKey` (= `sourceId`), `sourceCommit`, `repositoryUrl`, `eamSystemId` | ключ идентичности для `deploymap`; источник кода из Helm chart, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md) |
 | Дополнительные поля `ComputeInstance` | `ComputeInstance` без вида | `kind` (`VIRTUAL_MACHINE/PHYSICAL_SERVER/UNSPECIFIED`) определяет подтип | подтип по данным CMDB; `UNSPECIFIED` для заглушек |
 | `contentHash` | `'sha256:...'` | hex без префикса | совпадает с ключом S3 |
 | `ASSERTS.authority` | `'MASTER'` | `MASTER` или `SUPPLEMENTARY` | различие нужно для закрытия узла при tombstone |

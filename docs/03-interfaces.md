@@ -168,7 +168,7 @@ flowchart LR
 | `gid` | string | да | UUID | `gid` актива |
 | `includeRelations` | boolean | нет | по умолчанию `true` | включить связи 1 уровня |
 
-- **Ответ:** `{gid, type, properties{…}, firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources[{source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority}], relations[{relationType, direction (OUT|IN), gid, type, name, isCurrent, validFrom}], truncated}`. Служебные ключи (`gid`, `isCurrent`, `firstSeenAt`, `lastSeenAt`, `deletedAt`) в `properties` не дублируются. Закрытый актив возвращается с `isCurrent=false`; неактивные записи источников показывают, почему узел закрыт. Типы связей: `DECOMPOSED_INTO`, `IMPLEMENTED_IN`, `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `RUNS_ON`, `DEPENDS_ON`, `OWNED_BY`. Ошибки: `gid must be a UUID`, `asset not found`.
+- **Ответ:** `{gid, type, properties{…}, firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources[{source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority}], relations[{relationType, direction (OUT|IN), gid, type, name, isCurrent, validFrom}], truncated}`. Служебные ключи (`gid`, `isCurrent`, `firstSeenAt`, `lastSeenAt`, `deletedAt`) в `properties` не дублируются. Закрытый актив возвращается с `isCurrent=false`; неактивные записи источников показывают, почему узел закрыт. Типы связей: `DECOMPOSED_INTO`, `IMPLEMENTED_IN`, `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `RUNS_ON`, `DEPENDS_ON`, `OWNED_BY`, `DEPLOYED_FROM`. У `Deployment` в `properties` приходят `sourceCommit`, `repositoryUrl`, `eamSystemId` (если заданы), а связь `DEPLOYED_FROM` (направление `OUT`, сосед — `Repository`) отдаётся в `relations` с `validFrom`; сам `commit` связи в `relations` не входит, его читает `find_runtime_footprint` (`deployedFrom.commit`). Ошибки: `gid must be a UUID`, `asset not found`.
 - **Пример вызова и ответа:**
 
 ```text
@@ -196,7 +196,7 @@ flowchart LR
 | `systemGid` | string | да | UUID узла `ITSystem` | система |
 | `environment` | string | нет | код окружения | фильтр; сервис без развёртываний в окружении остаётся с пустым `deployments` |
 
-- **Ответ:** `{systemGid, systemName, systemLastSeenAt, systemStale, systemSources[], environment, services[{gid, name, lastSeenAt, stale, sources[], deployments[{gid, name, version, status, environment, lastSeenAt, stale, sources[], hasDeployment{source, sourceType, sourceId, validFrom}, compute[{gid, type (VirtualMachine|PhysicalServer|ComputeInstance), hostname, state, lastSeenAt, stale, sources[], runsOn{…}, hostedOn{gid, hostname, state, lastSeenAt, stale, sources[], hostedOn{…}}|null}]}]}], staleAfter, warnings[], truncated}`. Строка результата — тройка (service, deployment, compute), на большой системе `truncated=true`. `warnings` — по строке на устаревший узел. Ошибки: `systemGid must be a UUID`, `asset not found`.
+- **Ответ:** `{systemGid, systemName, systemLastSeenAt, systemStale, systemSources[], environment, services[{gid, name, lastSeenAt, stale, sources[], deployments[{gid, name, version, status, environment, lastSeenAt, stale, sources[], sourceCommit, repositoryUrl, repository{gid, name, url}|null, hasDeployment{source, sourceType, sourceId, validFrom}, deployedFrom{source, sourceType, sourceId, validFrom, commit}|null, compute[{gid, type (VirtualMachine|PhysicalServer|ComputeInstance), hostname, state, lastSeenAt, stale, sources[], runsOn{…}, hostedOn{gid, hostname, state, lastSeenAt, stale, sources[], hostedOn{…}}|null}]}]}], staleAfter, warnings[], truncated}`. `sourceCommit`, `repositoryUrl`, `repository` и `deployedFrom` — источник кода из Helm chart ([ADR 0029](adr/0029-helm-chart-system-repo-commit.md)); все четыре `null`, если у развёртывания нет открытой связи `DEPLOYED_FROM` (формат `deploymap-poc-0`). `repository` и `deployedFrom` всегда от одной связи; при нескольких открытых берётся связь с наибольшим `validFrom`. Строка результата — тройка (service, deployment, compute), на большой системе `truncated=true`. `warnings` — по строке на устаревший узел. Ошибки: `systemGid must be a UUID`, `asset not found`.
 - **Пример вызова и ответа** (ответ сокращён):
 
 ```text
@@ -205,8 +205,11 @@ flowchart LR
      "systemSources":[{"source":"EAM","sourceType":"IT_SYSTEM","sourceId":"EAM-1042","authority":"MASTER"}],"environment":"prod",
      "services":[{"gid":"fbf12197-…","name":"payments-api","stale":false,"sources":[…],
        "deployments":[{"gid":"4ea7832d-…","name":"payments-api","version":"1.4.2","status":null,"environment":"prod","stale":false,
+         "sourceCommit":"9fceb02d0ae598e95dc970b74767f19372d61af8","repositoryUrl":"https://git.example.org/pay/payments-api",
+         "repository":{"gid":"b0c1…","name":"payments-api","url":"https://git.example.org/pay/payments-api"},
          "sources":[{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","authority":"MASTER"}],
          "hasDeployment":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":"2026-10-06T09:10:24.075410506Z"},
+         "deployedFrom":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":"2026-10-06T09:10:24.075410506Z","commit":"9fceb02d0ae598e95dc970b74767f19372d61af8"},
          "compute":[{"gid":"d45f082a-…","type":"VirtualMachine","hostname":"vm-pay-01.prod.example.org","state":"RUNNING","stale":false,
            "sources":[{"source":"CMDB","sourceType":"COMPUTE_INSTANCE","sourceId":"vm-pay-01","authority":"MASTER"}],
            "runsOn":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":"2026-10-06T09:10:24.075834402Z"},"hostedOn":null}]}]}],
@@ -227,7 +230,7 @@ flowchart LR
 | `mode` | string | нет | `trace` (по умолчанию) или `impact`, регистр не важен | режим |
 | `direction` | string | нет | `upstream` или `downstream`, по умолчанию `downstream`; в `impact` допустим только `upstream` | `upstream` идёт против направления связей, `downstream` по направлению |
 | `maxDepth` | integer | нет | 1..`max-depth` (6), по умолчанию 6 | глубина обхода |
-| `relationTypes` | string[] | нет | `trace`: `DEPENDS_ON`, `DECOMPOSED_INTO`, `HAS_DEPLOYMENT`, `RUNS_ON`, `HOSTED_ON`, `OWNED_BY`; `impact`: `RUNS_ON`, `HOSTED_ON`, `HAS_DEPLOYMENT`, `DECOMPOSED_INTO`, `DEPENDS_ON`; по умолчанию весь allowlist режима | типы связей |
+| `relationTypes` | string[] | нет | `trace`: `DEPENDS_ON`, `DECOMPOSED_INTO`, `HAS_DEPLOYMENT`, `RUNS_ON`, `HOSTED_ON`, `OWNED_BY`, `DEPLOYED_FROM` (`Deployment` → `Repository`; в `impact` не входит); `impact`: `RUNS_ON`, `HOSTED_ON`, `HAS_DEPLOYMENT`, `DECOMPOSED_INTO`, `DEPENDS_ON`; по умолчанию весь allowlist режима | типы связей |
 | `environment` | string | нет | только для `impact`, до 128 символов | `Environment.code`: каждый `Deployment` на пути должен быть в этом окружении, путь без `Deployment` фильтр проходит |
 
 - **Режим `impact`:** идёт только вверх (против стрелок) до затронутых `Service` и `ITSystem`; их `gid` перечислены в `affected` в порядке первого появления. В режиме `trace` `affected` пуст.
@@ -411,6 +414,8 @@ flowchart LR
 
 SQL-чтения попадают в аудит чтения консоли как `sql:<таблица>`.
 
+Карточка актива в консоли (`access/admin-ui`, `AssetCard`) у `Deployment` с `sourceCommit` показывает блок «Исходный код»: короткий commit (7 символов) с полным значением рядом и `repositoryUrl` текстом, без ссылки (URL внешний). Данные приходят из свойств узла обычным чтением карточки; отдельного пути API нет.
+
 ## 4b. Админ-консоль: безопасность и доступ на стенде
 
 ADR [0026](adr/0026-admin-console-readonly-loopback.md). Консоль только читает; все `/api/**` требуют scope `architecture.admin` и audience `urn:archrag:console` (`ARCHRAG_CONSOLE_RESOURCE_URI`), статика, `/console-config.json` и `/actuator/health/**` публичны, остальное закрыто. Ответы несут CSP (`connect-src` — `'self'` и origin issuer).
@@ -477,7 +482,7 @@ public interface CanonicalMapper {
 | `EamMapper` | `TEAM`, `IT_SYSTEM`, `SERVICE_DEPENDENCY` | `OWNED_BY` (из `ownerTeam`), `DEPENDS_ON` Service→Service (из `SERVICE_DEPENDENCY`); непустой `dependsOn` у `IT_SYSTEM` даёт только warning `DEPENDS_ON_NOT_SUPPORTED` |
 | `ScmMapper` | `REPOSITORY`, `SERVICE` | `DECOMPOSED_INTO` ITSystem→Service (из `systemCode`), `IMPLEMENTED_IN` (из `repositoryId`) |
 | `CmdbMapper` | `COMPUTE_INSTANCE` | — (`kind` обязателен: значение по умолчанию затёрло бы известный тип) |
-| `DeployMapMapper` | `ENVIRONMENT`, `DEPLOYMENT` | `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `RUNS_ON` (из `hosts`); формат `deploymap-poc-0` временный (раздел 5.5) |
+| `DeployMapMapper` | `ENVIRONMENT`, `DEPLOYMENT` | `HAS_DEPLOYMENT` (к сервису репозитория, запасной путь — `service` из payload), `DEPLOYED_FROM {commit}` (формат `deploymap-poc-1`), `IN_ENVIRONMENT`, `RUNS_ON` (из `hosts`); форматы `deploymap-poc-0`/`-1` временные (раздел 5.5) |
 
 ### 5.3. `EventJournal` и `CanonicalEventPublisher`
 
@@ -531,6 +536,14 @@ public interface CanonicalMapper {
 **Отправка webhook** — `StubWebhookSender(target, secret, clock)`: `send`, `sendAt(event, timestamp)` (проверка replay window), `sendWithBadSignature`; тело — `WebhookEvent` в JSON, заголовки из раздела 3.
 
 **Начальные данные** — `StubSources.seeded(clock)`: EAM (`TEAM-PAY`, `EAM-1042` Payments Core, `EAM-2001` Ledger, зависимость `svc-payments-api` → `svc-ledger-api`), SCM (`svc-payments-api`, `svc-ledger-api`, `repo-payments-api`), CMDB (`vm-pay-01`), deploy map (`ENVIRONMENT/prod`, `DEPLOYMENT/dep-payments-api-prod`). `addServiceWithBrokenReference` добавляет сервис с несуществующей системой (сценарий unresolved reference).
+
+**Формат `deploymap-poc-1`** (`DeployMapFormat.FORMAT_V1`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)). У `DEPLOYMENT` добавляется `format: "deploymap-poc-1"` и `chartMeta` — метаданные `Chart.yaml`: `name`, `version`, `appVersion`, `annotations` (map строк). Обязательны все три аннотации: `archrag.io/eam-system-id` (целое `id` системы EAM, не `eam_id`), `archrag.io/git-repo-url` (любая форма URL, нормализуется `GitUrls`), `archrag.io/git-commit` (40 hex в нижнем регистре). Строковые `chart` и `chartVersion` остаются и дублируют `chartMeta.name` и `chartMeta.version`. Формат `deploymap-poc-0` и запись без `format` по-прежнему валидны. Пример `annotations`:
+
+```json
+{"archrag.io/eam-system-id":"5101","archrag.io/git-repo-url":"git@git.example.org:pay/payments-api.git","archrag.io/git-commit":"9fceb02d0ae598e95dc970b74767f19372d61af8"}
+```
+
+Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (`baseline`, `legacy-poc-0`, `unknown-repository`, `system-mismatch`, `invalid-commit`, `commit-change`; описание сценариев — `README.md` каталога). Сквозная проверка смены commit на стенде — `platform/docker/scripts/deployment-commit-check.sh`.
 
 > **Временный формат.** Формат заглушки deploy map (`DeployMapFormat`, `format=deploymap-poc-0`: `ENVIRONMENT` с `name`, `class`; `DEPLOYMENT` с `service`, `environment`, `chart`, `chartVersion`, `hosts`, `validFrom`) **временный**: владелец ещё не решил, где хранятся deploy map и Helm charts и в каком формате. После решения формат и адаптер заменяются, а не расширяются (ADR [0009](adr/0009-deployment-from-deploymap.md)). Не опираться на него как на контракт.
 
