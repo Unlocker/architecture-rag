@@ -10,6 +10,7 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
+import io.github.unlocker.archrag.graphprojector.TemporalRelationMigration;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
@@ -21,6 +22,7 @@ import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.net.URI;
 import java.time.Clock;
+import java.time.Instant;
 import javax.sql.DataSource;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
@@ -66,6 +68,8 @@ public class IngestionServiceConfiguration {
   Driver neo4jDriver(Neo4jProperties props) {
     Driver driver = GraphDatabase.driver(props.uri(), AuthTokens.basic(props.username(), props.password()));
     Neo4jSchema.apply(driver);
+    // ADR 0028: связи, записанные до перевода в темпоральные, получают validFrom; повтор ничего не меняет.
+    new TemporalRelationMigration(driver).migrate(Instant.now());
     return driver;
   }
 

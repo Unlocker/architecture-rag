@@ -482,6 +482,127 @@ class GraphProjectorIT {
     assertThat(rel.get("validFrom").asZonedDateTime().toInstant()).isEqualTo(T1);
   }
 
+  private static long openCount(String type) {
+    return query("MATCH ()-[r:" + type + "]->() WHERE r.validTo IS NULL RETURN r").size();
+  }
+
+  private String environment(String code) {
+    upsert("deploymap", "ENVIRONMENT", code, "1", Map.of("name", code, "class", "dev"));
+    return code;
+  }
+
+  @Test
+  void changedServiceAndEnvironmentOfDeploymentCloseOldStructuralEdges() {
+    String svcA = "svc-" + uid();
+    String svcB = "svc-" + uid();
+    String envA = environment("env-a-" + uid());
+    String envB = environment("env-b-" + uid());
+    String dep = "dep-" + uid();
+    upsert("scm", "SERVICE", svcA, "1", Map.of("name", "a"));
+    upsert("scm", "SERVICE", svcB, "1", Map.of("name", "b"));
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "d", "service", svcA, "environment", envA));
+    assertThat(openCount("HAS_DEPLOYMENT")).isEqualTo(1);
+    assertThat(openCount("IN_ENVIRONMENT")).isEqualTo(1);
+
+    handle(upsertEvent("e-" + uid(), "deploymap", "DEPLOYMENT", dep, "2", T2,
+        Map.of("name", "d", "service", svcB, "environment", envB)));
+
+    assertThat(openCount("HAS_DEPLOYMENT")).isEqualTo(1);
+    assertThat(openCount("IN_ENVIRONMENT")).isEqualTo(1);
+    assertThat(query("MATCH (:Service {name: 'a'})-[r:HAS_DEPLOYMENT]->() RETURN r.validTo AS t").get(0).get("t")
+        .asZonedDateTime().toInstant()).isEqualTo(T2);
+    assertThat(query("MATCH (:Service {name: 'b'})-[r:HAS_DEPLOYMENT]->() WHERE r.validTo IS NULL RETURN r")).hasSize(1);
+    assertThat(query("MATCH ()-[r:IN_ENVIRONMENT]->(:Environment {code: $c}) WHERE r.validTo IS NOT NULL RETURN r",
+        "c", envA)).hasSize(1);
+    assertThat(query("MATCH ()-[r:IN_ENVIRONMENT]->(:Environment {code: $c}) WHERE r.validTo IS NULL RETURN r",
+        "c", envB)).hasSize(1);
+  }
+
+  @Test
+  void structuralEdgesGetValidFromFromEventTime() {
+    String svc = "svc-" + uid();
+    String env = environment("env-" + uid());
+    String dep = "dep-" + uid();
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", "a"));
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "d", "service", svc, "environment", env));
+
+    for (String type : List.of("HAS_DEPLOYMENT", "IN_ENVIRONMENT")) {
+      var rel = single("MATCH ()-[r:" + type + "]->() RETURN r").get("r").asRelationship();
+      assertThat(rel.get("validFrom").asZonedDateTime().toInstant()).as(type).isEqualTo(T1);
+    }
+  }
+
+  @Test
+  void changedSystemOfServiceClosesOldDecomposedInto() {
+    String sysA = "its-" + uid();
+    String sysB = "its-" + uid();
+    String svc = "svc-" + uid();
+    upsert("eam", "IT_SYSTEM", sysA, "1", Map.of("name", "SysA"));
+    upsert("eam", "IT_SYSTEM", sysB, "1", Map.of("name", "SysB"));
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", "a", "systemCode", sysA));
+
+    upsert("scm", "SERVICE", svc, "2", Map.of("name", "a", "systemCode", sysB));
+
+    assertThat(openCount("DECOMPOSED_INTO")).isEqualTo(1);
+    assertThat(query("MATCH (:ITSystem {name: 'SysA'})-[r:DECOMPOSED_INTO]->() WHERE r.validTo IS NOT NULL RETURN r"))
+        .hasSize(1);
+    assertThat(query("MATCH (:ITSystem {name: 'SysB'})-[r:DECOMPOSED_INTO]->() WHERE r.validTo IS NULL RETURN r"))
+        .hasSize(1);
+  }
+
+  @Test
+  void changedRepositoryOfServiceClosesOldImplementedIn() {
+    String repoA = "repo-" + uid();
+    String repoB = "repo-" + uid();
+    String svc = "svc-" + uid();
+    upsert("scm", "REPOSITORY", repoA, "1", Map.of("url", "https://git/a"));
+    upsert("scm", "REPOSITORY", repoB, "1", Map.of("url", "https://git/b"));
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", "a", "repositoryId", repoA));
+
+    upsert("scm", "SERVICE", svc, "2", Map.of("name", "a", "repositoryId", repoB));
+
+    assertThat(openCount("IMPLEMENTED_IN")).isEqualTo(1);
+    assertThat(query("MATCH ()-[r:IMPLEMENTED_IN]->(:Repository {url: 'https://git/a'}) WHERE r.validTo IS NOT NULL RETURN r"))
+        .hasSize(1);
+  }
+
+  @Test
+  void tombstoneClosesStructuralEdges() {
+    String svc = "svc-" + uid();
+    String env = environment("env-" + uid());
+    String dep = "dep-" + uid();
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", "a"));
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "d", "service", svc, "environment", env));
+
+    handle(deleteEvent("e-" + uid(), "deploymap", "DEPLOYMENT", dep, "2", T2));
+
+    assertThat(openCount("HAS_DEPLOYMENT")).isZero();
+    assertThat(openCount("IN_ENVIRONMENT")).isZero();
+    assertThat(query("MATCH ()-[r:HAS_DEPLOYMENT]->() WHERE r.validTo IS NOT NULL RETURN r")).hasSize(1);
+  }
+
+  @Test
+  void temporalRelationMigrationFillsMissingValidFromAndIsIdempotent() {
+    String svc = "svc-" + uid();
+    String env = environment("env-" + uid());
+    String dep = "dep-" + uid();
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", "a"));
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "d", "service", svc, "environment", env));
+    // Состояние графа до перевода связей в темпоральные: ни validFrom, ни validTo.
+    query("MATCH ()-[r:HAS_DEPLOYMENT|IN_ENVIRONMENT]->() REMOVE r.validFrom, r.validTo");
+    var now = Instant.parse("2026-12-01T00:00:00Z");
+    var migration = new io.github.unlocker.archrag.graphprojector.TemporalRelationMigration(driver);
+
+    assertThat(migration.migrate(now)).isEqualTo(2);
+
+    var rel = single("MATCH ()-[r:HAS_DEPLOYMENT]->() RETURN r").get("r").asRelationship();
+    // firstSeenAt записи-источника: узел Deployment впервые увиден в T1.
+    assertThat(rel.get("validFrom").asZonedDateTime().toInstant()).isEqualTo(T1);
+    var before = dump();
+    assertThat(migration.migrate(now.plusSeconds(60))).isZero();
+    assertThat(dump()).isEqualTo(before);
+  }
+
   @Test
   void closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent() {
     String team = "t-" + uid();

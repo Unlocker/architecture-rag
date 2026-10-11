@@ -272,6 +272,32 @@ class NormalizerTest {
         .satisfies(r -> assertThat(r.validity()).isNull());
   }
 
+  @Test
+  void structuralRelationsCarryValidityFromSource() {
+    var from = java.time.Instant.parse("2026-03-01T00:00:00Z");
+    known.add(key(SourceSystemCode.SCM, "SERVICE", "svc-a"));
+    known.add(key(SourceSystemCode.DEPLOYMAP, "ENVIRONMENT", "prod"));
+    var dep = normalized(normalizer.normalize(
+        event("urn:corp:deploymap", "urn:corp:schema:asset-upserted:1", "DEPLOYMENT", "dep-a",
+            fields("name", "dep-a", "service", "svc-a", "environment", "prod", "validFrom", "2026-03-01T00:00:00Z")),
+        RAW));
+    assertThat(of(dep, UpsertRelation.class))
+        .extracting(UpsertRelation::type)
+        .containsExactlyInAnyOrder(RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT);
+    assertThat(of(dep, UpsertRelation.class)).allSatisfy(r -> assertThat(r.validity().validFrom()).isEqualTo(from));
+
+    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1"));
+    known.add(key(SourceSystemCode.SCM, "REPOSITORY", "repo-a"));
+    var svc = normalized(normalizer.normalize(
+        event("urn:corp:scm", "urn:corp:schema:asset-upserted:1", "SERVICE", "svc-a",
+            fields("name", "a", "systemCode", "EAM-1", "repositoryId", "repo-a", "validFrom", "2026-03-01T00:00:00Z")),
+        RAW));
+    assertThat(of(svc, UpsertRelation.class))
+        .extracting(UpsertRelation::type)
+        .containsExactlyInAnyOrder(RelationType.DECOMPOSED_INTO, RelationType.IMPLEMENTED_IN);
+    assertThat(of(svc, UpsertRelation.class)).allSatisfy(r -> assertThat(r.validity().validFrom()).isEqualTo(from));
+  }
+
   // ---- schema, completeness, validation
 
   @Test

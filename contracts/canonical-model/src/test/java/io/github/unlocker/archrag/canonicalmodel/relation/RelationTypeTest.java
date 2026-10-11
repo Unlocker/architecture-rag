@@ -37,10 +37,12 @@ class RelationTypeTest {
     }
 
     @Test
-    void temporalOnlyForThree() {
+    void temporalTypes() {
         for (var type : RelationType.values()) {
-            boolean expected = type == RelationType.RUNS_ON || type == RelationType.DEPENDS_ON
-                    || type == RelationType.OWNED_BY;
+            boolean expected = java.util.Set.of(
+                    RelationType.RUNS_ON, RelationType.DEPENDS_ON, RelationType.OWNED_BY,
+                    RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT,
+                    RelationType.DECOMPOSED_INTO, RelationType.IMPLEMENTED_IN).contains(type);
             assertThat(type.temporal()).as(type.name()).isEqualTo(expected);
         }
     }

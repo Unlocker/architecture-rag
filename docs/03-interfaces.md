@@ -177,7 +177,7 @@ flowchart LR
      "firstSeenAt":"2026-10-06T09:10:24.075626952Z","lastSeenAt":"2026-10-06T09:10:24.075626952Z","deletedAt":null,"isCurrent":true,
      "sources":[{"source":"SCM","sourceType":"SERVICE","sourceId":"svc-payments-api","sourceVersion":"1","fetchedAt":"2026-10-06T09:10:24.075626952Z","active":true,"authority":"MASTER"}],
      "relations":[
-       {"relationType":"DECOMPOSED_INTO","direction":"IN","gid":"e833c322-…","type":"ITSystem","name":"Payments Core","isCurrent":true,"validFrom":null},
+       {"relationType":"DECOMPOSED_INTO","direction":"IN","gid":"e833c322-…","type":"ITSystem","name":"Payments Core","isCurrent":true,"validFrom":"2026-10-06T09:10:24.075410506Z"},
        {"relationType":"DEPENDS_ON","direction":"OUT","gid":"01703823-…","type":"Service","name":"ledger-api","isCurrent":true,"validFrom":"2026-10-06T09:10:24.075482389Z"},
        …],
      "truncated":false}
@@ -206,7 +206,7 @@ flowchart LR
      "services":[{"gid":"fbf12197-…","name":"payments-api","stale":false,"sources":[…],
        "deployments":[{"gid":"4ea7832d-…","name":"payments-api","version":"1.4.2","status":null,"environment":"prod","stale":false,
          "sources":[{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","authority":"MASTER"}],
-         "hasDeployment":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":null},
+         "hasDeployment":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":"2026-10-06T09:10:24.075410506Z"},
          "compute":[{"gid":"d45f082a-…","type":"VirtualMachine","hostname":"vm-pay-01.prod.example.org","state":"RUNNING","stale":false,
            "sources":[{"source":"CMDB","sourceType":"COMPUTE_INSTANCE","sourceId":"vm-pay-01","authority":"MASTER"}],
            "runsOn":{"source":"DEPLOYMAP","sourceType":"DEPLOYMENT","sourceId":"dep-payments-api-prod","validFrom":"2026-10-06T09:10:24.075834402Z"},"hostedOn":null}]}]}],

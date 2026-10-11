@@ -53,13 +53,16 @@ public final class AssetTemplates {
             AND any(l IN labels(n) WHERE l IN %s)
             AND ($types IS NULL OR any(l IN labels(n) WHERE l IN $types))
             AND ($environment IS NULL OR EXISTS {
-              MATCH (n:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              MATCH (n:Deployment)-[ie:IN_ENVIRONMENT]->%s WHERE ie.validTo IS NULL RETURN 1
               UNION
-              MATCH (n:Service)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              MATCH (n:Service)-[h:HAS_DEPLOYMENT]->(:Deployment)-[ie:IN_ENVIRONMENT]->%s
+              WHERE h.validTo IS NULL AND ie.validTo IS NULL RETURN 1
               UNION
-              MATCH (n:ITSystem)-[:DECOMPOSED_INTO]->(:Service)-[:HAS_DEPLOYMENT]->(:Deployment)-[:IN_ENVIRONMENT]->%s RETURN 1
+              MATCH (n:ITSystem)-[dc:DECOMPOSED_INTO]->(:Service)-[h:HAS_DEPLOYMENT]->(:Deployment)-[ie:IN_ENVIRONMENT]->%s
+              WHERE dc.validTo IS NULL AND h.validTo IS NULL AND ie.validTo IS NULL RETURN 1
               UNION
-              MATCH (n:ComputeInstance)<-[ro:RUNS_ON]-(:Deployment)-[:IN_ENVIRONMENT]->%s WHERE ro.validTo IS NULL RETURN 1
+              MATCH (n:ComputeInstance)<-[ro:RUNS_ON]-(:Deployment)-[ie:IN_ENVIRONMENT]->%s
+              WHERE ro.validTo IS NULL AND ie.validTo IS NULL RETURN 1
             })
           RETURN n.gid AS gid,
                  [l IN labels(n) WHERE l IN %s][0] AS type,

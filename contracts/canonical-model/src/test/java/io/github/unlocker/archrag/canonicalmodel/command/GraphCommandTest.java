@@ -33,7 +33,7 @@ class GraphCommandTest {
     @Test
     void validityOnlyForTemporal() {
         var validity = new Validity(T, null);
-        assertThatThrownBy(() -> relation(RelationType.IN_ENVIRONMENT, NodeLabel.DEPLOYMENT, NodeLabel.ENVIRONMENT,
+        assertThatThrownBy(() -> relation(RelationType.PART_OF, NodeLabel.NAMESPACE, NodeLabel.KUBERNETES_CLUSTER,
                 Map.of(), validity)).isInstanceOf(IllegalArgumentException.class);
         assertThatCode(() -> relation(RelationType.RUNS_ON, NodeLabel.DEPLOYMENT, NodeLabel.VIRTUAL_MACHINE,
                 Map.of(), validity)).doesNotThrowAnyException();
@@ -79,7 +79,7 @@ class GraphCommandTest {
 
     @Test
     void closeAssertionOnlyTemporal() {
-        assertThatThrownBy(() -> new CloseAssertion(RelationType.IN_ENVIRONMENT, DEPLOY, ENV, T, DEPLOY))
+        assertThatThrownBy(() -> new CloseAssertion(RelationType.PART_OF, DEPLOY, ENV, T, DEPLOY))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new CloseAssertion(RelationType.RUNS_ON, DEPLOY, HOST, null, DEPLOY))
                 .isInstanceOf(NullPointerException.class);

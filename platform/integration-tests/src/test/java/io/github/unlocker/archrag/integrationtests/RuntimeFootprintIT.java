@@ -236,6 +236,26 @@ class RuntimeFootprintIT {
   }
 
   @Test
+  void closedStructuralEdgesAreExcluded() {
+    baseGraph();
+    deployment("d1", "billing-prod-1", "PROD");
+    deployment("d2", "billing-prod-2", "PROD");
+    deployment("d3", "billing-prod-3", "PROD");
+    seed("MATCH ()-[h:HAS_DEPLOYMENT]->(:Deployment {gid: 'd2'}) SET h.validFrom = datetime('2020-01-01T00:00:00Z'), "
+        + "h.validTo = datetime('2021-01-01T00:00:00Z')");
+    seed("MATCH (:Deployment {gid: 'd3'})-[i:IN_ENVIRONMENT]->() SET i.validFrom = datetime('2020-01-01T00:00:00Z'), "
+        + "i.validTo = datetime('2021-01-01T00:00:00Z')");
+
+    assertThat(deploymentGids(footprint(SYS, null))).containsExactly("d1");
+
+    // Закрытая DECOMPOSED_INTO: сервис больше не часть системы.
+    seed("MATCH (:ITSystem)-[dc:DECOMPOSED_INTO]->(:Service) SET dc.validTo = datetime('2021-01-01T00:00:00Z')");
+    QueryResult r = footprint(SYS, null);
+    assertThat(r.rows()).hasSize(1);
+    assertThat(r.rows().get(0).get("service")).isNull();
+  }
+
+  @Test
   void closedUnknownAndNonSystemGidsGiveNoRows() {
     baseGraph();
     assertThat(footprint("svc", null).rows()).isEmpty();

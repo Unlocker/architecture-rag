@@ -68,7 +68,7 @@ public final class DeployMapMapper implements CanonicalMapper {
                         NodeLabel.SERVICE,
                         key,
                         NodeLabel.DEPLOYMENT,
-                        null,
+                        validity(p),
                         "service"));
         p.optional("environment")
             .ifPresent(
@@ -79,7 +79,7 @@ public final class DeployMapMapper implements CanonicalMapper {
                         NodeLabel.DEPLOYMENT,
                         new SourceKey(SourceSystemCode.DEPLOYMAP, ENVIRONMENT, env),
                         NodeLabel.ENVIRONMENT,
-                        null,
+                        validity(p),
                         "environment"));
         for (String host : p.optionalList("hosts")) {
           sink.relation(
@@ -96,7 +96,7 @@ public final class DeployMapMapper implements CanonicalMapper {
     }
   }
 
-  /** {@code validFrom} из источника; без него validity не задаётся, решение остаётся за проектором (E1.5). */
+  /** {@code validFrom} из источника для всех темпоральных связей записи; без него validity не задаётся, и проектор открывает связь на время события (E1.5). */
   private static Validity validity(Payload p) {
     return p.optionalInstant("validFrom").map(from -> new Validity(from, null)).orElse(null);
   }

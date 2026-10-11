@@ -7,7 +7,7 @@ import java.util.List;
  *
  * <p>Только действующие факты. Время — ISO-8601 UTC. Provenance узла — {@code lastSeenAt} и активные
  * {@code sources}. У рёбер {@code lastSeenAt} нет: возвращается {@link EdgeProvenance} (кто
- * утверждает связь, у темпоральных {@code RUNS_ON} ещё {@code validFrom}); свежесть связи оценивается
+ * утверждает связь, у темпоральных связей ещё {@code validFrom}); свежесть связи оценивается
  * по её конечному узлу.
  *
  * @param systemGid gid системы

@@ -14,7 +14,7 @@ public final class RuntimeTemplates {
    * Развёртывания системы: одна строка на (service, deployment, compute).
    *
    * <p>Параметры: {@code systemGid}, {@code environment} ({@code null} — без фильтра). Инварианты:
-   * только действующие факты ({@code isCurrent}; у темпоральной {@code RUNS_ON} ещё и {@code validTo IS NULL}, {@code HOSTED_ON} не темпоральна);
+   * только действующие факты ({@code isCurrent}; у темпоральных {@code DECOMPOSED_INTO}, {@code HAS_DEPLOYMENT}, {@code IN_ENVIRONMENT}, {@code RUNS_ON} ещё и {@code validTo IS NULL}, {@code HOSTED_ON} не темпоральна);
    * нет действующей системы с таким gid или она не {@code ITSystem} — строк нет; сервис без
    * подходящих deployments возвращается строкой с {@code null} в полях deployment; цели
    * {@code RUNS_ON} ограничены меткой {@code ComputeInstance} (Namespace не попадает). Узлы отдаются
@@ -26,9 +26,9 @@ public final class RuntimeTemplates {
           RUNTIME_FOOTPRINT_ID,
           """
           MATCH (s:ITSystem {gid: $systemGid}) WHERE s.isCurrent = true
-          OPTIONAL MATCH (s)-[:DECOMPOSED_INTO]->(svc:Service) WHERE svc.isCurrent = true
-          OPTIONAL MATCH (svc)-[hd:HAS_DEPLOYMENT]->(d:Deployment)-[:IN_ENVIRONMENT]->(e:Environment)
-          WHERE d.isCurrent = true AND e.isCurrent = true
+          OPTIONAL MATCH (s)-[dc:DECOMPOSED_INTO]->(svc:Service) WHERE dc.validTo IS NULL AND svc.isCurrent = true
+          OPTIONAL MATCH (svc)-[hd:HAS_DEPLOYMENT]->(d:Deployment)-[ie:IN_ENVIRONMENT]->(e:Environment)
+          WHERE hd.validTo IS NULL AND ie.validTo IS NULL AND d.isCurrent = true AND e.isCurrent = true
             AND ($environment IS NULL OR e.code = $environment)
           OPTIONAL MATCH (d)-[ro:RUNS_ON]->(c:ComputeInstance)
           WHERE ro.validTo IS NULL AND c.isCurrent = true
@@ -51,7 +51,7 @@ public final class RuntimeTemplates {
                                   RETURN {source: r.source, sourceType: r.sourceType,
                                           sourceId: r.sourceId, authority: a.authority} },
                hasDeployment: {source: hd.assertedBySource, sourceType: hd.assertedByType,
-                               sourceId: hd.assertedById, validFrom: null}} END AS deployment,
+                               sourceId: hd.assertedById, validFrom: toString(hd.validFrom)}} END AS deployment,
             CASE WHEN c IS NULL THEN null ELSE
               {gid: c.gid,
                type: CASE WHEN c:VirtualMachine THEN 'VirtualMachine'
