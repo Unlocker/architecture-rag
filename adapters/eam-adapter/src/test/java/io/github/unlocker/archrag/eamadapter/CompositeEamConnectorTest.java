@@ -183,7 +183,24 @@ class CompositeEamConnectorTest {
   }
 
   @Test
-  void malformedCursorIsRejected() {
-    assertThatThrownBy(() -> connector.fetchChanges("garbage", 10)).isInstanceOf(IllegalArgumentException.class);
+  void foreignCursorOfTheOldAdapterRestartsIncrementalReadWithoutSnapshotMarker() {
+    // Checkpoint старого адаптера (до перехода на eam-api) нового формата не имеет: чтение не должно зависнуть.
+    Run run = drain("12", 100);
+    assertThat(run.pages()).noneMatch(ChangePage::snapshotComplete);
+    assertThat(run.pages().getLast().hasMore()).isFalse();
+    assertThat(types(run.changes())).contains("IT_SYSTEM", "TEAM");
+    // Итоговый курсор нового формата: следующий цикл идёт обычным инкрементом.
+    assertThat(drain(run.pages().getLast().nextCursor(), 100).changes()).isEmpty();
+  }
+
+  @Test
+  void upstreamPageWithoutCursorIsAnError() {
+    SourceConnector noCursor = new SourceConnector() {
+      @Override public SourceSystem system() { return SourceSystem.EAM; }
+      @Override public ChangePage fetchChanges(String cursor, int limit) { return new ChangePage(List.of(), null, false, false); }
+      @Override public Optional<SourceChange> fetchById(String t, String i) { return Optional.empty(); }
+    };
+    var broken = new CompositeEamConnector(noCursor, noCursor);
+    assertThatThrownBy(() -> broken.fetchChanges(null, 10)).isInstanceOf(IllegalStateException.class);
   }
 }

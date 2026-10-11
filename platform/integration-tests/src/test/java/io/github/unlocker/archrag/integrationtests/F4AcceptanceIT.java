@@ -7,7 +7,6 @@ import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
@@ -174,6 +173,7 @@ class F4AcceptanceIT {
   private final Map<SourceSystem, StubSource> stubs = new EnumMap<>(SourceSystem.class);
   private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
   private final List<StubSourceServer> servers = new ArrayList<>();
+  private EamApiSupport eamApi;
   private final McpTestJwt jwt = new McpTestJwt();
   private final HttpClient http = HttpClient.newHttpClient();
   private final JsonMapper json = new JsonMapper();
@@ -197,12 +197,13 @@ class F4AcceptanceIT {
     store = S3RawPayloadStore.create(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)),
         ContainersSmokeIT.S3_ACCESS_KEY, ContainersSmokeIT.S3_SECRET_KEY, BUCKET);
     store.ensureBucket();
+    eamApi = new EamApiSupport(clock);
     stubs.putAll(StubSources.seeded(clock));
     stubs.forEach((system, stub) -> {
       var server = new StubSourceServer(stub);
       servers.add(server);
       adapters.put(system, switch (system) {
-        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, store);
+        case EAM -> eamApi.adapter(server.baseUri(), SECRET, journal, store);
         case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, store);
         case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, store);
         case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
@@ -222,23 +223,26 @@ class F4AcceptanceIT {
     mcpUrl = "http://localhost:" + mcpApp.getBean(Environment.class).getProperty("local.server.port");
 
     // Crosswalk строго до первого события любой из записей, иначе CrosswalkConflictException.
-    linkAndLoad("F4-1001", "Billing Hub F4");
-    linkAndLoad("F4-1002", "Ledger Archive F4");
+    linkAndLoad("9101", "F4-1001", "Billing Hub F4");
+    linkAndLoad("9102", "F4-1002", "Ledger Archive F4");
     twoSourceGid = gidByName("Billing Hub F4");
     masterGid = gidByName("Ledger Archive F4");
   }
 
-  /** Утверждает crosswalk EAM↔SCM через admin API, затем кладёт записи в обе заглушки и ждёт проекции. */
-  private void linkAndLoad(String id, String name) throws Exception {
-    String body = "[{\"left\":{\"source\":\"EAM\",\"sourceType\":\"" + IT_SYSTEM + "\",\"sourceId\":\"" + id + "\"},"
-        + "\"right\":{\"source\":\"SCM\",\"sourceType\":\"" + IT_SYSTEM + "\",\"sourceId\":\"" + id + "\"},"
+  /**
+   * Утверждает crosswalk EAM↔SCM через admin API, затем кладёт записи в eam-api (ключ — целочисленный id) и заглушку
+   * SCM и ждёт проекции.
+   */
+  private void linkAndLoad(String eamId, String scmId, String name) throws Exception {
+    String body = "[{\"left\":{\"source\":\"EAM\",\"sourceType\":\"" + IT_SYSTEM + "\",\"sourceId\":\"" + eamId + "\"},"
+        + "\"right\":{\"source\":\"SCM\",\"sourceType\":\"" + IT_SYSTEM + "\",\"sourceId\":\"" + scmId + "\"},"
         + "\"reason\":\"same system\"}]";
     HttpResponse<String> response = adminPost("/admin/crosswalks", body);
     assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
     assertThat(response.body()).contains("\"status\":\"APPLIED\"");
 
-    stubs.get(SourceSystem.EAM).upsert(IT_SYSTEM, id, Map.of("name", name, "criticality", "HIGH"));
-    stubs.get(SourceSystem.SCM).upsert(IT_SYSTEM, id, Map.of("name", name, "criticality", "LOW"));
+    eamApi.store.upsert("itsystems", Long.parseLong(eamId), Map.of("name", name, "criticality", "HIGH"));
+    stubs.get(SourceSystem.SCM).upsert(IT_SYSTEM, scmId, Map.of("name", name, "criticality", "LOW"));
     pollIncremental(SourceSystem.EAM);
     pollIncremental(SourceSystem.SCM);
     awaitIdle();
@@ -300,6 +304,9 @@ class F4AcceptanceIT {
     jwt.close();
     adapters.values().forEach(SourceAdapter::close);
     servers.forEach(StubSourceServer::close);
+    if (eamApi != null) {
+      eamApi.close();
+    }
     if (store != null) {
       store.close();
     }
@@ -338,7 +345,7 @@ class F4AcceptanceIT {
     var eam = record(r, "EAM");
     assertThat(eam.authoritative()).isTrue();
     assertThat(eam.authority()).isEqualTo("MASTER");
-    assertThat(eam.sourceId()).isEqualTo("F4-1001");
+    assertThat(eam.sourceId()).isEqualTo("9101");
     var scm = record(r, "SCM");
     assertThat(scm.authoritative()).isFalse();
     assertThat(scm.authority()).isEqualTo("SUPPLEMENTARY");
@@ -426,8 +433,10 @@ class F4AcceptanceIT {
     // Фиксирует правило проектора: узел закрывается, когда не осталось активных MASTER-утверждений.
     assertThat(explain(masterGid, null).isCurrent()).isTrue();
 
-    stubs.get(SourceSystem.EAM).delete(IT_SYSTEM, "F4-1002");
-    pollIncremental(SourceSystem.EAM);
+    // eam-api не отдаёт tombstone: архивный объект пропадает из списка, и tombstone ставит reconcile после snapshot.
+    eamApi.store.archive("itsystems", 9102);
+    assertThat(adapters.get(SourceSystem.EAM).poller().snapshotOnce().outcome())
+        .isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     awaitIdle();
 
     awaitTrue(() -> !explain(masterGid, null).isCurrent());

@@ -137,6 +137,7 @@ class AdminEndpointIT {
     var dm = StubSources.deployMap(clock);
     var servers = new ArrayList<StubSourceServer>();
     var adapters = new ArrayList<SourceAdapter>();
+    var eamApi = new EamApiSupport(clock);
     try {
       for (var pair : List.<Object[]>of(
           new Object[] {eam, "eam"}, new Object[] {scm, "scm"}, new Object[] {cmdb, "cmdb"}, new Object[] {dm, "dm"})) {
@@ -144,7 +145,7 @@ class AdminEndpointIT {
         var server = new StubSourceServer(stub);
         servers.add(server);
         SourceAdapter adapter = switch ((String) pair[1]) {
-          case "eam" -> EamAdapter.create(EamAdapter.config(server.baseUri(), "s"), journal, rawStore);
+          case "eam" -> eamApi.adapter(server.baseUri(), "s", journal, rawStore);
           case "scm" -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), "s"), journal, rawStore);
           case "cmdb" -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), "s"), journal, rawStore);
           default -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), "s"), journal, rawStore);
@@ -153,9 +154,11 @@ class AdminEndpointIT {
         adapter.poller().pollOnce();
       }
       // Вторая версия объекта: граф получает обновление поверх первой версии.
-      eam.upsert(StubSources.IT_SYSTEM, "EAM-1042", StubSources.fields("name", "Payments Core v2", "ownerTeam", "TEAM-PAY"));
+      eamApi.store.upsert("itsystems", 5101, StubSources.fields("name", "Payments Core v2", "eam_id", "EAM-1042",
+          "status", "ACTIVE", "criticality", "HIGH", "solution", List.of(7201L), "ownerTeam", "TEAM-PAY"));
       adapters.get(0).poller().pollOnce();
     } finally {
+      eamApi.close();
       adapters.forEach(SourceAdapter::close);
       servers.forEach(StubSourceServer::close);
     }
@@ -342,9 +345,9 @@ class AdminEndpointIT {
     String body = "["
         + "{\"left\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"xw-a\"},"
         + "\"right\":{\"source\":\"SCM\",\"sourceType\":\"CATALOG_SYSTEM\",\"sourceId\":\"xw-b\"},\"reason\":\"same system\"},"
-        // EAM-1042 и EAM-2001 уже на разных gid: второй элемент связывает их через общий ключ, это конфликт
-        + "{\"left\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"EAM-1042\"},"
-        + "\"right\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"EAM-2001\"},\"reason\":\"merge attempt\"},"
+        // 5101 и 5102 (Payments Core, Ledger) уже на разных gid: второй элемент связывает их через общий ключ, это конфликт
+        + "{\"left\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"5101\"},"
+        + "\"right\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"5102\"},\"reason\":\"merge attempt\"},"
         + "{\"left\":{\"source\":\"NOPE\",\"sourceType\":\"X\",\"sourceId\":\"1\"},"
         + "\"right\":{\"source\":\"SCM\",\"sourceType\":\"X\",\"sourceId\":\"2\"},\"reason\":\"bad source\"},"
         + "{\"left\":{\"source\":\"EAM\",\"sourceType\":\"IT_SYSTEM\",\"sourceId\":\"xw-c\"},"

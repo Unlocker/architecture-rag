@@ -31,6 +31,8 @@ public final class CompositeEamConnector implements SourceConnector, AutoCloseab
 
   private static final Set<String> API_TYPES = Set.of("PLATFORM", "SOLUTION", "IT_SYSTEM");
 
+  private static final System.Logger LOG = System.getLogger(CompositeEamConnector.class.getName());
+
   private final SourceConnector api;
   private final SourceConnector legacy;
 
@@ -46,7 +48,7 @@ public final class CompositeEamConnector implements SourceConnector, AutoCloseab
 
   @Override
   public ChangePage fetchChanges(String cursor, int limit) {
-    State s = cursor == null ? new State(true, false, null, null) : State.parse(cursor);
+    State s = cursor == null ? new State(true, false, null, null) : stateOf(cursor);
     if (!s.legacyPhase()) {
       ChangePage p = api.fetchChanges(s.api(), limit);
       if (p.nextCursor() == null) {
@@ -65,6 +67,21 @@ public final class CompositeEamConnector implements SourceConnector, AutoCloseab
       throw new IllegalStateException("legacy eam ended snapshot without snapshot-complete");
     }
     return new ChangePage(changes, new State(false, false, s.api(), p.nextCursor()).encode(), false, s.snapshot());
+  }
+
+  /**
+   * Курсор чужого формата (checkpoint, сохранённый старым адаптером до перехода на {@code eam-api}) не разбирается и
+   * не падает навсегда: чтение начинается с начала как <em>инкрементальное</em>, то есть без маркера
+   * {@code snapshot-complete} и без удалений. Все объекты перечитываются идемпотентными событиями, а итоговый курсор уже
+   * нового формата. Tombstone старых ключей ставит первый полный snapshot (reconcile).
+   */
+  private static State stateOf(String cursor) {
+    try {
+      return State.parse(cursor);
+    } catch (IllegalArgumentException e) {
+      LOG.log(System.Logger.Level.WARNING, "eam cursor is not of the composite format, restarting incremental read");
+      return new State(false, false, null, null);
+    }
   }
 
   @Override
@@ -93,8 +110,7 @@ public final class CompositeEamConnector implements SourceConnector, AutoCloseab
         a.close();
       } catch (Exception e) {
         // Закрытие при остановке адаптера: нечего восстанавливать, значения источника в сообщение не попадают.
-        System.getLogger(CompositeEamConnector.class.getName())
-            .log(System.Logger.Level.WARNING, "connector close failed: " + e.getClass().getName());
+        LOG.log(System.Logger.Level.WARNING, "connector close failed: " + e.getClass().getName());
       }
     }
   }
