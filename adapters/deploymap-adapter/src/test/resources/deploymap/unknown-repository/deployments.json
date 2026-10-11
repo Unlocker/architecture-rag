@@ -1,0 +1,27 @@
+[
+  {
+    "sourceId": "dep-unknown-repo-prod",
+    "sourceVersion": 1,
+    "payload": {
+      "format": "deploymap-poc-1",
+      "name": "unknown-repo",
+      "service": "svc-payments-api",
+      "environment": "prod",
+      "chart": "unknown-repo",
+      "chartVersion": "0.1.0",
+      "chartMeta": {
+        "name": "unknown-repo",
+        "version": "0.1.0",
+        "appVersion": "0.1.0",
+        "annotations": {
+          "archrag.io/eam-system-id": "5101",
+          "archrag.io/git-repo-url": "https://git.example.org/pay/unknown-repo.git",
+          "archrag.io/git-commit": "9fceb02d0ae598e95dc970b74767f19372d61af8"
+        }
+      },
+      "hosts": [
+        "vm-pay-01"
+      ]
+    }
+  }
+]
