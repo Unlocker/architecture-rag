@@ -7,7 +7,6 @@ import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.ingestionservice.IngestionServiceApplication;
@@ -170,6 +169,7 @@ class SyncAcceptanceIT {
   private final Map<SourceSystem, StubSource> stubs = new EnumMap<>(SourceSystem.class);
   private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
   private final List<StubSourceServer> servers = new ArrayList<>();
+  private EamApiSupport eamApi;
   private final Map<SourceSystem, StubWebhookSender> senders = new EnumMap<>(SourceSystem.class);
   private S3RawPayloadStore store;
   private final HttpClient http = HttpClient.newHttpClient();
@@ -186,12 +186,13 @@ class SyncAcceptanceIT {
     store = S3RawPayloadStore.create(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)),
         ContainersSmokeIT.S3_ACCESS_KEY, ContainersSmokeIT.S3_SECRET_KEY, BUCKET);
     store.ensureBucket();
+    eamApi = new EamApiSupport(clock);
     stubs.putAll(StubSources.seeded(clock));
     stubs.forEach((system, stub) -> {
       var server = new StubSourceServer(stub);
       servers.add(server);
       SourceAdapter adapter = switch (system) {
-        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, store);
+        case EAM -> eamApi.adapter(server.baseUri(), SECRET, journal, store);
         case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, store);
         case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, store);
         case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
@@ -207,6 +208,9 @@ class SyncAcceptanceIT {
     senders.values().forEach(StubWebhookSender::close);
     adapters.values().forEach(SourceAdapter::close);
     servers.forEach(StubSourceServer::close);
+    if (eamApi != null) {
+      eamApi.close();
+    }
     if (store != null) {
       store.close();
     }
@@ -229,6 +233,15 @@ class SyncAcceptanceIT {
     assertThat(count("MATCH (:Deployment)-[:RUNS_ON]->(c:ComputeInstance) RETURN count(c) AS c")).isPositive();
     assertThat(count("MATCH (:Service)-[:IMPLEMENTED_IN]->(r:Repository) RETURN count(r) AS c")).isPositive();
     assertThat(count("MATCH (:ITSystem)-[:OWNED_BY]->(t:Team) RETURN count(t) AS c")).isPositive();
+    // Срезы eam-api: ключ ITSystem — целочисленный id, ссылки USES_SOLUTION и USES_PLATFORM построены.
+    assertThat(count("MATCH (:ITSystem {name: 'Payments Core'})-[:USES_SOLUTION]->(:Solution {name: 'Card Processing'})"
+        + "-[:USES_PLATFORM]->(p:Platform {name: 'Kubernetes Platform'}) RETURN count(p) AS c")).isEqualTo(1);
+    assertThat(count("MATCH (:ITSystem {name: 'Ledger'})-[:USES_SOLUTION]->(:Solution {name: 'Ledger Engine'})"
+        + "-[:USES_PLATFORM]->(p:Platform) RETURN count(DISTINCT p) AS c")).isEqualTo(2);
+    assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM'}) WHERE r.active = true "
+        + "AND r.sourceId IN ['5101', '5102'] RETURN count(r) AS c")).isEqualTo(2);
+    assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM'}) WHERE r.sourceId STARTS WITH 'EAM-' "
+        + "RETURN count(r) AS c")).isZero();
     assertThat(count("MATCH (r:SourceRecord)-[:ASSERTS]->() RETURN count(DISTINCT r.source) AS c"))
         .as("ASSERTS приходят минимум от трёх SourceSystem").isGreaterThanOrEqualTo(3);
   }
@@ -238,6 +251,9 @@ class SyncAcceptanceIT {
   @Order(2)
   void k1_decomposedIntoLinksSystemToService() {
     assertThat(count("MATCH (:ITSystem)-[:DECOMPOSED_INTO]->(s:Service) RETURN count(s) AS c")).isPositive();
+    // SCM ссылается на систему кодом EAM-1042, ключ ITSystem — id 5101: связь идёт через ITSystem.eamCode.
+    assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', sourceId: '5101'})-[:ASSERTS]->(:ITSystem)"
+        + "-[:DECOMPOSED_INTO]->(:Service {name: 'payments-api'}) RETURN count(r) AS c")).isEqualTo(1);
     // Полная цепочка среза; глубина зафиксирована литералом.
     assertThat(count("MATCH (:ITSystem {name: 'Payments Core'})-[:DECOMPOSED_INTO]->(:Service)-[:HAS_DEPLOYMENT]->(:Deployment)"
         + "-[:RUNS_ON]->(c:ComputeInstance) RETURN count(c) AS c")).isPositive();
@@ -271,13 +287,14 @@ class SyncAcceptanceIT {
       boolean viaEam = i % 2 == 0;
       StubSource stub = viaEam ? eam : scm;
       if (viaEam) {
-        eam.upsert(StubSources.IT_SYSTEM, "EAM-2001", StubSources.fields("name", name, "ownerTeam", "TEAM-PAY"));
+        // Webhook старой заглушки живёт для TEAM: eam-api вебхуков не шлёт (путь ITSystem проверяет k2c через polling).
+        eam.upsert(StubSources.TEAM, "TEAM-PAY", StubSources.fields("name", name));
       } else {
         scm.upsert(StubSources.SERVICE, "svc-ledger-api",
             StubSources.fields("name", name, "systemCode", "EAM-2001"));
       }
       WebhookEvent event = stub.webhookEvents().getLast();
-      String label = viaEam ? "ITSystem" : "Service";
+      String label = viaEam ? "Team" : "Service";
 
       long start = System.nanoTime();
       assertThat(senders.get(stub.system()).send(event)).isEqualTo(202);
@@ -321,12 +338,33 @@ class SyncAcceptanceIT {
         Duration.ofSeconds(60));
     assertThat(count("MATCH (:SourceRecord {source: 'EAM', sourceType: 'TEAM', sourceId: '" + gone
         + "'})-[:ASSERTS]->(t:Team) WHERE t.isCurrent = false RETURN count(t) AS c")).isEqualTo(1);
+    // Reconcile един на источник EAM: объекты eam-api остались в прогоне и живы, tombstone ушёл только на пропавший TEAM.
+    assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM'}) WHERE r.active = true "
+        + "RETURN count(r) AS c")).isEqualTo(2);
+    assertThat(count("MATCH (:ITSystem)-[:USES_SOLUTION]->(:Solution)-[:USES_PLATFORM]->(:Platform) RETURN count(*) AS c"))
+        .isPositive();
+  }
+
+  /** Изменение в eam-api подхватывает polling: webhook у eam-api нет. */
+  @Test
+  @Order(7)
+  void k2c_eamApiChangeIsPickedUpByPolling() throws Exception {
+    String name = "Ledger-poll-" + uid();
+    eamApi.store.upsert("itsystems", 5102, io.github.unlocker.archrag.sourcestubs.StubSources.fields("name", name,
+        "eam_id", "EAM-2001", "status", "ACTIVE", "criticality", "HIGH", "description", "General ledger system",
+        "solution", List.of(7202L), "ownerTeam", "TEAM-PAY"));
+
+    assertThat(adapters.get(SourceSystem.EAM).poller().pollOnce().outcome()).isEqualTo(PollResult.Outcome.ADVANCED);
+
+    awaitTrue(() -> count("MATCH (n:ITSystem {name: '" + name + "'}) RETURN count(n) AS c") > 0, Duration.ofSeconds(60));
+    assertThat(count("MATCH (:ITSystem {name: '" + name + "'})-[:DECOMPOSED_INTO]->(:Service) "
+        + "RETURN count(*) AS c")).as("связь с сервисом SCM (k2a переименовал его) сохранилась после обновления ITSystem").isEqualTo(1);
   }
 
   // ---- К3: повтор и out-of-order -------------------------------------------------------------
 
   @Test
-  @Order(7)
+  @Order(8)
   void k3a_repeatedEventChangesNothing() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-DUP-" + uid();
@@ -345,7 +383,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(8)
+  @Order(9)
   void k3b_reversedWebhooks() throws Exception {
     StubSource eam = stubs.get(SourceSystem.EAM);
     String id = "T-REV-" + uid();
@@ -367,7 +405,7 @@ class SyncAcceptanceIT {
   }
 
   @Test
-  @Order(9)
+  @Order(10)
   void k3c_reorderedPolling() throws Exception {
     StubSource scm = stubs.get(SourceSystem.SCM);
     // Курсор incremental polling сдвигаем сначала к концу журнала, чтобы страница содержала только наши изменения.
@@ -396,7 +434,7 @@ class SyncAcceptanceIT {
   // ---- К4: rebuild ---------------------------------------------------------------------------
 
   @Test
-  @Order(10)
+  @Order(11)
   void k4_rebuildGivesEquivalentCanonicalGraph() throws Exception {
     awaitJournalDrained();
     List<String> before = CanonicalGraph.dump(driver);

@@ -6,7 +6,6 @@ import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.ingestionservice.IngestionServiceApplication;
@@ -130,6 +129,7 @@ class F1AcceptanceIT {
 
   private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
   private final List<StubSourceServer> servers = new ArrayList<>();
+  private EamApiSupport eamApi;
   private final McpTestJwt jwt = new McpTestJwt();
   private final HttpClient http = HttpClient.newHttpClient();
   private final JsonMapper json = new JsonMapper();
@@ -149,11 +149,12 @@ class F1AcceptanceIT {
     store = S3RawPayloadStore.create(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)),
         ContainersSmokeIT.S3_ACCESS_KEY, ContainersSmokeIT.S3_SECRET_KEY, BUCKET);
     store.ensureBucket();
+    eamApi = new EamApiSupport(clock);
     StubSources.seeded(clock).forEach((system, stub) -> {
       var server = new StubSourceServer(stub);
       servers.add(server);
       adapters.put(system, switch (system) {
-        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, store);
+        case EAM -> eamApi.adapter(server.baseUri(), SECRET, journal, store);
         case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, store);
         case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, store);
         case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
@@ -226,6 +227,9 @@ class F1AcceptanceIT {
     jwt.close();
     adapters.values().forEach(SourceAdapter::close);
     servers.forEach(StubSourceServer::close);
+    if (eamApi != null) {
+      eamApi.close();
+    }
     if (store != null) {
       store.close();
     }
@@ -306,7 +310,7 @@ class F1AcceptanceIT {
     assertThat(card.lastSeenAt()).isNotBlank();
     assertThat(card.sources()).anySatisfy(s -> {
       assertThat(s.source()).isEqualTo("EAM");
-      assertThat(s.sourceId()).isEqualTo("EAM-1042");
+      assertThat(s.sourceId()).isEqualTo("5101");
       assertThat(s.authority()).isEqualTo("MASTER");
       assertThat(s.active()).isTrue();
     });

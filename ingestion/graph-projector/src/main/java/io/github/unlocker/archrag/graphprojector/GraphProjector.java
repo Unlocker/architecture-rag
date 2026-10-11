@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
@@ -69,8 +70,10 @@ import org.neo4j.driver.TransactionContext;
  * ({@code DEPLOYED_FROM {commit}}), поэтому смена такого свойства даёт новое ребро, а {@code closeReplacedRelations}
  * закрывает старое: сравнивается тройка {@code (from, to, identity props)}, а не пара концов.
  *
- * <p>Alias репозитория: связь, отложенная на {@code SourceKey(SCM, REPOSITORY_URL, url)}, достраивается при
- * проекции записи SCM {@code REPOSITORY} с тем же {@code url}; конец связи подменяется реальным ключом записи.
+ * <p>Alias: связь, отложенная на ключ-псевдоним ({@link LookupKeys}), достраивается при проекции записи, чьё свойство
+ * даёт тот же псевдоним ({@link #ALIAS_RULES}): {@code SourceKey(SCM, REPOSITORY_URL, url)} — записью SCM
+ * {@code REPOSITORY} с тем же {@code url}, {@code SourceKey(EAM, IT_SYSTEM_CODE, code)} — записью EAM
+ * {@code IT_SYSTEM} с тем же {@code eamCode}. Конец-псевдоним подменяется реальным ключом записи.
  *
  * <p>Дополнительные метки подтипов, свойства связей и метки в тексте Cypher берутся только из enum
  * {@link NodeLabel}/{@link RelationType}, а не из данных источника.
@@ -79,6 +82,16 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
 
   private static final String REPOSITORY = "REPOSITORY";
   private static final String SERVICE = "SERVICE";
+  private static final String IT_SYSTEM = "IT_SYSTEM";
+
+  /** Правило alias: запись {@code source} с меткой {@code label} и свойством {@code property} даёт псевдоним. */
+  private record AliasRule(
+      NodeLabel label, SourceSystemCode source, String property, Function<String, SourceKey> alias) {}
+
+  private static final List<AliasRule> ALIAS_RULES =
+      List.of(
+          new AliasRule(NodeLabel.REPOSITORY, SourceSystemCode.SCM, "url", LookupKeys::repositoryUrl),
+          new AliasRule(NodeLabel.IT_SYSTEM, SourceSystemCode.EAM, "eamCode", LookupKeys::itSystemCode));
   private static final String RECORD_KEY = "{source: $source, sourceType: $sourceType, sourceId: $sourceId}";
 
   private final Driver driver;
@@ -165,6 +178,23 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
     }
   }
 
+  /** Активная запись EAM {@code IT_SYSTEM} с заданным {@code eamCode}; при нескольких выбирается наименьший числовой {@code sourceId}. */
+  @Override
+  public Optional<SourceKey> itSystemByEamCode(String eamCode) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true})"
+                          + "-[:ASSERTS]->(n:ITSystem) WHERE n.eamCode = $code "
+                          + "RETURN r.sourceId AS sourceId ORDER BY toInteger(r.sourceId), sourceId LIMIT 1",
+                      Map.of("code", eamCode))
+                  .stream()
+                  .findFirst()
+                  .map(row -> new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString())));
+    }
+  }
+
   /** Активные сервисы SCM с открытой {@code IMPLEMENTED_IN} на репозиторий. */
   @Override
   public List<SourceKey> servicesImplementedIn(SourceKey repository) {
@@ -213,7 +243,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
         case UpsertNode upsert -> {
           upsertNode(tx, request, upsert, skippedProperties);
           healPending(tx, upsert.record().key(), skippedRelations);
-          healRepositoryAlias(tx, upsert, skippedRelations);
+          healAliases(tx, upsert, skippedRelations);
         }
         case DeferRelation defer ->
             PendingRelations.store(tx, key, request.version().value(), request.eventTime(), defer.relation());
@@ -257,34 +287,42 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
   }
 
   /**
-   * Достраивает связи, отложенные на alias {@code (SCM, REPOSITORY_URL, url)}: после применения записи SCM
-   * {@code REPOSITORY} конец-alias подменяется её реальным ключом. {@code url} берётся из свойств узла этой же
-   * проекции; если запись URL не передала, достраивать нечего.
+   * Достраивает связи, отложенные на alias ({@link #ALIAS_RULES}): после применения записи конец-alias подменяется
+   * её реальным ключом. Значение берётся из свойств узла этой же проекции; если запись его не передала, достраивать
+   * нечего.
    */
-  private void healRepositoryAlias(TransactionContext tx, UpsertNode upsert, List<String> skipped) {
-    SourceKey repository = upsert.record().key();
-    if (upsert.data().label() != NodeLabel.REPOSITORY || repository.source() != SourceSystemCode.SCM) {
-      return;
-    }
-    Object url = NodeProperties.of(upsert.data()).get("url");
-    if (!(url instanceof String text)) {
-      return;
-    }
-    SourceKey alias = LookupKeys.repositoryUrl(text);
-    for (PendingRelations.Pending pending : PendingRelations.candidates(tx, alias)) {
-      UpsertRelation r = pending.relation();
-      if (!r.to().equals(alias)) {
+  private void healAliases(TransactionContext tx, UpsertNode upsert, List<String> skipped) {
+    SourceKey record = upsert.record().key();
+    for (AliasRule rule : ALIAS_RULES) {
+      if (upsert.data().label() != rule.label() || record.source() != rule.source()) {
         continue;
       }
-      UpsertRelation healed =
-          new UpsertRelation(
-              r.type(), r.from(), r.fromLabel(), repository, r.toLabel(), r.properties(), r.validity(), r.assertedBy());
-      Optional<UUID[]> gids = PendingRelations.endpointGids(tx, healed);
-      if (gids.isEmpty()) {
+      if (!(NodeProperties.of(upsert.data()).get(rule.property()) instanceof String text)) {
         continue;
       }
-      upsertRelation(tx, healed, gids.get()[0], gids.get()[1], pending.eventTime(), skipped);
-      PendingRelations.delete(tx, pending.key());
+      SourceKey alias = rule.alias().apply(text);
+      for (PendingRelations.Pending pending : PendingRelations.candidates(tx, alias)) {
+        UpsertRelation r = pending.relation();
+        if (!r.from().equals(alias) && !r.to().equals(alias)) {
+          continue;
+        }
+        UpsertRelation healed =
+            new UpsertRelation(
+                r.type(),
+                r.from().equals(alias) ? record : r.from(),
+                r.fromLabel(),
+                r.to().equals(alias) ? record : r.to(),
+                r.toLabel(),
+                r.properties(),
+                r.validity(),
+                r.assertedBy());
+        Optional<UUID[]> gids = PendingRelations.endpointGids(tx, healed);
+        if (gids.isEmpty()) {
+          continue;
+        }
+        upsertRelation(tx, healed, gids.get()[0], gids.get()[1], pending.eventTime(), skipped);
+        PendingRelations.delete(tx, pending.key());
+      }
     }
   }
 

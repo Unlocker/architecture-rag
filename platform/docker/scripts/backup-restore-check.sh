@@ -9,11 +9,12 @@ set -euo pipefail
 
 label="check-$(utc_stamp)"
 fp() { "$(dirname "$0")/graph-fingerprint.sh"; }
-# Печатает sourceVersion, присвоенную заглушкой (состояние заглушки живёт между прогонами сценария).
-upsert() { # <type> <id> <name>
-  printf '{"type":"%s","id":"%s","payload":{"name":"%s","ownerTeam":"TEAM-PAY"}}' "$1" "$2" "$3" |
-    dc exec -T stub-eam curl -sf -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' --data-binary @- |
-    sed -n 's/.*"sourceVersion":\([0-9]*\).*/\1/p'
+# Печатает ver, присвоенную заглушкой eam-api (состояние заглушки живёт между прогонами сценария). Все attrs
+# передаются целиком, иначе у изменённой системы пропали бы eam_id и ссылки.
+upsert() { # <id> <name> <eam_id>
+  printf '{"type":"itsystems","id":%s,"attrs":{"name":"%s","eam_id":"%s","status":"ACTIVE","criticality":"HIGH","solution":[7201],"ownerTeam":"TEAM-PAY"}}' "$1" "$2" "$3" |
+    dc exec -T eam-api-stub curl -sf -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' --data-binary @- |
+    sed -n 's/.*"ver":\([0-9]*\).*/\1/p'
 }
 # Адаптер забирает изменения polling'ом (по умолчанию раз в 30 с): ждём появления событий в inbox.
 wait_event() { # <source_id> <source_version>
@@ -31,13 +32,13 @@ log "F0 taken"
 
 "$(dirname "$0")/backup.sh" "$label" >/dev/null
 
-log "changes in the EAM stub: new EAM-9001, changed EAM-1042"
-probe="EAM-9001"
-v_probe=$(upsert IT_SYSTEM "$probe" "Backup Probe $label")
-v_core=$(upsert IT_SYSTEM EAM-1042 "Payments Core $label")
-[ -n "$v_probe" ] && [ -n "$v_core" ] || die "stub /control/upsert did not return a version"
+log "changes in the eam-api stub: new itsystem 9001, changed itsystem 5101 (EAM-1042)"
+probe="9001"
+v_probe=$(upsert "$probe" "Backup Probe $label" EAM-9001)
+v_core=$(upsert 5101 "Payments Core $label" EAM-1042)
+[ -n "$v_probe" ] && [ -n "$v_core" ] || die "eam-api-stub /control/upsert did not return a version"
 wait_event "$probe" "$v_probe"
-wait_event EAM-1042 "$v_core"
+wait_event 5101 "$v_core"
 wait_queue_empty 300
 F1=$(fp)
 log "F1 taken"

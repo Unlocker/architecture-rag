@@ -11,7 +11,7 @@ import java.util.Map;
  *
  * <p>Ключ объекта — целочисленный {@code id}. Системное поле {@code eam_id} ИТ-систем совпадает с {@code systemCode}
  * сервисов SCM в {@link StubSources#scm} ({@code EAM-1042}, {@code EAM-2001}), поэтому данные SCM менять не нужно:
- * {@code systemCode -> eam_id -> id}. Имена типов, поля {@code attrs} и словари — допущения «не подтверждено»
+ * {@code systemCode -> eam_id -> id}. Поле {@code ownerTeam} сохраняет связь {@code OWNED_BY}, пока {@code Team} приходит из старой заглушки. Имена типов, поля {@code attrs} и словари — допущения «не подтверждено»
  * ({@code docs/06-eam-integration.md}).
  */
 public final class EamApiSeed {
@@ -28,6 +28,13 @@ public final class EamApiSeed {
 
   /** Id типов в {@code /api/types/{id}/} — допущение. */
   static final Map<String, Long> TYPE_IDS = Map.of(PLATFORM_TYPE, 11L, SOLUTION_TYPE, 13L, IT_SYSTEM_TYPE, 12L);
+
+  /**
+   * Код команды-владельца в поле {@code ownerTeam} ИТ-систем: допущение 9 «не подтверждено, только для заглушки».
+   * Совпадает с ключом {@code Team} из старой заглушки ({@code StubSources.eam}); в реальном EAM владелец, вероятно,
+   * ссылка на {@code divisions}.
+   */
+  public static final String OWNER_TEAM = "TEAM-PAY";
 
   public static final long PLATFORM_KUBERNETES = 3101;
   public static final long PLATFORM_POSTGRES = 3102;
@@ -53,10 +60,10 @@ public final class EamApiSeed {
         "platform", List.of(PLATFORM_KUBERNETES, PLATFORM_POSTGRES)));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_PAYMENTS_CORE, fields("name", "Payments Core", "eam_id", "EAM-1042",
         "status", "ACTIVE", "criticality", "HIGH", "description", "Payments processing system",
-        "solution", List.of(SOLUTION_CARD_PROCESSING)));
+        "solution", List.of(SOLUTION_CARD_PROCESSING), "ownerTeam", OWNER_TEAM));
     s.upsert(IT_SYSTEM_TYPE, SYSTEM_LEDGER, fields("name", "Ledger", "eam_id", "EAM-2001",
         "status", "ACTIVE", "criticality", "HIGH", "description", "General ledger system",
-        "solution", List.of(SOLUTION_LEDGER_ENGINE)));
+        "solution", List.of(SOLUTION_LEDGER_ENGINE), "ownerTeam", OWNER_TEAM));
     return s;
   }
 }

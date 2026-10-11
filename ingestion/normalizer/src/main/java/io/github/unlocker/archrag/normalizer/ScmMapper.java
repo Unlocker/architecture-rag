@@ -5,6 +5,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.GitUrls;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.node.Repository;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
@@ -20,6 +21,17 @@ public final class ScmMapper implements CanonicalMapper {
 
   static final String SERVICE = "SERVICE";
   static final String REPOSITORY = "REPOSITORY";
+
+  private final DeploymentLookup lookup;
+
+  public ScmMapper() {
+    this(DeploymentLookup.NONE);
+  }
+
+  /** @param lookup порт графа: по нему {@code systemCode} находит ИТ-систему EAM с ключом {@code id} */
+  public ScmMapper(DeploymentLookup lookup) {
+    this.lookup = lookup;
+  }
 
   @Override
   public SourceSystemCode source() {
@@ -53,13 +65,16 @@ public final class ScmMapper implements CanonicalMapper {
                     p.optional("serviceType").orElse(null),
                     p.optional("language").orElse(null),
                     p.optional("status").orElse(null))));
-        // Связь DECOMPOSED_INTO идёт от системы к сервису, но утверждает её запись сервиса.
+        // Связь DECOMPOSED_INTO идёт от системы к сервису, но утверждает её запись сервиса. Ключ системы в EAM —
+        // целочисленный id, а systemCode (eam_id) — её свойство: известную систему берём по коду, неизвестную
+        // откладываем на alias-ключ, проектор достроит связь с приходом ITSystem с этим eamCode. На ключ
+        // (EAM, IT_SYSTEM, <systemCode>) не ссылаемся никогда: такой записи в EAM нет.
         p.optional("systemCode")
             .ifPresent(
                 system ->
                     sink.relation(
                         RelationType.DECOMPOSED_INTO,
-                        new SourceKey(SourceSystemCode.EAM, EamMapper.IT_SYSTEM, system),
+                        lookup.itSystemByEamCode(system).orElseGet(() -> LookupKeys.itSystemCode(system)),
                         NodeLabel.IT_SYSTEM,
                         key,
                         NodeLabel.SERVICE,

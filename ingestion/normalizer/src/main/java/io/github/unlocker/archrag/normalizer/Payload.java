@@ -106,6 +106,32 @@ final class Payload {
     return result;
   }
 
+  /**
+   * Поле-ссылка на объекты EAM: список целых {@code id}, одиночное целое либо {@code null}/отсутствие (допущение 3
+   * {@code docs/06-eam-integration.md}). Пустые элементы пропускаются; нецелое значение — {@code INVALID_PAYLOAD}.
+   */
+  List<String> optionalIdRefs(String field) {
+    Object v = values.get(field);
+    if (v == null) {
+      return List.of();
+    }
+    List<?> elements = v instanceof List<?> list ? list : List.of(v);
+    List<String> result = new ArrayList<>();
+    for (Object element : elements) {
+      if (element == null) {
+        continue;
+      }
+      if (!(element instanceof Long || element instanceof Integer)) {
+        throw invalidType(field);
+      }
+      String id = element.toString();
+      if (!result.contains(id)) {
+        result.add(id);
+      }
+    }
+    return result;
+  }
+
   private static NormalizationException invalidType(String field) {
     return new NormalizationException("INVALID_PAYLOAD", "field has unexpected type: " + field);
   }
