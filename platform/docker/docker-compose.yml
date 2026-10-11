@@ -305,17 +305,28 @@ services:
       start_period: 20s
 
   # Адаптер каждого источника — ровно один экземпляр: замок snapshot в Poller действует только внутри процесса.
+  # Читает eam-api-stub (PLATFORM, SOLUTION, IT_SYSTEM по id) и старую stub-eam (только TEAM и SERVICE_DEPENDENCY, долг
+  # PoC): один источник EAM, один snapshot, иначе reconcile снёс бы записи другой половины. ARCHRAG_EAM_MODE=legacy
+  # возвращает старый путь целиком (откат).
   adapter-eam:
     <<: *demo-launcher
     command: ["adapter", "EAM"]
-    secrets: *adapter-secrets
+    secrets:
+      - { source: pg_password, target: ARCHRAG_PG_PASSWORD }
+      - { source: s3_access_key, target: ARCHRAG_S3_ACCESS_KEY }
+      - { source: s3_secret_key, target: ARCHRAG_S3_SECRET_KEY }
+      - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
+      - { source: eam_api_token, target: ARCHRAG_EAM_API_TOKEN }
     networks: *adapter-networks
     environment:
       <<: *adapter-env
       ARCHRAG_SOURCE_URL: http://stub-eam:8080
+      ARCHRAG_EAM_MODE: ${ARCHRAG_EAM_MODE:-eam-api}
+      ARCHRAG_EAM_API_URL: http://eam-api-stub:8080
     depends_on:
       <<: *adapter-depends
       stub-eam: { condition: service_healthy }
+      eam-api-stub: { condition: service_healthy }
     deploy: { replicas: 1 }
     healthcheck: &adapter-health
       test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8090/health"]
@@ -416,9 +427,10 @@ services:
       - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
 
-  # Заглушка EAM в формате реального API (docs/eam-api.yaml): рядом со старой stub-eam, которую по-прежнему читает
-  # adapter-eam. К новой заглушке адаптер не подключён (переделка адаптера — отдельная задача). Порт на хост не
-  # публикуется: curl изнутри, см. README. Токен Authorization: Token приходит как Docker secret.
+  # Заглушка EAM в формате реального API (docs/eam-api.yaml): её читает adapter-eam рядом со старой stub-eam (TEAM,
+  # SERVICE_DEPENDENCY). Порт на хост не публикуется: curl изнутри, см. README; управление объектами —
+  # POST /control/upsert и /control/archive на порту 8091 (не публикуется). Токен Authorization: Token приходит как
+  # Docker secret.
   eam-api-stub:
     <<: *demo-launcher
     command: ["eam-api-stub"]
