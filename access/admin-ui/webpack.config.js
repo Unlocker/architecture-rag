@@ -28,6 +28,9 @@ module.exports = (env, argv) => ({
     new HtmlWebpackPlugin({ template: './src/index.html' }),
     new MiniCssExtractPlugin({ filename: '[name].[contenthash].css' }),
   ],
+  // webpack 5.111+ сам минифицирует HTML-ассеты и убирает кавычки атрибутов (`id=root`), а ConsoleApiTest
+  // и CSP-проверки разбирают index.html по `id="root"`. HTML уже минифицирует html-webpack-plugin.
+  optimization: { minimizeOptions: { html: false } },
   // Исходники в production-jar не публикуем.
   devtool: argv.mode === 'production' ? false : 'source-map',
   devServer: {
