@@ -417,7 +417,7 @@ class NormalizerTest {
             UnresolvedReference::from, UnresolvedReference::target)
         .containsExactlyInAnyOrder(
             org.assertj.core.api.Assertions.tuple("git-repo-url", RelationType.DEPLOYED_FROM, dep,
-                key(SourceSystemCode.SCM, "REPOSITORY_URL", "https://git.example.org/pay/payments-api")),
+                io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys.repositoryUrl("https://git.example.org/pay/payments-api")),
             org.assertj.core.api.Assertions.tuple("service", RelationType.HAS_DEPLOYMENT, dep,
                 key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api")),
             org.assertj.core.api.Assertions.tuple("environment", RelationType.IN_ENVIRONMENT, dep,

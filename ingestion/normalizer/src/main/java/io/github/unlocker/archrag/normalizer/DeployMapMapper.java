@@ -6,6 +6,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.Environment;
 import io.github.unlocker.archrag.canonicalmodel.node.EnvironmentClass;
 import io.github.unlocker.archrag.canonicalmodel.node.GitUrls;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
@@ -31,8 +32,8 @@ import java.util.regex.Pattern;
  * {@code 1}) добавляет у {@code DEPLOYMENT} метаданные {@code chartMeta.annotations}: {@code
  * archrag.io/eam-system-id}, {@code archrag.io/git-repo-url}, {@code archrag.io/git-commit}. Нужны все три
  * (иначе {@code MISSING_REQUIRED_FIELD}); неверный формат значения или неизвестный {@code format} —
- * {@code INVALID_PAYLOAD}, причина без значений. Запись без {@code chartMeta} и формат {@code poc-0}
- * разбираются по-старому.
+ * {@code INVALID_PAYLOAD}, причина без значений. Формат {@code poc-0} и запись без {@code format}
+ * разбираются по-старому; {@code poc-1} без {@code chartMeta} — {@code MISSING_REQUIRED_FIELD}.
  *
  * <p>Состояния нет: граф читается только через порт {@link DeploymentLookup}. Выбор сервиса для
  * {@code HAS_DEPLOYMENT} — снимок на момент нормализации: (1) {@code service} из payload, если он среди
@@ -137,7 +138,7 @@ public final class DeployMapMapper implements CanonicalMapper {
   /** Три аннотации chart, уже проверенные; {@code repositoryUrl} нормализован. */
   private record ChartMeta(long eamSystemId, String repositoryUrl, String commit) {}
 
-  /** Разбирает {@code chartMeta} формата {@code poc-1}; {@code null} — разбор по-старому (poc-0 или нет {@code chartMeta}). */
+  /** Разбирает {@code chartMeta} формата {@code poc-1}; {@code null} — разбор по-старому (poc-0 или без {@code format}). */
   private static ChartMeta chartMeta(Payload p) {
     String format = p.optional("format").orElse(null);
     if (format != null && !format.equals(FORMAT_V0) && !format.equals(FORMAT_V1)) {
@@ -148,7 +149,7 @@ public final class DeployMapMapper implements CanonicalMapper {
     }
     Optional<Payload> meta = p.optionalObject(CHART_META);
     if (meta.isEmpty()) {
-      return null;
+      throw new NormalizationException("MISSING_REQUIRED_FIELD", "required field is missing: " + CHART_META);
     }
     Payload annotations = meta.get().optionalObject("annotations").orElseGet(() -> new Payload(Map.of()));
     String systemId = annotations.required(ANNOTATION_EAM_SYSTEM_ID);
@@ -194,7 +195,7 @@ public final class DeployMapMapper implements CanonicalMapper {
     // Неизвестный репозиторий: связь откладывается на alias-ключ по URL, проектор достроит её с приходом SCM.
     SourceKey target =
         repository.orElseGet(
-            () -> new SourceKey(SourceSystemCode.SCM, ScmMapper.REPOSITORY_URL, chart.repositoryUrl()));
+            () -> LookupKeys.repositoryUrl(chart.repositoryUrl()));
     sink.relation(
         RelationType.DEPLOYED_FROM,
         key,

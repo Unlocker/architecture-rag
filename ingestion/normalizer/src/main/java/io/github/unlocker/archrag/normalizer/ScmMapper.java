@@ -21,12 +21,6 @@ public final class ScmMapper implements CanonicalMapper {
   static final String SERVICE = "SERVICE";
   static final String REPOSITORY = "REPOSITORY";
 
-  /**
-   * Тип alias-ключа репозитория: {@code SourceKey(SCM, REPOSITORY_URL, <нормализованный url>)}. Записи с таким
-   * ключом нет; он нужен, чтобы отложить связь на репозиторий, известный только по URL (см. {@code DeployMapMapper}).
-   */
-  public static final String REPOSITORY_URL = "REPOSITORY_URL";
-
   @Override
   public SourceSystemCode source() {
     return SourceSystemCode.SCM;
@@ -47,7 +41,7 @@ public final class ScmMapper implements CanonicalMapper {
               new UpsertNode(
                   input.record(),
                   new Repository(
-                      normalizedUrl(p.required("url"), sink),
+                      normalizedUrl(p.required("url")),
                       p.optional("defaultBranch").orElse(null),
                       p.optionalBoolean("archived").orElse(null))));
       case SERVICE -> {
@@ -89,18 +83,16 @@ public final class ScmMapper implements CanonicalMapper {
 
   /**
    * Приводит URL к каноническому виду ({@link GitUrls#normalize}), чтобы deploy map находил репозиторий по
-   * равенству. Нераспознанный URL остаётся как есть с предупреждением, а не уходит в карантин: иначе живые
-   * записи SCM, валидные до H.2, перестали бы приниматься. Значение URL в предупреждение не попадает.
+   * равенству. Нераспознанный URL — {@code INVALID_PAYLOAD} без значения в причине.
    *
    * <p>TODO: {@code FeatureNormalizer.repositoryUrl} (identity candidates) сравнивает URL своей функцией
    * {@code host/path}; на кандидатов формат хранимого {@code url} не влияет, функции можно объединить позже.
    */
-  private static String normalizedUrl(String raw, CommandSink sink) {
+  private static String normalizedUrl(String raw) {
     try {
       return GitUrls.normalize(raw);
     } catch (IllegalArgumentException e) {
-      sink.warn("REPOSITORY_URL_NOT_NORMALIZED");
-      return raw;
+      throw new NormalizationException("INVALID_PAYLOAD", "repository url is not a recognized git url");
     }
   }
 

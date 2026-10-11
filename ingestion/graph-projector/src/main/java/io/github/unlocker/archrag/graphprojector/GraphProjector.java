@@ -9,13 +9,13 @@ import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeData;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.normalizer.DeploymentLookup;
-import io.github.unlocker.archrag.normalizer.ScmMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -270,7 +270,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
     if (!(url instanceof String text)) {
       return;
     }
-    SourceKey alias = new SourceKey(SourceSystemCode.SCM, ScmMapper.REPOSITORY_URL, text);
+    SourceKey alias = LookupKeys.repositoryUrl(text);
     for (PendingRelations.Pending pending : PendingRelations.candidates(tx, alias)) {
       UpsertRelation r = pending.relation();
       if (!r.to().equals(alias)) {

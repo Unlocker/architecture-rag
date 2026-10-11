@@ -111,6 +111,11 @@ class DeployedFromIT {
   }
 
   private static ProcessingResult deployment(String version, Instant time, String commit, String service) {
+    return deployment(version, time, commit, service, "5101");
+  }
+
+  private static ProcessingResult deployment(
+      String version, Instant time, String commit, String service, String systemId) {
     Map<String, Object> p = new LinkedHashMap<>();
     p.put("format", "deploymap-poc-1");
     p.put("name", "payments-api");
@@ -123,7 +128,7 @@ class DeployedFromIT {
             "name", "payments-api", "version", "1.4.2",
             "annotations",
             Map.of(
-                "archrag.io/eam-system-id", "5101",
+                "archrag.io/eam-system-id", systemId,
                 "archrag.io/git-repo-url", "git@git.example.org:pay/payments-api.git",
                 "archrag.io/git-commit", commit)));
     return handle("deploymap", "DEPLOYMENT", "dep-1", version, time, p);
@@ -166,6 +171,20 @@ class DeployedFromIT {
     assertThat(query("MATCH (s:Service {name: 'svc-payments-api'})-[rel:HAS_DEPLOYMENT]->(:Deployment) "
             + "WHERE rel.validTo IS NULL RETURN count(rel) AS c").get(0).get("c").asLong())
         .isEqualTo(1);
+  }
+
+  @Test
+  void systemMismatchGivesOrdinaryBindingWithoutConflict() {
+    repository("1", T1);
+    service("svc-payments-api", "1", T1);
+
+    assertThat(deployment("1", T2, COMMIT_A, null, "5102").status()).isEqualTo(ProcessingStatus.PROJECTED);
+
+    assertThat(deployedFrom()).hasSize(1);
+    assertThat(query("MATCH (:Service)-[rel:HAS_DEPLOYMENT]->(d:Deployment) RETURN d.eamSystemId AS id").get(0).get("id").asLong())
+        .isEqualTo(5102L);
+    assertThat(query("MATCH ()-[a:ASSERTS]->() WHERE a.conflicts IS NOT NULL RETURN count(a) AS c").get(0).get("c").asLong())
+        .isZero();
   }
 
   @Test

@@ -37,6 +37,9 @@ public enum RelationType {
         this.sources = Set.copyOf(sources);
         this.targets = Set.copyOf(targets);
         this.temporal = temporal;
+        if (!identityProperties.isEmpty() && !temporal) {
+            throw new IllegalArgumentException("identity properties are supported for temporal relations only");
+        }
         this.identityProperties = Set.copyOf(identityProperties);
     }
 

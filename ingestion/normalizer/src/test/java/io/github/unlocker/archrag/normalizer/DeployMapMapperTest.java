@@ -8,6 +8,7 @@ import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
 import io.github.unlocker.archrag.canonicalmodel.node.Deployment;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
@@ -30,7 +31,7 @@ class DeployMapMapperTest {
   private static final SourceKey REPO = new SourceKey(SourceSystemCode.SCM, "REPOSITORY", "repo-payments-api");
   private static final SourceKey PAY = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-payments-api");
   private static final SourceKey LEDGER = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-ledger-api");
-  private static final SourceKey ALIAS = new SourceKey(SourceSystemCode.SCM, "REPOSITORY_URL", URL);
+  private static final SourceKey ALIAS = LookupKeys.repositoryUrl(URL);
 
   private final Set<SourceKey> known = new HashSet<>();
   private final Map<String, SourceKey> repositories = new HashMap<>();
@@ -197,6 +198,30 @@ class DeployMapMapperTest {
     payload.put("format", "deploymap-poc-9");
     assertThat(run(payload))
         .isInstanceOfSatisfying(Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD"));
+  }
+
+  @Test
+  void pocOneWithoutChartMetaIsQuarantined() {
+    Map<String, Object> payload = payloadV1("svc-payments-api", goodAnnotations());
+    payload.remove("chartMeta");
+    assertThat(run(payload))
+        .isInstanceOfSatisfying(Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD"));
+    payload.put("chartMeta", Map.of("name", "payments-api"));
+    assertThat(run(payload))
+        .isInstanceOfSatisfying(Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD"));
+  }
+
+  /** Fixture {@code system-mismatch}: система chart не совпадает с системой сервиса — обычная привязка, без Conflict (H.5). */
+  @Test
+  void systemMismatchGivesOrdinaryBindingWithoutConflictOrWarning() {
+    repositoryWith(PAY);
+    var n = ok(payloadV1(null, annotations("5102", "git@git.example.org:pay/payments-api.git", COMMIT)));
+    assertThat(((UpsertNode) n.commands().get(0)).data())
+        .isEqualTo(new Deployment("dep-1", "payments-api", "1.4.2", null, COMMIT, URL, 5102L, Fixtures.T));
+    assertThat(relations(n, RelationType.DEPLOYED_FROM)).hasSize(1);
+    assertThat(relations(n, RelationType.HAS_DEPLOYMENT)).singleElement().satisfies(r -> assertThat(r.from()).isEqualTo(PAY));
+    assertThat(n.warnings()).isEmpty();
+    assertThat(n.unresolved()).isEmpty();
   }
 
   @Test

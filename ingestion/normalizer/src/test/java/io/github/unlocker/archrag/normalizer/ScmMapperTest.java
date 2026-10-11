@@ -39,9 +39,24 @@ class ScmMapperTest {
   }
 
   @Test
-  void unrecognizedUrlKeepsRawValueWithWarningAndNoQuarantine() {
-    var n = repository("not a git url");
-    assertThat(((UpsertNode) n.commands().get(0)).data()).isEqualTo(new Repository("not a git url", null, null));
-    assertThat(n.warnings()).containsExactly("REPOSITORY_URL_NOT_NORMALIZED");
+  void unrecognizedUrlIsQuarantinedWithoutLeakingValue() {
+    var result =
+        normalizer.normalize(
+            event("urn:corp:scm", "urn:corp:schema:asset-upserted:1", "REPOSITORY", "r", Map.of("url", "not a git url s3cr3t")),
+            RAW);
+    assertThat(result)
+        .isInstanceOfSatisfying(
+            NormalizationResult.Quarantined.class,
+            q -> {
+              assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD");
+              assertThat(q.reason()).doesNotContain("s3cr3t");
+            });
+  }
+
+  @Test
+  void seedRepositoryUrlIsAlreadyCanonical() {
+    var n = repository("https://git.example.org/pay/payments-api");
+    assertThat(((UpsertNode) n.commands().get(0)).data())
+        .isEqualTo(new Repository("https://git.example.org/pay/payments-api", null, null));
   }
 }
