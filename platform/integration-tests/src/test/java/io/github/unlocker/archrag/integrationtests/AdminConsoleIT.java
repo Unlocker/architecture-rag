@@ -108,7 +108,7 @@ class AdminConsoleIT {
     var billing = fixtures.node(UUID.fromString(GID_BILLING), "component", "billing",
         new Service("Billing Payments Service", null, null, null), t2);
     var dep = fixtures.node(UUID.fromString(GID_DEP), "deployment", "billing-prod",
-        new Deployment("billing-prod", "billing-prod", null, null, null), t1);
+        new Deployment("billing-prod", "billing-prod", null, null, null, null, null, null), t1);
     var prod = fixtures.node(UUID.fromString(GID_PROD), "env", "prod",
         new Environment("prod", "Production", EnvironmentClass.PROD), t1);
     fixtures.relation(RelationType.DECOMPOSED_INTO, pay, UUID.fromString(GID_PAY), billing, UUID.fromString(GID_BILLING), null, t1);

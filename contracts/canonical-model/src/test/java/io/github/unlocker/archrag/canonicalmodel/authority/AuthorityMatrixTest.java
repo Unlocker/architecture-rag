@@ -20,6 +20,12 @@ class AuthorityMatrixTest {
     }
 
     @Test
+    void deployedFromBelongsToDeployMap() {
+        assertThat(matrix.relationAuthorities(RelationType.DEPLOYED_FROM)).containsExactly(DEPLOYMAP);
+        assertThat(matrix.isAuthoritative(RelationType.DEPLOYED_FROM, SCM)).isFalse();
+    }
+
+    @Test
     void itSystemCriticalityOnlyEam() {
         assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "criticality", EAM)).isTrue();
         for (var other : allExcept(EAM)) {

@@ -3,6 +3,7 @@ package io.github.unlocker.archrag.normalizer;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +38,26 @@ final class Payload {
     }
     String trimmed = s.strip();
     return trimmed.isEmpty() ? Optional.empty() : Optional.of(trimmed);
+  }
+
+  /** Необязательный вложенный объект; не-объект — {@code INVALID_PAYLOAD}. */
+  Optional<Payload> optionalObject(String field) {
+    Object v = values.get(field);
+    if (v == null) {
+      return Optional.empty();
+    }
+    if (!(v instanceof Map<?, ?> map)) {
+      throw invalidType(field);
+    }
+    Map<String, Object> copy = new HashMap<>();
+    map.forEach(
+        (key, value) -> {
+          if (!(key instanceof String name)) {
+            throw invalidType(field);
+          }
+          copy.put(name, value);
+        });
+    return Optional.of(new Payload(copy));
   }
 
   /** Необязательный момент времени в ISO-8601 (UTC). */

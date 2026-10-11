@@ -81,7 +81,7 @@ class GetAssetIT {
     var billing = fixtures.node(UUID.fromString(GID_BILLING), "component", "billing", new Service("Billing", null, null, null), t1);
     fixtures.nodeFrom(SourceSystemCode.EAM, UUID.fromString(GID_BILLING), "service", "EAM-9", new Service("Billing", null, null, null), t2);
     var team = fixtures.node(UUID.fromString(GID_TEAM), "team", "team-1", new Team("Payments Team", null), t1);
-    var dep = fixtures.node(UUID.fromString(GID_DEP), "deployment", "billing-prod", new Deployment("billing-prod", "billing-prod", null, null, null), t1);
+    var dep = fixtures.node(UUID.fromString(GID_DEP), "deployment", "billing-prod", new Deployment("billing-prod", "billing-prod", null, null, null, null, null, null), t1);
     var vm = fixtures.node(UUID.fromString(GID_VM), "host", "vm-prod-01", new ComputeInstance("vm-prod-01", ComputeKind.VIRTUAL_MACHINE, null, null, null, null, null), t1);
     var vmOld = fixtures.node(UUID.fromString(GID_VM_OLD), "host", "vm-prod-old", new ComputeInstance("vm-prod-old", ComputeKind.UNSPECIFIED, null, null, null, null, null), t1);
     // Закрытый узел: единственная мастер-запись tombstone-ится.

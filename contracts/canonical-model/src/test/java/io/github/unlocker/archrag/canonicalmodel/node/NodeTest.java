@@ -22,8 +22,8 @@ class NodeTest {
         assertThatThrownBy(() -> new Environment(null, "n", EnvironmentClass.DEV)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new Environment("", "n", EnvironmentClass.DEV)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Environment("c", "n", null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Deployment(null, "n", null, null, null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Deployment("", "n", null, null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment(null, "n", null, null, null, null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Deployment("", "n", null, null, null, null, null, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> vm(null, null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new ComputeInstance("", ComputeKind.UNSPECIFIED, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -82,5 +82,22 @@ class NodeTest {
         assertThatThrownBy(() -> new Lifecycle(null, t2, null, true)).isInstanceOf(NullPointerException.class);
         assertThatCode(() -> new Lifecycle(t1, t2, null, true)).doesNotThrowAnyException();
         assertThatCode(() -> new Lifecycle(t1, t2, t2, false)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void deploymentValidatesCommitUrlAndSystemId() {
+        String commit = "9fceb02d0ae598e95dc970b74767f19372d61af8";
+        assertThatCode(() -> new Deployment("d", "n", null, null, commit, "https://git.example.org/pay/api", 5101L, null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, commit.toUpperCase(), null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, commit.substring(1), null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, "git@git.example.org:pay/api.git", null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, null, 0L, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, null, -5L, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

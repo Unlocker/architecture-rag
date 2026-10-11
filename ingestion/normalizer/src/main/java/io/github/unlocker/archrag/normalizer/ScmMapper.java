@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.normalizer;
 
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
+import io.github.unlocker.archrag.canonicalmodel.node.GitUrls;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.node.Repository;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
@@ -40,7 +41,7 @@ public final class ScmMapper implements CanonicalMapper {
               new UpsertNode(
                   input.record(),
                   new Repository(
-                      p.required("url"),
+                      normalizedUrl(p.required("url")),
                       p.optional("defaultBranch").orElse(null),
                       p.optionalBoolean("archived").orElse(null))));
       case SERVICE -> {
@@ -77,6 +78,21 @@ public final class ScmMapper implements CanonicalMapper {
                         "repositoryId"));
       }
       default -> throw new NormalizationException("UNKNOWN_SOURCE_TYPE", "unknown SCM sourceType");
+    }
+  }
+
+  /**
+   * Приводит URL к каноническому виду ({@link GitUrls#normalize}), чтобы deploy map находил репозиторий по
+   * равенству. Нераспознанный URL — {@code INVALID_PAYLOAD} без значения в причине.
+   *
+   * <p>TODO: {@code FeatureNormalizer.repositoryUrl} (identity candidates) сравнивает URL своей функцией
+   * {@code host/path}; на кандидатов формат хранимого {@code url} не влияет, функции можно объединить позже.
+   */
+  private static String normalizedUrl(String raw) {
+    try {
+      return GitUrls.normalize(raw);
+    } catch (IllegalArgumentException e) {
+      throw new NormalizationException("INVALID_PAYLOAD", "repository url is not a recognized git url");
     }
   }
 

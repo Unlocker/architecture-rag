@@ -46,8 +46,21 @@ public final class CommandSink {
       NodeLabel toLabel,
       Validity validity,
       String field) {
+    relation(type, from, fromLabel, to, toLabel, Map.of(), validity, field);
+  }
+
+  /** То же со свойствами связи (например, {@code commit} у {@code DEPLOYED_FROM}). */
+  public void relation(
+      RelationType type,
+      SourceKey from,
+      NodeLabel fromLabel,
+      SourceKey to,
+      NodeLabel toLabel,
+      Map<String, Object> properties,
+      Validity validity,
+      String field) {
     SourceKey other = from.equals(self) ? to : from;
-    UpsertRelation relation = new UpsertRelation(type, from, fromLabel, to, toLabel, Map.of(), validity, self);
+    UpsertRelation relation = new UpsertRelation(type, from, fromLabel, to, toLabel, properties, validity, self);
     if (!resolver.exists(other)) {
       unresolved.add(new UnresolvedReference(self, field, type, other, relation));
       return;

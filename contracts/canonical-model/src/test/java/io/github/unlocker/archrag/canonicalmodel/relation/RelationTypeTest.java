@@ -42,7 +42,8 @@ class RelationTypeTest {
             boolean expected = java.util.Set.of(
                     RelationType.RUNS_ON, RelationType.DEPENDS_ON, RelationType.OWNED_BY,
                     RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT,
-                    RelationType.DECOMPOSED_INTO, RelationType.IMPLEMENTED_IN).contains(type);
+                    RelationType.DECOMPOSED_INTO, RelationType.IMPLEMENTED_IN,
+                    RelationType.DEPLOYED_FROM).contains(type);
             assertThat(type.temporal()).as(type.name()).isEqualTo(expected);
         }
     }
@@ -55,5 +56,18 @@ class RelationTypeTest {
         assertThat(new Validity(t1, t1).validFrom()).isEqualTo(t1);
         assertThatThrownBy(() -> new Validity(t2, t1)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Validity(null, t1)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void deployedFromIsTemporalAndIdentifiedByCommit() {
+        assertThat(RelationType.DEPLOYED_FROM.allows(DEPLOYMENT, REPOSITORY)).isTrue();
+        assertThat(RelationType.DEPLOYED_FROM.allows(REPOSITORY, DEPLOYMENT)).isFalse();
+        assertThat(RelationType.DEPLOYED_FROM.allows(SERVICE, REPOSITORY)).isFalse();
+        assertThat(RelationType.DEPLOYED_FROM.identityProperties()).containsExactly("commit");
+        for (var type : RelationType.values()) {
+            if (type != RelationType.DEPLOYED_FROM) {
+                assertThat(type.identityProperties()).as(type.name()).isEmpty();
+            }
+        }
     }
 }

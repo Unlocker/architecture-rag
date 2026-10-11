@@ -35,10 +35,15 @@ public final class Normalizer {
     mappers.forEach(m -> this.mappers.put(m.source(), m));
   }
 
-  /** Нормализатор со стандартными мапперами четырёх источников PoC. */
+  /** Нормализатор со стандартными мапперами четырёх источников PoC; без {@link DeploymentLookup}. */
   public static Normalizer standard(ReferenceResolver resolver) {
+    return standard(resolver, DeploymentLookup.NONE);
+  }
+
+  /** То же, но deploy map привязывает {@code Deployment} к репозиторию и сервису через {@code lookup}. */
+  public static Normalizer standard(ReferenceResolver resolver, DeploymentLookup lookup) {
     return new Normalizer(
-        List.of(new EamMapper(), new ScmMapper(), new CmdbMapper(), new DeployMapMapper()), resolver);
+        List.of(new EamMapper(), new ScmMapper(), new CmdbMapper(), new DeployMapMapper(lookup)), resolver);
   }
 
   /**
