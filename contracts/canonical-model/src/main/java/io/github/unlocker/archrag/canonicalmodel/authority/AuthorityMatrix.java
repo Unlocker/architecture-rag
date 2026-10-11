@@ -105,6 +105,7 @@ public final class AuthorityMatrix {
         relations.put(RelationType.HAS_DEPLOYMENT, Set.of(DEPLOYMAP));
         relations.put(RelationType.IN_ENVIRONMENT, Set.of(DEPLOYMAP));
         relations.put(RelationType.RUNS_ON, Set.of(DEPLOYMAP));
+        relations.put(RelationType.DEPLOYED_FROM, Set.of(DEPLOYMAP));
         relations.put(RelationType.PART_OF, Set.of(DEPLOYMAP));
         relations.put(RelationType.HOSTED_ON, Set.of(CMDB));
 

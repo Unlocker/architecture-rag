@@ -101,7 +101,7 @@ class FeatureExtractorTest {
   @Test
   void environmentAndDeploymentGiveNoFeatures() {
     var env = new Environment("prod", "Production", EnvironmentClass.PROD);
-    var deployment = new Deployment("svc@prod", "svc", "1.0", "RUNNING", T);
+    var deployment = new Deployment("svc@prod", "svc", "1.0", "RUNNING", null, null, null, T);
 
     assertThat(extract(KEY, List.of(node(KEY, env)), Map.of())).isEmpty();
     assertThat(extract(KEY, List.of(node(KEY, deployment)), Map.of())).isEmpty();

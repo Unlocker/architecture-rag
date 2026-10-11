@@ -92,7 +92,7 @@ class TraceDependenciesIT {
     var billingKey = fixtures.node(billing, "component", "billing", new Service("Billing", null, null, null), t1);
     var authKey = fixtures.node(auth, "component", "auth", new Service("Auth", null, null, null), t1);
     var teamKey = fixtures.node(team, "team", "team-1", new Team("Payments Team", null), t1);
-    var depKey = fixtures.node(dep, "deployment", "billing-prod", new Deployment("billing-prod", "billing-prod", null, null, null), t1);
+    var depKey = fixtures.node(dep, "deployment", "billing-prod", new Deployment("billing-prod", "billing-prod", null, null, null, null, null, null), t1);
     var vmKey = fixtures.node(vm, "host", "vm-prod-01", new ComputeInstance("vm-prod-01", ComputeKind.VIRTUAL_MACHINE, null, null, null, null, null), t1);
     var vmOldKey = fixtures.node(vmOld, "host", "vm-prod-old", new ComputeInstance("vm-prod-old", ComputeKind.UNSPECIFIED, null, null, null, null, null), t1);
 

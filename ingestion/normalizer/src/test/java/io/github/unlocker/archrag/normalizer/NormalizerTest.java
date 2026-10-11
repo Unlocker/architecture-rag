@@ -261,11 +261,14 @@ class NormalizerTest {
     known.add(key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", "vm-pay-01"));
     var n = stub(SourceSystem.DEPLOY_MAP, "urn:corp:deploymap", "DEPLOYMENT", "dep-payments-api-prod");
     assertThat(((UpsertNode) n.commands().get(0)).data())
-        .isEqualTo(new Deployment("dep-payments-api-prod", "payments-api", "1.4.2", null, T));
+        .isEqualTo(new Deployment("dep-payments-api-prod", "payments-api", "1.4.2", null,
+            "9fceb02d0ae598e95dc970b74767f19372d61af8", "https://git.example.org/pay/payments-api", 5101L, T));
     assertThat(of(n, UpsertRelation.class))
         .extracting(UpsertRelation::type)
         .containsExactlyInAnyOrder(
             RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT, RelationType.RUNS_ON);
+    // Репозиторий неизвестен (DeploymentLookup.NONE): DEPLOYED_FROM откладывается на alias по URL.
+    assertThat(n.unresolved()).extracting(UnresolvedReference::relationType).containsExactly(RelationType.DEPLOYED_FROM);
     assertThat(of(n, UpsertRelation.class))
         .filteredOn(r -> r.type() == RelationType.RUNS_ON)
         .singleElement()
@@ -413,6 +416,8 @@ class NormalizerTest {
         .extracting(UnresolvedReference::field, UnresolvedReference::relationType,
             UnresolvedReference::from, UnresolvedReference::target)
         .containsExactlyInAnyOrder(
+            org.assertj.core.api.Assertions.tuple("git-repo-url", RelationType.DEPLOYED_FROM, dep,
+                key(SourceSystemCode.SCM, "REPOSITORY_URL", "https://git.example.org/pay/payments-api")),
             org.assertj.core.api.Assertions.tuple("service", RelationType.HAS_DEPLOYMENT, dep,
                 key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api")),
             org.assertj.core.api.Assertions.tuple("environment", RelationType.IN_ENVIRONMENT, dep,
