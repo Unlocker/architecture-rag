@@ -92,4 +92,14 @@ class AuthorityMatrixTest {
         assertThat(matrix.isAuthoritative(NodeLabel.SOURCE_RECORD, EAM)).isFalse();
         assertThat(matrix.isAuthoritative(RelationType.ASSERTS, EAM)).isFalse();
     }
+
+    @Test
+    void solutionPlatformAndTheirRelationsAreMasteredByEam() {
+        assertThat(matrix.nodeAuthorities(NodeLabel.SOLUTION)).containsExactly(EAM);
+        assertThat(matrix.nodeAuthorities(NodeLabel.PLATFORM)).containsExactly(EAM);
+        assertThat(matrix.relationAuthorities(RelationType.USES_SOLUTION)).containsExactly(EAM);
+        assertThat(matrix.relationAuthorities(RelationType.USES_PLATFORM)).containsExactly(EAM);
+        assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", SCM)).isFalse();
+        assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", EAM)).isTrue();
+    }
 }

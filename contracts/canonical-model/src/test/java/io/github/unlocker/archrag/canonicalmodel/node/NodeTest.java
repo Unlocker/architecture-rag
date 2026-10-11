@@ -100,4 +100,23 @@ class NodeTest {
         assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, null, -5L, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void solutionAndPlatformRequireNameAndHaveLabels() {
+        assertThatThrownBy(() -> new Solution(null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Solution("", null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Platform(null, null, null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Platform("p", "", null, null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(new Solution("s", null, null).label()).isEqualTo(NodeLabel.SOLUTION);
+        assertThat(new Platform("p", null, null, null, null).label()).isEqualTo(NodeLabel.PLATFORM);
+        assertThat(NodeLabel.canonical()).contains(NodeLabel.SOLUTION, NodeLabel.PLATFORM);
+    }
+
+    @Test
+    void itSystemEamCodeAndRawCriticalityAreOptionalButNotBlank() {
+        assertThatThrownBy(() -> new ITSystem("n", null, null, null, "", null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ITSystem("n", null, null, null, null, " ")).isInstanceOf(IllegalArgumentException.class);
+        assertThat(new ITSystem("n", null, null, null).eamCode()).isNull();
+        assertThat(new ITSystem("n", null, null, null, "EAM-1042", "WEIRD").eamCode()).isEqualTo("EAM-1042");
+    }
 }

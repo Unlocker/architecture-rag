@@ -7,7 +7,7 @@ package io.github.unlocker.archrag.canonicalmodel.node;
  * fields may be {@code null} but not blank.
  */
 public sealed interface NodeData
-        permits ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance,
+        permits ITSystem, Solution, Platform, Service, Repository, Team, Environment, Deployment, ComputeInstance,
         Namespace, KubernetesCluster {
 
     /** The Neo4j label of this node. */

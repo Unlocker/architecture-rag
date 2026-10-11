@@ -10,6 +10,8 @@ import java.util.Set;
  * Label checks honour label supertypes ({@code RUNS_ON -> VirtualMachine} is allowed via {@code ComputeInstance}).
  */
 public enum RelationType {
+    USES_SOLUTION(Set.of(IT_SYSTEM), Set.of(SOLUTION), true),
+    USES_PLATFORM(Set.of(SOLUTION), Set.of(PLATFORM), true),
     DECOMPOSED_INTO(Set.of(IT_SYSTEM), Set.of(SERVICE), true),
     IMPLEMENTED_IN(Set.of(SERVICE), Set.of(REPOSITORY), true),
     HAS_DEPLOYMENT(Set.of(SERVICE), Set.of(DEPLOYMENT), true),

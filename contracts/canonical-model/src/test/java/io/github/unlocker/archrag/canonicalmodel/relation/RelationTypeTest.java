@@ -43,7 +43,7 @@ class RelationTypeTest {
                     RelationType.RUNS_ON, RelationType.DEPENDS_ON, RelationType.OWNED_BY,
                     RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT,
                     RelationType.DECOMPOSED_INTO, RelationType.IMPLEMENTED_IN,
-                    RelationType.DEPLOYED_FROM).contains(type);
+                    RelationType.DEPLOYED_FROM, RelationType.USES_SOLUTION, RelationType.USES_PLATFORM).contains(type);
             assertThat(type.temporal()).as(type.name()).isEqualTo(expected);
         }
     }
@@ -69,5 +69,16 @@ class RelationTypeTest {
                 assertThat(type.identityProperties()).as(type.name()).isEmpty();
             }
         }
+    }
+
+    @Test
+    void usesSolutionAndUsesPlatformChainItSystemToPlatform() {
+        assertThat(RelationType.USES_SOLUTION.allows(IT_SYSTEM, SOLUTION)).isTrue();
+        assertThat(RelationType.USES_SOLUTION.allows(SOLUTION, IT_SYSTEM)).isFalse();
+        assertThat(RelationType.USES_SOLUTION.allows(IT_SYSTEM, PLATFORM)).isFalse();
+        assertThat(RelationType.USES_PLATFORM.allows(SOLUTION, PLATFORM)).isTrue();
+        assertThat(RelationType.USES_PLATFORM.allows(IT_SYSTEM, PLATFORM)).isFalse();
+        assertThat(RelationType.USES_SOLUTION.temporal()).isTrue();
+        assertThat(RelationType.USES_PLATFORM.temporal()).isTrue();
     }
 }
