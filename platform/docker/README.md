@@ -68,7 +68,7 @@ EAM). `IT_SYSTEM` старой заглушки отбрасывается. `ARC
 **Переход живого стенда** (`ITSystem` меняет ключ `EAM-1042` → `5101`): `docker compose up -d --build adapter-eam`, дождаться первого
 полного snapshot (reconcile переведёт старые `IT_SYSTEM EAM-…` в tombstone: их нет в прогоне), затем `POST /admin/rebuild`
 ingestion-сервиса. Rebuild переигрывает журнал, в том числе tombstone старых ключей, и SCM-записи получают связь на `ITSystem 5101`
-через `eamCode`. Без rebuild связи SCM на старые узлы живут до новой версии записи SCM. Crosswalk `EAM-1042 ↔ 5101` не создаётся:
+через `eamCode`. Reconcile запускается `POST /admin/reconcile/eam` (иначе ждать интервала reconcile). Пара кандидатов «старый ключ — преемник» в `identity_candidate` ожидаема (одинаковое имя), её отклоняют. Без rebuild связи SCM на старые узлы живут до новой версии записи SCM. Crosswalk `EAM-1042 ↔ 5101` не создаётся:
 со старым узлом он слил бы gid с архивируемым.
 
 ## Токен и проверка
