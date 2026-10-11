@@ -95,7 +95,7 @@ public final class AssetTemplates {
    * {@code OWNS_RECORD}, {@code PROCESSED}, {@code PART_OF}, {@code HOSTED_ON}) не входят.
    */
   public static final List<String> RELATION_TYPES =
-      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY");
+      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY", "DEPLOYED_FROM");
 
   /**
    * Карточка актива по {@code gid}. Метки только из {@link #SEARCHABLE_TYPES}: служебные узлы не читаются.

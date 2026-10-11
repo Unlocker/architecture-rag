@@ -240,7 +240,7 @@ class F3AcceptanceIT {
   // ---- сценарии ----------------------------------------------------------------------------
 
   private static final Set<String> TRACE_TYPES =
-      Set.of("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY");
+      Set.of("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY", "DEPLOYED_FROM");
   private static final Duration BUDGET_P95 = Duration.ofSeconds(5);
   private static final Duration BUDGET_COLD = Duration.ofSeconds(15);
   private static final int WARM_CALLS = 10;

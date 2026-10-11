@@ -21,6 +21,7 @@ export const RELATION_TYPES = [
   'DEPENDS_ON',
   'OWNED_BY',
   'HOSTED_ON',
+  'DEPLOYED_FROM',
 ] as const;
 
 export const SOURCES = ['eam', 'scm', 'cmdb', 'deploymap'] as const;

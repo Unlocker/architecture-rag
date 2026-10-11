@@ -351,6 +351,45 @@ class F2AcceptanceIT {
     assertThat(result.systemGid()).isEqualTo(systemGid);
   }
 
+  /** H.3: commit и репозиторий развёртывания приходят через MCP-клиент; закрытая DEPLOYED_FROM не отдаётся. */
+  @Test
+  @Order(2)
+  void s2b_footprintReturnsDeploymentSourceCode() {
+    String commit = "9fceb02d0ae598e95dc970b74767f19372d61af8";
+    String oldCommit = "0123456789abcdef0123456789abcdef01234567";
+    var repo = driver.executableQuery("MATCH (r:Repository) RETURN r.gid AS gid, r.url AS url LIMIT 1")
+        .execute().records().getFirst();
+    String deploymentGid = onlyDeployment(service(footprint(systemGid, PROD), "payments-api")).gid();
+    try {
+      driver.executableQuery("""
+          MATCH (d:Deployment {gid: $d}), (r:Repository {gid: $r})
+          SET d.sourceCommit = $c, d.repositoryUrl = $url
+          CREATE (d)-[:DEPLOYED_FROM {commit: $old, validFrom: datetime('2026-01-01T00:00:00Z'),
+                                      validTo: datetime('2026-02-01T00:00:00Z')}]->(r)
+          CREATE (d)-[:DEPLOYED_FROM {commit: $c, validFrom: datetime('2026-02-01T00:00:00Z'),
+                                      assertedBySource: 'deploymap', assertedByType: 'DEPLOYMENT',
+                                      assertedById: 'it'}]->(r)
+          """)
+          .withParameters(Map.of("d", deploymentGid, "r", repo.get("gid").asString(), "c", commit,
+              "old", oldCommit, "url", repo.get("url").asString()))
+          .execute();
+
+      DeploymentFootprint deployment = onlyDeployment(service(footprint(systemGid, PROD), "payments-api"));
+
+      assertThat(deployment.sourceCommit()).isEqualTo(commit);
+      assertThat(deployment.repositoryUrl()).isEqualTo(repo.get("url").asString());
+      assertThat(deployment.repository().gid()).isEqualTo(repo.get("gid").asString());
+      assertThat(deployment.deployedFrom().commit()).isEqualTo(commit);
+    } finally {
+      driver.executableQuery("""
+          MATCH (d:Deployment {gid: $d})
+          OPTIONAL MATCH (d)-[df:DEPLOYED_FROM]->()
+          DELETE df
+          REMOVE d.sourceCommit, d.repositoryUrl
+          """).withParameters(Map.of("d", deploymentGid)).execute();
+    }
+  }
+
   @Test
   @Order(7)
   void s6_invalidAndUnknownGidAreToolErrorsWithoutEchoOrStacktrace() {

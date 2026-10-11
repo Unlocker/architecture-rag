@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -58,6 +59,7 @@ class AdminConsoleIT {
   static final String GID_BILLING = "22222222-2222-2222-2222-222222222222";
   static final String GID_DEP = "33333333-3333-3333-3333-333333333333";
   static final String GID_PROD = "44444444-4444-4444-4444-444444444444";
+  static final String GID_REPO = "55555555-5555-5555-5555-555555555555";
 
   @Container static final Neo4jContainer NEO4J = new Neo4jContainer(TestImages.NEO4J);
 
@@ -238,6 +240,25 @@ class AdminConsoleIT {
         body(get(console, "/api/graph/nodes/" + GID_BILLING + "/neighborhood?depth=2&relTypes=HAS_DEPLOYMENT"));
     assertThat(gids(filtered.get("nodes"))).containsExactlyInAnyOrder(GID_BILLING, GID_DEP);
     assertThat(filtered.get("edges").get(0).get("type").asString()).isEqualTo("HAS_DEPLOYMENT");
+  }
+
+  @Test
+  void neighborhoodAcceptsDeployedFromRelType() {
+    admin.executableQuery("""
+        MATCH (d:Deployment {gid: $d})
+        CREATE (d)-[:DEPLOYED_FROM {commit: $c, validFrom: datetime('2026-01-01T00:00:00Z')}]->
+               (:Repository {gid: $r, url: 'https://git.example.org/pay/billing', isCurrent: true})
+        """).withParameters(Map.of("d", GID_DEP, "c", "9fceb02d0ae598e95dc970b74767f19372d61af8", "r", GID_REPO)).execute();
+    try {
+      JsonNode graph =
+          body(get(console, "/api/graph/nodes/" + GID_DEP + "/neighborhood?depth=1&relTypes=DEPLOYED_FROM"));
+
+      assertThat(gids(graph.get("nodes"))).containsExactlyInAnyOrder(GID_DEP, GID_REPO);
+      assertThat(graph.get("edges")).singleElement()
+          .satisfies(e -> assertThat(e.get("type").asString()).isEqualTo("DEPLOYED_FROM"));
+    } finally {
+      admin.executableQuery("MATCH (r:Repository {gid: $r}) DETACH DELETE r").withParameters(Map.of("r", GID_REPO)).execute();
+    }
   }
 
   @Test
