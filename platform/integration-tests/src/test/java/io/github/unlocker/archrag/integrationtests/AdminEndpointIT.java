@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalKey;
@@ -124,7 +123,13 @@ class AdminEndpointIT {
   @AfterAll
   static void stopJwks() {
     JWT.close();
+    if (eamApi != null) {
+      eamApi.close();
+    }
   }
+
+  /** Заглушка eam-api живёт до конца класса: snapshot адаптера EAM обязан видеть её объекты, иначе reconcile их снесёт. */
+  private static EamApiSupport eamApi;
 
   private synchronized void seed() throws Exception {
     if (seeded) {
@@ -137,7 +142,7 @@ class AdminEndpointIT {
     var dm = StubSources.deployMap(clock);
     var servers = new ArrayList<StubSourceServer>();
     var adapters = new ArrayList<SourceAdapter>();
-    var eamApi = new EamApiSupport(clock);
+    eamApi = new EamApiSupport(clock);
     try {
       for (var pair : List.<Object[]>of(
           new Object[] {eam, "eam"}, new Object[] {scm, "scm"}, new Object[] {cmdb, "cmdb"}, new Object[] {dm, "dm"})) {
@@ -158,7 +163,6 @@ class AdminEndpointIT {
           "status", "ACTIVE", "criticality", "HIGH", "solution", List.of(7201L), "ownerTeam", "TEAM-PAY"));
       adapters.get(0).poller().pollOnce();
     } finally {
-      eamApi.close();
       adapters.forEach(SourceAdapter::close);
       servers.forEach(StubSourceServer::close);
     }
@@ -432,7 +436,7 @@ class AdminEndpointIT {
     seed();
     var eam = StubSources.eam(Clock.systemUTC());
     try (var server = new StubSourceServer(eam);
-        var adapter = EamAdapter.create(EamAdapter.config(server.baseUri(), "s"), journal, rawStore)) {
+        var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
       adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), EAM_CONTROL_PORT));
       long markers = scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'");
 
@@ -459,7 +463,7 @@ class AdminEndpointIT {
   /** Полный snapshot заглушки адаптером eam и обработка записанного, включая маркер. */
   private void runSnapshot(StubSource eam) throws Exception {
     try (var server = new StubSourceServer(eam);
-        var adapter = EamAdapter.create(EamAdapter.config(server.baseUri(), "s"), journal, rawStore)) {
+        var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
       adapter.poller().snapshotOnce();
     }
     processAllReceived();
