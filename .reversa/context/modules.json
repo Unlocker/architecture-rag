@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T18:07:10Z",
+  "generated_at": "2026-10-12T19:07:43Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -1029,6 +1029,567 @@
           "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:58-86"
         }
       ],
+      "complexity": "low"
+    },
+    {
+      "name": "adapters/adapter-core",
+      "path": "adapters/adapter-core",
+      "purpose": "Общий код адаптеров: REST-коннектор, приём подписанного webhook, polling с backoff, полный snapshot с маркером, запись в inbox",
+      "primary_files": [
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/SourceAdapter.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/InboxWriter.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookHandler.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/HttpSourceConnector.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/RetryPolicy.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/AdapterConfig.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/PollResult.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Json.java",
+        "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Sleeper.java"
+      ],
+      "functions": [
+        {
+          "name": "Poller.pollOnce",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java",
+          "params": [],
+          "returns": "PollResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Poller.snapshotOnce",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java",
+          "params": [],
+          "returns": "PollResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "InboxWriter.record",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/InboxWriter.java",
+          "params": [
+            "String eventId",
+            "SourceChange change",
+            "String correlationId",
+            "String syncRunId"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventMapper.toEvent",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java",
+          "params": [
+            "SourceSystem system",
+            "String eventId",
+            "SourceChange change",
+            "String correlationId"
+          ],
+          "returns": "CanonicalEvent",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventMapper.snapshotComplete",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java",
+          "params": [
+            "SourceSystem system",
+            "String syncRunId",
+            "Instant time",
+            "long objectCount"
+          ],
+          "returns": "CanonicalEvent",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "WebhookHandler.handle",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookHandler.java",
+          "params": [
+            "Function<String,String> header",
+            "String body"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "RetryPolicy.delay",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/RetryPolicy.java",
+          "params": [
+            "int attempt",
+            "SourceUnavailableException failure",
+            "Random random"
+          ],
+          "returns": "Duration",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "HttpSourceConnector.fetchChanges",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/HttpSourceConnector.java",
+          "params": [
+            "String cursor",
+            "int limit"
+          ],
+          "returns": "ChangePage",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "HttpSourceConnector.fetchById",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/HttpSourceConnector.java",
+          "params": [
+            "String sourceType",
+            "String sourceId"
+          ],
+          "returns": "Optional<SourceChange>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceAdapter.startPolling",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/SourceAdapter.java",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceAdapter.startReconciliation",
+          "file": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/SourceAdapter.java",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "AdapterConfig",
+          "fields": [
+            {
+              "name": "system",
+              "type": "SourceSystem",
+              "required": true
+            },
+            {
+              "name": "sourceBaseUri",
+              "type": "URI",
+              "required": true
+            },
+            {
+              "name": "webhookSecret",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "replayWindow",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "pageSize",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "pollInterval",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "reconcileInterval",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "retry",
+              "type": "RetryPolicy",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "RetryPolicy",
+          "fields": [
+            {
+              "name": "maxAttempts",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "baseDelay",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "maxDelay",
+              "type": "Duration",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PollResult",
+          "fields": [
+            {
+              "name": "outcome",
+              "type": "Outcome",
+              "required": true
+            },
+            {
+              "name": "appended",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "syncRunId",
+              "type": "String",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Курсор polling сдвигается только после append всей страницы",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:134-139",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Маркер snapshot-complete пишется только после последней страницы с snapshotComplete; порядок: маркер, done:<runId>, курсор",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:164-172",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "hasMore без нового курсора прерывает чтение (защита от недоверенного источника)",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:130-133, 157-160",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "null-значения верхнего уровня payload отбрасываются; DELETE даёт пустой payload",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java:55-63",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Webhook: 202 только после записи в inbox; DELETE без объекта в источнике фиксируется по подписанному телу",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookHandler.java:84-106",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Цикл одного источника под ReentrantLock; второй получает ALREADY_RUNNING",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:107-118",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "POST /control/snapshot не аутентифицирован; граница — сеть compose",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:18-22",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "contracts/source-spi",
+        "contracts/event-schemas"
+      ],
+      "algorithms": [
+        {
+          "name": "Poller.snapshot",
+          "description": "Полный snapshot под syncRunId из checkpoint, маркер после последней страницы",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:147-188"
+        },
+        {
+          "name": "RetryPolicy.delay",
+          "description": "Exponential backoff с equal jitter и Retry-After, сдвиг ≤ 30",
+          "location": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/RetryPolicy.java:40-50"
+        }
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "adapters/eam-adapter",
+      "path": "adapters/eam-adapter",
+      "purpose": "Адаптер EAM: коннектор формата EAM Tool API (platforms/itproducts/itsystems) и составной коннектор с legacy-заглушкой (TEAM, SERVICE_DEPENDENCY)",
+      "primary_files": [
+        "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamAdapter.java",
+        "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java",
+        "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiCursor.java",
+        "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/CompositeEamConnector.java"
+      ],
+      "functions": [
+        {
+          "name": "EamAdapter.create",
+          "file": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamAdapter.java",
+          "params": [
+            "AdapterConfig config",
+            "EamApi api",
+            "EventJournal journal",
+            "RawPayloadStore rawStore"
+          ],
+          "returns": "SourceAdapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiConnector.fetchChanges",
+          "file": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java",
+          "params": [
+            "String cursor",
+            "int limit"
+          ],
+          "returns": "ChangePage",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiConnector.fetchById",
+          "file": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java",
+          "params": [
+            "String sourceType",
+            "String sourceId"
+          ],
+          "returns": "Optional<SourceChange>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CompositeEamConnector.fetchChanges",
+          "file": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/CompositeEamConnector.java",
+          "params": [
+            "String cursor",
+            "int limit"
+          ],
+          "returns": "ChangePage",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiCursor.parse",
+          "file": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiCursor.java",
+          "params": [
+            "String text"
+          ],
+          "returns": "EamApiCursor",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "EamApiCursor",
+          "fields": [
+            {
+              "name": "mode",
+              "type": "Mode",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "page",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "size",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "from",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "watermark",
+              "type": "Instant",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamAdapter.EamApi",
+          "fields": [
+            {
+              "name": "baseUri",
+              "type": "URI",
+              "required": true
+            },
+            {
+              "name": "token",
+              "type": "String",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "page_size ≤ 500, не более 10 запросов/с, 429 с Retry-After — одно ожидание и повтор",
+          "location": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java:45-56, 207-217, 249-260",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "snapshotComplete только на последней странице legacy-половины составного коннектора",
+          "location": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/CompositeEamConnector.java:65-69",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Чужой курсор не падает навсегда: инкрементальное чтение с начала без маркера и удалений",
+          "location": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/CompositeEamConnector.java:78-85",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "EAM-коннектор никогда не порождает DELETE: удаление обнаруживается только snapshot'ом",
+          "location": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java:182-183",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "adapters/adapter-core",
+        "contracts/source-spi",
+        "contracts/event-schemas"
+      ],
+      "algorithms": [
+        {
+          "name": "EamApiConnector.fetchChanges",
+          "description": "Обход типов; snapshot sort=id, инкремент sort=-mtime до водяного знака",
+          "location": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java:93-132"
+        }
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "adapters/scm-adapter",
+      "path": "adapters/scm-adapter",
+      "purpose": "Тонкая привязка адаптера к источнику SourceSystem.SCM; логика в adapter-core",
+      "primary_files": [
+        "adapters/scm-adapter/src/main/java/io/github/unlocker/archrag/scmadapter/ScmAdapter.java"
+      ],
+      "functions": [
+        {
+          "name": "ScmAdapter.create",
+          "file": "adapters/scm-adapter/src/main/java/io/github/unlocker/archrag/scmadapter/ScmAdapter.java",
+          "params": [
+            "AdapterConfig config",
+            "EventJournal journal",
+            "RawPayloadStore rawStore"
+          ],
+          "returns": "SourceAdapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ScmAdapter.config",
+          "file": "adapters/scm-adapter/src/main/java/io/github/unlocker/archrag/scmadapter/ScmAdapter.java",
+          "params": [
+            "URI sourceBaseUri",
+            "String webhookSecret"
+          ],
+          "returns": "AdapterConfig",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [],
+      "business_rules": [
+        {
+          "description": "create отвергает конфигурацию другого источника (ожидается SCM)",
+          "location": "adapters/scm-adapter/src/main/java/io/github/unlocker/archrag/scmadapter/ScmAdapter.java:34-36",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "adapters/adapter-core",
+        "contracts/source-spi",
+        "contracts/event-schemas"
+      ],
+      "algorithms": [],
+      "complexity": "low"
+    },
+    {
+      "name": "adapters/asset-adapter",
+      "path": "adapters/asset-adapter",
+      "purpose": "Тонкая привязка адаптера к источнику SourceSystem.CMDB; логика в adapter-core",
+      "primary_files": [
+        "adapters/asset-adapter/src/main/java/io/github/unlocker/archrag/assetadapter/AssetAdapter.java"
+      ],
+      "functions": [
+        {
+          "name": "AssetAdapter.create",
+          "file": "adapters/asset-adapter/src/main/java/io/github/unlocker/archrag/assetadapter/AssetAdapter.java",
+          "params": [
+            "AdapterConfig config",
+            "EventJournal journal",
+            "RawPayloadStore rawStore"
+          ],
+          "returns": "SourceAdapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetAdapter.config",
+          "file": "adapters/asset-adapter/src/main/java/io/github/unlocker/archrag/assetadapter/AssetAdapter.java",
+          "params": [
+            "URI sourceBaseUri",
+            "String webhookSecret"
+          ],
+          "returns": "AdapterConfig",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [],
+      "business_rules": [
+        {
+          "description": "create отвергает конфигурацию другого источника (ожидается CMDB)",
+          "location": "adapters/asset-adapter/src/main/java/io/github/unlocker/archrag/assetadapter/AssetAdapter.java:34-36",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "adapters/adapter-core",
+        "contracts/source-spi",
+        "contracts/event-schemas"
+      ],
+      "algorithms": [],
+      "complexity": "low"
+    },
+    {
+      "name": "adapters/deploymap-adapter",
+      "path": "adapters/deploymap-adapter",
+      "purpose": "Тонкая привязка адаптера к источнику SourceSystem.DEPLOY_MAP; логика в adapter-core; формат deploy map лежит вне модуля (platform/source-stubs, normalizer)",
+      "primary_files": [
+        "adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter/DeploymapAdapter.java"
+      ],
+      "functions": [
+        {
+          "name": "DeploymapAdapter.create",
+          "file": "adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter/DeploymapAdapter.java",
+          "params": [
+            "AdapterConfig config",
+            "EventJournal journal",
+            "RawPayloadStore rawStore"
+          ],
+          "returns": "SourceAdapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DeploymapAdapter.config",
+          "file": "adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter/DeploymapAdapter.java",
+          "params": [
+            "URI sourceBaseUri",
+            "String webhookSecret"
+          ],
+          "returns": "AdapterConfig",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [],
+      "business_rules": [
+        {
+          "description": "create отвергает конфигурацию другого источника (ожидается DEPLOY_MAP)",
+          "location": "adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter/DeploymapAdapter.java:34-36",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "adapters/adapter-core",
+        "contracts/source-spi",
+        "contracts/event-schemas"
+      ],
+      "algorithms": [],
       "complexity": "low"
     }
   ]

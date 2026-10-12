@@ -1,7 +1,7 @@
 # Code Analysis → Технический анализ кода
 
-> Archaeologist, этап R.2a (UNLOCKER-263). Охвачены модули `contracts/canonical-model`, `contracts/event-schemas`, `contracts/source-spi`.
-> Остальные модули (R.2b–R.2e) добавят свои разделы позже.
+> Archaeologist, этапы R.2a (UNLOCKER-263: `contracts/*`, разделы A, E, S) и R.2b (UNLOCKER-264: `adapters/*`, раздел R.2b / P в конце файла).
+> Остальные модули (R.2c–R.2e) добавят свои разделы позже.
 > Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` даны относительно корня репозитория.
 > Описания источников не дублируются: модель — `docs/02-data-model.md`, интерфейсы — `docs/03-interfaces.md`, решения — `docs/adr/`.
 
@@ -188,3 +188,205 @@ Feature flags и параметры окружения в модуле отсу�
 | `canonical-model` | 38 | 36 | 11 `NodeData`, 5 `GraphCommand`, 15 `RelationType` | A5: `SourceSystem` ×3, `platformId` в `docs/02`, `CloseAssertion` |
 | `event-schemas` | 18 | 16 | 4 порта, 10 статусов | E5: типы событий вне контракта, нет валидации `JournalEntry`, разнобой NPE/IAE |
 | `source-spi` | 10 | 10 | 1 порт, 1 утилита подписи | S5: инварианты `SourceChange` только в Javadoc, `long` vs `SourceVersion` |
+
+---
+
+# R.2b. `adapters/*` (UNLOCKER-264)
+
+> Archaeologist, этап R.2b. Охвачены `adapters/adapter-core`, `eam-adapter`, `scm-adapter`, `asset-adapter`, `deploymap-adapter`. Разделы contracts (A, E, S) выше не менялись.
+> Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` — от корня репозитория.
+> Сокращения: `AC` = `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore`, `EA` = `adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter`, `SC` = `adapters/scm-adapter/src/main/java/io/github/unlocker/archrag/scmadapter`, `AS` = `adapters/asset-adapter/src/main/java/io/github/unlocker/archrag/assetadapter`, `DM` = `adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter`.
+> Контракты событий и интерфейсы не дублируются: `docs/03-interfaces.md` §3 (webhook), §5.4 (CloudEvent), `docs/06-eam-integration.md` (EAM), ADR 0009/0010.
+
+## Общие свойства группы
+
+- Группа делится на **ядро** (`adapter-core`: 13 файлов main, 50 тестов) и **четыре тонких привязки**. Привязки `scm`, `asset`, `deploymap` — копии одного шаблона по 39 строк, отличаются только константой `SYSTEM` (`SC/ScmAdapter.java:18`, `AS/AssetAdapter.java:18`, `DM/DeploymapAdapter.java:18`) 🟢. `eam` содержит собственный код: два коннектора и курсор (~590 строк, 48 тестов) 🟢.
+- Зависимости: `adapter-core` → `source-spi`, `event-schemas`; `source-stubs` только в `test` (`adapters/adapter-core/pom.xml`). Neo4j-доступа и импорта `canonical-model`/`ingestion/*` в main нет 🟢 (`AC/package-info.java:3-5`, `AC/SourceAdapter.java:12-15`). `deploymap-adapter` тянет `canonical-model` и `source-stubs` только в `test` (`adapters/deploymap-adapter/pom.xml:33-40`) 🟢.
+- Границы по `CLAUDE.md`: source DTO (`SourceChange`) не выходят из адаптера — наружу идёт только `CanonicalEvent` (`AC/EventMapper.java:14-16`); адаптер ничего не пишет в источник (только `GET`) 🟢.
+- Единственная точка записи — `EventJournal.append` через `InboxWriter` (`AC/InboxWriter.java:34-48`); checkpoint-ы пишутся тем же `EventJournal` (`AC/Poller.java:136, 170-171`) 🟢.
+- Время везде `Instant`/`Clock` (`Poller`, `WebhookHandler`) 🟢; секреты не попадают в `toString` (`AC/AdapterConfig.java:71-74`, `EA/EamAdapter.java:49-52`) и сообщения исключений (`EA/EamApiConnector.java:243-245`) 🟢.
+
+---
+
+## P1. `adapters/adapter-core`
+
+**Назначение.** Общий код всех адаптеров: REST-коннектор по умолчанию, приём подписанного webhook, polling, полный snapshot с маркером, backoff, запись в inbox 🟢 (`AC/package-info.java:2-5`).
+
+### P1.1 Поток управления
+
+| Компонент | Что делает | Где |
+|---|---|---|
+| `SourceAdapter` | сборка коннектор + `WebhookHandler` + `Poller`; `startWebhook`, `startPolling`, `startReconciliation`, `close` | `AC/SourceAdapter.java:29-136` 🟢 |
+| `Poller.pollOnce` | нет checkpoint → `snapshot`, иначе `incremental(cursor)` | `AC/Poller.java:89-96` 🟢 |
+| `Poller.snapshotOnce` | полный snapshot при существующем курсоре (reconciliation) | `AC/Poller.java:103-105` 🟢 |
+| `Poller.exclusive` | `ReentrantLock.tryLock`; занят → `ALREADY_RUNNING`; `GaveUp` → `GAVE_UP` | `AC/Poller.java:107-118` 🟢 |
+| `Poller.fetch` | цикл повторов по `RetryPolicy` при `SourceUnavailableException` | `AC/Poller.java:191-204` 🟢 |
+| `InboxWriter.record` | `rawStore.put` → `journal.append` | `AC/InboxWriter.java:34-48` 🟢 |
+| `EventMapper.toEvent` / `snapshotComplete` | `SourceChange` → `CanonicalEvent`; маркер полного snapshot | `AC/EventMapper.java:52-95` 🟢 |
+| `WebhookHandler.handle` | подпись → JSON → поля → `fetchById` → `record` → HTTP-статус | `AC/WebhookHandler.java:56-107` 🟢 |
+| `WebhookServer` | JDK `HttpServer`: `POST /webhook`, `POST /control/snapshot`, лимит тела | `AC/WebhookServer.java:45-123` 🟢 |
+| `HttpSourceConnector` | `GET /changes?limit&cursor`, `GET /objects/{type}/{id}` | `AC/HttpSourceConnector.java:51-78` 🟢 |
+| `Json` | собственный парсер/писатель JSON (глубина ≤ 64) | `AC/Json.java:16-18, 27-40, 215` 🟢 |
+
+Обработка ошибок (ловушка 14): ошибки источника → повтор/`GAVE_UP`; ошибки журнала и S3 **пробрасываются** (`AC/InboxWriter.java:19`, `AC/Poller.java:29`); в `SourceAdapter` и `WebhookServer` исключение логируется **только типом класса** и расписание продолжается (`AC/SourceAdapter.java:82-85, 107-110`, `AC/WebhookServer.java:119-122`) 🟢. Ни одного `catch (Exception) {}` без реакции: пустых обработчиков нет, `InterruptedException` восстанавливает флаг (`AC/Poller.java:209-211`, `AC/HttpSourceConnector.java:93-95`) 🟢. Исключение с проглатыванием «по умолчанию» — формат Retry-After не число → `null` (`AC/HttpSourceConnector.java:114-117`) 🟢 осознанно, комментарий в коде.
+
+### P1.2 Алгоритмы и встроенные правила
+
+1. **Инкрементальный polling** (`Poller.incremental`, `Poller.java:120-145`): читает страницы подряд; события страницы пишутся в inbox (`:126-129`), и только затем `saveCheckpoint(nextCursor)` (`:134-139`) — ловушка 6 в части «курсор после записи» 🟢. Страница с `hasMore` без нового курсора → `IllegalStateException` (защита от зацикливания недоверенным источником, `:130-133`) 🟢.
+2. **Полный snapshot** (`Poller.snapshot`, `:147-174`): `syncRunId` берётся из checkpoint `<code>-snapshot` (`run:<id>`) или создаётся и сразу сохраняется (`:180-188`) — прерванный snapshot продолжается под тем же `syncRunId` 🟢. Все события snapshot пишутся с `correlationId = syncRunId` и `sync_run_id = syncRunId` (`:154`). Порядок завершения: **маркер → `done:<runId>` → переход на инкрементальный курсор** (`:168-172`) 🟢. Страница без `snapshotComplete` или без `nextCursor` на последней странице → `IllegalStateException`, маркер не пишется (`:164-167`) — ловушка 9 🟢.
+3. **Идентификаторы событий** детерминированы: `poll:<type>/<id>/v<ver>`, `snap:<runId>:<type>/<id>/v<ver>`, `snapshot-complete:<runId>` (`EventMapper.java:98-105, 83`) 🟢. Перечитывание после сбоя даёт `DUPLICATE` (дедупликация `source + eventId` — на стороне журнала, R.2c) 🟡.
+4. **`RetryPolicy.delay`** (`RetryPolicy.java:40-50`): `ceiling = min(maxDelay, base << min(attempt-1, 30))`, «equal jitter» `half + rnd[0..ceiling-half]`; `Retry-After` источника обрезается до `maxDelay` (`:46-48`) и используется, если больше backoff (`:49`). По умолчанию 5 попыток, 500 мс…30 с (`:31-33`) 🟢. Сдвиг ограничен 30, чтобы `long` не переполнился 🟢.
+5. **Null-политика** (ловушка 5): `EventMapper.toEvent` отбрасывает `null`-значения **верхнего уровня** payload (`:57-61`); `DELETE` даёт пустой payload (`:56`); полнота — ключ `_completeness` (`:62`, константа `:35`) 🟢. Вложенные `null` (например внутри `attrs` EAM) **не** отбрасываются 🟡 (§P2.5).
+6. **Webhook** (`WebhookHandler.handle`): порядок и коды ответов — `401` подпись (`:65-67`), `400` не JSON / нет полей / `source` ≠ код адаптера / `eventId` ≠ заголовку `X-Archrag-Event-Id` (`:68-83`), `503` источник недоступен (`:87-89`), `404` источник не знает объект (`:102`), `202` после записи (`:105-106`) 🟢. Для `DELETE`, когда источник объект забыл, tombstone строится по подписанному телу; `sourceVersion` из уведомления обязана быть числом ≥ 0, иначе `400` (`:93-100`) 🟢. Дедупликация идёт по `eventId` **из подписанного тела**, заголовок только сверяется (Javadoc `:27-28`) 🟢. Повторов `RetryPolicy` в webhook-пути нет (`docs/03-interfaces.md:351`) 🟢.
+7. **`WebhookServer`**: тело ≤ `MAX_BODY_BYTES = 64 КБ`, чтение `readNBytes(MAX+1)` и `413` (`:30, 111-115`); не-POST → `405` (`:99-100`); необработанное исключение → `500` без деталей (`:119-122`); ответы без тела (`:104`); обработчики — виртуальные потоки (`:53`) 🟢. `POST /control/snapshot` синхронный, коды `202/409/503/500` (`:73-88`) и **без аутентификации** (Javadoc `:21-22`, `docs/03-interfaces.md:33, 368`) 🟢 — осознанный риск, граница — сеть compose.
+8. **`HttpSourceConnector`**: `429` и `5xx` → `SourceUnavailableException(+Retry-After)` (`:98-100`); таймаут/обрыв → статус `0` (`:90-92`); любой другой не-200 → `IllegalStateException` без тела (`:104-108`); `404` на объект → `Optional.empty()` (`:73-75`); malformed JSON/изменение → `IllegalStateException` с причиной (`:121-127, 144-146`) 🟢. Тексты ответов источника в исключения и логи не попадают (ловушка 11) 🟢.
+9. **Reconciliation-расписание** (`SourceAdapter.startReconciliation`, `:97-115`): первый запуск через `reconcileInterval` (по умолчанию 6 ч, `AdapterConfig.java:57`), общий `ReentrantLock` с polling (`:93-95`) 🟢. Замок внутрипроцессный — рассчитан на **один экземпляр** адаптера (Javadoc `Poller.java:34-35`) 🟢.
+
+### P1.3 Структуры данных
+
+Таблицы полей — `data-dictionary.md`, раздел P. Кратко: `AdapterConfig` (8 полей), `RetryPolicy` (3), `PollResult` (3 + `Outcome` из 5 значений), события `architecture.asset.upserted.v1`, `architecture.asset.deleted.v1`, `architecture.sync.snapshot-complete.v1`, raw-JSON в S3 для изменения и маркера 🟢.
+
+### P1.4 Константы и конфигурация
+
+`DEFAULT_REPLAY_WINDOW = 5 мин` (`AdapterConfig.java:32`), `pageSize = 100`, `pollInterval = 30 с` (`:61-62`), `DEFAULT_RECONCILE_INTERVAL = 6 ч` (`:57`), `MAX_BODY_BYTES = 64 КБ` (`WebhookServer.java:30`), connect-таймаут 5 с, запрос 10 с (`HttpSourceConnector.java:38, 83`), `Json.MAX_DEPTH = 64` (`Json.java:18`), схемы `urn:corp:schema:{asset-upserted,asset-deleted,snapshot-complete}:1` (`EventMapper.java:40-42`) 🟢. Конфигурация — через record `AdapterConfig`; env-переменных в модуле нет — их читает `platform/demo-launcher` (`docs/03-interfaces.md:316`) 🟢.
+
+### P1.5 Сомнения и расхождения
+
+- 🟡 **`AdapterConfig` проверяет не всё.** `replayWindow` и `pollInterval` на `null` дают `NullPointerException` на `.isNegative()` (`AdapterConfig.java:42, 48`), а не `requireNonNull` с именем поля, как у `system`/`retry` (`:35-38`). Пустой/пробельный `webhookSecret` отвергается (`:39-41`), но теста на это в `adapters/*/src/test` не нашлось (grep `blank`/`is required` находит только `blankTokenIsRefused` у EAM-токена) 🟡.
+- 🟡 **`toString` `AdapterConfig` не показывает `pollInterval`, `reconcileInterval`, `retry`** (`:72-74`) — безопасно для секрета, но неполно для диагностики.
+- 🟡 **Один и тот же `sourceVersion` у двух событий**: `poll:T/1/v3` и `snap:run:T/1/v3` — разные `eventId` с одинаковой версией объекта; корректность зависит от того, что projector не считает равную версию «старой» (R.2c).
+- 🟡 **Reconciliation переписывает курсор.** `snapshot` по завершении безусловно сохраняет `page.nextCursor()` как курсор polling (`Poller.java:171`), даже если checkpoint уже был дальше; изменения между началом snapshot и его концом полагаются на перекрытие страниц и идемпотентность событий (для EAM это прямо оговорено, `EA/EamApiConnector.java:34-35`).
+- 🟡 **`Json` — самописный парсер** (277 строк) вместо библиотеки; новая зависимость запрещена `CLAUDE.md`, поэтому это осознанно; покрыт 5 тестами (`JsonTest`). Числа парсятся в `Long`, иначе `Double` (`Json.java:169-171`) — большие целые > 2^63 станут `Double` 🟡.
+- 🟡 **`WebhookHandler` не ограничивает длину `eventId`/`sourceType`/`sourceId`** (только `isBlank`, `:109-111`), кроме 64 КБ тела; значения идут в `eventId` и `subject`. Предел накладывает журнал — не проверялось (R.2c) 🟡.
+- 🔴 **Тип `architecture.asset.deleted.v1` и `snapshot-complete.v1` объявлены в адаптере**, а не в контракте (§P1.6, сомнение R.2a п.3).
+
+### P1.6 Сомнение R.2a п.3: `TYPE_ASSET_DELETED` в `EventMapper` — **подтверждено, 🟡/🔴**
+
+- Определение: `AC/EventMapper.java:29` (`TYPE_ASSET_DELETED`), `:32` (`TYPE_SNAPSHOT_COMPLETE`), схемы `:40-42`. В контракте `CanonicalEvent` есть только `TYPE_ASSET_UPSERTED` (`contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/CanonicalEvent.java:31`) 🟢.
+- Потребители не могут импортировать константу (по схеме зависимостей `ingestion/*` не зависит от `adapters/*`), поэтому **литерал продублирован**: `ingestion/graph-projector/.../EventProcessor.java:92-94` (`TYPE_ASSET_DELETED`, `TYPE_SNAPSHOT_COMPLETE`, `SCHEMA_ASSET_DELETED`), `ingestion/ingestion-service/.../StoredEventReader.java:34` (`TYPE_SNAPSHOT_COMPLETE`); интеграционные тесты используют голые строки (`platform/integration-tests/.../PlatformInvariantIT.java:136-137`, `GraphProjectorIT.java:140-141`) 🟢.
+- Риск: переименование типа в одном месте не ломает компиляцию, тип событий разъедется молча. Тест на равенство литералов между `EventMapper` и `EventProcessor` не найден 🔴. Рекомендация для следующих этапов: вынести константы в `contracts/event-schemas` — правка кода вне границ R.2b.
+
+---
+
+## P2. `adapters/eam-adapter`
+
+**Назначение.** Привязка к источнику `SourceSystem.EAM` плюс два коннектора для реального формата «EAM Tool API» (`docs/eam-api.yaml`) 🟢.
+
+### P2.1 Поток управления
+
+- `EamAdapter.create(config, journal, rawStore)` — стандартный `SourceAdapter` с `HttpSourceConnector` (`EA/EamAdapter.java:33-39`); `create(config, EamApi, journal, rawStore)` — **составной** коннектор: `EamApiConnector` (токен, формат eam-api) + `HttpSourceConnector` для «старой заглушки» (`:62-71`). Обе фабрики отвергают конфигурацию чужого источника `IllegalArgumentException` (`:35-37, 64-66`) 🟢.
+- `CompositeEamConnector.fetchChanges` (`EA/CompositeEamConnector.java:50-70`): фаза A (eam-api) → фаза L (legacy); фаза переключается, когда `eam-api` вернул `hasMore=false` (`:57`); `snapshotComplete` ставится **только** на последней странице legacy-половины и только если legacy подтвердил полноту (`:65-69`) 🟢. Страницы eam-api всегда отдаются с `hasMore=true` и `snapshotComplete=false` (`:57-58`) — «последняя» страница определяется по legacy-фазе 🟢.
+- `EamApiConnector.fetchChanges` (`EA/EamApiConnector.java:93-132`): типы читаются по очереди `PLATFORM → SOLUTION → IT_SYSTEM` (`:51-54`); snapshot — `sort=id`, инкремент — `sort=-mtime` до первого объекта с `datetime ≤ from` (`:107, 113-118`); конец типа — страница короче `page_size` или достигнут известный объект (`:124`); последняя страница последнего типа возвращает курсор-водяной знак `W,<watermark>` и `snapshotComplete = snapshot` (`:131`) 🟢.
+- `EamApiConnector.fetchById` — `GET /api/<type>/{id}/`; нечисловой `sourceId` или неизвестный тип → `Optional.empty()` (`:135-153`); **`DELETE` никогда не порождается** (`change` всегда `UPSERT`, `:182-183`) — удаление обнаруживается только snapshot'ом (Reconciler) 🟢, `docs/06-eam-integration.md:60`.
+
+### P2.2 Алгоритмы и правила
+
+1. **Курсор `EamApiCursor`** (`EA/EamApiCursor.java:18-69`): три режима `S,<тип>,<стр>,<размер>,<wm>` / `I,<тип>,<стр>,<размер>,<от>,<wm>` / `W,<wm>`; разбор любой ошибки → `IllegalArgumentException("malformed eam-api cursor")` (`:59-61`), проверка числа частей и диапазонов (`:64-68`) 🟢. Курсор непрозрачен для `Poller` 🟢.
+2. **Водяной знак** — максимум `datetime`, увиденный за проход (`EamApiConnector.java:120-122`); объект без `datetime` получает `Instant.EPOCH` (`:180-181`) 🟡 — такой объект в инкременте всегда «известен» и обрывает чтение типа.
+3. **Лимиты (допущение 6, `docs/06-eam-integration.md:96`)**: `page_size ≤ 500` (`EamApiConnector.java:45, 82`), ≤ 10 запросов/с через `throttle` (`:249-260`, `MIN_INTERVAL = 100 мс`, `:56`), `429` с `Retry-After` — **одно** ожидание (≤ 30 с) и повтор, затем `SourceUnavailableException` (`:207-217`) 🟢.
+4. **Аутентификация**: заголовок `Authorization: Token …` (`:227`), токен обязателен (`:75-77`), `401/403` → `IllegalStateException` без тела (`:241-245`) 🟢.
+5. **Payload — весь `ArchObject` как есть** (`:182-183`: `payload = archObject` с `id`, `ver`, `datetime`, `attrs`). `EventMapper` отбрасывает `null` только на верхнем уровне, поэтому `attrs.<поле> = null` доходит до normalizer'а 🟡 — ловушка 5 переносится на `EamMapper` (R.2c).
+6. **`sourceVersion = ver`**, `sourceId = id` без префикса (`:175-183`; `docs/06-eam-integration.md:61`); `ver`/`id` обязаны быть `Long`, иначе «malformed ArchObject» (`:190-195`) 🟢.
+7. **Составной курсор** `S|I ; A|L ; eamapi:<base64url>|legacy:<base64url>` (`CompositeEamConnector.java:118-155`). Чужой формат (checkpoint старого адаптера) не падает навсегда: разбор → инкрементальное чтение с начала без маркера и без удалений, предупреждение в лог (`:78-85`) 🟢.
+8. **Legacy-половина** отдаёт только `TEAM` и `SERVICE_DEPENDENCY`; `IT_SYSTEM` старой заглушки отфильтровывается (`:30, 61`) 🟢. Это долг PoC (Javadoc `:16-17`, `docs/06-eam-integration.md:127`).
+
+### P2.3 Сомнения
+
+- 🟡 **Пропуски при `sort=-mtime` во время записи** — компенсируются только периодическим snapshot'ом (`EamApiConnector.java:34-35`, допущение 6 `docs/06`).
+- 🟡 **`datetime == null` → `EPOCH`** (`:180-181`): объект может не попасть в инкремент (см. §P2.2.2).
+- 🟡 **`contentHash` считается от сырого JSON, не от канонизированного `attrs`**, идемпотентность держится на `ver` — известное расхождение, зафиксировано в `docs/06-eam-integration.md:61`; в коде адаптера `contentHash` не встречается (grep по `adapters/*/src/main`) 🟢.
+- 🟢 **Лимит 10 запросов/с общий для polling и webhook-`fetchById`**: `throttle` синхронизирован (`EamApiConnector.java:249`), поля `lastRequestNanos`/`requested` читаются и пишутся только внутри него (`:65-66, 250-259`); при этом пауза выполняется под монитором, т. е. параллельные запросы выстраиваются в очередь 🟡 (на виртуальных потоках это допустимо).
+- 🟡 **Webhook-путь EAM в реальности не используется** (в реальном EAM webhook'ов нет, `docs/06-eam-integration.md:64`), но `WebhookServer` стартует и для EAM — для заглушки.
+- 🟡 **`EamAdapter.EamApi.token`**: токен хранится в record, в `toString` маскируется (`EamAdapter.java:49-52`); `equals`/`hashCode` record'а включают токен — не логируется, но попадёт в любое сравнение/ключ коллекции.
+
+---
+
+## P3. `adapters/scm-adapter`
+
+Тонкая привязка к `SourceSystem.SCM` (`SC/ScmAdapter.java:15-39`): `config(baseUri, secret)` → `AdapterConfig.of` (`:23-25`), `create` → `SourceAdapter` со стандартным `HttpSourceConnector` (`:32-38`); отказ на чужой `config.system()` (`:34-36`) 🟢. Собственной логики нет. Тесты: `ScmAdapterContractTest` (6) и smoke (1) работают против `StubSources.scm` из `platform/source-stubs` 🟢.
+Сомнение 🟡: класс-маркер `ScmAdapterModule` существует «ради непустого JAR» (`SC/ScmAdapterModule.java`, ср. `CM/CanonicalModelModule.java:3`) — тот же приём, что в contracts.
+
+## P4. `adapters/asset-adapter`
+
+Привязка к `SourceSystem.CMDB` (`AS/AssetAdapter.java:18`) — **имя модуля/класса `asset`/`Asset` не совпадает с кодом источника `cmdb`**; в документации связь описана (`docs/03-interfaces.md:322`: CMDB → `AssetAdapter` → `urn:corp:cmdb`) 🟢. Остальное — копия шаблона §P3. Тесты: 6 + 1 (`AssetAdapterContractTest`, `AssetAdapterSmokeTest`). В `modules.json` модуль описан под своим путём, источник — `CMDB`.
+
+## P5. `adapters/deploymap-adapter`
+
+Привязка к `SourceSystem.DEPLOY_MAP` (код `deploymap`) (`DM/DeploymapAdapter.java:18`). **Знания о формате deploy map/Helm в модуле нет**: main-код — тот же шаблон, а формат (`DeployMapFormat`, `deploymap-poc-0/1`) определяется в `platform/source-stubs` и разбирается в `ingestion/normalizer/.../DeployMapMapper.java` 🟢. Модуль содержит **контрактные тесты формата** (`DeployMapFixturesContractTest`, 9 тестов; `DeploymapAdapterContractTest`, 6; smoke, 1) и fixtures `src/test/resources/deploymap/*` (7 сценариев) 🟢 — это единственный «живой» документ временного формата на стороне адаптеров. См. раздел «Временные форматы» ниже.
+
+---
+
+## P6. Сомнения R.2a, отнесённые к `adapters/` — результат разбора
+
+### П.1 `SourceSystem` / `SourceSystemCode`, `DEPLOYMAP` vs `DEPLOY_MAP`, `eam` → `urn:corp:eam` — **подтверждено как 🟡 (работает, но размазано и не защищено тестом)**
+
+Цепочка преобразований (все звенья найдены):
+
+| Звено | Значение | Где |
+|---|---|---|
+| enum адаптера | `EAM`, `SCM`, `CMDB`, `DEPLOY_MAP` | `contracts/source-spi/.../SourceSystem.java:5-9` |
+| код источника | `eam`, `scm`, `cmdb`, `deploymap` | там же, `code()` `:18-20` |
+| `source` события | `"urn:corp:" + code` → `urn:corp:eam` | `AC/EventMapper.java:47-49`, `AC/AdapterConfig.java:66-68` |
+| имя consumer'а checkpoint | `<code>-poller`, `<code>-snapshot` | `AC/Poller.java:79-86` |
+| enum модели | `EAM, SCM, CMDB, DEPLOYMAP, MANUAL` | `contracts/canonical-model/.../SourceSystemCode.java:5` |
+| URN → `SourceSystemCode` (normalizer) | `switch` по `eam`/`scm`/`cmdb`/`deploymap`, иначе `null` | `ingestion/normalizer/.../Normalizer.java:93-101` |
+| URN → `SourceSystemCode` (projector) | второй независимый `switch` | `ingestion/graph-projector/.../EventProcessor.java:633-646` |
+| список кодов админки | `List.of("eam","scm","cmdb","deploymap")` | `access/admin-console/.../pg/SyncSources.java:19` |
+| код из URN (ingestion) | `startsWith("urn:corp:")` → подстрока | `ingestion/ingestion-service/.../AdapterControlClient.java:33-35` |
+
+Выводы:
+1. Для четырёх источников преобразование сходится: `DEPLOY_MAP` → `"deploymap"` → `urn:corp:deploymap` → `DEPLOYMAP` 🟢. Расхождение имён `DEPLOY_MAP`/`DEPLOYMAP` не приводит к ошибке, пока соответствие идёт через строковый код, а не через `Enum.valueOf`/`name()`.
+2. 🟡 Соответствие закодировано **минимум в пяти местах** строковыми литералами; общей функции нет. `valueOf(name())` в обход кода дал бы `DEPLOY_MAP` → исключение, потому что у `SourceSystemCode` нет такого имени. В `PostgresIdentity*` используется `SourceSystemCode.valueOf(rs.getString(..))` для значений, записанных как `name()` модели (`ingestion/identity-resolution/.../PostgresIdentityMapping.java:71`) — это другой enum и другой путь, но для `DEPLOYMAP` он совпадает по имени 🟢.
+3. 🔴 Теста, сверяющего **все значения `SourceSystem` с `SourceSystemCode` (и `code()` с литералами `switch`)**, не найдено: `SourceSystem.values()` перебирают `LauncherConfig`, `IngestionMetrics` и интеграционные тесты, но не как проверку согласованности двух enum'ов. Добавление пятого источника потребует правки ≥ 5 мест без подсказки компилятора. Рекомендация вне R.2b: общий `SourceSystem.toCode()` или тест на соответствие.
+4. 🟡 В Javadoc `SourceSystem.DEPLOY_MAP` (`SourceSystem.java:8`) указана ссылка `stub.DeployMapFormat`; фактический пакет — `io.github.unlocker.archrag.sourcestubs` (`platform/source-stubs/.../DeployMapFormat.java:24`) — ссылка устарела.
+
+### П.3 `TYPE_ASSET_DELETED` в `EventMapper.java` — см. §P1.6 (**подтверждено, 🟡/🔴: константы продублированы без перекрёстной проверки**).
+
+### П.8 `WebhookSignature` с пустым secret — **снято для адаптеров, остаётся 🟡 для прямых вызовов контракта**
+
+- `WebhookSignature.hmac` создаёт `SecretKeySpec(secret.getBytes(UTF_8), "HmacSHA256")` без проверки (`contracts/source-spi/.../WebhookSignature.java:88-95`); `SecretKeySpec` отвергает пустой массив ключа `IllegalArgumentException` (поведение JDK; здесь не запускалось) 🟡.
+- В адаптерах этот путь **недостижим**: `AdapterConfig` отвергает `null`/пустой/пробельный `webhookSecret` ещё при создании (`AC/AdapterConfig.java:39-41`), а `WebhookHandler` берёт секрет только из `config` (`AC/WebhookHandler.java:59`) 🟢.
+- Если бы исключение всё же возникло, оно попало бы в `catch (RuntimeException)` `WebhookServer.process` и стало `500` без деталей (`AC/WebhookServer.java:119-122`) — не `401` и не утечка секрета 🟢.
+- Остаётся: (а) нет теста на отказ `AdapterConfig` при пустом секрете 🟡; (б) ложная защита контракта: `verify` для пустого секрета бросает, а не возвращает `BAD_SIGNATURE` — теоретически отличимо снаружи, но снаружи секрет не задаётся.
+
+---
+
+## P7. Временные форматы заглушек (deploy map, Helm chart, EAM API)
+
+Формат каждой заглушки — временный, и PoC опирается на него в соответствии с ADR [0010](../docs/adr/0010-master-systems-are-stubs.md) («Адаптеры работают с заглушками, повторяющими зафиксированные контракты»). Ниже — что именно зафиксировано и где живёт; описания не дублируются.
+
+### P7.1 Deploy map и Helm chart — `deploymap-poc-0` / `deploymap-poc-1`
+
+- **Статус**: «ВРЕМЕННЫЙ собственный формат … после решения владельца формат и адаптер заменяются, а не расширяются» (`platform/source-stubs/.../DeployMapFormat.java:3-8`). Реального источника нет (`adapters/deploymap-adapter/src/test/resources/deploymap/README.md:3-5`). Основание — ADR [0009](../docs/adr/0009-deployment-from-deploymap.md): мастер `Deployment` — deploy map и Helm charts, читаются отдельным адаптером; «контракт deploy map нужно зафиксировать заглушкой» (раздел «Последствия» ADR 0009); дополняет ADR 0029 (`DEPLOYED_FROM{commit}`) 🟢.
+- **Состав payload** (`DeployMapFormat.java:10-23`): `ENVIRONMENT {name}`; `DEPLOYMENT {service, environment, chart, chartVersion, hosts[]}`; в `poc-1` добавляется `chartMeta {name, version, appVersion, annotations{}}` — отражение `Chart.yaml`. Ключи аннотаций: `archrag.io/eam-system-id` (id объекта EAM, **не** `eam_id`), `archrag.io/git-repo-url` (нормализуется `GitUrls.normalize`), `archrag.io/git-commit` (40 hex, нижний регистр) (`DeployMapFormat.java:35-42`) 🟢. Ключи аннотаций — решение архитектора UNLOCKER-248 (README fixtures `:4-5`).
+- **Совместимость**: `poc-0` остаётся валидным до перехода (`legacy-poc-0/`); строки `chart`/`chartVersion` дублируют `chartMeta` (`DeployMapFormat.java:19-22`) 🟢. Версия формата — это поле payload `format`, не `schemaVersion` события 🟢.
+- **Где разбирается**: адаптер формат **не знает**; разбор — `ingestion/normalizer/.../DeployMapMapper.java` 🟢. Адаптер лишь переносит payload в `CanonicalEvent` (`EventMapper.java:57-62`).
+- **Сценарии fixtures** (`deploymap/README.md`): `baseline`, `legacy-poc-0`, `unknown-repository`, `system-mismatch`, `invalid-commit`, `commit-change` (v1 → v2, `sourceVersion` 1 → 2) 🟢.
+- **Риск H.2** (README `:24-27`): chart несёт `id` системы EAM (`5101`), а у сервиса SCM `systemCode` — `eam_id` (`EAM-1042`); сравнение для `Conflict` идёт через индекс `eam_id → id` (ADR [0024](../docs/adr/0024-open-source-id-format.md), ADR [0030](../docs/adr/0030-deployment-system-conflict.md)) 🟡.
+- 🟡 **Дрейф**: Helm chart как артефакт не читается — «chart» представлен JSON-полями, а не `Chart.yaml`; выбор реального хранилища (Git, Helm-репозиторий, ConfigMap) отложен до решения владельца. Общий разрыв «контракты реальных EAM/SCM/CMDB/deploymap не проверены» — `docs/05-production-gap-list.md:43` (п. 3.5).
+
+### P7.2 EAM API — `docs/eam-api.yaml`, заглушка `EamApiStub`
+
+- **Статус**: PoC работает не с реальным EAM, а с `EamApiStub` в формате «EAM Tool API» v0.4 (`docs/06-eam-integration.md:3, 128`). Контракт и допущения — только в `docs/06-eam-integration.md` («Решения» 1–9) и `adapters/eam-adapter/src/test/resources/eam-api/README.md`; **всё, чего нет в спеке, — допущение**; подтверждено владельцем 2026-10-10/11, кроме `ownerTeam` (допущение 9) 🟢.
+- **Что адаптер считает контрактом** (в коде): типы `platforms`, `itproducts` (как «ИТ-решение»; единственная константа `SOLUTION_TYPE`, `EA/EamApiConnector.java:48`), `itsystems` (`:51-54`); голый массив `ArchObject {id:int, ver:int, datetime, attrs}` (`:169-188`); пагинация `page`/`page_size`/`sort` (`:160`); конец выборки по неполной странице (`:124`); `page_size ≤ 500` и 10 rps (допущение 6); `Authorization: Token` (`:227`); архивный объект исчезает из списка и даёт 404 на `GET /{id}/` (допущение 4) 🟢.
+- **Две половины одного источника**: `eam-api` для `PLATFORM/SOLUTION/IT_SYSTEM` и «старая заглушка» (`/changes`, `/objects/…`, id вида `EAM-1042`) для `TEAM` и `SERVICE_DEPENDENCY` (`CompositeEamConnector.java:13-26`, `docs/06-eam-integration.md:127`). Один коннектор вместо двух адаптеров, потому что `Reconciler` tombstone-ит все активные записи источника `EAM`, которых нет в прогоне (`CompositeEamConnector.java:19-22`). Долг PoC снимается задачей про реальный EAM.
+- **Проверка контракта**: `EamApiFixturesContractTest` (14 тестов) сверяет fixtures с `EamApiFormat` из `source-stubs`; `EamApiConnectorTest` (18) и `CompositeEamConnectorTest` (9) проверяют поведение коннекторов 🟢. Fixtures не записаны с реального EAM, а собраны по спеке (README `:2-3`).
+- 🟡 **Заведомые расхождения с реальностью, зафиксированные в коде/доках**: нет фильтра «изменено после T» (водяной знак по `-mtime`); нет webhook'ов; `contentHash` от сырого JSON; удаление определяется только snapshot'ом; `ownerTeam` — строковый код (допущение 9); при дубле `eamCode` связь SCM уходит на наименьший числовой `id` без логирования (`docs/06-eam-integration.md:121`).
+
+### P7.3 Остальные заглушки (для полноты)
+
+`StubSources.scm` и заглушка CMDB (старый формат `/changes`, `/objects/…`) обслуживают `scm-adapter` и `asset-adapter` через общий `HttpSourceConnector`; формат — `docs/03-interfaces.md` §5, раздел заглушек (`:536-538`). Реальные API SCM и CMDB не зафиксированы (ADR 0010).
+
+---
+
+## Итоги по модулям R.2b
+
+| Модуль | Файлов main / тестов | Классов | Основные риски (см. §) |
+|---|---|---|---|
+| `adapter-core` | 13 / 50 `@Test` в 7 классах | 11 публичных типов, 1 пакетный (`InboxWriter`) | P1.5: проверки `AdapterConfig`; P1.6: дубль констант типов событий; `/control/snapshot` без аутентификации |
+| `eam-adapter` | 6 / 48 в 5 классах | `EamAdapter`, `EamApiConnector`, `CompositeEamConnector`, `EamApiCursor` (пакетный) | P2.3: `datetime == null`, пропуски при `-mtime`; P7.2: допущения контракта |
+| `scm-adapter` | 3 / 7 в 2 классах | `ScmAdapter` | P3: нет собственной логики |
+| `asset-adapter` | 3 / 7 в 2 классах | `AssetAdapter` | P4: имя `asset` ≠ источник `cmdb` |
+| `deploymap-adapter` | 3 / 16 в 3 классах | `DeploymapAdapter` | P5/P7.1: формат вне модуля, временный |
+
+Новые сомнения R.2b (для комментария к задаче): 🟡 `AdapterConfig` (NPE вместо `requireNonNull`, нет теста на пустой секрет); 🟡 вложенные `null` в `attrs` EAM доходят до normalizer'а; 🟡 `datetime == null → EPOCH`; 🟡 одинаковая версия у `poll:` и `snap:` событий; 🔴 дубли литералов типов событий; 🔴 нет теста согласованности `SourceSystem` ↔ `SourceSystemCode`; 🟡 устаревшая ссылка в Javadoc `SourceSystem.DEPLOY_MAP`.

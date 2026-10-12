@@ -32,11 +32,11 @@
 
 ### R.2b adapters (UNLOCKER-264)
 
-- [ ] **Archaeologist** — `adapters/adapter-core`: `Poller`, `WebhookServer`, `InboxWriter`, `RetryPolicy`
-- [ ] **Archaeologist** — `adapters/eam-adapter`: адаптер EAM
-- [ ] **Archaeologist** — `adapters/scm-adapter`: адаптер Git/SCM
-- [ ] **Archaeologist** — `adapters/asset-adapter`: адаптер материальных активов
-- [ ] **Archaeologist** — `adapters/deploymap-adapter`: адаптер deploy map / Helm
+- [x] ✅ **Archaeologist** — `adapters/adapter-core`: `Poller`, `WebhookServer`, `InboxWriter`, `RetryPolicy`
+- [x] ✅ **Archaeologist** — `adapters/eam-adapter`: адаптер EAM
+- [x] ✅ **Archaeologist** — `adapters/scm-adapter`: адаптер Git/SCM
+- [x] ✅ **Archaeologist** — `adapters/asset-adapter`: адаптер материальных активов
+- [x] ✅ **Archaeologist** — `adapters/deploymap-adapter`: адаптер deploy map / Helm
 
 ### R.2c ingestion (UNLOCKER-265)
 
