@@ -105,8 +105,8 @@ class AuthorityMatrixTest {
 
     @Test
     void platformIdOfSystemAndSolutionBelongsToEamOnly() {
-        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "eamPlatformId")).containsExactly(EAM);
-        assertThat(matrix.propertyAuthorities(NodeLabel.SOLUTION, "eamPlatformId")).containsExactly(EAM);
-        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "eamPlatformId")).doesNotContain(SCM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.SOLUTION, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).doesNotContain(SCM);
     }
 }

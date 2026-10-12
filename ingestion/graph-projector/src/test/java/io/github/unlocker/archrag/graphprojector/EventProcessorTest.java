@@ -825,18 +825,18 @@ class EventProcessorTest {
         new AssetEventData(type, sourceId, new SourceVersion(version), payload));
   }
 
-  private static CanonicalEvent systemEvent(String id, String version, Long eamPlatformId) {
+  private static CanonicalEvent systemEvent(String id, String version, Long platformId) {
     Map<String, Object> attrs = new java.util.LinkedHashMap<>();
     attrs.put("name", "Cards Hub");
     attrs.put("product_id", 7201L);
-    attrs.put("platform_id", eamPlatformId);
+    attrs.put("platform_id", platformId);
     return eamEvent(id, "IT_SYSTEM", "5104", version, attrs);
   }
 
-  private static CanonicalEvent solutionEvent(String id, String version, Long eamPlatformId) {
+  private static CanonicalEvent solutionEvent(String id, String version, Long platformId) {
     Map<String, Object> attrs = new java.util.LinkedHashMap<>();
     attrs.put("name", "Card Processing");
-    attrs.put("platform_id", eamPlatformId);
+    attrs.put("platform_id", platformId);
     return eamEvent(id, "SOLUTION", "7201", version, attrs);
   }
 
@@ -845,7 +845,7 @@ class EventProcessorTest {
     var result = run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3102L));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(conflicts.relations).containsExactly("5104/platform_id/3102/7201");
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
     assertThat(conflicts.relationValues).containsExactly("3101");
   }
 
@@ -855,7 +855,7 @@ class EventProcessorTest {
     var result = run(withEamLookup(false, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3102L));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(conflicts.relations).containsExactly("5104/platform_id/3102/7201");
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
   }
 
   @Test
@@ -865,14 +865,14 @@ class EventProcessorTest {
     run(withEamLookup(true, EamLookup.NONE), systemEvent("s3", "3", 3102L));
 
     assertThat(conflicts.relations)
-        .containsExactly("5104/platform_id//-", "5104/platform_id/3102/-", "5104/platform_id/3102/-");
+        .containsExactly("5104/platformId//-", "5104/platformId/3102/-", "5104/platformId/3102/-");
   }
 
   @Test
   void systemEventWithEqualPlatformsPassesEqualValues() {
     run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3101L));
 
-    assertThat(conflicts.relations).containsExactly("5104/platform_id/3101/7201");
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3101/7201");
     assertThat(conflicts.relationValues).containsExactly("3101");
   }
 
@@ -887,7 +887,7 @@ class EventProcessorTest {
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(projection.requests).hasSize(1);
-    assertThat(conflicts.relations).containsExactly("5104/platform_id/3102/7201", "5105/platform_id//-");
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201", "5105/platformId//-");
     assertThat(conflicts.relationValues).containsExactly("3101", "");
   }
 
@@ -950,7 +950,7 @@ class EventProcessorTest {
     var retried = processor.process(event, RAW);
 
     assertThat(retried.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(conflicts.relations).containsExactly("5104/platform_id/3102/7201");
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
   }
 
   private ProcessingResult run(EventProcessor processor, CanonicalEvent event) {

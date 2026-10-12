@@ -124,7 +124,7 @@ class NodeTest {
     void platformIdMustBePositiveWhenSet() {
         assertThatThrownBy(() -> new ITSystem("n", null, null, null, null, null, 0L)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Solution("n", null, null, -1L)).isInstanceOf(IllegalArgumentException.class);
-        assertThat(new ITSystem("n", null, null, null, null, null, 3101L).eamPlatformId()).isEqualTo(3101L);
-        assertThat(new Solution("n", null, null).eamPlatformId()).isNull();
+        assertThat(new ITSystem("n", null, null, null, null, null, 3101L).platformId()).isEqualTo(3101L);
+        assertThat(new Solution("n", null, null).platformId()).isNull();
     }
 }

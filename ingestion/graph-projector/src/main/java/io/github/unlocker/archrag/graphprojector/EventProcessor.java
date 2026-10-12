@@ -88,7 +88,7 @@ public final class EventProcessor {
   /** Свойство, несущее ссылку развёртывания на систему EAM; имя {@code RELATION}-конфликта. */
   static final String SYSTEM_PROPERTY = "eamSystemId";
   /** Свойство узла, несущее платформу ИТ-системы и решения; имя {@code RELATION}-конфликта (ADR 0031). */
-  static final String PLATFORM_PROPERTY = "platform_id";
+  static final String PLATFORM_PROPERTY = "platformId";
   static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
   static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
@@ -465,10 +465,10 @@ public final class EventProcessor {
   }
 
   /**
-   * Сверяет {@code ITSystem.eamPlatformId} события EAM с {@code eamPlatformId} её решения (ключ решения — из
+   * Сверяет {@code ITSystem.platformId} события EAM с {@code platformId} её решения (ключ решения — из
    * {@code USES_SOLUTION} этого же события, в том числе отложенной); вне транзакции Neo4j. Граф не меняется:
-   * расхождение только фиксируется. Без {@code eamPlatformId} системы, без известного решения или без его
-   * {@code eamPlatformId} открытые конфликты записи закрываются.
+   * расхождение только фиксируется. Без {@code platformId} системы, без известного решения или без его
+   * {@code platformId} открытые конфликты записи закрываются.
    *
    * @param markers предыдущий результат; заменяется полным набором конфликтов {@code gid}
    */
@@ -481,11 +481,11 @@ public final class EventProcessor {
       if (command instanceof UpsertNode upsert && upsert.data() instanceof ITSystem system) {
         UUID gid = gids.get(key);
         Optional<EamLookup.SolutionPlatform> solution =
-            solutionOf(key, commands).flatMap(eamLookup::solutionPlatform).filter(s -> s.eamPlatformId() != null);
+            solutionOf(key, commands).flatMap(eamLookup::solutionPlatform).filter(s -> s.platformId() != null);
         Optional<SourceKey> master =
-            system.eamPlatformId() == null ? Optional.empty() : solution.map(EamLookup.SolutionPlatform::solution);
-        String systemValue = system.eamPlatformId() == null ? "" : String.valueOf(system.eamPlatformId());
-        String masterValue = master.isPresent() ? String.valueOf(solution.get().eamPlatformId()) : "";
+            system.platformId() == null ? Optional.empty() : solution.map(EamLookup.SolutionPlatform::solution);
+        String systemValue = system.platformId() == null ? "" : String.valueOf(system.platformId());
+        String masterValue = master.isPresent() ? String.valueOf(solution.get().platformId()) : "";
         return ConflictMarkers.of(gid, conflicts.assertRelation(key, gid, PLATFORM_PROPERTY, systemValue, master, masterValue));
       }
     }
@@ -508,7 +508,7 @@ public final class EventProcessor {
   }
 
   /**
-   * После записи решения EAM перепроверяет {@code eamPlatformId} его систем: решение могло прийти позже системы или
+   * После записи решения EAM перепроверяет {@code platformId} его систем: решение могло прийти позже системы или
    * сменить платформу, порядок прихода на результат не влияет. Маркеры {@code ASSERTS} систем здесь не пишутся
    * (ограничение 1 ADR 0030): они обновятся при следующем событии системы, а сам конфликт виден в хранилище сразу.
    */
@@ -517,16 +517,16 @@ public final class EventProcessor {
     if (!isSolution || commands.stream().anyMatch(TombstoneSourceRecord.class::isInstance)) {
       return;
     }
-    Long eamPlatformId =
+    Long platformId =
         commands.stream()
             .filter(c -> c instanceof UpsertNode u && u.data() instanceof Solution)
-            .map(c -> ((Solution) ((UpsertNode) c).data()).eamPlatformId())
+            .map(c -> ((Solution) ((UpsertNode) c).data()).platformId())
             .filter(Objects::nonNull)
             .findFirst()
             // null из источника не затирает известное: платформа решения в графе осталась прежней.
-            .orElseGet(() -> eamLookup.solutionPlatform(key).map(EamLookup.SolutionPlatform::eamPlatformId).orElse(null));
+            .orElseGet(() -> eamLookup.solutionPlatform(key).map(EamLookup.SolutionPlatform::platformId).orElse(null));
     for (EamLookup.SystemPlatform system : eamLookup.systemsOfSolution(key)) {
-      Optional<SourceKey> master = eamPlatformId == null || system.eamPlatformId() == null ? Optional.empty() : Optional.of(key);
+      Optional<SourceKey> master = platformId == null || system.platformId() == null ? Optional.empty() : Optional.of(key);
       identity
           .find(system.system())
           .ifPresent(
@@ -535,9 +535,9 @@ public final class EventProcessor {
                       system.system(),
                       gid,
                       PLATFORM_PROPERTY,
-                      system.eamPlatformId() == null ? "" : String.valueOf(system.eamPlatformId()),
+                      system.platformId() == null ? "" : String.valueOf(system.platformId()),
                       master,
-                      master.isPresent() ? String.valueOf(eamPlatformId) : ""));
+                      master.isPresent() ? String.valueOf(platformId) : ""));
     }
   }
 

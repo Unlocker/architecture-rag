@@ -41,8 +41,8 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 
 | Метка | Назначение | Ключ | Свойства (тип) | Кто наполняет (источник) | Класс в коде |
 |---|---|---|---|---|---|
-| `ITSystem` | Учётная ИТ-система | `gid`; ключ записи источника — целочисленный `id` EAM (`sourceId`, не `eam_id`) | `name`\*, `status`, `criticality` (`LOW/MEDIUM/HIGH/CRITICAL`), `criticalityRaw` (сырое значение, которого нет в словаре), `description`, `eamCode` (`eam_id` вида `EAM-1042`, индекс `it_system_eam_code`), `eamPlatformId` (`platform_id` EAM; сверяется с платформой решения, [ADR 0031](adr/0031-it-system-platform-invariant.md)) | EAM (`EamMapper`, `IT_SYSTEM`) | `node/ITSystem` |
-| `Solution` | ИТ-решение (EAM `itproducts`) | `gid`; `sourceId` = `id` EAM | `name`\*, `lifecycle`, `description`, `eamPlatformId` (`platform_id` EAM) | EAM (`EamMapper`, `SOLUTION`) | `node/Solution` |
+| `ITSystem` | Учётная ИТ-система | `gid`; ключ записи источника — целочисленный `id` EAM (`sourceId`, не `eam_id`) | `name`\*, `status`, `criticality` (`LOW/MEDIUM/HIGH/CRITICAL`), `criticalityRaw` (сырое значение, которого нет в словаре), `description`, `eamCode` (`eam_id` вида `EAM-1042`, индекс `it_system_eam_code`), `platformId` (`platform_id` EAM; сверяется с платформой решения, [ADR 0031](adr/0031-it-system-platform-invariant.md)) | EAM (`EamMapper`, `IT_SYSTEM`) | `node/ITSystem` |
+| `Solution` | ИТ-решение (EAM `itproducts`) | `gid`; `sourceId` = `id` EAM | `name`\*, `lifecycle`, `description`, `platformId` (`platform_id` EAM) | EAM (`EamMapper`, `SOLUTION`) | `node/Solution` |
 | `Platform` | ИТ-платформа (EAM `platforms`) | `gid`; `sourceId` = `id` EAM | `name`\*, `type`, `version`, `lifecycle`, `description` | EAM (`EamMapper`, `PLATFORM`) | `node/Platform` |
 | `Team` | Владелец/эксплуатант | `gid` | `name`\*, `type` | EAM (`EamMapper`, `TEAM`) | `node/Team` |
 | `Service` | Сервис | `gid` | `name`\*, `serviceType`, `language`, `status` | SCM (`ScmMapper`, `SERVICE`) | `node/Service` |
