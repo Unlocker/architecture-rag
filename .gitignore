@@ -30,3 +30,8 @@ target/
 
 platform/docker/.env
 platform/docker/measurements/
+
+# Reversa: runtime-установка, не коммитится
+.agents/
+.claude/skills/reversa/
+.claude/skills/reversa-*
