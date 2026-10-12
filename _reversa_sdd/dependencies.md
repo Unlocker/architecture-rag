@@ -94,7 +94,7 @@ flowchart LR
   IT -.-> MCP & ADC & IS & GP
 ```
 
-Проверка правил направления из `CLAUDE.md`: `access/*` не зависит от `ingestion/*` и `adapters/*` 🟢; `contracts/*` ни от чего проектного (кроме друг друга) не зависят 🟢; `ingestion/ingestion-service` зависит от `adapters/adapter-core` и `source-spi` 🟡 (оркестрация управления адаптерами, `AdapterControlClient`) — для Archaeologist R.2c.
+Проверка правил направления (`access/*` не зависит от `ingestion/*`, `contracts/*` не зависят от остальных): `access/*` не зависит от `ingestion/*` и `adapters/*` 🟢; `contracts/*` ни от чего проектного (кроме друг друга) не зависят 🟢; `ingestion/ingestion-service` зависит от `adapters/adapter-core` и `source-spi` 🟡 (оркестрация управления адаптерами, `AdapterControlClient`) — для Archaeologist R.2c.
 
 ## 4. Frontend (`access/admin-ui/package.json`)
 

@@ -70,7 +70,7 @@ erDiagram
 
 ### D6. Агентам — предметные tools с параметризованными шаблонами; read-only обеспечивает приложение, не Neo4j Community
 - **Evidence:** ADR [0004](../docs/adr/0004-neo4j-community-constraints.md), [0005](../docs/adr/0005-readonly-mcp-by-application.md), [0012](../docs/adr/0012-trace-dependencies-impact-mode.md), [0017](../docs/adr/0017-mcp-streamable-http.md), [0018](../docs/adr/0018-domain-tools-not-arbitrary-cypher.md); `access/graph-query-core` (`QueryTemplateRegistry`, `QueryLimits`), `access/mcp-server` (`ToolScopeFilter`).
-- **Implication:** любой новый tool = новый шаблон + scope в Spring Security; MCP — Streamable HTTP в режиме `STATELESS` (🟡 `CLAUDE.md` называет `STREAMABLE`, код и ADR 0017 — `STATELESS`).
+- **Implication:** любой новый tool = новый шаблон + scope в Spring Security; MCP — Streamable HTTP в режиме `STATELESS` (🟡 `docs/00-vision.md:555` называет `STREAMABLE`, код и ADR 0017 — `STATELESS`).
 - **Confidence:** 🟢
 
 ### D7. Java 21 + Spring Boot 4 + Spring AI 2 + Maven multi-module; четыре контура как модули; Docker Compose стенд
@@ -88,8 +88,8 @@ erDiagram
 ## 4. Пробелы и вопросы
 
 1. 🔴 Задача R.1 ссылается на ADR 0001–0028, в `docs/adr/` их 31 (0029–0031 от 2026-10-10…12). Soul охватывает все 31; подтвердить, что так и нужно.
-2. 🔴 `CLAUDE.md` и `docs/00-vision.md:555` называют `protocol=STREAMABLE`, код — `STATELESS` (ADR 0017 уточнён 2026-10-07, UNLOCKER-224). Само видение не обновлено.
-3. 🟡 Раскладка модулей шире схемы из `CLAUDE.md` (`adapter-core`, `event-journal`, `ingestion-service`, `admin-console`, `admin-ui`, `source-stubs`, `demo-launcher`); нужно ли отразить их в `CLAUDE.md`?
+2. 🔴 `docs/00-vision.md:555` называет `protocol=STREAMABLE`, код — `STATELESS` (ADR 0017 уточнён 2026-10-07, UNLOCKER-224). Само видение не обновлено.
+3. 🟡 Раскладка модулей шире схемы «Java-модули» в `docs/00-vision.md:453` (`adapter-core`, `event-journal`, `ingestion-service`, `admin-console`, `admin-ui`, `source-stubs`, `demo-launcher`); нужно ли отразить их в видении?
 4. 🟡 Кардинальности связей в модели не хранятся — их выяснит Archaeologist (R.2a) по `GraphProjector`/`Neo4jSchema`.
 
 ## 5. Как читать

@@ -93,9 +93,9 @@
 
 JUnit 5 + AssertJ (корневой `pom.xml:163-172`), Testcontainers 2.0.5; образ Neo4j в тестах `neo4j:5.26.31-community` (`platform/integration-tests/.../TestImages.java:9`); Jest 29 для admin-ui.
 
-## 7. Расхождения с контекстом задачи и `CLAUDE.md` (для архитектора)
+## 7. Расхождения с контекстом задачи и `docs/00-vision.md` (для архитектора)
 
-1. 🔴 Фактическая раскладка шире схемы в `CLAUDE.md`: есть `adapters/adapter-core`, `ingestion/event-journal`, `ingestion/ingestion-service`, `access/admin-console`, `access/admin-ui`, `platform/source-stubs`, `platform/demo-launcher`. `platform/observability` как модуля нет — наблюдаемость лежит в `platform/docker/observability/`.
+1. 🔴 Фактическая раскладка шире схемы «Java-модули» (`docs/00-vision.md:453`): есть `adapters/adapter-core`, `ingestion/event-journal`, `ingestion/ingestion-service`, `access/admin-console`, `access/admin-ui`, `platform/source-stubs`, `platform/demo-launcher`. `platform/observability` как модуля нет — наблюдаемость лежит в `platform/docker/observability/`.
 2. 🔴 `docs/adr/` содержит ADR 0001–0031; задача R.1 называет 0001–0028. ADR 0029–0031 (Helm chart, конфликт системы, инвариант платформы ИТ-системы) добавлены 2026-10-10…12. Soul ссылается на весь диапазон.
-3. 🟡 `CLAUDE.md` требует `spring.ai.mcp.server.protocol=STREAMABLE`, код использует `STATELESS` (`access/mcp-server/src/main/resources/application.yml:11`); это сознательное уточнение, зафиксированное в ADR 0017 (UNLOCKER-224).
+3. 🟡 `docs/00-vision.md:555` требует `spring.ai.mcp.server.protocol=STREAMABLE`, код использует `STATELESS` (`access/mcp-server/src/main/resources/application.yml:11`); это сознательное уточнение, зафиксированное в ADR 0017 (UNLOCKER-224).
 4. 🟡 `adapters/*` и `ingestion/normalizer` зависят от `platform/source-stubs` только в `test`-scope (`adapters/adapter-core/pom.xml`, `ingestion/normalizer/pom.xml`); направление «adapters → platform» нарушено только для тестов.
