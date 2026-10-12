@@ -107,7 +107,7 @@ class GraphProjectorIT {
     ReconciliationTrigger trigger = (source, run, id, count) -> snapshots.add(run);
     return new EventProcessor(journal, Normalizer.standard(projector::isActive, projector), identity, projection, trigger,
         candidates,
-        conflicts);
+        conflicts, projector);
   }
 
   @BeforeEach
@@ -1062,5 +1062,48 @@ class GraphProjectorIT {
     assertThat(upsert("eam", "SERVICE_DEPENDENCY", dep, "1", Map.of("from", a, "to", b, "kind", "SYNC")).status())
         .isEqualTo(ProcessingStatus.DUPLICATE);
     assertThat(pendingCount()).isEqualTo(1);
+  }
+
+  // ---- система EAM сервиса (H.5) ------------------------------------------------------------
+
+  private static SourceKey service(String id) {
+    return new SourceKey(SourceSystemCode.SCM, "SERVICE", id);
+  }
+
+  @Test
+  void eamSystemOfServiceFindsTheSingleDecomposingSystem() {
+    String code = "EAM-" + uid();
+    String svc = "svc-" + uid();
+    upsert("eam", "IT_SYSTEM", "5101", "1", eamSystem("Payments", code));
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", svc, "systemCode", code));
+
+    assertThat(projector.eamSystemOfService(service(svc)))
+        .contains(new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "5101"));
+  }
+
+  @Test
+  void eamSystemOfServiceIsEmptyWithoutSystem() {
+    String svc = "svc-" + uid();
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", svc));
+
+    assertThat(projector.eamSystemOfService(service(svc))).isEmpty();
+    assertThat(projector.eamSystemOfService(service("unknown-" + uid()))).isEmpty();
+  }
+
+  @Test
+  void eamSystemOfServiceIsEmptyWhenTwoSystemsDecomposeIt() {
+    String svc = "svc-" + uid();
+    upsert("scm", "SERVICE", svc, "1", Map.of("name", svc, "systemCode", "EAM-A"));
+    upsert("eam", "IT_SYSTEM", "5201", "1", eamSystem("A", "EAM-A"));
+    upsert("scm", "SERVICE", svc, "2", Map.of("name", svc, "systemCode", "EAM-A"));
+    driver.executableQuery(
+            "MATCH (s:Service {name: $name}) CREATE (:ITSystem {gid: 'g-x', name: 'B'})-[:DECOMPOSED_INTO]->(s) "
+                + "WITH s MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', sourceId: '5201'}) "
+                + "CREATE (r2:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', sourceId: '5202', active: true}) "
+                + "WITH r2 MATCH (b:ITSystem {gid: 'g-x'}) CREATE (r2)-[:ASSERTS]->(b)")
+        .withParameters(Map.of("name", svc))
+        .execute();
+
+    assertThat(projector.eamSystemOfService(service(svc))).isEmpty();
   }
 }

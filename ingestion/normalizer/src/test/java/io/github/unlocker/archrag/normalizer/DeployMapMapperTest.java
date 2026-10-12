@@ -211,7 +211,10 @@ class DeployMapMapperTest {
         .isInstanceOfSatisfying(Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD"));
   }
 
-  /** Fixture {@code system-mismatch}: система chart не совпадает с системой сервиса — обычная привязка, без Conflict (H.5). */
+  /**
+   * Fixture {@code system-mismatch}: система chart не совпадает с системой сервиса — маппер даёт обычную привязку и
+   * ничего не сравнивает; конфликт открывает {@code EventProcessor} (H.5, ADR 0030).
+   */
   @Test
   void systemMismatchGivesOrdinaryBindingWithoutConflictOrWarning() {
     repositoryWith(PAY);

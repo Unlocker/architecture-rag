@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -193,5 +194,80 @@ class PostgresSourceConflictsIT {
 
     assertThat(store.openConflicts(a)).hasSize(1);
     assertThat(store.openConflicts(b)).isEmpty();
+  }
+
+  // --- RELATION (H.5) ---
+
+  private static SourceKey deployment(UUID gid) {
+    return new SourceKey(SourceSystemCode.DEPLOYMAP, "DEPLOYMENT", "d-" + gid);
+  }
+
+  private static List<SourceConflict> relation(UUID gid, String chart, String system) {
+    return store.assertRelation(
+        deployment(gid), gid, "eamSystemId", chart, system == null ? Optional.empty() : Optional.of(eam(system)), system);
+  }
+
+  @Test
+  void relationMismatchOpensIdempotentlyAndResolvesWhenEqual() throws SQLException {
+    UUID gid = UUID.randomUUID();
+
+    var open = relation(gid, "5102", "5101");
+
+    assertThat(open).singleElement().satisfies(x -> {
+      assertThat(x.kind()).isEqualTo(SourceConflict.Kind.RELATION);
+      assertThat(x.property()).isEqualTo("eamSystemId");
+      assertThat(x.dissent()).isEqualTo(deployment(gid));
+      assertThat(x.master()).isEqualTo(eam("5101"));
+      assertThat(x.dissentValue()).isEqualTo("5102");
+      assertThat(x.masterValue()).isEqualTo("5101");
+    });
+    var before = row(gid, deployment(gid));
+    assertThat(relation(gid, "5102", "5101")).hasSize(1);
+    assertThat(row(gid, deployment(gid))).as("repeat changes nothing").isEqualTo(before);
+
+    assertThat(relation(gid, "5101", "5101")).isEmpty();
+    assertThat(row(gid, deployment(gid))).containsEntry("status", "RESOLVED").doesNotContainEntry("resolvedAt", null);
+
+    assertThat(relation(gid, "5102", "5101")).hasSize(1);
+    assertThat(row(gid, deployment(gid)))
+        .containsEntry("status", "OPEN")
+        .containsEntry("resolvedAt", null)
+        .containsEntry("openedAt", before.get("openedAt"));
+  }
+
+  @Test
+  void relationClosesWhenMasterUnknownAndNeverOpensWithoutIt() {
+    UUID gid = UUID.randomUUID();
+
+    assertThat(relation(gid, "5102", null)).as("no master, nothing opened").isEmpty();
+    relation(gid, "5102", "5101");
+
+    assertThat(relation(gid, "5102", null)).isEmpty();
+  }
+
+  @Test
+  void retractResolvesRelationAndPropertyRecomputeLeavesItAlone() {
+    UUID gid = UUID.randomUUID();
+    relation(gid, "5102", "5101");
+    var other = cmdb("s-" + gid);
+    master(eam("s-" + gid), gid, "HIGH");
+    dissent(other, gid, "HIGH");
+
+    assertThat(store.openConflicts(gid)).as("property recompute keeps the relation row").hasSize(1);
+    assertThat(store.retract(other, gid)).as("retract of another record").hasSize(1);
+
+    assertThat(store.retract(deployment(gid), gid)).isEmpty();
+  }
+
+  @Test
+  void relationAndPropertyConflictsCoexistOnOneGid() {
+    UUID gid = UUID.randomUUID();
+    master(eam("s-" + gid), gid, "HIGH");
+    dissent(cmdb("s-" + gid), gid, "LOW");
+
+    var all = relation(gid, "5102", "5101");
+
+    assertThat(all).extracting(SourceConflict::kind)
+        .containsExactlyInAnyOrder(SourceConflict.Kind.PROPERTY, SourceConflict.Kind.RELATION);
   }
 }

@@ -253,6 +253,12 @@ class EventProcessorTest {
     }
 
     @Override
+    public List<SourceConflict> assertRelation(
+        SourceKey dissent, UUID gid, String property, String dissentValue, Optional<SourceKey> master, String masterValue) {
+      return open;
+    }
+
+    @Override
     public List<SourceConflict> retract(SourceKey key, UUID gid) {
       if (fail) {
         throw new IdentityStoreException("down", null);

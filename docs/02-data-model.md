@@ -186,7 +186,7 @@ erDiagram
 | `HOSTED_ON` | CMDB |
 | `ASSERTS`, `OWNS_RECORD`, `PROCESSED` | вне матрицы |
 
-«Допустимые дополнения» из видения в коде не выражены: неавторитетный источник свойства не записывает. **Что происходит с неавторитетным значением:** проектор пропускает его (`GraphProjector.upsertNode` для свойства, `upsertRelation` для связи), не меняя канонического, и возвращает в `ProjectionResult` списки пропущенных (`Label.property`, имя типа связи). Узел при этом утверждается как `SUPPLEMENTARY`. Сущности `Conflict` пока нет (см. [5.5](#55-identitycandidate-и-conflict)).
+«Допустимые дополнения» из видения в коде не выражены: неавторитетный источник свойства не записывает. **Что происходит с неавторитетным значением:** проектор пропускает его (`GraphProjector.upsertNode` для свойства, `upsertRelation` для связи), не меняя канонического, и возвращает в `ProjectionResult` списки пропущенных (`Label.property`, имя типа связи). Узел при этом утверждается как `SUPPLEMENTARY`. Конфликты источников хранятся в `source_conflict` (см. [5.5](#55-identitycandidate-и-conflict)); граф при этом не меняется.
 
 ## 4. Команды проекции (`GraphCommand`)
 
@@ -304,6 +304,8 @@ stateDiagram-v2
 
 ### 5.5. IdentityCandidate и Conflict
 
+**Конфликты источников** — таблица `source_conflict` (V5, `kind` с V7). `kind = PROPERTY`: неавторитетная запись расходится с мастером по свойству узла. `kind = RELATION` ([ADR 0030](adr/0030-deployment-system-conflict.md)): `Deployment.eamSystemId` из chart не совпадает с `sourceId` системы EAM, которая через `DECOMPOSED_INTO` ведёт в сервис развёртывания (`gid` — Deployment, `property = 'eamSystemId'`, `dissent_*` — запись DEPLOYMAP, `master_*` — запись EAM `IT_SYSTEM`). Строка не удаляется: при совпадении `RESOLVED`, при новом расхождении снова `OPEN`. Граф и привязка `HAS_DEPLOYMENT` не меняются.
+
 **Не реализовано** (E3, UNLOCKER-174, UNLOCKER-175). Таблиц `identity_candidate` и `conflict` нет, миграций для них нет. Сейчас: неавторитетное значение пропускается проектором и возвращается в `ProjectionResult` ([раздел 3](#3-authority-matrix)); конфликт двух разных `gid` при approved crosswalk — исключение `CrosswalkConflictException`. Candidate matching не реализован.
 
 ### 5.6. DLQ / quarantine
@@ -355,6 +357,6 @@ stateDiagram-v2
 | `SyncRun` | `endedAt`, счётчики | проектор пишет `runId`, `adapter`, `status`, `startedAt`; остальное — в модели, но не в графе | инкремент внутри повторяемой транзакции удваивался бы при повторе |
 | Статусы обработки | `RECEIVED -> ... -> PROJECTED`, `DUPLICATE`/`IGNORED_OLD_VERSION` из `RECEIVED` | то же, плюс `IGNORED_OLD_VERSION` из любого шага до `PROJECTED` и `RETRYING` → любой шаг | версия сравнивается с графом, а не только с журналом; см. [ADR 0006](adr/0006-postgres-inbox-event-backbone.md) |
 | Поля inbox | `source cursor` в каждой стадии | курсор — в отдельной `consumer_checkpoint`; в `inbox_event` нет колонки cursor | checkpoint на `(consumer, source)` |
-| Conflict, IdentityCandidate | сущности и ручные решения | **не реализованы** | E3, UNLOCKER-174/175 |
+| Conflict, IdentityCandidate | сущности и ручные решения | таблицы `source_conflict` (виды `PROPERTY`/`RELATION`) и `identity_candidate` есть, ручных решений нет | E3, UNLOCKER-174/175; ADR 0030 |
 | Объекты raw | «raw snapshots/events» в объектном хранилище | один формат: raw события/маркера по ключу `raw/<source>/<sha256>` | отдельного snapshot-формата нет |
 | Жизненный цикл `SyncRun.status` | — | при создании `RUNNING`; перевод в `SUCCEEDED`/`FAILED` в проекторе не реализован | пробел |
