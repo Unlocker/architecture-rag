@@ -164,7 +164,7 @@ public final class EamMapper implements CanonicalMapper {
         if (unmapped != null) {
           // Неизвестное значение словаря не отбрасывается: сырое значение сохраняется для разбора, в журнал — только код.
           sink.warn("UNMAPPED_CRITICALITY");
-          LOG.log(System.Logger.Level.WARNING, "EAM IT_SYSTEM has a criticality value outside the dictionary");
+          LOG.log(System.Logger.Level.DEBUG, "EAM IT_SYSTEM has a criticality value outside the dictionary");
         }
         sink.add(
             new UpsertNode(

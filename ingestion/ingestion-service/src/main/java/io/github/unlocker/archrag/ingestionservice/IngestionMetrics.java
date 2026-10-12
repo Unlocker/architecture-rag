@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.micrometer.core.instrument.Counter;
@@ -10,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -28,6 +30,11 @@ import org.springframework.scheduling.annotation.Scheduled;
  * {@link #refresh()} по расписанию, а не при каждом сборе; источник без строк получает {@code 0}.
  * Счётчик событий, как и gauges, существует с нулём до первого события: все пары {@code source} × {@code status}
  * регистрируются в конструкторе, иначе перезапущенный процесс без событий не отдаёт ряд в OTLP.
+ *
+ * <p>Счётчик {@code archrag.normalizer.unmapped.values} ({@code source}, {@code property}) растёт на каждую
+ * нормализацию, давшую код предупреждения о значении вне словаря, включая повтор, replay и rebuild: это метрика
+ * темпа (в Prometheus — через {@code increase()}). Коды вне {@link #UNMAPPED_PROPERTIES} не считаются; в теги и логи
+ * попадают только коды, без значений источника.
  */
 public class IngestionMetrics {
 
@@ -37,6 +44,12 @@ public class IngestionMetrics {
   static final String EVENTS = "archrag.ingestion.events";
   static final String SYNC_LAG = "archrag.ingestion.sync.lag";
   static final String DLQ_OPEN = "archrag.ingestion.dlq.open";
+  static final String UNMAPPED_VALUES = "archrag.normalizer.unmapped.values";
+
+  /** Код предупреждения нормализатора → свойство, чьё значение вышло за словарь. Фиксированная таблица ограничивает кардинальность. */
+  static final Map<String, String> UNMAPPED_PROPERTIES = Map.of("UNMAPPED_CRITICALITY", "criticality");
+  private static final Map<SourceSystemCode, List<String>> UNMAPPED_SOURCES =
+      Map.of(SourceSystemCode.EAM, List.copyOf(UNMAPPED_PROPERTIES.values()));
 
   private static final String SOURCE_PREFIX = "urn:corp:";
   static final String UNKNOWN_SOURCE = "unknown";
@@ -77,6 +90,25 @@ public class IngestionMetrics {
       }
       eventCounter(source, STATUS_ERROR);
     }
+    UNMAPPED_SOURCES.forEach((source, properties) -> properties.forEach(p -> unmappedCounter(source, p)));
+  }
+
+  /**
+   * Считает коды предупреждений нормализации события источника {@code source}; коды вне таблицы
+   * {@link #UNMAPPED_PROPERTIES} (например {@code DEPENDS_ON_NOT_SUPPORTED}) игнорируются.
+   */
+  public void recordWarnings(SourceSystemCode source, List<String> warnings) {
+    for (String code : warnings) {
+      String property = UNMAPPED_PROPERTIES.get(code);
+      if (property != null) {
+        unmappedCounter(source, property).increment();
+      }
+    }
+  }
+
+  private Counter unmappedCounter(SourceSystemCode source, String property) {
+    // Тег source совпадает с SourceSystem.code(), как у счётчика событий.
+    return registry.counter(UNMAPPED_VALUES, "source", source.name().toLowerCase(Locale.ROOT), "property", property);
   }
 
   /**

@@ -104,10 +104,11 @@ public class IngestionServiceConfiguration {
       IdentityMapping identity,
       Reconciler reconciliation,
       IdentityCandidates candidates,
-      SourceConflicts conflicts) {
+      SourceConflicts conflicts,
+      IngestionMetrics metrics) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector, projector);
+        projector, projector, metrics::recordWarnings);
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */
