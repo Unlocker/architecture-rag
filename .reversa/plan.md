@@ -8,9 +8,13 @@
 
 ## Fase 1: Reconhecimento 🔍
 
-- [ ] **Scout** — Mapeamento de estrutura de pastas e tecnologias
-- [ ] **Scout** — Análise de dependências e gerenciadores de pacotes
-- [ ] **Scout** — Identificação de entry points, CI/CD e configurações
+- [x] ✅ **Scout** — Mapeamento de estrutura de pastas e tecnologias
+- [x] ✅ **Scout** — Análise de dependências e gerenciadores de pacotes
+- [x] ✅ **Scout** — Identificação de entry points, CI/CD e configurações
+
+## Soul Extractor ✅
+
+- [x] ✅ **Soul Extractor** — `_reversa_sdd/soul.md` (R.1, UNLOCKER-262)
 
 ## Decisão de organização das specs 🗂️
 
@@ -18,9 +22,43 @@
 
 ## Fase 2: Escavação 🏗️
 
-> O Reversa preenche esta seção com os módulos reais após o Scout concluir o reconhecimento.
+> Переписано после Scout (R.1, UNLOCKER-262): по одному пункту Archaeologist на каждый из 17 модулей. Группы соответствуют подзадачам R.2a–R.2e. `platform/docker` — не Maven-модуль, входит в R.2e отдельным пунктом.
 
-- [ ] **Arqueólogo** — Análise dos módulos identificados pelo Scout
+### R.2a contracts (UNLOCKER-263)
+
+- [ ] **Archaeologist** — `contracts/canonical-model`: узлы, связи, `GraphCommand`, `AuthorityMatrix`, инварианты
+- [ ] **Archaeologist** — `contracts/event-schemas`: `CanonicalEvent`, `EventJournal`, `Checkpoint`, `ProcessingStatus`
+- [ ] **Archaeologist** — `contracts/source-spi`: `SourceConnector`, `SourceChange`, вебхуки
+
+### R.2b adapters (UNLOCKER-264)
+
+- [ ] **Archaeologist** — `adapters/adapter-core`: `Poller`, `WebhookServer`, `InboxWriter`, `RetryPolicy`
+- [ ] **Archaeologist** — `adapters/eam-adapter`: адаптер EAM
+- [ ] **Archaeologist** — `adapters/scm-adapter`: адаптер Git/SCM
+- [ ] **Archaeologist** — `adapters/asset-adapter`: адаптер материальных активов
+- [ ] **Archaeologist** — `adapters/deploymap-adapter`: адаптер deploy map / Helm
+
+### R.2c ingestion (UNLOCKER-265)
+
+- [ ] **Archaeologist** — `ingestion/event-journal`: Postgres-журнал, S3 raw store
+- [ ] **Archaeologist** — `ingestion/normalizer`: мапперы источников → `GraphCommand`
+- [ ] **Archaeologist** — `ingestion/identity-resolution`: crosswalk, кандидаты, конфликты
+- [ ] **Archaeologist** — `ingestion/graph-projector`: проекция в Neo4j, reconcile, `Neo4jSchema`
+- [ ] **Archaeologist** — `ingestion/ingestion-service`: диспетчер журнала, админ-эндпоинт, replay/rebuild
+
+### R.2d access (UNLOCKER-266)
+
+- [ ] **Archaeologist** — `access/graph-query-core`: шаблоны запросов, лимиты, executor
+- [ ] **Archaeologist** — `access/mcp-server`: MCP tools, безопасность, аудит
+- [ ] **Archaeologist** — `access/admin-console`: read-only консоль: REST и безопасность
+- [ ] **Archaeologist** — `access/admin-ui`: SPA React/TypeScript
+
+### R.2e platform (UNLOCKER-267)
+
+- [ ] **Archaeologist** — `platform/source-stubs`: заглушки мастер-систем
+- [ ] **Archaeologist** — `platform/demo-launcher`: запуск адаптеров и заглушек
+- [ ] **Archaeologist** — `platform/integration-tests`: IT-набор, фикстуры, приёмочные сценарии
+- [ ] **Archaeologist** — `platform/docker (не модуль)`: compose, Dockerfile, Keycloak, observability, скрипты
 
 ## Fase 3: Interpretação 🧠
 

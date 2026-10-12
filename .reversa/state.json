@@ -8,16 +8,58 @@
   "doc_level": "completo",
   "output_folder": "_reversa_sdd",
   "forward_folder": "_reversa_forward",
-  "phase": null,
-  "completed": [],
+  "phase": "escavacao",
+  "completed": [
+    "reconhecimento"
+  ],
   "pending": [
-    "reconhecimento",
     "escavacao",
     "interpretacao",
     "geracao",
     "revisao"
   ],
-  "checkpoints": {},
+  "checkpoints": {
+    "scout": {
+      "completed_at": "2026-10-12T17:22:37Z",
+      "files": [
+        "_reversa_sdd/inventory.md",
+        "_reversa_sdd/dependencies.md",
+        ".reversa/context/surface.json"
+      ]
+    },
+    "soul": {
+      "completed_at": "2026-10-12T17:22:37Z",
+      "files": [
+        "_reversa_sdd/soul.md"
+      ]
+    },
+    "archaeologist": {
+      "modules_analyzed": [],
+      "modules_pending": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "contracts/source-spi",
+        "adapters/adapter-core",
+        "adapters/eam-adapter",
+        "adapters/scm-adapter",
+        "adapters/asset-adapter",
+        "adapters/deploymap-adapter",
+        "ingestion/event-journal",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution",
+        "ingestion/graph-projector",
+        "ingestion/ingestion-service",
+        "access/graph-query-core",
+        "access/mcp-server",
+        "access/admin-console",
+        "access/admin-ui",
+        "platform/integration-tests",
+        "platform/source-stubs",
+        "platform/demo-launcher",
+        "platform/docker"
+      ]
+    }
+  },
   "engines": [
     "claude-code"
   ],

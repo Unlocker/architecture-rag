@@ -107,6 +107,6 @@ doc_level = "completo"
 layout = "feature-folder"              # constante "feature-folder" após a primeira execução
 granularity = "hybrid"         # module | use-case | endpoint | hybrid | feature | custom
 custom_folders = []      # preenchido apenas quando granularity == "custom"
-scout_suggestion = ""    # registro da sugestão original do Scout, imutável após a 1a execução
+scout_suggestion = "module"    # registro da sugestão original do Scout, imutável após a 1a execução
 language = "ru"
 decided_at = "2026-10-12T00:00:00Z"          # timestamp ISO 8601 da escolha do usuário
