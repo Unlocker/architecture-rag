@@ -234,6 +234,7 @@ class EventProcessorTest {
   private static final class FakeConflicts implements SourceConflicts {
     final List<String> asserted = new ArrayList<>();
     final List<String> relations = new ArrayList<>();
+    final List<String> relationValues = new ArrayList<>();
     boolean failRelation;
     final List<SourceKey> retracted = new ArrayList<>();
     final List<Boolean> graphUntouchedAtCall = new ArrayList<>();
@@ -261,6 +262,7 @@ class EventProcessorTest {
       if (failRelation) {
         throw new IdentityStoreException("down", null);
       }
+      relationValues.add(masterValue);
       relations.add(dissent.sourceId() + "/" + property + "/" + dissentValue + "/" + master.map(SourceKey::sourceId).orElse("-"));
       return open;
     }
@@ -783,6 +785,172 @@ class EventProcessorTest {
 
     assertThat(commands).anyMatch(c -> c instanceof io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation r
         && r.type() == RelationType.HAS_DEPLOYMENT && r.from().equals(SERVICE));
+  }
+
+  // ---- платформа ИТ-системы и решения (H.7) --------------------------------------------------
+
+  private static final SourceKey SOLUTION = new SourceKey(SourceSystemCode.EAM, "SOLUTION", "7201");
+  private static final SourceKey SYSTEM_5104 = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "5104");
+
+  private EventProcessor withEamLookup(boolean solutionKnown, EamLookup eam) {
+    identity.map.put(SOLUTION, UUID.randomUUID());
+    identity.map.put(new SourceKey(SourceSystemCode.EAM, "PLATFORM", "3101"), UUID.randomUUID());
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> solutionKnown), identity, projection, (source, run, eventId, count) -> {}, candidates,
+        conflicts, DeploymentLookup.NONE, eam);
+  }
+
+  private static EamLookup eamLookup(Long solutionPlatform, List<EamLookup.SystemPlatform> systems) {
+    return new EamLookup() {
+      @Override
+      public Optional<SolutionPlatform> solutionPlatform(SourceKey solution) {
+        return solution.equals(SOLUTION) ? Optional.of(new SolutionPlatform(SOLUTION, solutionPlatform)) : Optional.empty();
+      }
+
+      @Override
+      public List<SystemPlatform> systemsOfSolution(SourceKey solution) {
+        return systems;
+      }
+    };
+  }
+
+  private static CanonicalEvent eamEvent(String id, String type, String sourceId, String version, Map<String, Object> attrs) {
+    Map<String, Object> payload = new java.util.LinkedHashMap<>();
+    payload.put("id", Long.parseLong(sourceId));
+    payload.put("ver", 1L);
+    payload.put("datetime", "2026-10-01T09:00:00Z");
+    payload.put("attrs", attrs);
+    return new CanonicalEvent(
+        id, "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, type + "/" + sourceId, T, "urn:corp:schema:asset-upserted:1", null,
+        new AssetEventData(type, sourceId, new SourceVersion(version), payload));
+  }
+
+  private static CanonicalEvent systemEvent(String id, String version, Long platformId) {
+    Map<String, Object> attrs = new java.util.LinkedHashMap<>();
+    attrs.put("name", "Cards Hub");
+    attrs.put("product_id", 7201L);
+    attrs.put("platform_id", platformId);
+    return eamEvent(id, "IT_SYSTEM", "5104", version, attrs);
+  }
+
+  private static CanonicalEvent solutionEvent(String id, String version, Long platformId) {
+    Map<String, Object> attrs = new java.util.LinkedHashMap<>();
+    attrs.put("name", "Card Processing");
+    attrs.put("platform_id", platformId);
+    return eamEvent(id, "SOLUTION", "7201", version, attrs);
+  }
+
+  @Test
+  void systemEventComparesPlatformWithSolutionAndPassesBothSides() {
+    var result = run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3102L));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
+    assertThat(conflicts.relationValues).containsExactly("3101");
+  }
+
+  @Test
+  void systemEventComparesWithSolutionAlsoWhenUsesSolutionIsDeferred() {
+    // Решение ещё не пришло в нормализатор (связь отложена), но уже есть в графе: сверка по ключу из DeferRelation.
+    var result = run(withEamLookup(false, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3102L));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
+  }
+
+  @Test
+  void systemEventWithoutPlatformOrWithoutKnownSolutionPlatformClosesConflict() {
+    run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", null));
+    run(withEamLookup(true, eamLookup(null, List.of())), systemEvent("s2", "2", 3102L));
+    run(withEamLookup(true, EamLookup.NONE), systemEvent("s3", "3", 3102L));
+
+    assertThat(conflicts.relations)
+        .containsExactly("5104/platformId//-", "5104/platformId/3102/-", "5104/platformId/3102/-");
+  }
+
+  @Test
+  void systemEventWithEqualPlatformsPassesEqualValues() {
+    run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3101L));
+
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3101/7201");
+    assertThat(conflicts.relationValues).containsExactly("3101");
+  }
+
+  @Test
+  void solutionEventRechecksAllItsSystemsAfterGraphWrite() {
+    var other = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "5105");
+    identity.map.put(SYSTEM_5104, UUID.randomUUID());
+    identity.map.put(other, UUID.randomUUID());
+    var eam = eamLookup(null, List.of(new EamLookup.SystemPlatform(SYSTEM_5104, 3102L), new EamLookup.SystemPlatform(other, null)));
+
+    var result = run(withEamLookup(true, eam), solutionEvent("o1", "2", 3101L));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(projection.requests).hasSize(1);
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201", "5105/platformId//-");
+    assertThat(conflicts.relationValues).containsExactly("3101", "");
+  }
+
+  @Test
+  void solutionEventWithoutPlatformFallsBackToStoredSolutionPlatform() {
+    identity.map.put(SYSTEM_5104, UUID.randomUUID());
+    var eam = eamLookup(3101L, List.of(new EamLookup.SystemPlatform(SYSTEM_5104, 3102L)));
+
+    run(withEamLookup(true, eam), solutionEvent("o1", "2", null));
+
+    assertThat(conflicts.relationValues).containsExactly("3101");
+  }
+
+  @Test
+  void solutionEventDoesNotRecheckOnOldVersionOrTombstone() {
+    identity.map.put(SYSTEM_5104, UUID.randomUUID());
+    var eam = eamLookup(3101L, List.of(new EamLookup.SystemPlatform(SYSTEM_5104, 3102L)));
+    var processor = withEamLookup(true, eam);
+    projection.result = ProjectionResult.of(ProjectionOutcome.IGNORED_OLD_VERSION);
+
+    var old = run(processor, solutionEvent("o1", "1", 3101L));
+    projection.result = ProjectionResult.of(ProjectionOutcome.APPLIED);
+    var tombstone =
+        run(
+            processor,
+            new CanonicalEvent(
+                "d1", "urn:corp:eam", EventProcessor.TYPE_ASSET_DELETED, "SOLUTION/7201", T, EventProcessor.SCHEMA_ASSET_DELETED, null,
+                new AssetEventData("SOLUTION", "7201", new SourceVersion("3"), Map.of())));
+
+    assertThat(old.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
+    assertThat(tombstone.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).isEmpty();
+  }
+
+  @Test
+  void storeFailureOnSystemPlatformCheckRetriesBeforeGraphWrite() {
+    conflicts.failRelation = true;
+
+    var result = run(withEamLookup(true, eamLookup(3101L, List.of())), systemEvent("s1", "1", 3102L));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void storeFailureOnSolutionRecheckRetriesAndRetryRechecks() {
+    identity.map.put(SYSTEM_5104, UUID.randomUUID());
+    var processor = withEamLookup(true, eamLookup(3101L, List.of(new EamLookup.SystemPlatform(SYSTEM_5104, 3102L))));
+    var event = solutionEvent("o1", "2", 3101L);
+    conflicts.failRelation = true;
+
+    var failed = run(processor, event);
+
+    assertThat(failed.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(failed.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
+    conflicts.failRelation = false;
+    projection.applied = Optional.of(new AppliedRecord(new SourceVersion("2"), true));
+
+    var retried = processor.process(event, RAW);
+
+    assertThat(retried.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("5104/platformId/3102/7201");
   }
 
   private ProcessingResult run(EventProcessor processor, CanonicalEvent event) {

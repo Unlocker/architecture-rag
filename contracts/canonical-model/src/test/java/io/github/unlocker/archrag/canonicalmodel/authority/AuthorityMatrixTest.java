@@ -102,4 +102,11 @@ class AuthorityMatrixTest {
         assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", SCM)).isFalse();
         assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", EAM)).isTrue();
     }
+
+    @Test
+    void platformIdOfSystemAndSolutionBelongsToEamOnly() {
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.SOLUTION, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).doesNotContain(SCM);
+    }
 }
