@@ -242,11 +242,11 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
           tx ->
               tx.run(
                       "MATCH (:SourceRecord {source: 'EAM', sourceType: 'SOLUTION', sourceId: $id, active: true})"
-                          + "-[:ASSERTS]->(n:Solution) RETURN n.platformId AS platformId LIMIT 1",
+                          + "-[:ASSERTS]->(n:Solution) RETURN n.eamPlatformId AS eamPlatformId LIMIT 1",
                       Map.of("id", solution.sourceId()))
                   .stream()
                   .findFirst()
-                  .map(row -> new SolutionPlatform(solution, platformId(row))));
+                  .map(row -> new SolutionPlatform(solution, eamPlatformId(row))));
     }
   }
 
@@ -261,17 +261,17 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                           + "-[:ASSERTS]->(:Solution)<-[rel:USES_SOLUTION]-(sys:ITSystem)"
                           + "<-[:ASSERTS]-(s:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true}) "
                           + "WHERE rel.validTo IS NULL "
-                          + "RETURN DISTINCT s.sourceId AS sourceId, sys.platformId AS platformId ORDER BY sourceId",
+                          + "RETURN DISTINCT s.sourceId AS sourceId, sys.eamPlatformId AS eamPlatformId ORDER BY sourceId",
                       Map.of("id", solution.sourceId()))
                   .list(
                       row ->
                           new SystemPlatform(
-                              new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString()), platformId(row))));
+                              new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString()), eamPlatformId(row))));
     }
   }
 
-  private static Long platformId(Record row) {
-    return row.get("platformId").isNull() ? null : row.get("platformId").asLong();
+  private static Long eamPlatformId(Record row) {
+    return row.get("eamPlatformId").isNull() ? null : row.get("eamPlatformId").asLong();
   }
 
   /** Развёртывания DEPLOYMAP сервиса, у которых в chart задан {@code eamSystemId}. */

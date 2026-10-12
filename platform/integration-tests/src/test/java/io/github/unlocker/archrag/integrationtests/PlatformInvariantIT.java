@@ -120,14 +120,14 @@ class PlatformInvariantIT {
     return handle("PLATFORM", id, "1", T1, Map.of("name", "Platform " + id));
   }
 
-  private static ProcessingResult solution(String version, Instant time, long platformId) {
-    return handle("SOLUTION", "7201", version, time, Map.of("name", "Card Processing", "platform_id", platformId));
+  private static ProcessingResult solution(String version, Instant time, long eamPlatformId) {
+    return handle("SOLUTION", "7201", version, time, Map.of("name", "Card Processing", "platform_id", eamPlatformId));
   }
 
-  private static ProcessingResult system(String id, String version, Instant time, long solutionId, long platformId) {
+  private static ProcessingResult system(String id, String version, Instant time, long solutionId, long eamPlatformId) {
     return handle(
         "IT_SYSTEM", id, version, time,
-        Map.of("name", "Cards Hub " + id, "eam_id", "EAM-" + id, "product_id", solutionId, "platform_id", platformId));
+        Map.of("name", "Cards Hub " + id, "eam_id", "EAM-" + id, "product_id", solutionId, "platform_id", eamPlatformId));
   }
 
   private static ProcessingResult deleteSystem(String id, String version, Instant time) {
@@ -165,7 +165,7 @@ class PlatformInvariantIT {
     assertThat(platform("3102").status()).isEqualTo(ProcessingStatus.PROJECTED);
   }
 
-  private static final String MISMATCH = "OPEN|platformId|5104|3102|7201|3101";
+  private static final String MISMATCH = "OPEN|platform_id|5104|3102|7201|3101";
 
   // ---- tests -------------------------------------------------------------------------------
 
@@ -197,7 +197,7 @@ class PlatformInvariantIT {
 
     system("5104", "2", T3, 7201, 3101);
 
-    assertThat(relationConflicts()).containsExactly("RESOLVED|platformId|5104|3102|7201|3101");
+    assertThat(relationConflicts()).containsExactly("RESOLVED|platform_id|5104|3102|7201|3101");
   }
 
   @Test
@@ -208,7 +208,7 @@ class PlatformInvariantIT {
 
     solution("2", T3, 3102);
 
-    assertThat(relationConflicts()).containsExactly("RESOLVED|platformId|5104|3102|7201|3101");
+    assertThat(relationConflicts()).containsExactly("RESOLVED|platform_id|5104|3102|7201|3101");
   }
 
   @Test
@@ -219,7 +219,7 @@ class PlatformInvariantIT {
 
     assertThat(deleteSystem("5104", "2", T3).status()).isEqualTo(ProcessingStatus.PROJECTED);
 
-    assertThat(relationConflicts()).singleElement().satisfies(row -> assertThat(row).startsWith("RESOLVED|platformId|"));
+    assertThat(relationConflicts()).singleElement().satisfies(row -> assertThat(row).startsWith("RESOLVED|platform_id|"));
   }
 
   @Test
@@ -232,8 +232,8 @@ class PlatformInvariantIT {
         .singleElement()
         .satisfies(r -> assertThat(r.get("name").asString()).isEqualTo("Platform 3101"));
     assertThat(query("MATCH (:ITSystem)-[r]->(:Platform) RETURN r")).isEmpty();
-    assertThat(query("MATCH (s:ITSystem) RETURN s.platformId AS p").get(0).get("p").asLong()).isEqualTo(3102L);
-    assertThat(query("MATCH (s:Solution) RETURN s.platformId AS p").get(0).get("p").asLong()).isEqualTo(3101L);
+    assertThat(query("MATCH (s:ITSystem) RETURN s.eamPlatformId AS p").get(0).get("p").asLong()).isEqualTo(3102L);
+    assertThat(query("MATCH (s:Solution) RETURN s.eamPlatformId AS p").get(0).get("p").asLong()).isEqualTo(3101L);
   }
 
   @Test

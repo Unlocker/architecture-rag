@@ -27,11 +27,11 @@ public interface EamLookup {
         }
       };
 
-  /** Платформа решения: {@code Solution.platformId} узла активной записи EAM {@code SOLUTION}; {@code platformId} может быть {@code null}. */
-  record SolutionPlatform(SourceKey solution, Long platformId) {}
+  /** Платформа решения: {@code Solution.eamPlatformId} узла активной записи EAM {@code SOLUTION}; {@code eamPlatformId} может быть {@code null}. */
+  record SolutionPlatform(SourceKey solution, Long eamPlatformId) {}
 
-  /** Платформа системы: {@code ITSystem.platformId} узла активной записи EAM {@code IT_SYSTEM}; может быть {@code null}. */
-  record SystemPlatform(SourceKey system, Long platformId) {}
+  /** Платформа системы: {@code ITSystem.eamPlatformId} узла активной записи EAM {@code IT_SYSTEM}; может быть {@code null}. */
+  record SystemPlatform(SourceKey system, Long eamPlatformId) {}
 
   /** Активная запись EAM {@code SOLUTION} с данным ключом; пусто, если решение неизвестно или удалено. */
   Optional<SolutionPlatform> solutionPlatform(SourceKey solution);

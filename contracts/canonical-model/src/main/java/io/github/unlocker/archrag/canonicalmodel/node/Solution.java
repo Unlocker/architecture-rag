@@ -5,18 +5,18 @@ import static io.github.unlocker.archrag.canonicalmodel.Invariants.requireText;
 
 /**
  * IT solution (EAM {@code itproducts}). Required: {@code name}. Optional: {@code lifecycle} (source vocabulary),
- * {@code description} and {@code platformId} (the EAM {@code itproducts.platform_id}, positive; the platform that
+ * {@code description} and {@code eamPlatformId} (the EAM {@code itproducts.platform_id}, positive; the platform that
  * the platforms of the solution's systems are checked against, see ADR 0031). Not to be confused with
  * {@link Lifecycle}, the validity interval of a stored node.
  */
-public record Solution(String name, String lifecycle, String description, Long platformId) implements NodeData {
+public record Solution(String name, String lifecycle, String description, Long eamPlatformId) implements NodeData {
 
     public Solution {
         requireText(name, "name");
         optionalText(lifecycle, "lifecycle");
         optionalText(description, "description");
-        if (platformId != null && platformId <= 0) {
-            throw new IllegalArgumentException("platformId must be positive");
+        if (eamPlatformId != null && eamPlatformId <= 0) {
+            throw new IllegalArgumentException("eamPlatformId must be positive");
         }
     }
 

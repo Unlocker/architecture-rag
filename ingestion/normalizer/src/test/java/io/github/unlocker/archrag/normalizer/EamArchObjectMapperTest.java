@@ -106,10 +106,10 @@ class EamArchObjectMapperTest {
   void platformIdOfSystemAndSolutionIsReadAndMissingIsNull() {
     var mismatchSolution = (UpsertNode) ok("SOLUTION", 7201, archObject(7201, "name", "Card Processing", "platform_id", 3101L)).commands().get(0);
     var mismatchSystem = (UpsertNode) ok("IT_SYSTEM", 5104, archObject(5104, "name", "Cards Hub", "product_id", 7201L, "platform_id", 3102L)).commands().get(0);
-    assertThat(((Solution) mismatchSolution.data()).platformId()).isEqualTo(3101L);
-    assertThat(((ITSystem) mismatchSystem.data()).platformId()).isEqualTo(3102L);
-    assertThat(((ITSystem) ((UpsertNode) ok("IT_SYSTEM", 1, archObject(1, "name", "A")).commands().get(0)).data()).platformId()).isNull();
-    assertThat(((Solution) ((UpsertNode) ok("SOLUTION", 2, archObject(2, "name", "A")).commands().get(0)).data()).platformId()).isNull();
+    assertThat(((Solution) mismatchSolution.data()).eamPlatformId()).isEqualTo(3101L);
+    assertThat(((ITSystem) mismatchSystem.data()).eamPlatformId()).isEqualTo(3102L);
+    assertThat(((ITSystem) ((UpsertNode) ok("IT_SYSTEM", 1, archObject(1, "name", "A")).commands().get(0)).data()).eamPlatformId()).isNull();
+    assertThat(((Solution) ((UpsertNode) ok("SOLUTION", 2, archObject(2, "name", "A")).commands().get(0)).data()).eamPlatformId()).isNull();
   }
 
   @Test
