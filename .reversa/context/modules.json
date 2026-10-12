@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:09:06Z",
+  "generated_at": "2026-10-12T21:12:00Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -3453,6 +3453,323 @@
         "сборка дедуплицированного графа путей и оценка stale"
       ],
       "complexity": "high"
+    },
+    {
+      "name": "access/admin-console",
+      "path": "access/admin-console",
+      "purpose": "Read-only админ-консоль: статика SPA (admin-ui) и REST /api/** (граф через graph-query-core, журнал/DLQ/идентичность/аудит из PostgreSQL ролью archrag_console_ro), OAuth2 resource server со scope architecture.admin, аудит чтений",
+      "primary_files": [
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/AdminConsoleApplication.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/SpaWebConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/ConsoleConfigController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/ConsoleProperties.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/ApiExceptionHandler.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/graph/GraphReads.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/graph/GraphReaderConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsolePgConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/Rows.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java",
+        "access/admin-console/src/main/resources/application.yml"
+      ],
+      "functions": [
+        {
+          "name": "GraphController.search",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String q",
+            "List types",
+            "Integer limit"
+          ],
+          "returns": "SearchResponse",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphController.node",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String gid"
+          ],
+          "returns": "NodeCard",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphController.neighborhood",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String gid",
+            "Integer depth",
+            "List relTypes"
+          ],
+          "returns": "Neighborhood",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.sources",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [],
+          "returns": "List<SourceStatus>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.events",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [
+            "source",
+            "status",
+            "from",
+            "to",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Event>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.dlq",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [
+            "source",
+            "replayed",
+            "page",
+            "size"
+          ],
+          "returns": "Page<DlqEntry>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "IdentityController.conflicts",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java",
+          "params": [
+            "status",
+            "gid",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Conflict>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AuditController.audit",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java",
+          "params": [
+            "operation",
+            "status",
+            "from",
+            "to",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Audit>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ConsoleReadRepository.page",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java",
+          "params": [
+            "table",
+            "columns",
+            "Where",
+            "orderBy",
+            "PageRequest",
+            "RowMapper"
+          ],
+          "returns": "Page<T>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ReadAuditInterceptor.afterCompletion",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java",
+          "params": [
+            "request",
+            "response",
+            "handler",
+            "ex"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Page",
+          "fields": [
+            {
+              "name": "items",
+              "type": "List<T>",
+              "required": true
+            },
+            {
+              "name": "page",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "size",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Event",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "eventId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "payloadRef",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "contentHash",
+              "type": "String",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceStatus",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "checkpoints",
+              "type": "List<Checkpoint>",
+              "required": true
+            },
+            {
+              "name": "eventsByStatus",
+              "type": "Map<String,Long>",
+              "required": true
+            },
+            {
+              "name": "lagSeconds",
+              "type": "Long",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Neighborhood",
+          "fields": [
+            {
+              "name": "center",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "nodes",
+              "type": "List<GraphNode>",
+              "required": true
+            },
+            {
+              "name": "edges",
+              "type": "List<GraphEdge>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "/api/** требует JWT (issuer + audience консоли) и scope architecture.admin; health и console-config.json публичны; остальной actuator и не-GET вне /api закрыты",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java:38-53",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Контроллеры содержат только GET; вызовов ingestion (replay/rebuild/reconcile/crosswalk) нет",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "PG: пул readOnly + SET default_transaction_read_only = on, максимум 4 соединения, ленивое соединение",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsolePgConfiguration.java:22-36",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "SQL: константные фрагменты WHERE + именованные параметры; payload не читается; тексты источников режутся до 500 символов, request/result аудита >4000 символов не отдаются",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:34-36,270-365",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Окрестность: глубина 1..2, relTypes из allowlist, узлы затем рёбра, truncated по обоим запросам",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:127-167",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Пагинация page>=0, 1<=size<=200 (по умолчанию 50)",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/PageRequest.java:14-24",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "lagSeconds = max(0, now - max(updated_at) PROJECTED) по источнику; сводка всегда содержит 4 источника и 10 статусов",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:56-75",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "SPA fallback на index.html только для путей без расширения, кроме api/ и actuator/",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/SpaWebConfiguration.java:48-71",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Аудит чтения: одна запись на запрос, дошедший до контроллера; отказы 401/403 в неё не попадают",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java:31-58",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "access/admin-ui",
+        "access/graph-query-core",
+        "neo4j-java-driver",
+        "spring-boot-webmvc",
+        "spring-boot-jdbc",
+        "postgresql",
+        "spring-security-oauth2-resource-server"
+      ],
+      "algorithms": [
+        "построение WHERE из константных фрагментов и именованных параметров",
+        "постраничный вывод count + LIMIT/OFFSET",
+        "SPA fallback resolver",
+        "расчёт отставания по последнему PROJECTED"
+      ],
+      "complexity": "medium"
     }
   ]
 }

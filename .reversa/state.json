@@ -49,17 +49,17 @@
         "ingestion/graph-projector",
         "ingestion/ingestion-service",
         "access/graph-query-core",
-        "access/mcp-server"
+        "access/mcp-server",
+        "access/admin-console"
       ],
       "modules_pending": [
-        "access/admin-console",
         "access/admin-ui",
         "platform/integration-tests",
         "platform/source-stubs",
         "platform/demo-launcher",
         "platform/docker"
       ],
-      "last_run_at": "2026-10-12T21:09:06Z",
+      "last_run_at": "2026-10-12T21:12:00Z",
       "files": [
         "_reversa_sdd/code-analysis.md",
         "_reversa_sdd/data-dictionary.md",
@@ -78,7 +78,8 @@
         "_reversa_sdd/flowcharts/graph-projector.md",
         "_reversa_sdd/flowcharts/ingestion-service.md",
         "_reversa_sdd/flowcharts/graph-query-core.md",
-        "_reversa_sdd/flowcharts/mcp-server.md"
+        "_reversa_sdd/flowcharts/mcp-server.md",
+        "_reversa_sdd/flowcharts/admin-console.md"
       ]
     }
   },

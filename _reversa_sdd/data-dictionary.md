@@ -753,3 +753,57 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
 | `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
 | `management.otlp.metrics.export.{enabled,step}` | `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED`, `…_URL` | `false`, `10s` | Micrometer |
+
+---
+
+## X.3 admin-console: ответы REST, чтение PostgreSQL, конфигурация
+
+`AC/` = `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/`. Времена `Instant` сериализуются Jackson в ISO-8601 UTC; времена из графа приходят строкой. 🟢
+
+### X.3.1 Ответы `/api/graph/**` (`AC/api/GraphResponses.java`)
+
+| Тип | Поля |
+|---|---|
+| `Stats` (`:21`) | `nodes: [Count{name, count}]`, `relations: [Count]`, `lastUpdatedAt: String\|null` |
+| `SearchResponse` (`:29`) | `items: [AssetHit]`, `truncated` |
+| `AssetHit` (`:32-39`) | `gid, type, name, score (double), matchType, sources[String], lastSeenAt` |
+| `NodeCard` (`:47-55`) | `gid, type, properties (Map, без gid/isCurrent/firstSeenAt/lastSeenAt/deletedAt), firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources: [Map]` — записи `explain_provenance` (`source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, active, deletedAt, authority, confidence, conflicts`) |
+| `Neighborhood` (`:68`) | `center, nodes: [GraphNode{gid, type, name, isCurrent, distance}], edges: [GraphEdge{type, source, target}], truncated` |
+| `ApiError` (`AC/api/ApiExceptionHandler.java:21`) | `error` (`invalid_request`, `not_found`, `query_timeout`), `message` |
+| `ConsoleConfig` (`AC/config/ConsoleConfigController.java:18`) | `issuer, clientId, scope` |
+
+### X.3.2 Ответы `/api/sync|identity|audit` (`AC/pg/Rows.java`, `AC/pg/Page.java`)
+
+`Page<T>{items, page (с 0), size, total}` (`Page.java:13`); запрос `page ≥ 0`, `size 1..200`, по умолчанию `0`/`50` (`PageRequest.java:10-24`).
+
+| Тип | Поля | Таблица / колонки (`ConsoleReadRepository`) |
+|---|---|---|
+| `Event` (`Rows.java:15-32`) | `source` (короткий код), `eventId, type, subject, sourceType, sourceId, sourceVersion, correlationId, syncRunId, schemaVersion, status, attempts, errorCode, payloadRef, contentHash, receivedAt, updatedAt` | `inbox_event` (`payloadRef` = `payload_key`, `contentHash` = `payload_hash`) — `ConsoleReadRepository.java:38-40` |
+| `EventDetail` (`:35`) | `event, errorReason (≤ 500), dlqEntries[], historyNote` | `inbox_event.error_reason`, `dlq_entry` |
+| `DlqEntry` (`:38-46`) | `id, source, eventId, errorCode, reason (≤ 500), payloadRef, createdAt, replayedAt` | `dlq_entry` |
+| `Conflict` (`:49-64`) | `gid, property, dissentSource/Type/Id, dissentValue (≤ 500), masterSource/Type/Id, masterValue (≤ 500), status, openedAt, updatedAt, resolvedAt, kind` | `source_conflict` |
+| `Candidate` (`:67-79`) | `leftSource/Type/Id, rightSource/Type/Id, labelFamily, matched (JSON), score, status, firstSeenAt, updatedAt` | `identity_candidate` (`matched::text`) |
+| `Audit` (`:82-94`) | `id, operation, actor, status, replayId, request (JSON\|null), requestTruncated, result (JSON\|null), resultTruncated, error (≤ 500), startedAt, finishedAt` | `admin_audit` (`request`/`result` > 4000 символов → `null` + флаг) |
+| `Checkpoint` (`:97`) | `consumer, cursor, updatedAt` | `consumer_checkpoint` |
+| `SyncRunInfo` (`:100-107`) | `runId, startedAt, endedAt, status, fetched, applied, failed` | граф: `SyncRun` (`console_latest_sync_runs`) |
+| `SourceStatus` (`:110-116`) | `source, checkpoints[], lastSyncRun, eventsByStatus (Map всех 10 статусов), lastProjectedAt, lagSeconds` | агрегат |
+
+Читаемые колонки согласованы с миграциями V1/V4/V5/V7/V3 (`ingestion/*/src/main/resources/db/migration/`, проверено поиском колонок `error_reason, payload_hash, attempts, replayed_at, kind, matched, label_family, dissent_value, payload_key, sync_run_id, correlation_id`), права — с V6 (`SELECT` на 6 таблиц) 🟢.
+
+Фильтры (константные значения): `SyncSources.CODES = [eam, scm, cmdb, deploymap]`, `URN_PREFIX = "urn:corp:"`, `STATUSES = RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION` (`AC/pg/SyncSources.java:16-33`).
+
+### X.3.3 Свойства admin-console (`access/admin-console/src/main/resources/application.yml`)
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | обязательно | Spring Boot |
+| `spring.security.oauth2.resourceserver.jwt.audiences` | = `archrag.console.resource-uri` | | |
+| `spring.web.resources.add-mappings` | — | `false` | Spring MVC |
+| `archrag.console.resource-uri` | `ARCHRAG_CONSOLE_RESOURCE_URI` | обязательно (пусто → не стартует) | `ConsoleProperties` (`AC/config/ConsoleProperties.java:13-17`) |
+| `archrag.console.client-id` | — | `archrag-admin-console` | |
+| `archrag.console.scope` | — | `openid architecture.admin` | |
+| `archrag.neo4j.reader.{uri,username,password}` | `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD` | обязательно | `GraphReaderProperties` (`AC/graph/GraphReaderProperties.java:14-15`) |
+| `archrag.console-pg.{url,username,password}` | `ARCHRAG_CONSOLE_PG_URL`, `…_USERNAME`, `…_PASSWORD` | `username` = `archrag_console_ro` | `ConsolePgProperties` (`AC/pg/ConsolePgProperties.java:12-13`) |
+| `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
+| `management.health.db.enabled` | — | `false` | Spring Boot |
+| `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
