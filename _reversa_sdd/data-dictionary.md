@@ -494,3 +494,68 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `OWNER` | 0.2 | нет | `gid` команды-владельца (строка UUID) |
 
 `score = min(1.00, Σ весов различных совпавших видов)`.
+
+## Q.4 graph-projector: что пишется в Neo4j
+
+> Каноническая модель узлов и связей — `docs/02-data-model.md`, §A.1–A.3 этого словаря; полная схема Neo4j — R.3. Здесь — свойства служебных узлов и рёбер, которые создаёт проектор (`GP/` = `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/`). 🟢
+
+### Q.4.1 Узел `SourceRecord` (`GP/GraphProjector.java:447-464, 493-505, 507-518`)
+
+| Свойство | Тип в Neo4j | Когда пишется | Примечание |
+|---|---|---|---|
+| `source`, `sourceType`, `sourceId` | string | при `MERGE` (ключ, UNIQUE) | `source` = `SourceSystemCode.name()` |
+| `sourceVersion` | string | upsert, relation-only, tombstone | цифры; сравнивается как число |
+| `contentHash` | string | только `UpsertNode` | SHA-256 raw payload |
+| `fetchedAt` | datetime | только `UpsertNode` | `event.time()` |
+| `active` | boolean | `true` при upsert/relation-only, `false` при tombstone | |
+| `deletedAt` | datetime | tombstone ставит; upsert снимает | |
+| `_lock` | — | ставится и тут же снимается (`:307`) | приём блокировки; в данных не остаётся |
+
+Запись без версии (`sourceVersion IS NULL`) — «заготовка» от `MERGE`; `applied()` и `activeRecords()` её игнорируют (`:120, 154`).
+
+### Q.4.2 Служебные узлы и рёбра
+
+| Элемент | Ключ | Свойства | Создаётся |
+|---|---|---|---|
+| `SourceSystem` | `code` (UNIQUE) | — | upsert, relation-only, tombstone |
+| `(:SourceSystem)-[:OWNS_RECORD]->(:SourceRecord)` | — | — | то же |
+| `(:SourceRecord)-[:ASSERTS]->(:<Canonical>)` | — | `confidence=1.0`, `authority ∈ {MASTER, SUPPLEMENTARY}`, `conflicts: list<string>` (имена свойств; снимается при отсутствии конфликта) | `UpsertNode`; `conflicts` — `writeConflictMarkers` |
+| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум) | если у события есть `syncRunId` (`:687-703`) |
+| `(:SyncRun)-[:PROCESSED]->(:SourceRecord)` | — | — | то же |
+| `PendingRelation` | `key` (UNIQUE, SHA-256) | `type`, `fromLabel`, `toLabel`, `from{Source,Type,Id}`, `to{Source,Type,Id}`, `props` (JSON-строка), `validFrom?`, `validTo?`, `referrerVersion`, `eventTime` | `DeferRelation` (`GP/PendingRelations.java:53-80`) |
+| `(:SourceRecord)-[:DEFERS]->(:PendingRelation)` | — | — | то же |
+
+Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы, `:694`); `SyncRun.status` после создания не меняется 🟡 — кто его завершает, из кода ingestion не видно (проверить в R.3).
+
+### Q.4.3 Канонический узел
+
+`MERGE (n:<root> {gid})` (`gid` — строка UUID); `n += $props` только авторитетные непустые свойства компонентов record'а (`NodeProperties.of`: `Instant` → `datetime` UTC, enum → имя, список → список преобразованных значений); служебные: `isCurrent` (true при создании; для мастера — всегда true при upsert), `deletedAt` (tombstone без другого активного мастера), `firstSeenAt` (минимум по `eventTime`), `lastSeenAt` (максимум) (`GraphProjector.java:442-465, 543-549`) 🟢.
+
+### Q.4.4 Свойства темпоральной связи
+
+`rel += $props` (только переданные свойства связи); `assertedBySource`, `assertedByType`, `assertedById` — запись, утверждающая связь; `validFrom`, `validTo` — для `RelationType.temporal()` (`:564-596`). Закрытие: `validTo = max(validFrom, <момент>)` — интервал не бывает отрицательным (`:525, 538, 643, 682`) 🟢.
+
+### Q.4.5 Результаты и порты (Java)
+
+| Тип | Поля | Инварианты |
+|---|---|---|
+| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation`/`CloseAssertion` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
+| `ProjectionResult` (`GP/ProjectionResult.java:13-14`) | `outcome ∈ {APPLIED, NOOP_SAME_VERSION, IGNORED_OLD_VERSION}`, `skippedProperties`, `skippedRelations` | списки неизменяемы |
+| `ProcessingResult` (`GP/ProcessingResult.java:13`) | `status`, `errorCode?`, `projection?` | `status` обязателен |
+| `ConflictMarkers` (`GP/ConflictMarkers.java:22`) | `gid?`, `byRecord: Map<SourceKey, List<String>>` | непустые списки; маркеры без `gid` недопустимы; `none()` = «не менять» |
+| `Reconciler.Report` (`GP/Reconciler.java:86`) | `tombstoned`, `ignoredOldVersion`, `keptRecentlyTouched`, `keptInSnapshot` | — |
+
+Порты, которые реализует `GraphProjector`: `GraphProjection` (`project`, `applied`, `isActive`, `activeRecords`), `DeploymentLookup` (Q.2.4), `EamLookup` (`solutionPlatform`, `systemsOfSolution`); внешние порты `ReconciliationTrigger` и `NormalizationWarnings` реализуют `Reconciler` и слой метрик (Q5).
+
+### Q.4.6 Схема Neo4j, которую применяет `Neo4jSchema` (`GP/schema/Neo4jSchema.java:41-60`)
+
+| Объект | Определение |
+|---|---|
+| `<label>_gid` для каждой канонической метки | `UNIQUE n.gid` (имя из `CamelCase` → `snake_case` + `_gid`) |
+| `source_record_key` | `UNIQUE (SourceRecord.source, .sourceType, .sourceId)` |
+| `source_system_code` | `UNIQUE SourceSystem.code` |
+| `sync_run_id` | `UNIQUE SyncRun.runId` |
+| `pending_relation_key` | `UNIQUE PendingRelation.key` |
+| `environment_code` | `UNIQUE Environment.code` |
+| `it_system_eam_code` | индекс `ITSystem.eamCode` |
+| `asset_text` | FULLTEXT `ITSystem\|Service` по `name`, `description` |
