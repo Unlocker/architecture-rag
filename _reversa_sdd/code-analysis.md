@@ -1,7 +1,7 @@
 # Code Analysis → Технический анализ кода
 
 > Archaeologist, этапы R.2a (UNLOCKER-263: `contracts/*`, разделы A, E, S), R.2b (UNLOCKER-264: `adapters/*`, раздел R.2b / P) и R.2c (UNLOCKER-265: `ingestion/*`, раздел «R.2c — `ingestion/*`», Q1–Q7, в конце файла).
-> Остальные модули (R.2d–R.2e) добавят свои разделы позже.
+> R.2d (`access/*`, X1–X6) и R.2e (`platform/*`, Y1–Y2, Z1, W1) добавлены в конце файла.
 > Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` даны относительно корня репозитория.
 > Описания источников не дублируются: модель — `docs/02-data-model.md`, интерфейсы — `docs/03-interfaces.md`, решения — `docs/adr/`.
 
@@ -1133,3 +1133,841 @@ TypeScript-интерфейсы ответов (`UI/api/types.ts`) — зерк�
 - **Три контура аутентификации** с разными audience и scope: MCP (`architecture.read`, audience = `ARCHRAG_MCP_RESOURCE_URI`), консоль (`architecture.admin`, `urn:archrag:console`), admin REST ingestion (`architecture.admin` + `azp`) — токены не взаимозаменяемы по `aud`.
 - **Открытые вопросы к архитектору** (🔴/🟡, не блокируют): Н1 (смысл DLQ), Н2 (статусы кандидатов), `SyncRun` без итогового статуса (X5.5), нормализация `systemGid` в `find_runtime_footprint` (X2.5), разграничение scope tools (X2.5), кто и когда показывает `checkpoints` оператору (X5.3).
 - **Не проверялось в этом этапе** (передано в R.2e/R.3): фактическая работа IT с Neo4j/PG (`platform/integration-tests`), Keycloak-клиенты и CSP в смоуке (`platform/docker`), полный словарь меток и свойств графа.
+
+---
+
+# R.2e — `platform/*` (UNLOCKER-267)
+
+> Archaeologist, этап R.2e: `platform/source-stubs`, `platform/demo-launcher`, `platform/integration-tests`, `platform/docker`. Разделы Y1–Y2 (заглушки и запуск), Z1 (IT-набор), W1 (compose-стенд). Схема Neo4j, Flyway и S3-ключи — R.3, правила и retroactive ADR — R.4. Тесты и Docker в этом прогоне не запускались: описано, что тесты и скрипты утверждают, а не результат прогона.
+
+Сокращения путей: `SS` = `platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs`, `DL` = `platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher`; тесты: `SST` = `platform/source-stubs/src/test/java/io/github/unlocker/archrag/sourcestubs`, `DLT` = `platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher`. Остальные пути даны от корня репозитория. Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение.
+
+Заглушки — решение ADR [0010](../docs/adr/0010-master-systems-are-stubs.md) («Адаптеры работают с заглушками, повторяющими зафиксированные контракты»); REST-контракт и сценарии описаны в `docs/03-interfaces.md` §5.5 (`:521-550`), EAM API — в `docs/06-eam-integration.md` (раздел «Заглушки и fixtures», `:125-129`) и `docs/eam-api.yaml`. Форматы `DeployMapFormat` / `EamApiFormat` разобраны в P7 (`code-analysis.md`, §P7.1–P7.3) и здесь не повторяются: только то, чего там нет.
+
+---
+
+## Y1. `platform/source-stubs`
+
+**Назначение.** Библиотека «мастер-систем» для PoC: (а) управляемая in-memory заглушка любого из четырёх источников по `SourceConnector` (`StubSource`) с HTTP-фасадом `GET /changes`, `GET /objects/{type}/{id}` (`StubSourceServer`); (б) отдельная заглушка реального EAM API `ArchObject` (`EamApiStore` + `EamApiStub` + `EamApiSeed` + `EamApiTypeMeta`); (в) начальные данные и негативные сценарии (`StubSources`); (г) отправитель подписанных webhook (`StubWebhookSender`); (д) собственный мини-парсер JSON (`Json`) (`SS/package-info.java:1-5`) 🟢. Модуль не часть прод-контура (`docs/03-interfaces.md:525`). Зависит только от `source-spi` (`platform/source-stubs/pom.xml:17-22`); без `src/main/resources` и без `*IT` 🟢. Потребители: в `test`-scope — `adapter-core`, `eam-adapter`, `scm-adapter`, `asset-adapter`, `deploymap-adapter`, `normalizer`, `platform/integration-tests`; в основном scope — `demo-launcher` (`platform/demo-launcher/pom.xml:50-53`) 🟢.
+
+### Y1.1 Состав
+
+| Файл | Строк | Что внутри |
+|---|---|---|
+| `SS/StubSource.java` | 214 | `StubSource implements SourceConnector`: журнал изменений, версии, snapshot/инкремент, сбои, webhook-события |
+| `SS/StubSourceServer.java` | 187 | JDK `HttpServer` над `StubSource`: `/changes`, `/objects/`, расписание сбоев по номеру вызова |
+| `SS/StubSources.java` | 221 | seed четырёх источников, константы типов, хелперы негативных сценариев, `fields(...)` |
+| `SS/DeployMapFormat.java` | 48 | константы временного формата deploy map (P7.1) |
+| `SS/EamApiStore.java` | 97 | хранилище `ArchObject`: тип → id → `Entry`, `ver`, архив, страница с сортировкой |
+| `SS/EamApiStub.java` | 240 | `HttpServer` формата реального EAM: `/api/<type>/`, `/api/<type>/{id}/`, `/api/types/**`, токен |
+| `SS/EamApiSeed.java` | 69 | seed `EamApiStore` (6 объектов), id типов, константы |
+| `SS/EamApiTypeMeta.java` | 62 | метаданные типов для `/api/types/{id}/options/` |
+| `SS/EamApiFormat.java` | 83 | разбор и проверка `ArchObject` (P7.3) |
+| `SS/StubWebhookSender.java` | 96 | подписанный webhook на endpoint адаптера, негативные варианты |
+| `SS/Json.java` | 234 | `write`/`parse` JSON без библиотек, package-private |
+| `SS/package-info.java` | 6 | Javadoc пакета |
+
+Всего 12 main-файлов, 1557 строк. Тесты: 5 классов, 48 `@Test`, 713 строк (Y1.6) 🟢.
+
+### Y1.2 `StubSource` — журнал, версии, курсоры
+
+**Состояние.** `journal: List<Entry(seq, change, notified)>`, `versions: Map<"type/id", Long>`, флаги `webhooksSuppressed`, `reorderNextPage`, счётчик `failuresLeft` со `status`/`retryAfter` (`SS/StubSource.java:31-41`). Все публичные методы `synchronized` (класс потокобезопасен, `:29`) 🟢.
+
+**Запись.** `upsert` → `COMPLETE`, `upsertPartial` → `PARTIAL` (в payload только переданные поля, значения могут быть `null`), `delete` → `DELETE` + `COMPLETE` + пустой payload (`:54-70`). Все три идут через `append` (`:182-190`): `sourceVersion = versions.merge(type/id, 1, sum)` — **версия монотонна на ключ и растёт также на `DELETE`**, повторный upsert после delete продолжает нумерацию; `updatedAt = clock.instant()` (UTC `Instant`, ловушка 10); `seq = journal.size() + 1`; `notified = !webhooksSuppressed` 🟢. `SourceChange` копирует payload в `LinkedHashMap`, сохраняя `null`-значения (`contracts/source-spi/.../SourceChange.java:41-44`) — именно на этом держится сценарий «неполная запись не затирает» (ловушка 5; тест `SST/StubSourceTest.java:154`) 🟢.
+
+**`fetchChanges(cursor, limit)`** (`:108-168`) 🟢:
+1. `limit ≤ 0` → `IllegalArgumentException` (`:109-111`); затем `failIfRequested()` (`:112`) — счётчик сбоев уменьшается только на допустимом вызове.
+2. Курсор `i<seq>` — **инкремент** (`:113-131`): обход всего журнала, в страницу берутся записи с `seq > after`, не больше `limit`. Если взведён `reorderNextPage` и страница не пуста — флаг сбрасывается, страница разворачивается и в конец добавляется дубль первой записи (`:123-128`). Ответ: `ChangePage(page, "i"+last, hasMore = journal.size() > last, snapshotComplete = false)` (`:130`).
+3. `cursor == null` — **начало snapshot**: `bound = journal.size()`, `after = 0` (`:134-136`); `s<after>:<bound>` — продолжение (`:137-140`); иной префикс → `IllegalArgumentException("unknown cursor")` (`:141-143`).
+4. Snapshot (`:144-167`): из записей с `seq ≤ bound` по ключу `type/id` остаётся последняя (`byKey`), из них только `UPSERT` → `latest: TreeMap<seq, change>`; страница — первые `limit` элементов с `seq > after`. `more` = есть ли в `latest` ещё `seq > last`. Следующий курсор: `more ? "s"+last+":"+bound : "i"+bound`; `snapshotComplete = !more` (`:164-167`).
+
+Следствия: объект, изменённый после `bound`, в этот snapshot не попадает и приходит инкрементом с курсором `i<bound>`; удалённый объект в snapshot отсутствует (основа «удалять можно только после полного snapshot», ловушка 9) 🟢 (тесты `SST/StubSourceTest.java:94,108`). Snapshot отдаёт **последнюю** запись ключа как есть — если она `PARTIAL`, объект приходит с `completeness=PARTIAL` 🟡 (поведение не зафиксировано тестом).
+
+**`fetchById`** (`:171-180`): последняя запись журнала по `(type, id)` **включая `DELETE`** (вернётся изменение с `operation=DELETE`), пусто только для неизвестного объекта; сбои применяются так же, как в `fetchChanges` 🟢.
+
+**Сценарные ручки.** `suppressWebhooks(boolean)` — новые записи не попадают в `webhookEvents()`, но остаются в polling (`:73,103-105`; тест `:172`); `reorderNextPage()` — один раз (`:82`; тест `:228`); `failNext(times, status, retryAfter)` — следующие `times` чтений кидают `SourceUnavailableException(system, status, retryAfter)` (`:92-96,204-209`); `status`: 429 / 5xx / 0 (timeout) (Javadoc `:89`) 🟢. `webhookEvents()` — `WebhookEvent(eventId = "<code>-evt-<seq>", source = code, sourceType, sourceId, sourceVersion, operation, occurredAt = updatedAt)`, где `code` — `SourceSystem.code()` в нижнем регистре (`:192-202`) 🟢.
+
+### Y1.3 `StubSourceServer` — HTTP-фасад
+
+- Один `HttpServer` на `InetSocketAddress` (конструктор по умолчанию — loopback и порт 0, `SS/StubSourceServer.java:41-44`; явный адрес — для контейнера, `:46-56`). Контексты `/changes` и `/objects/` (`:53-54`). Executor не задан, обработка последовательная (поведение `HttpServer` по умолчанию) 🟡. `baseUri()` всегда `http://127.0.0.1:<port>` (`:59-61`), даже если сервер слушает `0.0.0.0` 🟡.
+- `GET /changes?cursor=&limit=`: `limit` по умолчанию 100 (`:33,83`); пустой `cursor` = `null` (`:84-85`); ответ `200` с `ChangePage` в JSON (`pageJson`, `:136-145`). `GET /objects/{type}/{id}`: ровно два сегмента, иначе `404 {}`; неизвестный объект `404 {}` (`:90-100`). Формат полей — `data-dictionary.md` §Y.1.2.
+- `respond` (`:102-127`) 🟢: не-`GET` → `405 {}`; затем `failIfScheduled()` (счётчик вызовов `calls` общий для обеих ручек, нумерация с 1; запланированный сбой удаляется при срабатывании, `:129-134`); `SourceUnavailableException` → HTTP-статус из исключения, **0 → 504**, `Retry-After` в секундах если задан; `IllegalArgumentException` (включая `NumberFormatException` от `limit=abc` и неизвестный курсор) → `400 {}`. Тела ошибок всегда `{}`, значения ввода не возвращаются 🟢.
+- Аутентификации нет; защита — сетевая граница (`docs/03-interfaces.md:560`). Только чтение (ловушка «MCP/заглушки только читают» для источника выполнена) 🟢.
+
+### Y1.4 Начальные данные и сценарии (`StubSources`)
+
+- `seeded(clock)` собирает `EnumMap<SourceSystem, StubSource>` из `eam/scm/cmdb/deployMap` (`SS/StubSources.java:29-36`). Состав seed — `data-dictionary.md` §Y.1.4; согласованность идентификаторов: `SERVICE.systemCode` (SCM) = `IT_SYSTEM`-ключ EAM, `DEPLOYMENT.service` = id сервиса SCM, `hosts` = id `COMPUTE_INSTANCE` 🟢.
+- Негативные сценарии — отдельные статические хелперы, **в seed они не входят** (тест `SST/StubSourceTest.java:61`): `addServiceWithBrokenReference` (SCM, `systemCode=EAM-UNKNOWN`, `:207-211`), `addDeploymentWithUnknownRepository` (`:121-130`), `addDeploymentWithSystemMismatch` (система `5102` при сервисе системы `5101`, `:138-146`), `addDeploymentWithInvalidCommit` (`commit="not-a-commit"`, `:153-161`), `addDeploymentRedeploy` (тот же `sourceId`, новый commit `1b4f0e98…`, версия `1.4.3`, `:169-178`) 🟢.
+- `deploymentV1` (`:181-200`) собирает payload `deploymap-poc-1`; помимо описанного в P7.1 кладёт `name = chart` и `chartMeta.appVersion = chartVersion` 🟢. Ключ `name` в Javadoc `DeployMapFormat` не упомянут (`SS/DeployMapFormat.java:10-14`) 🟡.
+- `fields(Object... kv)` — `LinkedHashMap` из пар, допускает `null`-значения; нечётное число аргументов даст `ArrayIndexOutOfBoundsException` (`:214-220`) 🟡.
+
+### Y1.5 Заглушка EAM API
+
+**`EamApiStore`** (`SS/EamApiStore.java`) 🟢. `byType: LinkedHashMap<type, TreeMap<id, Entry(id, ver, ctime, mtime, attrs)>>`, `synchronized`. `upsert` (`:28-37`): нового объекта — `ver=1`, `ctime=mtime=now`; существующего — **только если `attrs` изменились** (`!old.attrs().equals(attrs)`) → `ver+1`, `ctime` прежний, `mtime=now`, `attrs` заменяются **целиком**; одинаковые `attrs` — no-op (`ver`/`mtime` не меняются). `archive` (`:40-45`) физически удаляет запись: объект исчезает из списка и из `GET /{id}/`, а повторный `upsert` начнёт с `ver=1` (история версий не хранится) 🟡. `page(type, sort, page, pageSize)` (`:69-84`): по умолчанию порядок по `id`; `sort` — список через запятую, префикс `-` — убывание, допустимы `id`, `ctime`, `mtime`, хвостовое сравнение по `id` для стабильности; другой ключ → `IllegalArgumentException` (`:86-93`); страница вне диапазона — пустой список (`:82-83`).
+
+**`EamApiStub`** (`SS/EamApiStub.java`) 🟢. Контекст `/api/` (`:65`). Порядок проверок в `route` (`:92-120`): (1) `Authorization: Token <token>` — иначе `401 {"detail":"Authentication credentials were not provided."}`; сравнение `MessageDigest.isEqual` (постоянное время, `:186-191`); (2) метод ≠ `GET` → `405`; (3) пустой путь → `404`; (4) `types` → `types(...)`; (5) тип отсутствует в хранилище (`hasType`) → `404`; (6) `/api/<type>/` → `list`; `/api/<type>/{id}/` → `find` или `404`; глубже → `404`. Ошибки разбора (`page=abc`, `id=abc`, `page<1`, `page_size<1`, неподдерживаемый `sort`, `kind` не из `fields|system`) → `400 {"detail":...}` (`:77-90`, `:122-131`, `:193-210`). Формат ответа и параметры — `data-dictionary.md` §Y.1.5. Токен обязателен и непуст (`:55-57`); он хранится как байты в приватном поле и в ответах/логах не появляется (ловушка 12) 🟢.
+
+**Метаданные типов.** `/api/types/` — отсортированный список `typeObject` для `TYPE_IDS`; `/api/types/{id|name}/` — один тип (поиск по числовому id **или** по имени типа, `:139-141`); `/api/types/{id}/options/?kind=fields|system` — `{"options":[…]}` из `EamApiTypeMeta.options` (`SS/EamApiTypeMeta.java:25-50`). Состав ключей опций — допущение «не подтверждено» (Javadoc `:9-12`) 🟢.
+
+**`EamApiSeed.seeded(clock)`** — 2 платформы, 2 ИТ-решения, 2 ИТ-системы; ИТ-системы несут `eam_id` (`EAM-1042`, `EAM-2001`), совпадающий с `systemCode` сервисов SCM, и `ownerTeam = TEAM-PAY` (допущение 9) (`SS/EamApiSeed.java:49-68`). Состав — `data-dictionary.md` §Y.1.4.
+
+### Y1.6 `StubWebhookSender`, `Json`
+
+**`StubWebhookSender`** (`SS/StubWebhookSender.java`) 🟢. `send(event)` = `sendAt(event, clock.instant())`; `sendAt` подписывает `WebhookSignature.sign(secret, ts, body)` и шлёт `POST` с заголовками `Content-Type`, `X-Archrag-Event-Id`, `X-Archrag-Timestamp`, `X-Archrag-Signature` (`:40-49,71-80`); `sendWithBadSignature` подписывает секретом `secret + "-wrong"` (`:52-56`). Тело — **только уведомление**, без payload объекта (`body`, `:59-69`). Таймауты: подключение 5 с, запрос 10 с (`:26,74`). Возвращается HTTP-статус; `IOException` → `IllegalStateException("webhook delivery failed: <класс>")` — текст исключения клиента HTTP в сообщение не попадает (секрет не утекает, ловушка 12); `InterruptedException` восстанавливает флаг и бросает `IllegalStateException` (`:81-89`) 🟢. Класс `AutoCloseable` (закрывает `HttpClient`, `:92-95`).
+
+**`Json`** (`SS/Json.java`, package-private) 🟡. `write`: `null`, `Boolean`, `Number` (через `toString`), `Map`, `Collection`, прочее — `toString()` в строку (так сериализуются `Instant` → ISO-8601 UTC и enum → имя) (`:14,178-211`); экранируются `"`, `\`, `\n`, `\r`, `\t`, управляющие `< 0x20` как `\u00XX` (`:213-232`). `parse`: рекурсивный спуск в `Map`/`List`/`String`/`Long`/`Double`/`Boolean`/`null`; число, состоящее только из `-` и цифр → `Long`, иначе `Double` (`:164-175`); хвост после значения → `IllegalArgumentException("trailing characters")` (`:21-30`). Ограничений глубины и размера нет; неполная escape-последовательность в конце строки даёт `StringIndexOutOfBoundsException`, а не `IllegalArgumentException` (`:139-153`) — см. сомнения. Парсер используют `EamApiFormat.parse` (`SS/EamApiFormat.java:18-20`) и тесты; `write` — оба HTTP-сервера и отправитель.
+
+### Y1.7 Тесты `platform/source-stubs` (48 `@Test`, 5 классов, 713 строк)
+
+| Класс | `@Test` | Что покрыто |
+|---|---|---|
+| `SST/StubSourceTest.java` (253) | 17 | seed четырёх источников и deploy map `poc-1` (`:28,43`), негативные хелперы вне seed (`:61`), redeploy → `sourceVersion+1` (`:72`), монотонность версии (`:84`), `DELETE` виден по id и инкрементом, но не в snapshot (`:94`), стабильность snapshot при изменении посреди прохода и `snapshotComplete` только на последней странице (`:108`), инкрементальные страницы (`:138`), `PARTIAL` с `null` (`:154`), битая ссылка (`:163`), подавление webhook (`:172`), старая версия в уведомлении (`:190`), 429 с `Retry-After` и восстановление (`:204`), 503 на `fetchById` с обратным отсчётом (`:216`), `reorderNextPage` (`:228`), `limit=0` (`:243`), неизвестный объект (`:250`) |
+| `SST/StubSourceServerTest.java` (121) | 8 | явный адрес (`:55`), обход курсором (`:65`), `/objects` и 404 (`:77`), `limit=0|abc` → 400 (`:85`), `failOnCall` с `Retry-After` (`:91`), сбой источника → 503 без `Retry-After` (`:101`), timeout → 504 (`:110`), `POST` → 405 (`:116`) |
+| `SST/EamApiStubTest.java` (227) | 18 | голый массив трёх типов, seed `eam_id`/`id`, пагинация «короткая → пустая», сортировка `-mtime`/`-id`, `fields`, зажим `page_size`, рост `ver` и no-op при повторе, архив, 200/404/400 по id и типу, метаданные типов, ссылки `product_id`/`platform_id` — одиночные id, 401 (нет токена / неверный / `Bearer`), 405 на `POST/PATCH/DELETE`, пустой токен, разбор `ArchObject`, `fields=name,name`, `sort=name` → 400, обрыв JSON |
+| `SST/StubWebhookSenderTest.java` (91) | 4 | корректная подпись → 202 и тело без состояния объекта (`:63`), устаревший timestamp → `OUT_OF_WINDOW` (`:73`), неверная подпись → `BAD_SIGNATURE` (`:79`), повтор доставки с тем же `eventId` и телом (`:85`) |
+| `SST/JsonTest.java` (21) | 1 | экранирование и вложенность `write` (`:13`) |
+
+Негативные тесты есть для лимитов (`limit`, `page_size`, `sort`), аутентификации (401), методов (405/PATCH/DELETE), подписи и окна replay; идемпотентность на стороне заглушек не проверяется (она на стороне ingestion) 🟢. Не покрыты: `Json.parse` напрямую (только через `EamApiFormat`), некорректные `s…`-курсоры, `PARTIAL` в snapshot, `sort=","`, `fields` с пробелами, `/api/types/{id}/` с несуществующим id, `EamApiTypeMeta` для `itproducts`, параллельные вызовы `StubSource` 🟡.
+
+### Y1.8 Сомнения и расхождения
+
+- 🔴 **`EamApiStub` уже, чем `docs/eam-api.yaml`.** `GET /api/types/{id}/options/` в спеке принимает `kind=groups|fields|computed|system` (`docs/eam-api.yaml:18075-18079`), заглушка — только `fields|system` и отвечает `400` на остальное (`SS/EamApiStub.java:43,148-153`; тест `SST/EamApiStubTest.java:142` закрепляет это как норму). Спека для списка допускает также `search`, `search_by`, `search_mode`, `enrich`, `only_names` (`docs/eam-api.yaml:15-58`) и сортировку по «полям схемы» — заглушка эти параметры молча игнорирует, а `sort` ограничивает `id|ctime|mtime` (`SS/EamApiStore.java:86-93`). Для адаптера, который начнёт использовать поиск, заглушка даст ложный «успех» 🟡. Допущения перечислены в Javadoc и `docs/06-eam-integration.md`; расхождение с ADR 0010 нет, но в документе §6 нет явного списка «чего заглушка не умеет».
+- 🟡 **Docs: `docs/03-interfaces.md:534` «Нет эндпоинтов `/control/*`»** верно для `StubSourceServer`, но в `demo-launcher` `StubControl` и `EamApiControl` поднимают `POST /control/upsert` и `/control/archive` на порту 8091 (Y2). В таблице безопасности §6 (`:560-567`) они не перечислены; `docs/03-interfaces.md:3` объясняет это «описывается после E5», а compose уже в репозитории (`platform/docker/docker-compose.yml:432-441`) 🟡.
+- 🟡 **`DeployMapFormat` неполно описывает poc-0.** `docs/03-interfaces.md:550` называет `ENVIRONMENT {name, class}` и `DEPLOYMENT {…, validFrom}`; это согласуется с нормализатором, который читает необязательные `class` и `validFrom` (`ingestion/normalizer/.../DeployMapMapper.java:86,241`), поэтому документ верен. Но Javadoc `DeployMapFormat` (`SS/DeployMapFormat.java:10-14`) перечисляет только `name` у `ENVIRONMENT` и `service, environment, chart, chartVersion, hosts` у `DEPLOYMENT`, а seed (`SS/StubSources.java:92-93,189-199`) `class` и `validFrom` не заполняет — необязательные поля формата заглушкой не покрыты.
+- 🟡 **Два JSON-парсера.** `SS/Json` (без ограничений) дублирует `adapters/adapter-core/.../Json` (с `MAX_DEPTH = 64`, `Json.java:18`); модуль не зависит от `adapter-core` (направление зависимостей), поэтому копия объяснима. Глубокая вложенность `[[[…` даёт `StackOverflowError` в `SS/Json.value`; `\` в конце строки и обрезанная `\u` — `StringIndexOutOfBoundsException`; число `-` или `1-2` проходит проверку символов и падает как `NumberFormatException` (это `IllegalArgumentException`, но с сообщением JDK) (`SS/Json.java:135-175`). Вход — ответы собственной заглушки и fixtures, поэтому риск низкий; тест на `parse` — только через `EamApiFormat`.
+- 🟡 **Необработанные исключения в HTTP-обработчиках.** Только `IllegalArgumentException` превращается в `400`. Курсор `s5` без `:` даёт `ArrayIndexOutOfBoundsException` (`SS/StubSource.java:138-140`), `sort=","` — `NullPointerException` (`"," .split` → пустой массив, `chain == null`, `SS/EamApiStore.java:73-79`), а запись `sort=id, -mtime` ошибочно отвергается `400`, потому что `trim()` применён только к ключу без `-` (`:76`). Необработанное исключение вылетает из обработчика `HttpServer`, и клиент видит обрыв соединения вместо `400` (контракт `docs/03-interfaces.md:531` обещает `400 {}` на «неизвестный курсор»).
+- 🟡 **Производительность и память журнала.** Журнал неограничен; инкрементальная страница и каждая страница snapshot обходят весь журнал (`SS/StubSource.java:117-122,147-151`), snapshot из N объектов по страницам `limit` стоит O(N·N/limit). Для сценариев замеров (`docs/04-poc-measurements.md:41`, пачки upsert) на заглушке EAM это ограничивает throughput самой заглушки, а не системы — учитывать при чтении p95 🟡.
+- 🟡 **Snapshot отдаёт `PARTIAL` как есть**, а `fetchById` — `DELETE`-запись; адаптеры обязаны сами различать (`completeness`/`operation`). Тест на snapshot с `PARTIAL` отсутствует.
+- 🟡 **Слабые утверждения в тестах.** `pageSizeIsClampedToMaximum` проверяет только `200` при двух объектах в seed — зажим до 500 не доказан (`SST/EamApiStubTest.java:100-102`); в `suppressedWebhookIsMissingFromNotificationsButPresentInPolling` проверка `extracting(sourceId).doesNotContain("missed")` ничего не доказывает (значение `missed` — это `name`, а не `sourceId`, `SST/StubSourceTest.java:183`); `staleWebhookVersionIsLowerThanCurrentState` содержит тривиальное `isLessThan(current + 1)` (`:198-199`).
+- 🟡 **`EamApiStore.archive` без истории.** Реальный EAM, скорее всего, хранит архивные объекты и отдаёт их по `GET /{id}/`; допущение «архивированный объект исчезает» зафиксировано только в Javadoc (`SS/EamApiStore.java:14-16`). После `archive`+`upsert` `ver` сбрасывается в 1 — адаптер не должен считать `ver` монотонным в пределах `id`.
+- 🟢 Ловушки CLAUDE.md: заглушки только читают (`405` на не-`GET`, `SS/StubSourceServer.java:107-108`, `SS/EamApiStub.java:96-98`); время — `Instant` UTC через инжектируемый `Clock` (ловушка 10); секрет webhook и токен EAM в исключения и логи не попадают (ловушка 12, `SS/StubWebhookSender.java:83-85`, `SS/EamApiStub.java:55-57`); тексты объектов не логируются (в модуле нет логирования вообще).
+
+### Y1.9 Итоговая строка
+
+| Модуль | Java-файлов main / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `platform/source-stubs` | 11 (+1 `package-info`) / 1557 | 48 в 5 классах | журнал с монотонной версией; snapshot по `bound` + курсоры `s…`/`i…`; расписание сбоев по номеру вызова; `ver` по изменению `attrs`; сортировка по списку ключей | Y1.8: заглушка EAM уже спеки (`kind`, `search`, `sort`), необработанные исключения вместо 400, второй JSON-парсер, O(N·N/limit) на snapshot |
+
+---
+
+## Y2. `platform/demo-launcher`
+
+**Назначение.** Исполняемый Spring Boot-fat-jar (`classifier=exec`, `mainClass=DemoLauncher`, `platform/demo-launcher/pom.xml:72-89`) — один образ стенда для **четырёх ролей**: `adapter <SRC>` (адаптер источника с webhook, polling, reconciliation и `/health`), `stub <SRC>` (заглушка источника + управляющий вход), `eam-api-stub` (заглушка формата реального EAM + управляющий вход) (`DL/DemoLauncher.java:26-48,58-83`) 🟢. Это не Spring-приложение: контекста Spring нет, используются `main`, JDK `HttpServer` и env (`DL/DemoLauncher.java:3,58`) 🟢. В compose все роли — один `Dockerfile` (`platform/docker/Dockerfile:1-14`), роль выбирается `command:` сервиса (`platform/docker/docker-compose.yml:313,340,354,368,383,399,410,421,436`), секреты Docker превращает в env `platform/docker/entrypoint.sh:4-10` 🟢.
+
+### Y2.1 Состав
+
+| Файл | Строк | Что внутри |
+|---|---|---|
+| `DL/DemoLauncher.java` | 168 | `main`, три режима запуска, сборка адаптера, `/health`, ожидание SIGTERM |
+| `DL/LauncherConfig.java` | 205 | разбор env в записи `Adapter`, `Stub`, `EamApiStub`; валидация портов/интервалов |
+| `DL/StubControl.java` | 125 | `POST /control/upsert` для заглушки источника (+ необязательный webhook адаптеру) |
+| `DL/EamApiControl.java` | 112 | `POST /control/upsert`, `/control/archive` для заглушки EAM API |
+| `DL/package-info.java` | 6 | Javadoc пакета |
+
+Всего 5 main-файлов, 616 строк. Тесты: 3 класса, 28 `@Test`, 424 строки (Y2.6). Зависимости: `source-spi`, `adapter-core`, четыре адаптера, `event-schemas`, `event-journal`, `source-stubs`, `postgresql` (`platform/demo-launcher/pom.xml:17-57`) — платформенный «сборочный» модуль, направление зависимостей схемы `platform → всё` не нарушает (CLAUDE.md, раскладка модулей) 🟢.
+
+### Y2.2 Жизненный цикл `DemoLauncher`
+
+**Диспетчер** (`DL/DemoLauncher.java:58-83`) 🟢:
+1. `args == ["eam-api-stub"]` → `runEamApiStub(LauncherConfig.eamApiStub(System.getenv()))` (`:59-67`).
+2. Иначе нужны ровно два аргумента `adapter|stub` + код источника; иначе `usage` в stderr и `System.exit(2)` (`:68-71`).
+3. `LauncherConfig.parseSystem(args[1])` и конфиг роли из `System.getenv()`; любой `IllegalArgumentException` → `configuration error: <сообщение>` в stderr и `exit(2)` (`:72-82`). Сообщения содержат только **имена** переменных (ловушка 12; тесты `DLT/LauncherConfigTest.java:49,77`).
+
+**`runStub`** (`:85-95`): `StubSources.seeded(Clock.systemUTC()).get(system)` — **seed всех четырёх, берётся один**; `StubWebhookSender` создаётся только если задан `ARCHRAG_WEBHOOK_TARGET`; `StubSourceServer` слушает `0.0.0.0:ARCHRAG_STUB_PORT`, `StubControl` — `0.0.0.0:8091` (константа `STUB_CONTROL_PORT`, `:54`). Лог `stub <SRC> listens on …` и `awaitShutdown()`. `StubWebhookSender` в `try-with-resources` не включён и не закрывается 🟡.
+
+**`runEamApiStub`** (`:97-106`): `EamApiSeed.seeded` → `EamApiStub` на `ARCHRAG_STUB_PORT` с токеном `ARCHRAG_EAM_API_TOKEN`, `EamApiControl` на 8091. `IOException` при старте управляющего входа превращается в `IllegalStateException` (не в код 2).
+
+**`runAdapter`** (`:108-135`) — порядок старта 🟢:
+1. `PGSimpleDataSource` из `ARCHRAG_PG_*` → `PostgresEventJournal(ds)`; миграции **не накатываются** (их делает `ingestion-service`, поэтому в compose `adapter-*` зависят от `ingestion`, `platform/docker/docker-compose.yml:28-32`).
+2. `AdapterConfig(system, sourceUrl, webhookSecret, DEFAULT_REPLAY_WINDOW (5 мин), pageSize=100, pollInterval, reconcileInterval, RetryPolicy.defaults())` — размер страницы 100 зашит (`:114-116`; `adapters/adapter-core/.../AdapterConfig.java:21-29,61`).
+3. `S3RawPayloadStore.create(endpoint, access, secret, bucket)` (в `try-with-resources`) → `store.ensureBucket()`.
+4. `create(...)` (`:137-145`): `EAM` → `EamAdapter.create(config, journal, store)` либо, если задан `config.eamApi()`, `EamAdapter.create(config, eamApi, journal, store)`; `SCM`/`CMDB`/`DEPLOY_MAP` → соответствующие `…Adapter.create`.
+5. `healthServer(HEALTH_PORT, started)` создаётся **до** запуска адаптера: пока `started=false`, `GET /health` → `503 {"status":"DOWN"}` (также на не-`GET`), после — `200 {"status":"UP"}` (`:147-160`).
+6. `startWebhook(0.0.0.0:WEBHOOK_PORT)` → `startPolling()` → `startReconciliation()` → `started.set(true)`; `finally` останавливает health-сервер (`:123-131`).
+7. `awaitShutdown()` (`:163-167`): `CountDownLatch` и shutdown hook, который лишь снимает защёлку; ресурсы закрывает `try-with-resources` после возврата из `await` — но JVM не ждёт главный поток после хука, поэтому фактическое закрытие при SIGTERM не гарантировано (Javadoc `:162` так и говорит: «ресурсы закрывает ОС») 🟡. Корректность не страдает: checkpoint сдвигается адаптером после коммита (ловушка 6), повтор безопасен.
+
+Инвариант из Javadoc: **ровно один экземпляр адаптера на источник**, замок snapshot действует только внутри процесса (`:46`; в compose `replicas: 1`, `platform/docker/README.md:30`) 🟢.
+
+### Y2.3 `LauncherConfig` — разбор env
+
+Список переменных, умолчания и коды — `data-dictionary.md` §Y.2.1. Алгоритм 🟢:
+- `adapter(system, env)`: обязательные 9 переменных (`PG_URL`, `PG_USER`, `PG_PASSWORD`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `SOURCE_URL`, `WEBHOOK_SECRET`) собираются в список `missing`; пустая/пробельная строка = не задано; если список непуст — одно `IllegalArgumentException("required environment variables are not set: [..]")` с **именами** (`DL/LauncherConfig.java:107-121,165-173`). Для `EAM` дополнительно `eamApi(env, missing)` (`:118,128-139`). Необязательные: `WEBHOOK_PORT` (8080), `HEALTH_PORT` (8090), `POLL_INTERVAL_SECONDS` (30), `RECONCILE_INTERVAL_SECONDS` (21600) (`:122-124`).
+- `eamApi`: `ARCHRAG_EAM_MODE` пусто/`legacy` → `null`; `eam-api` → требуются `EAM_API_URL` и `EAM_API_TOKEN` (имена добавляются в `missing`); иное значение → сразу `IllegalArgumentException` (`:128-139`). Для не-`EAM` источников режим игнорируется (тест `DLT/LauncherConfigTest.java:153`).
+- `stub(system, env)`: без `WEBHOOK_TARGET` → `Stub(system, port, null, null)` — `WEBHOOK_SECRET` в этом случае **игнорируется**; с целью — секрет обязателен (`:142-153`).
+- `eamApiStub(env)`: обязателен `EAM_API_TOKEN` (`:156-163`).
+- `port` — целое `1..65535` (`:174-188`); `seconds` — целое `≥ 1` (`:190-203`); сообщения называют переменную, но не значение.
+- Записи `Adapter`, `Stub`, `EamApiStub` переопределяют `toString` с `secrets=***`/`token=***`; `Adapter.toString` печатает `eamApi` через собственный маскирующий `EamAdapter.EamApi.toString` (`:66-70,82-84,91-93`; `adapters/eam-adapter/.../EamAdapter.java:47-53`) 🟢 (ловушка 12).
+
+### Y2.4 `StubControl` и `EamApiControl`
+
+Оба — отдельный `HttpServer` на порту 8091, **без аутентификации**, на всех интерфейсах контейнера (`new InetSocketAddress(8091)`, `DL/DemoLauncher.java:90,100`); защита — что порт не публикуется и не проксируется (Javadoc `DL/StubControl.java:18-20`, `DL/EamApiControl.java:19-21`, `platform/docker/README.md:51`) 🟡. Исполняется только изнутри контейнера (`docker compose exec … curl`), этим пользуются `platform/docker/scripts/backup-restore-check.sh:16`, `deployment-commit-check.sh:107`, `measure.sh:196,260`.
+
+**`StubControl`** (`DL/StubControl.java`) 🟢: `POST /control/upsert` с телом `{"type","id","payload","notify"?}`.
+1. Не-`POST` → `405 {"error":"POST expected"}` (`:56-58`).
+2. Тело читается не более `MAX_BODY_BYTES = 64 KiB`: `readNBytes(64K+1)`, больше → `IllegalArgumentException` → `400` (`:113-119`); разбор — `adapter-core.Json.parseObject` (с лимитом глубины 64, `adapters/adapter-core/.../Json.java:18,40-45`).
+3. `type`, `id` — непустые строки, `payload` — JSON-объект (`:61-66,106-111`); иначе `400 {"error":"invalid request"}` **без эха ввода** (`:77-80`; ловушка 11).
+4. `source.upsert(type, id, payload)` (всегда `COMPLETE`); `notify` по умолчанию `true`, отключается только литералом `false` (`:69-70`).
+5. Если задан `StubWebhookSender` и `notify`: `notifyAdapter` берёт **последнее** событие `(type, id)` из `webhookEvents()` и шлёт `webhooks.send(event)`; при `IllegalStateException` (доставка не удалась) — лог `WARNING` и статус `0`; при успехе — HTTP-статус адаптера (`:89-104`). Ответ `200 {"sourceVersion":N[,"webhookStatus":S]}`; поле `webhookStatus` отсутствует, если webhook не отправлялся (`:72-76`). Сбой доставки upsert не откатывает: догонит polling.
+Отправка синхронна внутри обработчика (до 10 с таймаута отправителя), обработка на `HttpServer` последовательная 🟡.
+
+**`EamApiControl`** (`DL/EamApiControl.java`) 🟢: контексты `/control/upsert` (`{"type","id","attrs"}`) и `/control/archive` (`{"type","id"}`) (`:33-34`). Общая обёртка `handle` (`:77-98`): не-`POST` → `405`; `IllegalArgumentException` → `400 {"error":"invalid request"}`. `type` ∈ `{platforms, itproducts, itsystems}` (`:27,59-64`); `id` — только JSON-целое (`Long`), строка `"x"` → `400` (`:66-71`); `attrs` — объект (`:45-47`). `upsert` **заменяет `attrs` целиком** и возвращает `{"ver":N}` (`:42-52`); `archive` идемпотентен — для неизвестного объекта тоже `200 {}` (`:54-57`). `/api/**` заглушки остаётся только для чтения (тест `DLT/EamApiControlTest.java:77`).
+
+### Y2.5 Блок `/health` и порты
+
+Порты роли: адаптер — `WEBHOOK_PORT` (8080; `/webhook` и `/control/snapshot` от `WebhookServer`), `HEALTH_PORT` (8090); заглушка — `STUB_PORT` (8080) и 8091; `eam-api-stub` — `STUB_PORT` (8080) и 8091 (`DL/DemoLauncher.java:54,89-90,99-100,122-124`; `LauncherConfig.java:122-124`). Health заглушек в compose — `GET /changes?limit=1` на 8080, `eam-api-stub` — `GET /api/platforms/?page_size=1` с токеном (`platform/docker/docker-compose.yml:390-395,441`) 🟢.
+
+### Y2.6 Тесты `platform/demo-launcher` (28 `@Test`, 3 класса, 424 строки; `*IT` нет)
+
+| Класс | `@Test` | Что покрыто |
+|---|---|---|
+| `DLT/LauncherConfigTest.java` (159) | 14 | умолчания и переопределения адаптера (`:29,39`), ошибка с перечислением имён и без значений секретов (`:49`), неверный порт/интервал/не число (`:61`), `toString` без секретов (`:77`), неизвестный источник/`null` (`:83`), заглушка без секретов и порт (`:90`), токен EAM API обязателен и скрыт (`:96`), цель webhook требует секрет (`:107`) и разбор (`:114`), без цели секрет игнорируется (`:123`), режим `legacy` по умолчанию (`:129`), `eam-api` требует URL и токен (`:137`), неизвестный режим и игнор для не-EAM (`:153`) |
+| `DLT/StubControlTest.java` (184) | 10 | upsert виден в `/changes` (`:56`), плохие тела → 400 без изменения источника (`:64`), тело > 64 KiB → 400 (`:74`), `GET` → 405 (`:80`), control не обслуживается на порту источника (`:87`), подписанный webhook с проверкой подписи и `eventId` (`:123`), `notify:false` (`:141`), недоступный получатель → 200 и `webhookStatus:0` (`:156`), ошибка получателя 401 отражается, а не бросается (`:169`), без цели нет `webhookStatus` (`:181`) |
+| `DLT/EamApiControlTest.java` (81) | 4 | upsert/рост `ver` и видимость в `/api` (`:48`), архивирование (`:58`), плохие запросы без эха ввода: не JSON, чужой тип, нецелый id, нет `attrs`, `GET` → 405 (`:65`), `/api/**` остаётся read-only (`:77`) |
+
+Негативные тесты есть для валидации env, размера и формата тела, методов; не покрыты: `DemoLauncher.main` (маршрутизация аргументов, коды выхода), `runAdapter` и `/health`, `create(...)`, закрытие `StubWebhookSender`, `ARCHRAG_STUB_PORT` вне диапазона для `stub`, `archive` неизвестного объекта и неверный `type` у `/control/archive`, подпись webhook при `notify` для `PARTIAL`-записей (control всегда шлёт `COMPLETE`) 🟡. Запуск процесса и `/health` проверяет только смоук стенда (`platform/docker/smoke.sh`) — вне этих модулей.
+
+### Y2.7 Сомнения и расхождения
+
+- 🟡 **Управляющий вход без аутентификации на wildcard-адресе.** `POST /control/upsert|archive` меняет данные источника, слушает `0.0.0.0:8091` в сети `edge`, где находятся адаптеры (`platform/docker/docker-compose.yml:381-388`); единственная защита — «не публикуется» (комментарий `:432`). Это согласуется с общей установкой `docs/03-interfaces.md:560` («защита — сетевая граница») для `/control/snapshot` и `/changes`, но сами `/control/*` заглушек в таблице §6 не перечислены (см. Y1.8). Для демо-стенда допустимо; для любого другого развёртывания — риск.
+- 🔴 **`EamApiControl.TYPES` продублирован литералами** (`DL/EamApiControl.java:27`), тогда как `EamApiSeed` объявляет `SOLUTION_TYPE` «единственным местом выбора» типа ИТ-решения (Javadoc `SS/EamApiSeed.java:23-26`). Смена константы переключит заглушку на новый тип, а управляющий вход продолжит принимать только `itproducts` и отвергать новый тип (`400`). Тест `DLT/EamApiControlTest` этого не ловит.
+- 🟡 **Ошибки времени выполнения маскируются под конфигурацию.** `catch (IllegalArgumentException)` вокруг всего `runAdapter(...)`/`runStub(...)` (`DL/DemoLauncher.java:72-82`) печатает `configuration error` и код 2 для любого `IllegalArgumentException`, включая возникшее при старте адаптера/сервера (например, из `HttpServer.create` для порта вне диапазона). Сообщение может содержать текст исключения библиотеки.
+- 🟡 **`URI.create(...)` для `S3_ENDPOINT`, `SOURCE_URL`, `EAM_API_URL`, `WEBHOOK_TARGET`** (`DL/LauncherConfig.java:122-123,138,152`) при неверном URI кидает `IllegalArgumentException`, текст которого содержит **значение** (JDK добавляет входную строку). Если в URL окажутся учётные данные (`user:pass@host`), они попадут в stderr, вопреки заявленному «значения в сообщения не попадают» (Javadoc `DL/LauncherConfig.java:11-12`, ловушка 12). Тест этого не проверяет.
+- 🟡 **`StubWebhookSender` не закрывается** в `runStub` (`DL/DemoLauncher.java:87-94`) — `HttpClient` живёт до конца процесса; на практике безвреден (процесс завершается).
+- 🟡 **Корректное завершение не гарантировано** (Y2.2, п. 7): `awaitShutdown` не ждёт закрытия адаптера, in-flight обработка может прерваться; безопасность данных держится на идемпотентности ingestion, не на lifecycle.
+- 🟡 **`DemoLauncher` без unit-тестов**: маршрутизация аргументов, `exit(2)`, порядок старта, `/health` до/после старта — не покрыты; всё опирается на смоук `platform/docker/smoke.sh`.
+- 🟡 **Hard-coded значения.** Порт 8091 (`DL/DemoLauncher.java:54`) и `pageSize=100` (`:115`) не настраиваются через env; `ARCHRAG_STUB_PORT` служит и портом `stub`, и портом `eam-api-stub`. Для `stub` на одном хосте с `eam-api-stub` (без compose-изоляции сетей) порт 8091 конфликтует.
+- 🟡 **Версия плагина Spring Boot** задана свойством `${spring-boot.version}` прямо в `build/plugins` (`platform/demo-launcher/pom.xml:72-76`), а не через `pluginManagement` корневого `pom.xml:176-208` (там плагина нет). Так же сделано в `ingestion-service`, `mcp-server`, `admin-console` (соседний код), поэтому расхождение со стилем нулевое; версия при этом всё же определяется в одном месте (`pom.xml:28`). Решение (вынести в `pluginManagement`) — за архитектором.
+- 🟢 Ловушки CLAUDE.md: секреты (PG/S3/webhook/EAM-токен) не логируются и не попадают в `toString` (тесты `DLT/LauncherConfigTest.java:77,96,114,137`); тело control — недоверенный ввод: ограничение размера, `400` без эха (`DLT/StubControlTest.java:64,74`, `DLT/EamApiControlTest.java:65`); `catch` не глушит ошибки — `IllegalStateException` доставки логируется как `WARNING` и отражается статусом `0` (`DL/StubControl.java:100-103`).
+
+### Y2.8 Итоговая строка
+
+| Модуль | Java-файлов main / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `platform/demo-launcher` | 4 (+1 `package-info`) / 616 | 28 в 3 классах (`main`/`runAdapter` без тестов) | разбор env с накоплением `missing`; порядок старта адаптера (миграции — не здесь) и `/health` после старта; control-вход с лимитом 64 KiB и необязательным webhook | Y2.7: `/control/*` без аутентификации на wildcard, `TYPES` продублирован, `configuration error` для любого IAE, `URI.create` может эхо-вывести URL |
+
+
+---
+
+## Z1. `platform/integration-tests`
+
+> Archaeologist, этап R.2e (`platform/integration-tests`). Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Тесты в этом прогоне **не запускались** (только чтение; Docker не использовался), поэтому утверждения о поведении — это то, что тест *утверждает*, а не результат прогона.
+> Сокращение: `IT` = `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests`. Ссылка `Класс.метод:N` — строка объявления метода (`void …`) в `IT/Класс.java`; ссылка `Класс:N-M` — строки файла. Номера строк методов получены машинной выгрузкой по `@Test`.
+> Не дублируется: требования и критерии PoC — `docs/00-vision.md:794-807`; порядок работ F1–F4 — `docs/01-development-order.md:36-45`; решения — `docs/adr/` (0007, 0017, 0019, 0020, 0030, 0031).
+
+**Назначение.** Единственный модуль сквозной приёмки: поднимает настоящие Neo4j Community, PostgreSQL и S3-совместимое хранилище в Testcontainers и прогоняет через них код всех остальных групп (`adapters/*` → `ingestion/*` → `access/*`) на заглушках `platform/source-stubs`. Модуль не содержит прод-логики: в `src/main` лишь маркер (`platform/integration-tests/src/main/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsModule.java:3-6`, `package-info.java`), а все 31 класс `*IT`, `IntegrationTestsSmokeTest` и 6 вспомогательных классов лежат в `src/test` 🟢.
+
+---
+
+### Z1.1 Состав и сборка
+
+**Состав** 🟢 (машинный подсчёт): 38 файлов в `src/test` — **31 класс `*IT`** (298 методов `@Test`), 1 unit-класс `IntegrationTestsSmokeTest` (1 `@Test`, запускается surefire) и 6 вспомогательных (`AssetFixtures`, `CanonicalGraph`, `EamApiSupport`, `McpTestJwt`, `ScmItSystemMapper`, `TestImages`). Итого **299 `@Test`**, `@ParameterizedTest`/`@RepeatedTest`/`@TestFactory` — 0, `@Disabled` — 0, `@DisplayName` — 0. ≈ 10 880 строк в `src/test` (классы `*IT` ≈ 10 520). Совпадает с `_reversa_sdd/inventory.md:16` (31 `*IT.java`).
+
+| Класс | Область | Строк | @Test | Ст. | Кон. | JWT | @Order |
+|---|---|---|---|---|---|---|---|
+| `AdapterInboxIT` | ингест/журнал | 151 | 3 | M | PS | — | — |
+| `AdminConsoleIT` | консоль | 334 | 8 | SA | N | RSA | — |
+| `AdminEndpointIT` | admin REST | 477 | 13 | SB | NPS | RSA | — |
+| `ContainersSmokeIT` | среда | 87 | 3 | — | NPS | — | — |
+| `DeployedFromIT` | deploy map / конфликты | 371 | 11 | M | NP | — | — |
+| `DeploymentCommitReadIT` | query-core | 173 | 4 | M | N | — | — |
+| `EamApiProjectionIT` | проекция EAM | 271 | 9 | M | NP | — | — |
+| `EamKeyMigrationIT` | миграция ключа EAM | 324 | 5 | SB | NPS | HS | 5 |
+| `EventJournalIT` | ингест/журнал | 300 | 12 | M | PS | — | — |
+| `ExplainProvenanceIT` | query-core / provenance | 274 | 5 | M | NP | — | — |
+| `F1AcceptanceIT` | приёмка F1 | 428 | 8 | SB+SA | NPS | RSA(MCP)+HS | 8 |
+| `F2AcceptanceIT` | приёмка F2 | 521 | 9 | SB+SA | NPS | RSA(MCP)+HS | 9 |
+| `F3AcceptanceIT` | приёмка F3 | 539 | 8 | SB+SA | NPS | RSA(MCP)+HS | 8 |
+| `F4AcceptanceIT` | приёмка F4 | 544 | 7 | SB+SA | NPS | RSA(MCP)+HS | 7 |
+| `GetAssetIT` | query-core | 175 | 6 | M | N | — | — |
+| `GraphProjectorIT` | projector | 1109 | 51 | M | NP | — | — |
+| `GraphQueryCoreIT` | query-core | 229 | 11 | M | N | — | — |
+| `IdentityCandidateIT` | identity | 275 | 8 | M | NP | — | — |
+| `IdentityMappingIT` | identity | 192 | 9 | M | P | — | — |
+| `IngestionMetricsIT` | метрики | 94 | 1 | M | P | — | — |
+| `IntegrationTestsSmokeTest` | smoke (surefire) | 13 | 1 | — | — | — | — |
+| `JournalDispatcherIT` | ингест/журнал | 297 | 6 | SB | NPS | HS | — |
+| `Neo4jSchemaIT` | схема/миграции | 90 | 4 | M | N | — | — |
+| `PlatformInvariantIT` | инварианты платформы | 249 | 7 | M | NP | — | — |
+| `PostgresSourceConflictsIT` | конфликты (PG) | 273 | 12 | M | P | — | — |
+| `ReconciliationIT` | sync / reconcile | 400 | 6 | M | NP | — | — |
+| `RuntimeFootprintIT` | query-core | 277 | 9 | M | N | — | — |
+| `SearchAssetsIT` | query-core | 255 | 13 | M | N | — | — |
+| `SourceConflictIT` | конфликты (граф) | 345 | 7 | M | NP | — | — |
+| `SyncAcceptanceIT` | sync | 543 | 11 | SB | NPS | HS | 11 |
+| `SyncConsoleIT` | консоль | 376 | 14 | SA | NP | RSA | — |
+| `TraceDependenciesIT` | query-core | 393 | 18 | M | N | — | — |
+
+Колонки: **Ст.** — стиль запуска сервисов: `M` — собираются руками (`new …`, без Spring); `SB` — `@SpringBootTest(IngestionServiceApplication, RANDOM_PORT)`; `SA` — отдельное приложение через `new SpringApplicationBuilder(...).run(args)`; `SB+SA` — ingestion как `@SpringBootTest` плюс второе приложение (MCP) в том же тесте. **Кон.** — контейнеры: `N` Neo4j, `P` PostgreSQL, `S` S3. **JWT**: `RSA` — `McpTestJwt` (настоящая проверка подписи по JWKS), `HS` — подменённый `JwtDecoder` на HS256, `—` токенов нет. **@Order** — число методов с `@Order`.
+
+**Maven** 🟢.
+- `platform/integration-tests/pom.xml:19-123`: все зависимости со `scope=test` (версий нет — BOM корня): 17 проектных модулей (`canonical-model`, `event-schemas`, `source-spi`, `adapter-core`, `source-stubs`, 4 адаптера, `event-journal`, `normalizer`, `identity-resolution`, `graph-projector`, `ingestion-service`, `graph-query-core`, `mcp-server`, `admin-console`), `spring-boot-starter-test`, `testcontainers-{junit-jupiter,neo4j,postgresql}`, `neo4j-java-driver`, `postgresql`. `admin-console` стоит после `mcp-server` намеренно (`pom.xml:92`): на classpath два `application.yml`, порядок сохраняет прежнюю загрузку 🟡 (`F1AcceptanceIT` обходит неопределённость, передавая все свойства MCP аргументами, `F1AcceptanceIT:186-190`).
+- `nimbus-jose-jwt`, клиент MCP (`io.modelcontextprotocol.client`), `spring-security-oauth2-jose`, logback, AWS SDK в `pom.xml` не объявлены: приходят транзитивно через `mcp-server`/`ingestion-service`/`event-journal` (`McpTestJwt:3-8`, `F1AcceptanceIT:20-23`, `SyncConsoleIT` использует `ch.qos.logback.classic`) 🟡. Исчезновение транзитивной зависимости сломает компиляцию тестов, а не прод.
+- **failsafe только под профилем `integration-tests`** (`pom.xml:136-157`, комментарий `:136`): обычный `./mvnw verify` не запускает ни один `*IT` и не требует Docker; surefire по умолчанию берёт `*Test` и запускает единственный `IntegrationTestsSmokeTest:9-12`. Плагины и версии (3.5.6) заданы в корне (`pom.xml:34-35,189-196`); конфигурации (параллелизм, `forkCount`, `reuseForks`, таймаут форка, `includes`) нет — действуют умолчания: один форк, классы последовательно, `*IT` подбирается по имени 🟡.
+- **CI**: job `integration-tests` — `./mvnw -B -ntp verify -Pintegration-tests`, без `needs` (параллельно с `build`), при падении выгружает `target/surefire-reports` и `target/failsafe-reports` (`.github/workflows/ci.yml:35-55`); README: «требует запущенный Docker» (`README.md:44`) 🟢.
+
+---
+
+### Z1.2 Инфраструктура
+
+#### Z1.2.1 Контейнеры и образы 🟢
+
+| Сервис | Образ (точный тег) | Где задан | Классов используют |
+|---|---|---|---|
+| Neo4j Community | `neo4j:5.26.31-community` (5.26 LTS) | `TestImages:9` (`TestImages.NEO4J`) | 26 |
+| PostgreSQL | `postgres:16` — **мажорный тег, не точный** 🟡 | литерал в каждом классе (`ContainersSmokeIT:41`; `new PostgreSQLContainer("postgres:16")` в 23 классах) | 23 |
+| S3 | `chrislusf/seaweedfs:4.48` (SeaweedFS, не MinIO) | `ContainersSmokeIT:35` (`S3_IMAGE`), фабрика `ContainersSmokeIT:52-60` | 11 (через `ContainersSmokeIT.s3Container()`) |
+
+- Контейнер S3: команда `server -s3 -dir=/data`, ключи `test-access-key`/`test-secret-key` из env `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (`ContainersSmokeIT:44-46,54-56`), порт 8333, ожидание `GET /` с кодом < 500 и `withStartupTimeout(120 s)` (`ContainersSmokeIT:57-59`). Это единственная настроенная таймаутом стратегия ожидания; Neo4j и PostgreSQL ждут умолчаниями Testcontainers 2.0.5 (`pom.xml:30`).
+- **Полная пересборка на класс.** Контейнеры `static final` и принадлежат классу; `withReuse` не вызывается нигде, фиксированных портов нет (`getMappedPort`/`getBoltUrl`). За прогон ≈ **60 запусков контейнеров** (26 Neo4j + 23 PostgreSQL + 11 S3) 🟢. Общего singleton-контейнера нет, «сбрасывается» граф внутри класса, а не между классами 🟡.
+- **Расхождение с текстом `CLAUDE.md`.** `CLAUDE.md` называет MinIO для S3 в тестах; в репозитории SeaweedFS по принятому решению `docs/adr/0007-s3-raw-storage-seaweedfs.md:1,10` («MinIO больше не публикует образы»). Код прав, текст агентского профиля устарел 🟡. Точный тег требуется `CLAUDE.md` для Neo4j — соблюдён; для PostgreSQL точного тега не требуется, но `postgres:16` плавающий в пределах мажора 🟡.
+
+#### Z1.2.2 Четыре способа запуска тестируемого кода 🟢
+
+| Способ | Классы | Как |
+|---|---|---|
+| **M — вручную, без Spring** | 19 классов (журнал, identity, projector, query-core, ряд проекций) | `@Testcontainers` + `@Container static final`; в `@BeforeAll` `new GraphDatabase.driver`, `Neo4jSchema.apply`, `PGSimpleDataSource`, `JournalMigrations.apply`, затем `new PostgresEventJournal / PostgresIdentityMapping / GraphProjector / EventProcessor(...)` (`GraphProjectorIT:89-110`). Без HTTP и без JWT |
+| **SB — `@SpringBootTest` ingestion** | `AdminEndpointIT`, `JournalDispatcherIT`, `EamKeyMigrationIT`, `SyncAcceptanceIT`, `F1–F4` | `@SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = RANDOM_PORT)`; свойства — `@DynamicPropertySource` (datasource, `archrag.neo4j.*`, `archrag.s3.*`, `jwt.*`, `archrag.dispatcher.*`, `archrag.adapters.*.control-url`), например `AdminEndpointIT:84-105` |
+| **SA — второе приложение вручную** | `AdminConsoleIT` (2 контекста), `SyncConsoleIT`, MCP внутри `F1–F4` | `new SpringApplicationBuilder(X.class).run(args)`; свойства — **аргументами командной строки** (`--server.port=0`, `--spring.autoconfigure.exclude=DataSource…,Flyway…`), потому что на classpath два `application.yml` (`F1AcceptanceIT:186-222`, `AdminConsoleIT:130-155`, `SyncConsoleIT:128-151`) |
+| **Один бин как Java-метод** | `ExplainProvenanceIT` | `AnnotationConfigApplicationContext` с `ExplainProvenanceTool` и `GraphQueries`; без Security, `ToolScopeFilter`, HTTP (`ExplainProvenanceIT:125-130`) |
+
+Жизненный цикл контейнеров у классов `SB` двух видов 🟢: (а) `@Testcontainers` + `@Container` — `AdminEndpointIT:54,64-71`, `JournalDispatcherIT:60,68-75`; (б) `@TestInstance(PER_CLASS)` + `static { NEO4J.start(); POSTGRES.start(); S3.start(); }` без `@Testcontainers` — `F1–F4`, `EamKeyMigrationIT:90-94`, `SyncAcceptanceIT:107-111`. Причина (б) — в комментарии (`F1AcceptanceIT:93`, `EamKeyMigrationIT:89`): при `PER_CLASS` контекст Spring создаётся раньше расширения Testcontainers, и `@DynamicPropertySource` не получил бы адресов. Явного `stop()` нет — гасит Ryuk 🟡.
+
+#### Z1.2.3 Как применяется схема 🟢
+
+Тремя путями — **тем же кодом, что и в проде**, отдельной тестовой DDL нет:
+1. *Напрямую* (классы `M`): `Neo4jSchema.apply(driver)` и `JournalMigrations.apply(dataSource)` (`GraphProjectorIT:91,97`; у `Neo4jSchemaIT` — дважды, как проверка идемпотентности, `Neo4jSchemaIT:33-34`).
+2. *Через приложение* (классы `SB`): `IngestionServiceConfiguration` вызывает `JournalMigrations.apply(dataSource)` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:47`) и в бине `neo4jDriver` — `Neo4jSchema.apply` + `TemporalRelationMigration.migrate(now)` (`:68-72`). Flyway Boot не подключён (`:38`). Тесты схему явно не вызывают 🟡 (выведено из отсутствия вызова).
+3. *Никак*: `GraphQueryCoreIT` и `RuntimeFootprintIT` работают на «голой» базе без constraint/индексов (только `CREATE USER mcp-reader`), `AdminConsoleIT` и остальные чтения применяют `Neo4jSchema.apply` 🟡 — стоимость EXPLAIN/запросов на пустой схеме отличается от прода.
+
+`JournalMigrations.apply` = `Flyway.configure().dataSource(ds).locations("classpath:db/migration").load().migrate()` (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/JournalMigrations.java:12-13`). На classpath IT это **V1–V7 из трёх модулей** (`V1` event-journal; `V2, V4, V5, V7` identity-resolution; `V3, V6` ingestion-service), поэтому классы `M` видят и роль `archrag_console_ro` (V6), и `source_conflict.kind` (V7): ни один модуль в одиночку всех семи не видит 🟢. Следствие 🟡: набор таблиц в тесте зависит от состава зависимостей `pom.xml` модуля.
+
+#### Z1.2.4 Изоляция и состояние 🟢
+
+| Стратегия | Классы |
+|---|---|
+| `@BeforeEach MATCH (n) DETACH DELETE n` (только Neo4j) | `GraphProjectorIT:113-117`, `GraphQueryCoreIT`, `GetAssetIT`, `SearchAssetsIT`, `TraceDependenciesIT`, `DeploymentCommitReadIT`, `RuntimeFootprintIT`, `EamApiProjectionIT:88-91`, `PlatformInvariantIT:91-97` (+ `DELETE FROM source_conflict`), `DeployedFromIT:92-98` (+ `source_conflict`) |
+| `@BeforeEach` чистит и Neo4j, и PG (`TRUNCATE dlq_entry, inbox_event, consumer_checkpoint`) | `ReconciliationIT:108-121` |
+| Только `TRUNCATE consumer_checkpoint` | `JournalDispatcherIT:113-119` (граф и журнал не чистятся) |
+| **Нет очистки**, изоляция уникальными `UUID`/`uid()` в ключах | `EventJournalIT`, `IdentityMappingIT`, `IdentityCandidateIT`, `PostgresSourceConflictsIT`, `SourceConflictIT`, `ExplainProvenanceIT`, `AdapterInboxIT`, `AdminConsoleIT`, `SyncConsoleIT` |
+| **Нет очистки, состояние копится намеренно** (последовательный сценарий) | `F1–F4`, `SyncAcceptanceIT`, `EamKeyMigrationIT`, `AdminEndpointIT` (ленивый `seed()` и мутирующие тесты) |
+
+Время: фиксированные константы `Instant.parse("2026-…Z")` почти везде; реальные часы (`Clock.systemUTC()`) — в классах с настоящими адаптерами и `Reconciler` (`ReconciliationIT`, `SourceConflictIT:140`, `AdminEndpointIT:138`, `SyncAcceptanceIT:180`, `F1–F4`) 🟢. Подмены часов нет.
+
+#### Z1.2.5 Ожидания, таймауты, `Thread.sleep` 🟢
+
+Awaitility в проект не входит (комментарий «новую зависимость в задаче не вводим»: `F1AcceptanceIT:413`, `EamKeyMigrationIT:309`), поэтому в каждом классе свой цикл `awaitTrue`:
+
+| Где | Шаг | Таймаут | Строка |
+|---|---|---|---|
+| `F1–F4`, `EamKeyMigrationIT` | `Thread.sleep(200)` | 90 с (`TIMEOUT`) | `F1AcceptanceIT:84,421`; `F2AcceptanceIT:88,514`; `F3AcceptanceIT:87,532`; `F4AcceptanceIT:106,537`; `EamKeyMigrationIT:311,317` |
+| `SyncAcceptanceIT` | `Thread.sleep(200)`; плюс пауза «ничего не должно измениться» `Thread.sleep(2000)` (= `2 × DISPATCHER_POLL`) | 60 с по умолчанию | `SyncAcceptanceIT:526,536,329` |
+| `JournalDispatcherIT` | `Thread.sleep(100)` | 30 с | `JournalDispatcherIT:284,290` |
+| MCP-клиент (`F1–F4`) | `requestTimeout` | 60 с | `F1AcceptanceIT:367` |
+| прогрев Neo4j | `QueryLimits.timeout` | 120 с (`DeploymentCommitReadIT:63`) | — |
+| индексы Neo4j | `CALL db.awaitIndexes(30)` | 30 с (серверное ожидание, не sleep) | `SearchAssetsIT:118-120`, `AdminConsoleIT:121` |
+
+Бюджет запроса в IT: `QueryLimits(6, 500, 50, 5 s, 512 KiB)`; таймаут берётся из системного свойства `archrag.it.queryTimeoutSeconds` (по умолчанию 5) в `GetAssetIT:46`, `SearchAssetsIT:51`, `TraceDependenciesIT:47`, `DeploymentCommitReadIT:39`; `RuntimeFootprintIT:31` задаёт `Duration.ofSeconds(5)` жёстко 🟡. Диспетчер в `JournalDispatcherIT` крутится в фоне (`poll-interval=100ms, batch-size=1, retry-delay=1s`, `JournalDispatcherIT:86-104`); в `AdminEndpointIT` выключен (`archrag.dispatcher.enabled=false`, `:101`), чтобы тест сам решал, когда обрабатывать журнал; в `SyncAcceptanceIT` включён на умолчаниях ради честного замера задержки (`:162`).
+
+#### Z1.2.6 JWT и безопасность в IT 🟢
+
+Три разные схемы — важно не путать, что они проверяют:
+1. **`McpTestJwt`** — настоящая проверка: RSA-2048 в памяти, публичный ключ отдаёт локальный `HttpServer` (JWKS `/jwks`, kid `test`) (`McpTestJwt:40-52`). Приложение получает `jwk-set-uri`, `issuer-uri`, `audiences` и **само собирает валидаторы** (подпись, issuer, audience, плюс `azp` в ingestion). Используют: `AdminEndpointIT`, `AdminConsoleIT`, `SyncConsoleIT`, MCP-контекст в `F1–F4`.
+2. **Подменённый `JwtDecoder`** на HS256 с общим ключом `0123456789abcdef…` (`@TestConfiguration`: `F1AcceptanceIT:99-106`, `JournalDispatcherIT:81-82`, `EamKeyMigrationIT:100-101`, `SyncAcceptanceIT:114-120`, `F4AcceptanceIT:126-127`) — проверка подписи есть, issuer/audience/azp **выключены** (`issuer-uri=http://unused.invalid` — плейсхолдер). Токен `scope=architecture.admin` без `aud`/`azp`.
+3. **Без токенов** — все классы `M`.
+
+Следствие 🟡: реальная цепочка JWT ingestion-сервиса (issuer + audience + `AuthorizedPartyValidator`) работает **только в `AdminEndpointIT`**; в семи классах (`F1–F4` для ingestion-части, `SyncAcceptanceIT`, `EamKeyMigrationIT`, `JournalDispatcherIT`) она заменена заглушкой, а проверки доступа там либо отсутствуют, либо относятся к MCP.
+
+#### Z1.2.7 Прочее
+
+- Фиксированных портов нет: `server.port=0`, `RANDOM_PORT`, эфемерный порт webhook. Исключение по духу — `freePort()` (закрывает сокет до использования, `AdminEndpointIT:74-82`, `SyncAcceptanceIT:123-129`) и «недоступный адаптер» на `127.0.0.1:1` (`AdminEndpointIT:104`, `F1–F4` `control-url`) 🟡: при гонке/нетипичной ОС тест нестабилен.
+- Порядок тестов: `@TestMethodOrder(OrderAnnotation)` в 6 классах (см. таблицу), в остальных порядок не нужен 🟢; детали — Z1.6.2.
+- Секретов в Git нет: пароли `reader-pass`, `ro-pass`, ключ HS256, секрет webhook — тестовые литералы 🟢 (ловушка 12).
+
+---
+
+### Z1.3 Каталог сценариев по областям
+
+Формат: **поведение** → тесты → ловушки `CLAUDE.md` (№) / документы. Негативные тесты помечены «(−)». Все 299 методов учтены (проверка полноты — внизу раздела).
+
+#### Z1.3.1 Ингест и журнал (Postgres inbox, S3 raw, диспетчер)
+
+`ContainersSmokeIT` — «дымовой» тест среды: Neo4j отвечает на Cypher `ContainersSmokeIT.neo4jAnswersCypher:63`, PostgreSQL на `select 1` `ContainersSmokeIT.postgresAnswersSelect:70`, S3 принимает/отдаёт объект через `S3RawPayloadStore` `ContainersSmokeIT.s3StoragePutsAndGetsObject:79`.
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| Подписанный webhook → 202, строка `inbox_event` `RECEIVED`, raw в S3 читается по ref; повтор того же события → 202, но строка одна | `AdapterInboxIT.webhookIsStoredAsReceivedRowWithRawObjectAndDuplicateAddsNothing:99` | 6 (дедуп `source+eventId`), ADR 0007 |
+| Неверная подпись и просроченный timestamp (−1 ч) → 401, в журнал ничего не пишется | `AdapterInboxIT.badSignatureAndStaleTimestampAreRejectedAndNothingIsWritten:123` (−) | аутентификация webhook |
+| `pollOnce` завершает snapshot: маркер `snapshot-complete:<run>` записан **последним** в прогоне, записей = данные + 1, checkpoint `eam-poller` создан | `AdapterInboxIT.snapshotEndsWithMarkerOnRealInbox:135` | 9 (маркер после данных) |
+| Pending-выборка: `RECEIVED`, «созревший» `RETRYING`, давно прерванный `VALIDATED` — в порядке журнала keyset-ом; свежий `RETRYING` и `PROJECTED` не отдаются; `limit=0` отклоняется | `EventJournalIT.pendingReturnsReceivedAndMaturedRetryingInJournalOrderWithKeyset:109` (−) | 14 |
+| Дубль `source+eventId` → `DUPLICATE` с исходной версией, строка одна, статус не меняется; тот же `eventId` из другого источника — не дубль | `EventJournalIT.duplicateEventIsNotInsertedTwice:145`, `EventJournalIT.sameEventIdFromAnotherSourceIsAccepted:160` (−) | **6** |
+| Переход в `RETRYING` увеличивает `attempts`; `toDlq` → `QUARANTINED` с кодом, ссылкой на raw и записью `dlq_entry`; повтор `toDlq` — одна запись; пустой код/неизвестное событие отклоняются | `EventJournalIT.transitionsAndDlqArePersisted:170`, `EventJournalIT.repeatedDlqKeepsSingleRecord:187`, `EventJournalIT.dlqRejectsBlankCodeAndUnknownEvent:199` (−) | **14** |
+| Финальное состояние не откатывается (`PROJECTED` → `RETRYING` запрещён) | `EventJournalIT.finalStateCannotBeRolledBack:211` (−) | 6 |
+| Checkpoint переживает «рестарт» журнала, последнее значение побеждает, другой consumer пуст | `EventJournalIT.checkpointSurvivesJournalRestart:226` | 6 (сохранность; связь с коммитом Neo4j — см. `GraphProjectorIT`) |
+| Миграции применяются повторно без ошибки (**без единого `assert`**) | `EventJournalIT.migrationsAreIdempotent:237` | Flyway |
+| Raw в S3 адресуется по хешу: повторный `put` даёт тот же ref (`raw/<source>/<hash>`), неверный хеш при чтении → ошибка | `EventJournalIT.rawPayloadRoundTripsAndKeyIsContentAddressed:243` (−) | ADR 0007 |
+| Читатель журнала (`JournalReader`): keyset по порядку получения, фильтр источника и окна времени, исключает `replay:`-события; `limit` вне 1..`MAX_LIMIT` отклоняется | `EventJournalIT.readerPagesByKeysetInReceivedOrderAndFilters:261`, `EventJournalIT.readerRejectsBadLimit:295` (−) | лимиты |
+| События адаптера доходят до графа диспетчером без ручного вызова | `JournalDispatcherIT.eventsAppendedToJournalReachGraphWithoutManualCall:122` | конвейер |
+| Событие с невалидным raw → `QUARANTINED`/`INVALID_RAW_PAYLOAD`, **причина не содержит текста payload**, ровно одна открытая запись DLQ; следующие события проецируются (poison-pill не блокирует очередь) | `JournalDispatcherIT.brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected:137` (−) | 11, 12, **14** |
+| Неизвестный тип события → `QUARANTINED`/`UNSUPPORTED_EVENT_TYPE`; маркер без raw → `QUARANTINED`/`MARKER_NO_RAW` | `JournalDispatcherIT.unsupportedTypeIsQuarantinedWithCode:160`, `JournalDispatcherIT.markerWithoutRawGoesToDlq:219` (−) | **14** |
+| Маркер snapshot tombstone-ит пропавший объект, оставшийся остаётся `active` | `JournalDispatcherIT.snapshotMarkerTombstonesObjectMissingFromRun:172` | **9**, ADR 0020 |
+| Маркер, заявляющий 5 объектов при 0 в журнале прогона, **ничего не удаляет**; маркер уходит в `RETRYING` (`RECONCILIATION_TRIGGER_FAILED`, `attempts ≥ 2`) | `JournalDispatcherIT.markerClaimingMoreObjectsThanJournalHoldsDeletesNothing:194` (−) | **9**, 14 |
+
+#### Z1.3.2 Identity (gid, crosswalk, кандидаты, конфликты источников в PG)
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| `find` пуст до `resolve`; повторный `resolve` (в т. ч. новым экземпляром, «rebuild») даёт тот же gid | `IdentityMappingIT.findIsEmptyUntilResolved:55`, `IdentityMappingIT.repeatedResolveReturnsSameGidWithNewMappingInstance:64` | ADR 0003 |
+| Один `sourceId` в EAM и SCM — разные сущности | `IdentityMappingIT.sameSourceIdInDifferentSystemsIsNotSameEntity:76` (−) | ADR 0003, 0019 |
+| 16 параллельных `resolve` одного ключа сходятся к одному gid | `IdentityMappingIT.concurrentResolveConvergesToOneGid:84` (−) | MERGE по ключу (4) |
+| Утверждённый crosswalk даёт EAM- и SCM-записи один gid; присоединение к уже существующему gid; идемпотентность и независимость от порядка | `IdentityMappingIT.crosswalkGivesEamAndScmRecordsOneGid:97`, `IdentityMappingIT.crosswalkAdoptsGidOfAlreadyMappedKey:109`, `IdentityMappingIT.crosswalkIsIdempotentAndOrderInsensitive:119` | ADR 0019 |
+| Ключи с разными gid → `CrosswalkConflictException`, ничего не меняется; гонка `resolve`/`approve` завершается общим gid либо чистым откатом | `IdentityMappingIT.crosswalkOfKeysWithDifferentGidsIsRejectedAndChangesNothing:131`, `IdentityMappingIT.concurrentResolveAndApproveEndWithSharedGidOrCleanConflict:144` (−) | ADR 0019 (нет автослияния) |
+| Два CMDB-узла с одним hostname (регистр/точка нормализуются) остаются **двумя** узлами, создаётся один `OPEN`-кандидат (HOSTNAME, score 0.60) | `IdentityCandidateIT.sameHostnameInTwoRecordsKeepsTwoNodesAndRecordsOneOpenCandidate:141` | ADR 0019 |
+| Имя + владелец → кандидат с двумя признаками; один владелец при разных именах и IT_SYSTEM vs SERVICE с одним именем — не кандидаты | `IdentityCandidateIT.sameNameAndOwnerGivesCandidateWithBothFeatures:165`, `IdentityCandidateIT.sameOwnerWithDifferentNamesGivesNoCandidate:183` (−), `IdentityCandidateIT.itSystemAndServiceWithSameNameAreNotCandidates:197` (−) | порог признаков |
+| Связанные crosswalk-ом записи кандидата не порождают; повторная обработка (версия 2) оставляет одного кандидата с прежним `firstSeenAt` | `IdentityCandidateIT.recordsLinkedByCrosswalkShareGidAndGiveNoCandidate:210` (−), `IdentityCandidateIT.replayKeepsOneCandidateAndFirstSeenAt:226` | идемпотентность |
+| Tombstone-запись не матчится с поздней; признак чаще `MAX_MATCHES` (50) кандидатов не создаёт | `IdentityCandidateIT.tombstonedRecordDoesNotMatchLaterRecord:246` (−), `IdentityCandidateIT.popularFeatureAboveLimitCreatesNoCandidates:264` (−) | ADR 0020, лимиты |
+| Конфликт источников (`source_conflict`): расхождение не-мастера с мастером открывает один `PROPERTY`-конфликт; совпадение закрывает (`RESOLVED`), повторное расхождение снова `OPEN` с прежним `openedAt` | `PostgresSourceConflictsIT.differingNonAuthoritativeValueOpensOneConflict:82`, `PostgresSourceConflictsIT.equalValueResolvesAndReopeningKeepsOpenedAt:102` | ADR 0008 |
+| Результат не зависит от порядка прихода; смена значения мастера пересчитывает пару; только не-мастера конфликта не дают | `PostgresSourceConflictsIT.conflictDoesNotDependOnArrivalOrder:122`, `PostgresSourceConflictsIT.masterChangingValueRecomputesPair:135`, `PostgresSourceConflictsIT.onlyNonAuthoritativeAssertionsGiveNoConflict:148` (−) | ADR 0008 |
+| Отзыв утверждения (retract) мастера или dissent закрывает конфликт; повтор не меняет строку (в т. ч. `updated_at`); конфликты других gid не затронуты | `PostgresSourceConflictsIT.retractOfDissentResolvesAndRetractOfMasterResolvesToo:157`, `PostgresSourceConflictsIT.repeatedCallLeavesStateUnchanged:173`, `PostgresSourceConflictsIT.conflictsOfOtherGidAreNotAffected:187` (−) | 6, ADR 0020 |
+| `RELATION`-конфликты (deploymap `eamSystemId` vs EAM): открываются идемпотентно, закрываются при совпадении; без известного мастера не открываются; пересчёт `PROPERTY` не трогает `RELATION`; на одном gid живут оба вида | `PostgresSourceConflictsIT.relationMismatchOpensIdempotentlyAndResolvesWhenEqual:211`, `PostgresSourceConflictsIT.relationClosesWhenMasterUnknownAndNeverOpensWithoutIt:239` (−), `PostgresSourceConflictsIT.retractResolvesRelationAndPropertyRecomputeLeavesItAlone:249`, `PostgresSourceConflictsIT.relationAndPropertyConflictsCoexistOnOneGid:263` | ADR 0030 |
+
+#### Z1.3.3 Projector (граф Neo4j, `GraphProjectorIT`: 51 тест) и схема
+
+`GraphProjectorIT` (1109 строк) — самый большой класс; тесты идут через `EventProcessor` (`handle` = `journal.append` + `process`, `GraphProjectorIT:144-147`) и через `projector.project` напрямую.
+
+| Группа поведений | Тесты | Ловушки / док |
+|---|---|---|
+| **Upsert и provenance**: узел `Team` с gid из identity, `isCurrent`, `SourceRecord` (version/active/contentHash), цепочка `SourceSystem-OWNS_RECORD→SourceRecord-ASSERTS{authority=MASTER}→Team`, `SyncRun-PROCESSED→SourceRecord`, checkpoint журнала сдвинут | `GraphProjectorIT.upsertCreatesNodeWithProvenanceAndMovesEventToProjected:199`, `GraphProjectorIT.syncRunIsLinkedOnceAndNotDoubledOnRepeat:853` | 4, 6 |
+| **Идемпотентность и версии**: повтор события и повторный `project` той же версии → граф идентичен (`dump`); тот же `ver` другим `eventId` (webhook/polling) → `DUPLICATE`, а не `IGNORED_OLD_VERSION`; версия сравнивается **числом** ("99" < "184"); out-of-order 5→3 и 3→5 сходятся к 5 | `GraphProjectorIT.replayDoesNotChangeGraph:222`, `GraphProjectorIT.webhookAndPollingWithSameVersionAreDuplicateNotOldVersion:242` (−), `GraphProjectorIT.olderVersionIsIgnoredAndComparedNumerically:256` (−), `GraphProjectorIT.outOfOrderDeliveryConvergesToTheNewestVersion:269` (−) | **6** (`IGNORED_OLD_VERSION`) |
+| 16 параллельных версий одного объекта в 8 потоках → один `SourceRecord` версии 16 | `GraphProjectorIT.concurrentUpsertsOfOneObjectKeepOneRecordAtTheHighestVersion:285` | **4** (MERGE по ключу) |
+| **Неполная запись не затирает**: версия 2 без `description`/`criticality` сохраняет известное и обновляет `name` | `GraphProjectorIT.partialRecordDoesNotEraseKnownFields:304` (−) | **5** |
+| **Authority**: не-мастер (CMDB) по `Service` — `APPLIED`, `skippedProperties`, значения мастера целы, два `ASSERTS` (`MASTER`/`SUPPLEMENTARY`); не-мастерская связь `DEPENDS_ON` пропущена и отражена в `skippedRelations` | `GraphProjectorIT.nonAuthoritativeSourceDoesNotReplaceCanonicalValue:320` (−), `GraphProjectorIT.nonAuthoritativeRelationIsSkippedAndReported:659` (−) | ADR 0008 |
+| **Темпоральные связи** (`validFrom`/`validTo`): `OWNED_BY` получает `validFrom`, повтор версии не переоткрывает; смена `hosts`/`ownerTeam`/service/environment/`systemCode`/`repositoryId` закрывает старую связь временем события и открывает новую; хост, вернувшийся позже, переоткрывается без дубля; связь, подтверждённая другой записью, не закрывается | `GraphProjectorIT.temporalRelationGetsValidFromAndIsNotReopenedByRepeat:343`, `GraphProjectorIT.replacedHostClosesOldRunsOnAtEventTimeAndKeepsNewOpen:377`, `GraphProjectorIT.changedOwnerTeamClosesOldOwnedBy:391`, `GraphProjectorIT.unknownNewHostStillClosesOldRunsOn:439`, `GraphProjectorIT.relationReassertedByAnotherRecordIsNotClosed:450` (−), `GraphProjectorIT.hostReturningInLaterVersionReopensRunsOn:467`, `GraphProjectorIT.relationValidFromDefaultsToEventTimeAndRunsOnLinksDeploymentToHost:481`, `GraphProjectorIT.changedServiceAndEnvironmentOfDeploymentCloseOldStructuralEdges:501`, `GraphProjectorIT.structuralEdgesGetValidFromFromEventTime:528`, `GraphProjectorIT.changedSystemOfServiceClosesOldDecomposedInto:542`, `GraphProjectorIT.changedRepositoryOfServiceClosesOldImplementedIn:560` | 10 (`datetime`/UTC), ADR 0028 |
+| Повтор версии и версия без поля `hosts` ничего не закрывают; **пустой список `hosts` неотличим от отсутствующего** и тоже ничего не закрывает (задокументированное ограничение) | `GraphProjectorIT.repeatedVersionClosesNothing:406` (−), `GraphProjectorIT.partialRecordWithoutHostsClosesNothing:416` (−), `GraphProjectorIT.emptyHostsListClosesNothingKnownLimitation:428` (−) | **5** |
+| Tombstone закрывает структурные связи; `CloseAssertion` закрывает открытую `OWNED_BY` временем T2; миграция `TemporalRelationMigration` проставляет отсутствующий `validFrom` (из `firstSeenAt`) и **идемпотентна** (повтор → 0) | `GraphProjectorIT.tombstoneClosesStructuralEdges:576`, `GraphProjectorIT.closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent:613`, `GraphProjectorIT.temporalRelationMigrationFillsMissingValidFromAndIsIdempotent:591` (−) | ADR 0020, миграции |
+| **Связи и подтипы**: ссылка на отсутствующую цель не создаёт связь и фантомный узел; SCM-сервис строит `DECOMPOSED_INTO` по `eamCode`; смена `kind` у `ComputeInstance` оставляет один узел и меняет метку подтипа | `GraphProjectorIT.relationToUnknownTargetIsNotBuiltAndCreatesNoPhantomNode:633` (−), `GraphProjectorIT.scmServiceRecordBuildsDecomposedIntoFromEamSystem:644`, `GraphProjectorIT.computeInstanceSubtypeChangeKeepsOneNode:683` | **4** |
+| `SERVICE_DEPENDENCY` строит `DEPENDS_ON`; тот же `version` → `DUPLICATE`, меньшая → `IGNORED_OLD_VERSION`; tombstone закрывает ребро (`validTo=T2`), сервисы остаются текущими; «пропавшая» зависимость закрывается tombstone-ом (Reconciler не вызывается, имитация) | `GraphProjectorIT.serviceDependencyBuildsDependsOnEdgeAndIsIdempotentAndVersioned:706` (−), `GraphProjectorIT.serviceDependencyTombstoneClosesEdgeAndKeepsServicesCurrent:733`, `GraphProjectorIT.missingServiceDependencyIsFoundByReconcilerAndItsEdgeIsClosed:748` | **6**, 9 (🟡: Reconciler не вызывается) |
+| **Tombstone**: `active=false`, версия 2, узел `isCurrent=false` + `deletedAt`, связи закрыты, сосед цел; новее версия реактивирует; узел с двумя мастер-записями живёт, пока жива вторая; delete раньше upsert блокирует старый upsert (`IGNORED_OLD_VERSION`); delete старой версии игнорируется | `GraphProjectorIT.tombstoneDeactivatesRecordArchivesNodeAndClosesRelations:773`, `GraphProjectorIT.upsertWithNewerVersionAfterTombstoneReactivates:794` (−), `GraphProjectorIT.tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains:810`, `GraphProjectorIT.deleteArrivingBeforeUpsertBlocksOlderUpsertAndCreatesNoNode:827` (−), `GraphProjectorIT.deleteWithOlderVersionIsIgnored:839` (−) | **6**, ADR 0020 |
+| **Сбои и карантин**: маркер `snapshot-complete` передаётся `ReconciliationTrigger` и в граф не пишется; `ServiceUnavailableException` из проекции → `RETRYING`/`GRAPH_UNAVAILABLE`, **checkpoint не сдвинут**, граф пуст, повтор → `PROJECTED` и сдвиг; пустой payload TEAM → `QUARANTINED`/`MISSING_REQUIRED_FIELD`, граф пуст | `GraphProjectorIT.snapshotCompleteIsHandedToReconciliationAndNotProjected:862`, `GraphProjectorIT.graphFailureLeavesEventRetryingAndDoesNotMoveCheckpoint:875` (−), `GraphProjectorIT.invalidPayloadIsQuarantinedWithCodeAndWritesNothing:916` (−) | **6** (checkpoint после коммита), **14** |
+| **Отложенные связи** (`PendingRelation`, E1.14): зависимость до обоих сервисов достраивается после появления второго; SCM-сервис до системы EAM, система до команды — аналогично; новая версия заменяет отложенную; tombstone referrer-а удаляет pending; повторная проекция концов не дублирует ребро; повтор той же версии referrer-а pending не удаляет | `GraphProjectorIT.dependencyBeforeBothServicesAppearsAfterSecondService:944`, `GraphProjectorIT.scmServiceBeforeEamSystemGetsDecomposedInto:968`, `GraphProjectorIT.systemBeforeTeamGetsOwnedBy:988`, `GraphProjectorIT.newReferrerVersionReplacesDeferredRelation:1002`, `GraphProjectorIT.tombstoneOfReferrerRemovesDeferredRelation:1021` (−), `GraphProjectorIT.repeatedEndpointProjectionDoesNotDuplicateEdge:1038` (−), `GraphProjectorIT.sameVersionReplayOfReferrerKeepsDeferredRelation:1055` (−) | 4, 6 |
+| **Система EAM сервиса (H.5)**: `eamSystemOfService` возвращает единственную декомпозирующую систему; пусто без системы и при двух | `GraphProjectorIT.eamSystemOfServiceFindsTheSingleDecomposingSystem:1074`, `GraphProjectorIT.eamSystemOfServiceIsEmptyWithoutSystem:1085` (−), `GraphProjectorIT.eamSystemOfServiceIsEmptyWhenTwoSystemsDecomposeIt:1094` (−) | ADR 0030 |
+
+**`Neo4jSchemaIT`** (схема Community): после двойного `apply` ровно ожидаемый набор constraint-ов (13 `*_gid`, `source_record_key`, `source_system_code`, `sync_run_id`, `pending_relation_key`, `environment_code`) и индексов `asset_text`, `it_system_eam_code` без дублей `Neo4jSchemaIT.applyTwiceCreatesEveryObjectExactlyOnce:48`; составной UNIQUE `(source, sourceType, sourceId)` отклоняет дубль, но принимает тот же `sourceId` с другим `sourceType` `Neo4jSchemaIT.duplicateSourceRecordKeyIsRejectedButOtherSourceTypeAccepted:61` (−); дубли `Service.gid` и `Environment.code` отклоняются `Neo4jSchemaIT.duplicateServiceGidAndEnvironmentCodeAreRejected:72` (−); FULLTEXT `asset_text` находит `ITSystem` по имени `Neo4jSchemaIT.fulltextFindsItSystemByName:82`. Ловушка 4, ADR 0004 (никаких NODE KEY/existence-constraints) 🟢; отсутствие платных конструкций тестом не утверждается 🟡.
+
+#### Z1.3.4 Конфликты источников в графе и инварианты платформы
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| Неавторитетное значение (CMDB `LOW` при мастере EAM `HIGH`): в графе остаётся `HIGH`, один `OPEN`-конфликт в PG, маркер `conflicts=[criticality]` **только** на ребре `ASSERTS` записи CMDB | `SourceConflictIT.nonAuthoritativeValueOpensConflictAndMarksOnlyDissentEdge:199` (−) | ADR 0008 |
+| Порядок прихода не важен; совпавшее значение (новой версией CMDB или смена мастера) закрывает конфликт и снимает маркер; одинаковые значения не открывают | `SourceConflictIT.reverseOrderGivesTheSameOutcome:221` (−), `SourceConflictIT.agreeingValueResolvesConflictAndClearsMarker:241`, `SourceConflictIT.masterChangeClearsMarkerOnDissentEdge:255`, `SourceConflictIT.sameValuesNeverOpenConflict:268` (−) | — |
+| Reconcile snapshot CMDB без записи деактивирует её, снимает assertion в PG, конфликт → `RESOLVED`, маркеры сняты, значение мастера цело | `SourceConflictIT.reconciliationTombstoneResolvesConflictAndClearsMarkers:280` | **9** (🟡 см. Z1.6.4: маркер подделан) |
+| «Rebuild»: после очистки графа и переигровки событий конфликт и маркер те же (PG не трогали) | `SourceConflictIT.rebuildKeepsNodeConflictAndMarker:328` | критерий 4 (🟡: rebuild смоделирован) |
+| Инвариант платформы ИТ-системы (ADR 0031): решение раньше/позже системы с другим `platformId` открывает `RELATION`-конфликт `platformId` (dissent — система, master — решение); исправление версией системы или решения и tombstone системы → `RESOLVED`; граф строится по решению, прямого ребра «система→платформа» нет; согласованные данные конфликтов не дают | `PlatformInvariantIT.solutionBeforeSystemOpensConflict:173` (−), `PlatformInvariantIT.systemBeforeSolutionOpensConflictWhenSolutionArrives:182` (−), `PlatformInvariantIT.newSystemVersionWithCorrectedPlatformResolvesConflict:193`, `PlatformInvariantIT.newSolutionVersionWithSystemPlatformResolvesConflict:204`, `PlatformInvariantIT.systemTombstoneResolvesConflict:215`, `PlatformInvariantIT.graphIsBuiltBySolutionAndHasNoDirectSystemToPlatformEdge:226` (−), `PlatformInvariantIT.baselineHasNoPlatformConflicts:240` (−) | ADR 0031, 0019, 0020 |
+| Deploy map: `eamSystemId` развёртывания расходится с системой сервиса → `OPEN` `RELATION`-конфликт и `ASSERTS.conflicts=['eamSystemId']`; совпадение конфликта не даёт; deploy map раньше SCM — конфликт открывается при появлении сервиса; исправление чарта → `RESOLVED`, регресс → снова `OPEN`; tombstone → `RESOLVED` | `DeployedFromIT.systemMismatchOpensRelationConflict:226`, `DeployedFromIT.matchingSystemOpensNoConflict:242` (−), `DeployedFromIT.deployMapBeforeScmOpensConflictWhenScmArrives:253` (−), `DeployedFromIT.correctedChartResolvesConflictAndRegressionReopensIt:266`, `DeployedFromIT.deploymentTombstoneResolvesConflict:282` | ADR 0030 |
+
+#### Z1.3.5 Проекции EAM-API и deploy map, миграция ключа
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| Развёртывание привязывается к репозиторию (`DEPLOYED_FROM` с `sourceCommit`, `repositoryUrl`, `eamSystemId`), сервис находится по репозиторию через `IMPLEMENTED_IN` | `DeployedFromIT.deploymentIsBoundToRepositoryAndServiceFoundByUrl:204` | 4 |
+| Новый commit закрывает старое `DEPLOYED_FROM` (`validTo` = время события UTC) и открывает новое; тот же commit новой версией не меняет рёбра; отложенная связь достраивается при появлении репозитория; при неактивном репозитории старое ребро закрывается, новая связь откладывается; неверный commit → `QUARANTINED`/`INVALID_PAYLOAD`, граф цел | `DeployedFromIT.newCommitClosesOldDeployedFromAndOpensNewOne:294`, `DeployedFromIT.sameCommitInNewVersionChangesNothing:312` (−), `DeployedFromIT.deferredDeployedFromIsBuiltWhenRepositoryArrives:327` (−), `DeployedFromIT.commitChangeWhileRepositoryIsUnknownClosesOldEdge:344` (−), `DeployedFromIT.invalidCommitIsQuarantinedAndGraphIsUntouched:360` (−) | 10, 14 |
+| Срез `ITSystem → Solution → Platform` строится в любом порядке прихода (недостающие цели откладываются как `PendingRelation`); SCM-сервис до/после EAM-системы; неизвестный `systemCode` остаётся отложенным без фантомного узла | `EamApiProjectionIT.verticalSliceItSystemSolutionPlatformIsBuiltInAnyOrder:158`, `EamApiProjectionIT.scmServiceBeforeEamIsLinkedToItSystemWhenItArrives:181`, `EamApiProjectionIT.eamBeforeScmServiceIsLinkedImmediatelyToRealKey:197`, `EamApiProjectionIT.unknownSystemCodeStaysDeferredAndCreatesNoPhantomNode:209` (−) | 4, ADR 0024 |
+| Смена `platform_id` закрывает старую `USES_PLATFORM`; повтор `ver` — не карантин, старая `ver` → `IGNORED_OLD_VERSION` (имя не затирается); одинаковое `name` при разных `id` — два узла; неизвестная `criticality` пишется в `criticalityRaw` и **не затирает** известную; tombstone платформы → `active=false` | `EamApiProjectionIT.changedReferenceClosesOldRelationAndOpensNewOne:220`, `EamApiProjectionIT.repeatedVerIsNoOpAndOlderVerIsIgnored:233` (−), `EamApiProjectionIT.sameNameDifferentIdsAreTwoNodes:242` (−), `EamApiProjectionIT.unknownCriticalityIsStoredRawAndDoesNotOverwriteKnownValue:250` (−), `EamApiProjectionIT.tombstonedPlatformDisappearsFromActiveRecords:261` | **5**, **6** |
+| Миграция ключа EAM (UNLOCKER-255), строго по порядку m1→m5: на старом стенде `ITSystem` с ключами `EAM-1042/EAM-2001`; новый составной адаптер читает eam-api при старом checkpoint (`ADVANCED`); первый snapshot tombstone-ит старые ключи, `TEAM`/`SERVICE_DEPENDENCY` остаются; `POST /admin/rebuild?confirm=true` → нет активных `EAM-*`, нет дублей, старые узлы в архиве; нет карантина/DLQ, `source_conflict` пуст, кандидаты только «старый↔преемник» | `EamKeyMigrationIT.m1_legacyStandHasItSystemsWithOldKeys:175`, `EamKeyMigrationIT.m2_newAdapterReadsEamApiDespiteOldCheckpoint:189`, `EamKeyMigrationIT.m3_reconcileTombstonesOldKeysAndKeepsTeamAndDependencies:207`, `EamKeyMigrationIT.m4_rebuildHasNoItSystemWithOldKeysAndNoDuplicates:225`, `EamKeyMigrationIT.m5_provenanceAndConflictStoresAreConsistent:250` | **9**, 14, ADR 0019/0020 |
+
+#### Z1.3.6 Query-core (`graph-query-core`): чтение графа без HTTP
+
+Все классы этой группы вызывают `GraphQueryExecutor` под учёткой `mcp-reader` напрямую (HTTP, JWT и scope здесь нет — см. Z1.3.9 и матрицу). Граф засевается либо настоящим `GraphProjector` через `AssetFixtures`, либо голым Cypher.
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| Шаблоны с `CREATE`/`SET`/`DETACH DELETE` принимаются конструктором, но на первом `execute` падают на EXPLAIN-проверке («not read-only») и остаются закрытыми; граф не меняется | `GraphQueryCoreIT.writingTemplatesFailExplainCheckOnFirstExecuteAndStayClosed:79` (−) | **3** |
+| Сессия `READ_SESSION_CONFIG` отвергает `CREATE` серверным кодом `Neo.ClientError.Statement.AccessMode` (учётка Community без ролей — защита именно режимом сессии) | `GraphQueryCoreIT.readSessionConfigRejectsWritesAtDatabaseLevel:112` (−) | **3**, ADR 0005 |
+| Конструктор исполнителя не обращается к БД; публичный API не принимает произвольный Cypher (единственный `String`-параметр — ID шаблона, проверка reflection); неизвестный шаблон, отсутствующий/лишний параметр и внешний `limit` отклоняются до БД | `GraphQueryCoreIT.executorConstructionDoesNotTouchDatabase:103`, `GraphQueryCoreIT.publicApiHasNoMethodAcceptingCypher:137`, `GraphQueryCoreIT.unknownTemplateAndBadParametersFailBeforeDatabase:150` (−) | **1** |
+| Шаблоны, возвращающие сырые узлы/связи/пути (в т. ч. во вложенных списках/map), запрещены | `GraphQueryCoreIT.nodesRelationshipsAndPathsInResultAreForbidden:123` (−) | 11 |
+| Бюджет: строки (5 из 20 → `truncated`), байты (100 B), запрошенный бюджет зажимается потолком `QueryLimits`, тяжёлый запрос при таймауте 100 мс → `QueryTimeoutException` быстрее 20 с | `GraphQueryCoreIT.rowBudgetTruncates:161`, `GraphQueryCoreIT.byteBudgetTruncates:177`, `GraphQueryCoreIT.requestedBudgetIsClampedToConfiguredCeiling:187`, `GraphQueryCoreIT.timeoutGivesQueryTimeoutException:201` (−) | лимиты |
+| `{maxDepth}` подставляется **числом** из бюджета: при глубине 2 достижимо 2 узла, при 3 — три | `GraphQueryCoreIT.traversalDepthIsBoundedByMaxDepth:214` | **2** |
+| `get_asset`: карточка (свойства, времена, активные источники с authority, без `contentHash`); закрытый узел возвращается `isCurrent=false`; неизвестный gid и gid служебного `SourceRecord` — пусто | `GetAssetIT.cardHasPropertiesTimesAndSourcesWithAuthority:106`, `GetAssetIT.closedNodeIsReturnedNotCurrentWithInactiveRecord:124`, `GetAssetIT.unknownGidAndServiceNodeGidReturnNothing:137` (−) | 1 (allowlist меток) |
+| `asset_relations`: открытые связи на один уровень в обе стороны только из allowlist; закрытая (`validTo` в прошлом) не возвращается; бюджет узлов → `truncated` | `GetAssetIT.relationsAreCurrentOneLevelBothDirectionsFromAllowlist:146`, `GetAssetIT.closedRelationIsNotReturned:159` (−), `GetAssetIT.relationsRespectNodeBudget:169` (−) | 1, лимиты |
+| `search_assets`: точный gid/`sourceId` ранжируется выше fulltext; в `sources` только активные записи; fulltext по слову; узел из обеих веток один раз; фильтр типов; `Repository` — только точным совпадением | `SearchAssetsIT.exactGidMatchComesFirstAboveFulltextHits:139`, `SearchAssetsIT.exactSourceIdMatchRanksAboveFulltextAndListsActiveSourcesOnly:150`, `SearchAssetsIT.fulltextFindsBySearchableTextAndExactStillWins:159`, `SearchAssetsIT.nodeFoundByExactAndFulltextAppearsOnceWithExactType:168`, `SearchAssetsIT.typeFilterRestrictsResults:180` (−), `SearchAssetsIT.repositoryIsFoundOnlyByExactMatch:186` (−) | 1 |
+| Фильтр окружения идёт по открытым связям (закрытая `IN_ENVIRONMENT` не считается); лимит 1 → `truncated`; нетекущий узел не находится; спецсимволы Lucene и ввод без текстовых символов не роняют запрос; узел вне поисковых типов не отдаётся | `SearchAssetsIT.environmentFilterFollowsRelationsAndExcludesOthers:192` (−), `SearchAssetsIT.closedStructuralEdgesDoNotMatchEnvironmentFilter:203` (−), `SearchAssetsIT.limitAndTruncated:215` (−), `SearchAssetsIT.nonCurrentNodeIsNotReturned:225` (−), `SearchAssetsIT.luceneSpecialCharactersDoNotFail:231` (−), `SearchAssetsIT.nonTextInputRunsOnlyExactBranches:239` (−), `SearchAssetsIT.nodeOutsideSearchableTypesIsNotReturnedByExactSourceId:247` (−) | **1**, лимиты |
+| `trace_*`/`impact`: обход вниз/вверх по allowlist типов, пути с провенансом шагов; цикл `DEPENDS_ON` завершается, связь в пути не повторяется; `maxPaths` → `truncated`; `maxDepth` ограничивает; закрытая связь и нетекущий узел не проходятся; фильтр типов связей сужает обход; неизвестный gid → пусто | `TraceDependenciesIT.downstreamFollowsDecompositionDeploymentRunsOnAndHostedOn:137`, `TraceDependenciesIT.upstreamGoesAgainstArrowsFromComputeInstanceToSystem:155`, `TraceDependenciesIT.dependencyCycleTerminatesAndDoesNotRepeatRelationInPath:164` (−), `TraceDependenciesIT.maxPathsBelowPathCountIsTruncated:173` (−), `TraceDependenciesIT.depthBoundsTheTraversal:183` (−), `TraceDependenciesIT.closedRelationIsNotTraversed:190` (−), `TraceDependenciesIT.relationTypesFilterNarrowsTheTraversal:197` (−), `TraceDependenciesIT.notCurrentNodeIsNotTraversed:204` (−), `TraceDependenciesIT.unknownGidGivesNoPathsAndNoAssetCard:213` (−) | **2**, лимиты |
+| `impact` от VM: затронуты сервис и система, но не `ledger-api`; в путях провенанс (`assertedBy*`, `sourceFetchedAt`, `sourceActive`); `DEPENDS_ON`-потребитель затронут, владение `OWNED_BY` не идёт; фильтр окружения отсекает чужие развёртывания, закрытая `IN_ENVIRONMENT` игнорируется, путь без Deployment проходит фильтр; закрытая `RUNS_ON` → пусто; отражены `lastSeenAt`, конфликты ASSERTS и неактивный источник | `TraceDependenciesIT.stoppingVmReachesServicesAndSystemsWithStepProvenance:259`, `TraceDependenciesIT.dependsOnConsumerOfAffectedServiceIsAffectedAndOwnershipIsNotFollowed:278` (−), `TraceDependenciesIT.environmentFilterCutsDeploymentsOfOtherEnvironments:285` (−), `TraceDependenciesIT.environmentFilterIgnoresClosedEnvironmentLink:300` (−), `TraceDependenciesIT.pathWithoutDeploymentPassesEnvironmentFilter:311`, `TraceDependenciesIT.closedRunsOnGivesNoImpact:320` (−), `TraceDependenciesIT.freshnessConflictsAndInactiveSourceAreProjected:326` | критерий 7 |
+| На плотном графе (30×30 `DEPENDS_ON`) impact и upstream-trace усекаются (`truncated=true`) в пределах таймаута | `TraceDependenciesIT.denseGraphImpactIsTruncatedWithinTimeout:375`, `TraceDependenciesIT.denseGraphUpstreamTraceIsTruncatedWithinTimeout:385` (−) | **2**, лимиты (🟡 время явно не измеряется) |
+| `DEPLOYED_FROM` в чтении: один ряд с текущим commit/репозиторием и провенансом ребра (закрытое не размножает); без `DEPLOYED_FROM` ряд остаётся с `null`; `asset_relations` и `trace_downstream` видят только открытое ребро | `DeploymentCommitReadIT.footprintReturnsCurrentCommitRepositoryAndEdgeProvenanceInOneRow:114`, `DeploymentCommitReadIT.deploymentWithoutDeployedFromGivesNullFieldsAndStillOneRow:130`, `DeploymentCommitReadIT.getAssetRelationsShowOnlyOpenDeployedFromBothDirections:143`, `DeploymentCommitReadIT.traceDownstreamReachesRepositoryOverOpenDeployedFromOnly:161` | — |
+| `find_runtime_footprint`: несколько развёртываний одного сервиса — отдельные ряды; фильтр окружения, сервис без развёртываний остаётся; VM на физсервере и развёртывание прямо на нём; активные источники и провенанс `HAS_DEPLOYMENT/RUNS_ON/HOSTED_ON`; `RUNS_ON` на `Namespace` не отдаётся; закрытые связи и нетекущие узлы исключены; не-система/неизвестный gid → пусто | `RuntimeFootprintIT.severalDeploymentsOfOneServiceInOneEnvironmentAreSeparateRows:107`, `RuntimeFootprintIT.environmentFilterNarrowsToProdAndServiceWithoutDeploymentsIsKept:121`, `RuntimeFootprintIT.vmHostedOnPhysicalServerAndDeploymentOnPhysicalServerDirectly:137`, `RuntimeFootprintIT.nodeAndEdgeProvenanceIsReturnedAndInactiveSourcesAreSkipped:175`, `RuntimeFootprintIT.runsOnNamespaceIsNotReturned:197` (−), `RuntimeFootprintIT.closedRunsOnAndNonCurrentNodesAreExcluded:213` (−), `RuntimeFootprintIT.closedStructuralEdgesAreExcluded:239` (−), `RuntimeFootprintIT.closedUnknownAndNonSystemGidsGiveNoRows:259` (−) | 1 |
+| Холодный первый вызов footprint укладывается в 3 с при продовом бюджете 5 с (UNLOCKER-216) | `RuntimeFootprintIT.coldFirstCallFitsProductionTimeout:268` | лимиты (🟡 время) |
+| `explain_provenance` (бин-tool как Java-метод): два источника — мастер первым, SCM `SUPPLEMENTARY` с `conflictProperties=['criticality']`, состояние `OPEN`; фильтр по свойству; согласные источники → `NONE`; после snapshot SCM без записи она `active=false`, актив остаётся текущим, конфликт очищен; неизвестный gid → `IllegalArgumentException("asset not found")` без эха значения | `ExplainProvenanceIT.twoSourcesShowMasterAndOpenCriticalityConflict:178`, `ExplainProvenanceIT.propertyFilterKeepsOnlyThatPropertyConflict:209` (−), `ExplainProvenanceIT.agreeingSourcesHaveNoConflict:224` (−), `ExplainProvenanceIT.tombstonedSourceIsInactiveAndConflictIsCleared:237`, `ExplainProvenanceIT.unknownGidIsAssetNotFound:269` (−) | **9**, 11 |
+
+#### Z1.3.7 Консоль (`access/admin-console`): HTTP-слой под реальным JWT
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| `/api/graph/stats` — узлы по меткам и связи по типам (нули для пустых), `lastUpdatedAt`; `search` — fulltext + точный gid + `limit`→`truncated`; карточка узла с `SourceRecord` (authority, `active`), 404 для неизвестного gid | `AdminConsoleIT.statsCountNodesByLabelRelationsByTypeAndLastUpdate:180`, `AdminConsoleIT.searchFindsByFulltextAndByExactGid:195`, `AdminConsoleIT.cardShowsPropertiesTimesAndAssertingSourceRecords:210` (−) | 1, лимиты |
+| Окрестность: глубина 1 и 2, фильтр `relTypes`, `DEPLOYED_FROM` принимается; `depth=3` → 400 (до любого запроса, отказ, не clamp); бюджет `max-nodes=3` → `truncated` | `AdminConsoleIT.neighborhoodDepthOneAndTwoWithRelTypeFilter:228`, `AdminConsoleIT.neighborhoodAcceptsDeployedFromRelType:246`, `AdminConsoleIT.depthThreeIsRejectedBeforeAnyQuery:265` (−), `AdminConsoleIT.neighborhoodOverNodeBudgetIsTruncated:272` (−) | **2**, лимиты |
+| Все шаблоны консоли и три asset-шаблона проходят EXPLAIN → `READ_ONLY` под `console-reader`; искусственный шаблон `CREATE` отвергается, узлов не прибавилось | `AdminConsoleIT.everyConsoleTemplatePassesReadOnlyExplainAndWritingTemplateIsClosed:280` (−) | **3** |
+| Роль PG `archrag_console_ro` читает `inbox_event`, но `INSERT/UPDATE/DELETE` и чтение `identity_mapping` падают с SQLSTATE `42501`; пул консоли имеет `default_transaction_read_only = on`; миграции идемпотентны при существующей роли (**без `assert`**) | `SyncConsoleIT.consoleRoleCannotWriteOrReadOtherTables:183` (−), `SyncConsoleIT.connectionsDefaultToReadOnlyTransactions:251`, `SyncConsoleIT.migrationIsIdempotentForExistingRole:200` | **3** (на уровне PG GRANT), ADR 0026 |
+| Без токена → 401; токен `architecture.read` → 403 на `/api/sync/events` и `/api/audit` (**единственные негативные проверки доступа консоли**) | `SyncConsoleIT.withoutScopeApiIsForbiddenAndWithoutTokenUnauthorized:212` (−) | **13** (🔴 неполно, Z1.6.1) |
+| Каждое SQL-чтение пишется в read-аудит `archrag.audit.console` (endpoint, `sql:inbox_event`, число строк); большие `request/result` (6000 символов) не отдаются (флаги `…Truncated`) | `SyncConsoleIT.sqlReadsAreRecordedInReadAudit:221`, `SyncConsoleIT.oversizedAuditResultIsNotReturned:240` (−) | 11 |
+| Журнал событий: фильтры source/status/период, порядок убывания времени; пагинация и потолок `size=201` → 400; метаданные события содержат `payloadRef`/`contentHash`, но **не payload**; детали с DLQ-историей, неизвестное → 404; DLQ-список с `replayedAt=null`; сводка источников (checkpoint, счётчики по статусам, `lagSeconds`, последний `SyncRun`, нули для пустого источника); конфликты (по умолчанию `OPEN`) и кандидаты; аудит операций с `request/result` | `SyncConsoleIT.eventsFilterBySourceStatusAndPeriod:264`, `SyncConsoleIT.eventsPaginateAndSizeIsCapped:275` (−), `SyncConsoleIT.eventMetadataHasRefAndHashButNoPayload:289` (−), `SyncConsoleIT.eventDetailCarriesDlqHistoryAndUnknownIsNotFound:301` (−), `SyncConsoleIT.dlqListsEntriesWithReason:312`, `SyncConsoleIT.sourcesShowCheckpointCountsLastProjectedLagAndLatestSyncRun:324`, `SyncConsoleIT.conflictsAndCandidatesAreListedAndFiltered:347`, `SyncConsoleIT.auditListsOperationsWithRequestParameters:367` | 11, 14, лимиты |
+
+#### Z1.3.8 Admin REST ingestion (`/admin/*`) — `AdminEndpointIT`
+
+Единственный класс с **настоящей** цепочкой JWT ingestion (подпись + issuer + audience + `azp`-allowlist), поэтому здесь же проверяется безопасность. Четыре настоящих адаптера над заглушками наполняют журнал, обработку делает сам тест (`processAllReceived`, диспетчер выключен).
+
+| Поведение | Тесты | Ловушки / док |
+|---|---|---|
+| `POST /admin/rebuild?confirm=true` на очищенном графе даёт эквивалентный канонический дамп; в `admin_audit` запись `REBUILD/SUCCEEDED`; в журнал добавляются `replay:*`, исходные не меняются; отложенные связи воспроизводятся без остатка `PendingRelation` | `AdminEndpointIT.rebuildOnWipedGraphGivesEquivalentGraphAndAuditsIt:256`, `AdminEndpointIT.rebuildReproducesRelationsThatWereDeferredUntilTheirEndpointsArrived:273` | критерий 4, 6 |
+| Без `confirm` (и `confirm=false`) rebuild → 400, граф цел | `AdminEndpointIT.rebuildWithoutConfirmIsRejectedAndGraphIsUntouched:292` (−) | защита разрушающей операции |
+| Replay с тем же `replayId` не плодит строки (`replay:<id>:…`) и не меняет граф, аудит фиксирует 2 вызова; после полной потери графа replay по четырём источникам восстанавливает его; replay пустого диапазона → `total:0` | `AdminEndpointIT.replayIsIdempotentForSameReplayIdAndRestoresLostProjection:303` (−), `AdminEndpointIT.replayOfEmptyRangeDoesNothing:334` (−) | **6**, критерий 3 |
+| `POST /admin/crosswalks` по элементам: валидный `APPLIED`, связь двух разных gid `CONFLICT`, неизвестный source/пустая причина `INVALID`; аудит ≥ 4 записей с `actor=operator-1`; повтор идемпотентен | `AdminEndpointIT.crosswalkAppliesValidItemAndReportsConflictAndInvalidPerItem:347` (−) | ADR 0019 |
+| Токен чужого audience → 401 на rebuild и replay; токен клиента `archrag-admin-console` (azp вне allowlist) с верным audience+scope → 401, `archrag-demo` → 200; без токена 401, без scope / `architecture.read` → 403, мусорный токен 401 | `AdminEndpointIT.tokenForForeignAudienceIsUnauthorized:375` (−), `AdminEndpointIT.tokenOfForeignClientIsUnauthorizedEvenWithAdminAudienceAndScope:383` (−), `AdminEndpointIT.scopeIsEnforced:393` (−) | **13** |
+| Пока удерживается `AdminLock`, rebuild и replay → 409; после освобождения replay 200 | `AdminEndpointIT.concurrentAdminOperationIsRejectedWith409:403` (−) | ADR 0013 |
+| Объект, пропавший из источника, после полного snapshot получает tombstone (событие `reconcile:…` → `PROJECTED`), и tombstone **переживает rebuild**; `POST /admin/reconcile/eam` проксируется в control-контекст адаптера (202), пишется маркер `snapshot-complete.v1` и аудит `RECONCILE`; неизвестный источник → 404, недоступный адаптер → 502, `architecture.read` → 403, без токена → 401 | `AdminEndpointIT.reconcileTombstoneSurvivesRebuild:413`, `AdminEndpointIT.reconcileProxiesToAdapterControlContext:435`, `AdminEndpointIT.reconcileUnknownSourceIs404UnreachableAdapterIs502AndScopeIsEnforced:455` (−) | **9**, 13, 14 |
+
+#### Z1.3.9 Приёмка F1–F4 (критерий 5: MCP по Streamable HTTP) — сквозной каркас
+
+Одинаково для всех четырёх классов 🟢 (`F1AcceptanceIT:75-97,141-185`): заглушки (`StubSources.seeded(clock)`) → реальные адаптеры EAM/SCM/CMDB/DEPLOY_MAP → `pollOnce()` с ожиданием `SNAPSHOT_COMPLETED` → PostgreSQL-журнал + S3 → диспетчер ingestion в `@SpringBootTest` → ожидание пустой очереди (нет `RECEIVED/RETRYING/VALIDATED/NORMALIZED/RESOLVED`) и **нуля `QUARANTINED`** → ожидание индексов Neo4j `ONLINE` → создание Neo4j-пользователя `mcp-reader` → второе приложение (MCP, `McpServerApplication`) с протоколом `STATELESS` на `/mcp`, `tool-scopes.<tool>=architecture.read` для каждого tool, лимитами `max-depth=6, max-nodes=500, max-paths=50, timeout=5s, max-response-bytes=512KB` (`F1AcceptanceIT:191-221`). Клиент — `McpSyncClient` на `HttpClientStreamableHttpTransport` с `Authorization: Bearer <McpTestJwt.token("architecture.read")>`. Негативные проверки доступа идут сырым HTTP `POST /mcp` (`tools/call`), без MCP-клиента.
+
+| Класс | Фича (док) | Сценарий (порядок `@Order`) | Тесты |
+|---|---|---|---|
+| `F1AcceptanceIT` (8) | F1 «поиск и карточка», UNLOCKER-181/184 (`docs/01-development-order.md:40`) | s1 `tools/list`; s2 fulltext по имени → `ITSystem` первым; s3 точный `EAM-1042` → тот же gid; s4 фильтр `types`+`environment`; s5 `limit=1` → `truncated`; s6 карточка со связями; s7 неизвестный gid → tool error без стектрейса; s8 без scope 403, без токена 401 | `F1AcceptanceIT.s1_toolsListContainsSearchAndGet:242`, `F1AcceptanceIT.s2_searchByNameIsFulltext:251`, `F1AcceptanceIT.s3_searchBySourceIdIsExact:268`, `F1AcceptanceIT.s4_typeAndEnvironmentFilter:280`, `F1AcceptanceIT.s5_limitTruncates:289`, `F1AcceptanceIT.s6_getAssetCardWithRelations:301`, `F1AcceptanceIT.s7_unknownGidIsToolErrorWithoutStacktrace:337` (−), `F1AcceptanceIT.s8_accessWithoutScopeOrTokenIsDenied:350` (−) |
+| `F2AcceptanceIT` (9) | F2 «runtime footprint», UNLOCKER-185/187 (`:41`) | s1 `tools/list`; s2 footprint Payments Core/prod: сервис→1 Deployment (DEPLOYMAP)→1 VM (CMDB), `stale=false`; s3 окружение без развёртываний; **s4 изменение deploy map в заглушке + `pollOnce` видно в ответе** (`lastSeenAt` позже); s4b замещённый хост исчезает; s5 удалённое развёртывание исчезает, сервис остаётся; s2b commit/репозиторий из открытого `DEPLOYED_FROM` (данные вставлены Cypher-ом); s6 невалидный/неизвестный gid без эха; s7 401/403 | `F2AcceptanceIT.s1_toolsListContainsFindRuntimeFootprint:247`, `F2AcceptanceIT.s2_footprintOfSeededProd:256`, `F2AcceptanceIT.s3_environmentWithoutDeploymentsKeepsServiceWithEmptyDeployments:292`, `F2AcceptanceIT.s4_deployMapChangeIsVisibleAfterSync:301`, `F2AcceptanceIT.s4b_replacedHostIsNoLongerReturned:339`, `F2AcceptanceIT.s5_deletedDeploymentDisappearsButServiceStays:348`, `F2AcceptanceIT.s2b_footprintReturnsDeploymentSourceCode:361`, `F2AcceptanceIT.s6_invalidAndUnknownGidAreToolErrorsWithoutEchoOrStacktrace:399` (−), `F2AcceptanceIT.s7_accessWithoutScopeOrTokenIsDenied:418` (−) |
+| `F3AcceptanceIT` (8) | F3 «зависимости и impact», UNLOCKER-188/191, критерии 5 и 7 (`:42`) | s1 схема `trace_dependencies`; s2 trace вниз доходит до VM и `ledger-api` (`DEPENDS_ON`), `HOSTED_ON` не попал; s3 trace вверх `relationTypes=[RUNS_ON]`, `maxDepth=1`; **s4 impact от VM с объяснимыми путями и провенансом/свежестью**; s5 фильтр окружения; s6 шесть невалидных входов (в т. ч. `maxDepth=7`); s7 401/403; s8 холодный impact ≤ 15 с, p95 ≤ 5 с | `F3AcceptanceIT.s1_toolsListContainsTraceDependencies:254`, `F3AcceptanceIT.s2_traceDownstreamFromPaymentsCore:266`, `F3AcceptanceIT.s3_traceUpstreamFromVmLimitedByTypeAndDepth:291` (−), `F3AcceptanceIT.s4_impactFromVmReturnsExplainablePaths:307`, `F3AcceptanceIT.s5_impactEnvironmentFilter:350` (−), `F3AcceptanceIT.s6_invalidInputIsToolErrorWithoutStacktrace:365` (−), `F3AcceptanceIT.s7_accessWithoutScopeOrTokenIsDenied:379` (−), `F3AcceptanceIT.s8_latencyWithinBudget:392` |
+| `F4AcceptanceIT` (7) | F4 «provenance», UNLOCKER-192/194 (`:43`), зависит от конфликтов E3 | подготовка: `@Primary EventProcessor` с `ScmItSystemMapper`, два актива, связанных `POST /admin/crosswalks`, критичность HIGH (EAM)/LOW (SCM); s1 `tools/list`; s2 EAM `MASTER` + SCM `SUPPLEMENTARY`, `conflictState=OPEN`; s3 фильтр по `property`; s4 tombstone SCM-записи: актив остаётся текущим, конфликт снят; s5 неизвестный gid; s6 401/403; s7 tombstone **мастера** закрывает актив даже при активной записи SCM | `F4AcceptanceIT.s1_toolsListContainsExplainProvenance:319`, `F4AcceptanceIT.s2_assetFromTwoSourcesShowsMasterAndConflict:328`, `F4AcceptanceIT.s3_propertyFilterKeepsOnlyThatPropertyConflict:362` (−), `F4AcceptanceIT.s4_tombstoneInOneSourceKeepsAssetCurrent:375` (−), `F4AcceptanceIT.s5_unknownGidIsToolErrorWithoutStacktrace:405` (−), `F4AcceptanceIT.s6_accessWithoutScopeOrTokenIsDenied:418` (−), `F4AcceptanceIT.s7_tombstoneOfMasterClosesAssetEvenWithActiveSupplementary:432` (−) |
+
+Негатив доступа проверяется для `search_assets` (F1), `find_runtime_footprint` (F2), `trace_dependencies` (F3), `explain_provenance` (F4): без токена 401, с `architecture.other` 403 и `WWW-Authenticate: …insufficient_scope` (`F1AcceptanceIT:350-358`). Отдельной проверки для `get_asset` и `ping` нет 🟡 (все шесть tools заведены в `tool-scopes` конфигурации, `access/mcp-server/src/main/resources/application.yml:28-34`).
+
+#### Z1.3.10 Sync и reconciliation (критерии 2, 3, 4)
+
+`SyncAcceptanceIT` (`@Order` k1…k4, диспетчер включён, четыре адаптера, webhook-отправитель с HMAC; общий ключ HS256) — приёмка синхронизации; `ReconciliationIT` — отдельные свойства reconcile без Spring.
+
+| Поведение | Тесты | Ловушки / критерий |
+|---|---|---|
+| **Срез загружен** (критерий 1): цепочки `Service→Deployment→Environment`, `RUNS_ON`, `IMPLEMENTED_IN`, `OWNED_BY`, `ITSystem` с целым ключом (5101/5102), `USES_SOLUTION/USES_PLATFORM`, `ASSERTS` минимум от трёх source; `DECOMPOSED_INTO` в т. ч. по `eamCode`; `DEPENDS_ON` ровно один; в журнале нет `QUARANTINED` | `SyncAcceptanceIT.k1_sliceIsLoaded:223`, `SyncAcceptanceIT.k1_decomposedIntoLinksSystemToService:252`, `SyncAcceptanceIT.k1_dependsOnLinksServices:264`, `SyncAcceptanceIT.k1_noQuarantine:271` (−) | 4, 14 |
+| **Критерий 2**: 20 изменений по одному через подписанный webhook доходят до графа, p95 ≤ 30 с (замер на реальных часах, печать в `System.out`) | `SyncAcceptanceIT.k2a_webhookLatencyP95:279` | критерий 2 |
+| Пропущенные изменения (удаление и добавление без webhook) в граф сами не попадают (пауза 2 с); `POST /admin/reconcile/eam` → 202, пропавшая Team `active=false`/узел `isCurrent=false`, новая появляется, объекты eam-api живы; изменение ITSystem в eam-api подхватывается polling-ом (`ADVANCED`) | `SyncAcceptanceIT.k2b_missedChangesAreFixedByReconcile:313` (−), `SyncAcceptanceIT.k2c_eamApiChangeIsPickedUpByPolling:351` | **9**, критерий 2 |
+| **Критерий 3**: повтор того же webhook (202) не создаёт второй строки `inbox_event` и не меняет граф; два webhook в обратном порядке → только актуальная V2, есть `DUPLICATE`, нет карантина; страница polling в перепутанном порядке → актуальная версия (старая не применена: `IGNORED_OLD_VERSION` **или** `DUPLICATE`) | `SyncAcceptanceIT.k3a_repeatedEventChangesNothing:368` (−), `SyncAcceptanceIT.k3b_reversedWebhooks:387` (−), `SyncAcceptanceIT.k3c_reorderedPolling:409` (−) | **6**, критерий 3 |
+| **Критерий 4**: `POST /admin/rebuild?confirm=true` → 200 и канонический дамп (`CanonicalGraph.dump`) равен дампу до rebuild, включая tombstone из k2b и версии из k3 | `SyncAcceptanceIT.k4_rebuildGivesEquivalentCanonicalGraph:438` | критерий 4 |
+| Удалённое в источнике без webhook обнаруживается **полным snapshot**: пропавший `active=false`, соседний цел (его событие — `DUPLICATE`); пропущенное создание появляется | `ReconciliationIT.missedDeleteIsTombstonedAfterSnapshotAndNeighboursStayActive:161`, `ReconciliationIT.missedCreateAppearsAfterSnapshot:185` | **9**, критерий 2 |
+| **Сбой источника (503) на середине snapshot**: исход `GAVE_UP`, маркера нет, удалённый объект остаётся `active`; рестарт `Poller` продолжает тот же `syncRunId` и завершает snapshot — теперь объект неактивен | `ReconciliationIT.failureInTheMiddleOfSnapshotDeletesNothingAndRestartCompletesTheSameRun:202` (−) | **9** |
+| Объект в карантине не считается пропавшим; повторный `reconcile` того же маркера ничего не tombstone-ит; объект, пришедший webhook-ом в окно snapshot-а, не удаляется этим прогоном (high-water mark) | `ReconciliationIT.quarantinedSnapshotObjectIsNotTreatedAsMissing:233` (−), `ReconciliationIT.reprocessingTheSameMarkerChangesNothing:249` (−), `ReconciliationIT.objectCreatedByWebhookDuringTheSnapshotWindowSurvivesThisRun:268` (−) | **9**, 6 |
+
+#### Z1.3.11 Миграции и схема (сводно)
+
+Нет отдельного класса миграций; поведение распределено: Neo4j-схема — `Neo4jSchemaIT` (Z1.3.3); Flyway PG — `EventJournalIT.migrationsAreIdempotent:237`, `SyncConsoleIT.migrationIsIdempotentForExistingRole:200` (оба без `assert`) и неявно каждый `@BeforeAll`; `TemporalRelationMigration` — `GraphProjectorIT.temporalRelationMigrationFillsMissingValidFromAndIsIdempotent:591`; миграция ключа EAM — `EamKeyMigrationIT` (Z1.3.5). Миграция V1–V7 «на непустой БД предыдущей версии» (upgrade-path) не проверяется ни одним тестом 🟡.
+
+#### Z1.3.12 Метрики
+
+`IngestionMetricsIT.lagAndOpenDlqPerSourceFromJournal:39` — единственный тест метрик: gauge `archrag.ingestion.sync.lag` по источнику = возраст старейшего нетерминального события (`RECEIVED/RETRYING`; `PROJECTED` и `QUARANTINED` не в счёт; у пустых источников и неизвестного `cmdb` = 0), `dlq.open` считает только непереигранные записи (`IngestionMetricsIT:39-61`). Метрик MCP/консоли/адаптеров и эндпоинта `/actuator/prometheus` в IT нет 🟡 (проверяются в `platform/docker`, вне модуля).
+
+#### Z1.3.13 Модульный smoke
+
+`IntegrationTestsSmokeTest.moduleMarkerIsOnClasspath:10` — маркер модуля на classpath (единственный тест, который выполняет surefire).
+
+**Проверка полноты.** из 299 методов `@Test` в тексте названы 299; все.
+
+---
+
+### Z1.4 Матрица «поведение / ловушка `CLAUDE.md` → IT»
+
+Метки: 🟢 покрыто IT (в т. ч. негативным); 🟡 покрыто частично / только unit-тестами модуля / косвенно; 🔴 пробел. Критерии PoC — `docs/00-vision.md:794-807`.
+
+| № | Поведение / ловушка | Где покрыто в IT | Статус |
+|---|---|---|---|
+| 1 | Cypher только с параметрами; метки/типы из allowlist | `GraphQueryCoreIT.publicApiHasNoMethodAcceptingCypher:137`, `GraphQueryCoreIT.unknownTemplateAndBadParametersFailBeforeDatabase:150`, `SearchAssetsIT.luceneSpecialCharactersDoNotFail:231`, `GetAssetIT.unknownGidAndServiceNodeGidReturnNothing:137`. Негатива «инъекция в `query`/`property` через tool» на уровне MCP нет; ввод `property` вне allowlist — только валидный (`ExplainProvenanceIT`) | 🟡 |
+| 2 | Глубина — валидированный `int`; обход без верхней границы запрещён | подстановка числа: `GraphQueryCoreIT.traversalDepthIsBoundedByMaxDepth:214`; отказ `maxDepth=7`: `F3AcceptanceIT.s6_invalidInputIsToolErrorWithoutStacktrace:365`; `depth=3` консоли: `AdminConsoleIT.depthThreeIsRejectedBeforeAnyQuery:265`; запрет `*`/`*1..` — **только unit** (`access/graph-query-core/src/test/…/QueryTemplateRegistryTest`, `DependencyTemplatesTest`); нижняя граница (`maxDepth=0`/отриц.) в IT не проверена | 🟡 |
+| 3 | MCP/консоль только читают (`executeRead`, нет write-шаблонов) | `GraphQueryCoreIT.writingTemplatesFailExplainCheckOnFirstExecuteAndStayClosed:79`, `GraphQueryCoreIT.readSessionConfigRejectsWritesAtDatabaseLevel:112`, `AdminConsoleIT.everyConsoleTemplatePassesReadOnlyExplainAndWritingTemplateIsClosed:280`, PG: `SyncConsoleIT.consoleRoleCannotWriteOrReadOtherTables:183`. Попытки записи через HTTP MCP нет (write-tool не существует). Раздельность учёток в Community не проверяется (`mcp-reader` — пользователь без ролей) | 🟢 (критерий 6 — на уровне исполнителя) |
+| 4 | `MERGE` только по ключу под constraint | `Neo4jSchemaIT.duplicateSourceRecordKeyIsRejectedButOtherSourceTypeAccepted:61`, `GraphProjectorIT.concurrentUpsertsOfOneObjectKeepOneRecordAtTheHighestVersion:285`, `GraphProjectorIT.computeInstanceSubtypeChangeKeepsOneNode:683`, `IdentityMappingIT.concurrentResolveConvergesToOneGid:84` | 🟢 |
+| 5 | Неполная запись не затирает известные поля | `GraphProjectorIT.partialRecordDoesNotEraseKnownFields:304`, `GraphProjectorIT.partialRecordWithoutHostsClosesNothing:416`, `EamApiProjectionIT.unknownCriticalityIsStoredRawAndDoesNotOverwriteKnownValue:250`; явного `null` в payload и семантики удаления нет (`emptyHosts…KnownLimitation`) | 🟢 (🟡 явный `null`) |
+| 6a | Дедупликация по `source + eventId` | журнал: `EventJournalIT.duplicateEventIsNotInsertedTwice:145`, `EventJournalIT.sameEventIdFromAnotherSourceIsAccepted:160`; webhook: `AdapterInboxIT.webhookIsStoredAsReceivedRowWithRawObjectAndDuplicateAddsNothing:99`; сквозь конвейер: `SyncAcceptanceIT.k3a_repeatedEventChangesNothing:368`; replay: `AdminEndpointIT.replayIsIdempotentForSameReplayIdAndRestoresLostProjection:303`. На уровне `EventProcessor` повторная доставка того же `eventId` в `GraphProjectorIT` не вызывается (каждый `handle` берёт новый `eventId`) | 🟢 |
+| 6b | `IGNORED_OLD_VERSION` | `GraphProjectorIT:263,277,728,833,846` (`GraphProjectorIT.olderVersionIsIgnoredAndComparedNumerically:256`, `GraphProjectorIT.outOfOrderDeliveryConvergesToTheNewestVersion:269`, `GraphProjectorIT.deleteWithOlderVersionIsIgnored:839`), `EamApiProjectionIT.repeatedVerIsNoOpAndOlderVerIsIgnored:233`; в сквозном `SyncAcceptanceIT.k3c_reorderedPolling:409` принимается `IGNORED_OLD_VERSION` **или** `DUPLICATE` (`SyncAcceptanceIT:429`) | 🟢 |
+| 6c | Checkpoint сдвигается только после коммита Neo4j | `GraphProjectorIT.graphFailureLeavesEventRetryingAndDoesNotMoveCheckpoint:875` (при сбое не сдвинут, после повтора сдвинут); `GraphProjectorIT.upsertCreatesNodeWithProvenanceAndMovesEventToProjected:199`. High-water mark: `ReconciliationIT.objectCreatedByWebhookDuringTheSnapshotWindowSurvivesThisRun:268`; для адаптерного checkpoint — только косвенно (`ReconciliationIT:202`) | 🟢 (🟡 checkpoint адаптера) |
+| 7 | Нет побочных эффектов в transaction functions (повтор при транзиентных ошибках) | ни один тест не имитирует транзиентный сбой внутри `executeRead/executeWrite` и не проверяет отсутствие побочных эффектов в PG/S3 | 🔴 |
+| 8 | Сессии и драйвер закрываются, один драйвер на приложение | прод-поведение в IT не проверяется; **сами тесты** не закрывают драйверы в большинстве классов `M` (`Neo4jSchemaIT:28`, `IdentityCandidateIT`, `ReconciliationIT`, `GetAssetIT`, `SearchAssetsIT`, `TraceDependenciesIT` и др.); закрывают `ExplainProvenanceIT:133-138`, `AdminConsoleIT:89-101` | 🔴 (тест-код) |
+| 9a | Удаление только после полного snapshot (позитив) | `ReconciliationIT.missedDeleteIsTombstonedAfterSnapshotAndNeighboursStayActive:161`, `JournalDispatcherIT.snapshotMarkerTombstonesObjectMissingFromRun:172`, `AdminEndpointIT.reconcileTombstoneSurvivesRebuild:413`, `SyncAcceptanceIT.k2b_missedChangesAreFixedByReconcile:313`, `EamKeyMigrationIT.m3_reconcileTombstonesOldKeysAndKeepsTeamAndDependencies:207`, `F4AcceptanceIT.s7_tombstoneOfMasterClosesAssetEvenWithActiveSupplementary:432` | 🟢 |
+| 9b | …на середине загрузки удаление запрещено (негатив) | `ReconciliationIT.failureInTheMiddleOfSnapshotDeletesNothingAndRestartCompletesTheSameRun:202`, `JournalDispatcherIT.markerClaimingMoreObjectsThanJournalHoldsDeletesNothing:194`, `ReconciliationIT.quarantinedSnapshotObjectIsNotTreatedAsMissing:233`, `AdapterInboxIT.snapshotEndsWithMarkerOnRealInbox:135` (маркер последним) | 🟢 |
+| 10 | Время — `Instant`/UTC, в Neo4j `datetime` | `GraphProjectorIT.temporalRelationGetsValidFromAndIsNotReopenedByRepeat:343`, `DeployedFromIT.newCommitClosesOldDeployedFromAndOpensNewOne:294` (`asZonedDateTime().toInstant()`), парсинг `Instant.parse` в ответах MCP. Запрета `LocalDateTime` тестом нет (проверяется только отсутствием) | 🟡 |
+| 11 | Тексты источников недоверенные, не логируются целиком | `JournalDispatcherIT.brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected:137` (причина без payload), tool-ошибки без эха значения (`F1AcceptanceIT.s7_unknownGidIsToolErrorWithoutStacktrace:337`, `F2AcceptanceIT.s6_invalidAndUnknownGidAreToolErrorsWithoutEchoOrStacktrace:399`, `ExplainProvenanceIT.unknownGidIsAssetNotFound:269`), консоль: `SyncConsoleIT.eventMetadataHasRefAndHashButNoPayload:289`, `SyncConsoleIT.oversizedAuditResultIsNotReturned:240`. «Текст не исполняется как инструкция» тестом не проверяется | 🟡 |
+| 12 | Секреты/токены не в логах и исключениях | явного теста нет; `JournalDispatcherIT.brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected:137` проверяет лишь отсутствие payload в причине; пароль Neo4j/PG в `toString` — unit-тесты модулей | 🟡 |
+| 13a | MCP: 401 без токена, 403 при неверном scope | `F1AcceptanceIT.s8_accessWithoutScopeOrTokenIsDenied:350` (`search_assets`), `F2AcceptanceIT.s7_accessWithoutScopeOrTokenIsDenied:418`, `F3AcceptanceIT.s7_accessWithoutScopeOrTokenIsDenied:379`, `F4AcceptanceIT.s6_accessWithoutScopeOrTokenIsDenied:418`. Нет: неверный audience/issuer, просроченный и подделанный токен, `get_asset`/`ping` отдельно | 🟡 → 🔴 по audience/exp |
+| 13b | Admin REST ingestion | `rebuild/replay`: 401/403, чужой audience, чужой `azp` — `AdminEndpointIT.tokenForForeignAudienceIsUnauthorized:375`, `AdminEndpointIT.tokenOfForeignClientIsUnauthorizedEvenWithAdminAudienceAndScope:383`, `AdminEndpointIT.scopeIsEnforced:393`; `reconcile`: 404/502/403/401; `crosswalks`: **только 403** (`AdminEndpointIT:398`), без 401, audience, azp | 🟡 |
+| 13c | Консоль | 401 без токена и 403 по scope только для `/api/sync/events`, `/api/audit` (`SyncConsoleIT.withoutScopeApiIsForbiddenAndWithoutTokenUnauthorized:212`). Для `/api/graph/*` (`AdminConsoleIT:158-168` всегда шлёт валидный токен) и `/api/identity/*`, `/api/sync/dlq|sources` — ничего; **неверные audience и `azp` не проверяются нигде** | 🔴 |
+| 14 | Ошибки не глушатся: `QUARANTINED`/`RETRYING` с кодом | `JournalDispatcherIT.unsupportedTypeIsQuarantinedWithCode:160`, `JournalDispatcherIT.markerWithoutRawGoesToDlq:219`, `GraphProjectorIT.invalidPayloadIsQuarantinedWithCodeAndWritesNothing:916`, `GraphProjectorIT.graphFailureLeavesEventRetryingAndDoesNotMoveCheckpoint:875`, `DeployedFromIT.invalidCommitIsQuarantinedAndGraphIsUntouched:360`, `EventJournalIT.transitionsAndDlqArePersisted:170`; ошибки tool/REST без стектрейса — F1–F4 `s6/s7`; `SOURCE_CONFLICT_FAILED` в IT нет (только `EventProcessorTest`) | 🟢 |
+| — | Tombstone вместо hard delete (ADR 0020): узел не удаляется, закрывается | `GraphProjectorIT.tombstoneDeactivatesRecordArchivesNodeAndClosesRelations:773`, `GraphProjectorIT.tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains:810`, `EamKeyMigrationIT.m4_rebuildHasNoItSystemWithOldKeysAndNoDuplicates:225` (старые узлы в архиве). Отдельного «узел физически существует после tombstone» для snapshot-пути нет | 🟢 |
+| — | Authority matrix (ADR 0008), конфликты (ADR 0030/0031) | `GraphProjectorIT.nonAuthoritativeSourceDoesNotReplaceCanonicalValue:320`, `SourceConflictIT.nonAuthoritativeValueOpensConflictAndMarksOnlyDissentEdge:199`, `PlatformInvariantIT` (7), `DeployedFromIT` (5), `PostgresSourceConflictsIT` (12) | 🟢 |
+| — | Критерий 1 (срез) / 2 (p95 30 с; polling = интервал + 5 с) / 3 (повтор, out-of-order) / 4 (rebuild) | `SyncAcceptanceIT.k1_sliceIsLoaded:223` / `SyncAcceptanceIT.k2a_webhookLatencyP95:279` (polling-границы «интервал + 5 с» нет, только `k2c` без замера) / `SyncAcceptanceIT.k3b_reversedWebhooks:387` + `GraphProjectorIT.outOfOrderDeliveryConvergesToTheNewestVersion:269` / `SyncAcceptanceIT.k4_rebuildGivesEquivalentCanonicalGraph:438`, `AdminEndpointIT.rebuildOnWipedGraphGivesEquivalentGraphAndAuditsIt:256` | 🟢 (критерий 2: 🟡 polling) |
+| — | Критерий 5 (пять tools по Streamable HTTP) / 6 / 7 | `F1–F4` (пять tools: `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies`, `explain_provenance`); протокол в IT и в `mcp-server` — `STATELESS` (см. Z1.6.3); критерий 6 — на уровне исполнителя (см. №3); критерий 7 — `F3AcceptanceIT.s4_impactFromVmReturnsExplainablePaths:307`, `TraceDependenciesIT.stoppingVmReachesServicesAndSystemsWithStepProvenance:259` | 🟢 (🟡 протокол) |
+| — | Критерий 8 (backup/restore Neo4j) / 9 (p95, lag, DLQ rate, глубина) | backup/restore в IT отсутствует (`platform/docker`, вне модуля); 9: `F3AcceptanceIT.s8_latencyWithinBudget:392`, `RuntimeFootprintIT.coldFirstCallFitsProductionTimeout:268`, `IngestionMetricsIT.lagAndOpenDlqPerSourceFromJournal:39`, `TraceDependenciesIT.denseGraphImpactIsTruncatedWithinTimeout:375` | 🟡 |
+
+---
+
+### Z1.5 Вспомогательные классы
+
+| Класс | Назначение и контракт | Кто использует |
+|---|---|---|
+| `TestImages` (`TestImages:9`) | единственная константа `NEO4J = DockerImageName.parse("neo4j:5.26.31-community")`; комментарий: плавающий тег может сломать CI | 26 классов |
+| `McpTestJwt` (`McpTestJwt:31-91`) | RSA-2048 в памяти (`:40-42`), JWKS на `HttpServer` по `getLoopbackAddress():0` (`:43-52`), `jwkSetUri()` возвращает `http://localhost:<port>/jwks` (`:59`); `RESOURCE = "https://mcp.test/mcp"` (`:33`) = и issuer, и audience по умолчанию; `token(scopes…)` (`:64`) → `tokenFor("test-user", RESOURCE, …)` (`:69`) → `tokenForClient("archrag-demo", …)` (`:74`); claims: `iss`, `sub`, `aud`, `azp`, `iat = now−60 s`, `exp = now+5 min`, `scope = "<s1> <s2>"` (`:76-79`), подпись RS256 (`:80`); `close()` останавливает сервер (`:88`). Копия `TestJwt` из `mcp-server` (его test-sources недоступны) | `AdminConsoleIT`, `SyncConsoleIT`, `AdminEndpointIT`, `F1–F4` |
+| `AssetFixtures` (`AssetFixtures:30-95`) | засев графа **через настоящий `GraphProjector`**: `node(...)` (мастер по `AuthorityMatrix.defaults()`), `nodeFrom(source, …)` (дополнительная запись другого источника), `tombstone(key, gid, at)`, `relation(type, from, to, validity, at)`; версия `"1"`, `contentHash = "sha256:<sourceId>"`; исход обязан быть `APPLIED`, иначе `IllegalStateException` (`:89-94`). Формы `lastSeenAt/isCurrent/active/ASSERTS.authority` совпадают с продовыми | `GetAssetIT`, `SearchAssetsIT`, `TraceDependenciesIT`, `AdminConsoleIT` |
+| `CanonicalGraph` (`CanonicalGraph:17-62`) | канонический дамп для сравнения «до/после»: узлы 7 канонических меток + `SourceRecord` + связи из фиксированного списка 10 типов (включая `ASSERTS`); отсортированные строки; список исключаемых полей **пуст** (`:23`, сравнение не ослаблять без решения архитектора); `SyncRun`/`PROCESSED` не входят | только `SyncAcceptanceIT` (k2b, k3a, k4); `AdminEndpointIT` использует собственный `dump()` 🟡 |
+| `EamApiSupport` (`EamApiSupport:17-38`) | `EamApiStub` + `EamApiSeed.seeded(clock)` с токеном `it-eam-api-token`; `adapter(legacyUri, secret, journal, rawStore)` собирает `EamAdapter` с eam-api **и** старой заглушкой (TEAM, SERVICE_DEPENDENCY) — EAM после перехода на ключ `id` | `AdminEndpointIT`, `EamKeyMigrationIT`, `F1–F4`, `SyncAcceptanceIT` |
+| `ScmItSystemMapper` (`ScmItSystemMapper:16-45`) | тестовый `CanonicalMapper` для SCM: `IT_SYSTEM` → `UpsertNode(ITSystem(name, criticality))`, остальные типы делегируются `ScmMapper`; в PoC SCM `IT_SYSTEM` не присылает, а для сценариев provenance нужен актив с записями двух источников | `ExplainProvenanceIT`, `F4AcceptanceIT` (через `@Primary EventProcessor`) |
+
+---
+
+### Z1.6 Сомнения и расхождения
+
+Нумерация внутри раздела; приоритет — по убыванию.
+
+#### Z1.6.1 🔴 Асимметрия негативных проверок безопасности
+
+- Консоль: 401/403 проверены только на `/api/sync/events` и `/api/audit` (`SyncConsoleIT:211-218`; 401 для `/api/audit` нет). `AdminConsoleIT` всегда отправляет валидный admin-токен (`AdminConsoleIT:158-168`) — для `/api/graph/*` и `/api/identity/*` отказов нет. Неверный audience и `azp` не проверяются **нигде** (в консоли `azp` не проверяется и в коде: `AuthorizedPartyValidator` есть только в ingestion, `ingestion/ingestion-service/…/AuthorizedPartyValidator.java:27`) — это подтверждает X5.4/X3.5 и расширяет их 🟡/🔴.
+- `/admin/crosswalks`: только 403 по scope (`AdminEndpointIT:398`), без 401, audience и `azp`; `/admin/reconcile/*`: без audience/`azp`. Для `rebuild`/`replay` покрыто полностью (`AdminEndpointIT:375-401`).
+- MCP: нет теста на неверный audience/issuer, просроченный (`McpTestJwt` умеет `tokenFor(sub, aud)`/`tokenForClient`, но срок жизни фиксирован +5 мин, `McpTestJwt:78`) и подделанный токен; `get_asset` и `ping` отдельно не проверяются.
+- Реальная цепочка JWT ingestion работает только в `AdminEndpointIT`; в `F1–F4`/`SyncAcceptanceIT`/`EamKeyMigrationIT`/`JournalDispatcherIT` она заменена HS256-декодером без `aud`/`azp` (Z1.2.6) 🟡.
+
+#### Z1.6.2 🟡 Зависимость от порядка и общего состояния
+
+- `@TestMethodOrder(OrderAnnotation)`: `EamKeyMigrationIT` (5 методов `@Order(1..5)`, `adapters.getLast()` в m2/m3 требует предшественников), `SyncAcceptanceIT` (11, `@Order(1..11)`; Javadoc заявляет «каждый фиксирует своё исходное состояние», но k2c опирается на сервис из k2a, k4 — на tombstone из k2b и версии из k3, `SyncAcceptanceIT:73-74,360-361,447`), `F1–F4`. Одиночный запуск `-Dit.test=Class#method` для них недопустим (F3 s8 требует `coldImpact` из s4, `F3AcceptanceIT:396`).
+- **Два метода с `@Order(2)`** в `F2AcceptanceIT` (`:255` s2 и `:360` s2b); s2b физически стоит после s5, но по `@Order` равен s2 — порядок между ними неявен 🔴 хрупкость. Цепочка мутаций F2: s4 (смена хоста) → s4b → s5 (удаление), s3 зависит от неизменённого состояния.
+- `AdminEndpointIT`: общий ленивый `seed()` (`static boolean seeded`, `:116,134-136`) и мутирующие тесты (`:325` — `DETACH DELETE` всего графа; `:413-432` — добавление `TEAM-GONE`); при падении теста посередине последующие получат пустой граф. Пустой `@BeforeAll noop()` с Javadoc, описывающим `seed()` (`:119-121`) — мусор 🟡.
+- Классы без очистки (`ExplainProvenanceIT`, `SourceConflictIT`, `EamApiProjectionIT` в PG, `DeployedFromIT` в PG) полагаются на уникальные `UUID`/ключи; фиксированные ключи `5101`, `5104`, `7201` переиспользуются между тестами при том, что identity в PG не очищается 🟡.
+- `JournalDispatcherIT`: диспетчер работает в фоне весь класс; «зависший» маркер из `markerClaimingMoreObjects…` вечно ретраится (retry-delay 1 с) и остаётся в журнале до конца класса; граф и `inbox_event` не чистятся (`:113-119`) 🟡.
+
+#### Z1.6.3 🟡 Расхождения с `CLAUDE.md` / docs (решения записаны в ADR)
+
+- **Протокол MCP.** `CLAUDE.md` требует `spring.ai.mcp.server.protocol=STREAMABLE`; IT поднимают MCP с `STATELESS` (`F1AcceptanceIT:201`), как и `access/mcp-server/src/main/resources/application.yml:11`. Это зафиксировано ADR 0017 (`docs/adr/0017-mcp-streamable-http.md:14,34` — «уточнено 2026-10-07 (UNLOCKER-224): в коде `STATELESS`»). Код и тесты следуют ADR, устарел текст профиля. Клиент в тестах — `HttpClientStreamableHttpTransport`, т. е. wire-формат Streamable HTTP проверяется, stateful-сессии — нет.
+- **S3 в тестах: SeaweedFS, не MinIO** — ADR 0007 (см. Z1.2.1).
+- **Тег PostgreSQL** `postgres:16` — не точный (Z1.2.1).
+- **Правило «tombstone мастера закрывает актив при активной supplementary-записи»** (`F4AcceptanceIT.s7`, комментарий «Фиксирует правило проектора», `F4AcceptanceIT:432-433`; поддержано `GraphProjectorIT.tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains`). ADR 0020 формулирует шире: «Канонический узел закрывается только при отсутствии **других активных assertions**» (`docs/adr/0020-tombstone-instead-of-hard-delete.md:14`); IT и код закрывают узел по отсутствию активных **MASTER**-assertions. Формулировку ADR стоит уточнить 🟡.
+- **Ссылка в ADR 0031 на несуществующий файл**: `0020-no-physical-delete.md` (`docs/adr/0031-it-system-platform-invariant.md:3`), тогда как файл называется `0020-tombstone-instead-of-hard-delete.md` 🟡 (докладная опечатка, к IT не относится).
+- **ADR 0031 и `PlatformInvariantIT` (7 тестов)**: не покрыты IT пункты ADR «нет `platformId`/решение неизвестно → строка закрывается», нецелое `platform_id` (карантин), сбой хранилища конфликтов (`RETRYING`), `IGNORED_OLD_VERSION`/tombstone решения не запускают перепроверку, маркеры `ASSERTS.conflicts` у системы. Часть покрыта unit-тестами (`ingestion/graph-projector/src/test/…/EventProcessorTest.java:898-912` — сравнение платформ, `:193,230,820` — `SOURCE_CONFLICT_FAILED`/`RETRYING`); остальное не проверено 🟡.
+
+#### Z1.6.4 🟡 Имитации там, где имя обещает реальный путь
+
+- `SourceConflictIT.reconciliationTombstoneResolvesConflictAndClearsMarkers`: маркер snapshot подменён событием типа `TYPE_ASSET_UPSERTED` (`SourceConflictIT:295-299`), а не `architecture.sync.snapshot-complete.v1`; `filler` только добавляется в журнал и не обрабатывается `EventProcessor`. `rebuildKeepsNodeConflictAndMarker` — «rebuild» это `DETACH DELETE` + переигровка с новыми `eventId`, а не `RebuildService` (`SourceConflictIT:322-338`).
+- `ExplainProvenanceIT.tombstonedSourceIsInactiveAndConflictIsCleared`: комментарий «маркер уже обработан», на деле маркер лишь добавляется в журнал и передаётся `reconciler.reconcile` напрямую (`ExplainProvenanceIT:241-255`) — проверяется `Reconciler`, а не путь «маркер → триггер». Tool вызывается как Java-метод: scope, `ToolScopeFilter` и 401/403 здесь не участвуют.
+- `GraphProjectorIT.missingServiceDependencyIsFoundByReconcilerAndItsEdgeIsClosed` — `Reconciler` не вызывается, tombstone шлётся вручную (🟡 имя шире содержания).
+- `ScmItSystemMapper` и `CmdbSystemMapper` (в `SourceConflictIT`) воспроизводят то, чего нет в проде (SCM/CMDB `IT_SYSTEM` не присылают) — сценарий искусственный.
+
+#### Z1.6.5 🟡 Имена, обещающие больше, чем проверяет тело
+
+- `GraphProjectorIT.closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent` — один вызов `project`, проверка лишь `validTo=T2` (`GraphProjectorIT:613-629`); «only» и «idempotent» не проверены 🔴.
+- `SearchAssetsIT.fulltextFindsBySearchableTextAndExactStillWins` — exact-ветка в теле не проверяется; `luceneSpecialCharactersDoNotFail` проверяет только отсутствие исключения.
+- `EventJournalIT.migrationsAreIdempotent` и `SyncConsoleIT.migrationIsIdempotentForExistingRole` — без `assert` (`EventJournalIT:237-240`).
+- `EamApiProjectionIT.repeatedVerIsNoOpAndOlderVerIsIgnored` — для повтора `isNotEqualTo(QUARANTINED)` (`EamApiProjectionIT:235`), ожидаемый статус не зафиксирован.
+- `IdentityCandidateIT.replayKeepsOneCandidateAndFirstSeenAt` — «replay» это версия 2 с новыми `eventId`, не повторная доставка тех же событий.
+- `TraceDependenciesIT.dense…WithinTimeout` — время явно не измеряется (падает исключением таймаута, а не `assert`).
+- `AdapterInboxIT.webhookIs…` — `assertThat(key).isNotNull()` (`AdapterInboxIT:109`), смысл несёт чтение объекта из S3.
+
+#### Z1.6.6 🟡 Временные утверждения и флейки
+
+- `F3AcceptanceIT.s8`: **p95 по 10 замерам равен максимуму** (`percentile` = `ceil(0.95·n)−1`, `F3AcceptanceIT:497-500`); порог 5 с на графе из ≈ десятка узлов заведомо свободный; замер включает создание MCP-клиента и выпуск токена на каждый вызов; «холодный» вызов — не первый в классе (s1–s3 уже прогрели JVM/пул/JWKS).
+- `SyncAcceptanceIT.k2a`: p95 по 20 замерам на реальном времени CI, печать в `System.out`; порог 30 с, ожидание 60 с; `Thread.sleep(2000)` в k2b — «ничего не должно измениться» (слабая гарантия).
+- `RuntimeFootprintIT.coldFirstCallFitsProductionTimeout` — порог 3 с; «холодность» не гарантирована (порядок методов не зафиксирован), `GraphQueryCoreIT.timeoutGivesQueryTimeoutException` — граница 20 с.
+- `IngestionMetricsIT:55` — `isBetween(119 d, 180 d)` (допуск на время выполнения); `SyncConsoleIT:334` — `lagSeconds isPositive()` верно, пока `now()` позже сида 2026-01.
+- `EventJournalIT:289` — окно `receivedAt..+1000 нс` опирается на микросекундную точность `timestamptz`.
+- `McpTestJwt`: JWKS слушает `getLoopbackAddress()`, а `jwkSetUri()` отдаёт `localhost` (`McpTestJwt:45,59`) — на системе, где `localhost` → IPv6 при IPv4-loopback (или наоборот), получение ключей может не сработать 🟡.
+
+#### Z1.6.7 🟡 Прочее
+
+- **Каркас F1–F4 дублируется** (≈ 200 строк в четырёх файлах: `post`, `awaitTrue`, `count`, `scalarLong`, `startMcp`, `awaitIdle`) — риск расхождения; общего базового класса нет.
+- `SyncConsoleIT:374` фиксирует, что `/api/audit` отдаёт `request` (jsonb) как есть, включая ключ `secret` из сида. Это фикстура со значением `x`, а не нарушение ловушки 12; но если `admin_audit.request` когда-либо получит секреты, консоль их вернёт — маскирования нет (🟡, ср. X3.5).
+- Cypher/SQL в тестах местами собирается конкатенацией (`GraphProjectorIT.node()`/`openCount()`, `RuntimeFootprintIT.deployment()`, `SyncAcceptanceIT:301,359-361`, `F4AcceptanceIT:249`, `SyncConsoleIT:60,107-111`): только из констант теста, но стиль расходится с ловушкой 1 и не должен копироваться в прод-тесты.
+- Тест `F2AcceptanceIT.s4b_replacedHostIsNoLongerReturned` помечен в Javadoc как «Дефект E1»; тесты не запускались, поэтому неизвестно, исправлен ли дефект (`F2AcceptanceIT:336-337`) 🟡.
+- `F2AcceptanceIT.s2b` пишет в Neo4j напрямую (SET `sourceCommit`, два ребра `DEPLOYED_FROM`) в обход `GraphProjector`; `stale=true` в F2 нигде не проверяется (только `false`) 🔴 пробел покрытия свежести.
+- Тест не проверяет `Dockerfile`/compose-стенд и backup/restore Neo4j (критерий 8) — это `platform/docker` (вне модуля).
+- `pom.xml` модуля подключает `admin-console` и `mcp-server` одновременно: у обоих `application.yml`, какой попадёт в classpath-контекст ingestion, зависит от порядка зависимостей (`pom.xml:92`), поэтому все свойства соседних приложений передаются аргументами 🟡.
+
+---
+
+### Z1.7 Итоговая строка (для таблицы итогов)
+
+| Модуль | Файлов test / строк | Тестов | Ключевые механизмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `platform/integration-tests` | 38 (31 `*IT` + 1 unit + 6 хелперов) / ≈ 10 880; `src/main` — 1 маркер | 299 `@Test` (298 в `*IT`) в 32 классах, `@ParameterizedTest` 0 | Testcontainers: Neo4j `5.26.31-community` + `postgres:16` + SeaweedFS `4.48`, контейнеры на класс без reuse (≈ 60 запусков); 4 способа запуска (M/SB/SA/bean); `McpTestJwt` (RSA + JWKS) против HS256-заглушки; сквозные цепочки F1–F4/Sync на `@Order` | Z1.6.1: асимметрия негативов безопасности; Z1.6.2: порядок и общее состояние (`@Order`, дубль `@Order(2)` в F2); Z1.6.4–5: имитации и «обещающие» имена; Z1.6.6: временные утверждения (p95 при n=10) |
+
+
+---
+
+## W1. `platform/docker` (не Maven-модуль)
+
+Сокращение: `PD` = `platform/docker`. Метки: 🟢 подтверждено кодом/конфигом · 🟡 выведено · 🔴 пробел/расхождение. Дизайн-контекст не дублируется: ADR [0021](../docs/adr/0021-compose-demo-stand.md) (Compose вместо Kubernetes, backup через `dump/load`), [0026](../docs/adr/0026-admin-console-readonly-loopback.md) (консоль, loopback, `azp`), [0007](../docs/adr/0007-s3-raw-storage-seaweedfs.md) (SeaweedFS вместо MinIO), перечень отличий от production — `docs/05-production-gap-list.md` (§1.7, 2.1, 2.4, 2.7). Правка файлов репозитория не выполнялась, `docker`/`mvn` не запускались: утверждения о рантайме выведены из конфигурации (🟡), кроме отмеченных локальным экспериментом.
+
+**Назначение.** Демо-стенд PoC (E5.1–E5.5) одной командой `docker compose up`: инфраструктура (Neo4j, PostgreSQL, SeaweedFS, Keycloak), приложения (ingestion, mcp-server, admin-console, четыре адаптера), заглушки мастер-систем, единственный TLS-вход (nginx), необязательная наблюдаемость и набор bash-скриптов приёмки (smoke, backup/restore, замеры). Каталог не входит в Maven-реактор: образы собираются из jar, которые уже собрал `./mvnw package` (`PD/Dockerfile:1`, `PD/README.md:11`). 🟢
+
+### W1.1 Состав
+
+| Файл | Строк | Роль |
+|---|---|---|
+| `PD/docker-compose.yml` | 574 | 23 сервиса (20 в профиле по умолчанию + 3 профиля `observability`), 6 сетей, 9 secrets, 8 томов; проект `name: archrag` (`:4`) |
+| `PD/Dockerfile`, `PD/entrypoint.sh`, `PD/Dockerfile.dockerignore` | 14 / 11 / 4 | один образ-обёртка для всех Java-приложений: `eclipse-temurin:21-jre`, непривилегированный uid 10001 (`Dockerfile:3,6,10`); контекст сборки — корень репо, в образ попадают только `*-exec.jar` и `entrypoint.sh` (`Dockerfile.dockerignore:2-4`) |
+| `PD/.env.example` | 54 | демо-значения всех переменных стенда; реальный `.env` в `.gitignore` (`.gitignore:31`) |
+| `PD/README.md` | 244 | инструкция стенда (запуск, сети и секреты, консоль, наблюдаемость, backup/restore, замеры, допущения) |
+| `PD/keycloak/archrag-realm.json` | 113 | realm `archrag`: 2 клиента, 2 client scope, 1 роль, 1 пользователь; значения секретов — плейсхолдеры `${VAR}` |
+| `PD/neo4j/init-reader.sh`, `PD/postgres/init-console-ro.sh` | 22 / 11 | одноразовые init: пользователь Neo4j `archrag_reader`, пароль роли PostgreSQL `archrag_console_ro` |
+| `PD/proxy/nginx.conf` | 63 | TLS-терминация и маршрутизация `/mcp`, PRM, OIDC-endpoint'ы Keycloak, 4 вебхука |
+| `PD/certs/gen-certs.sh` | 41 | демо-CA и серверные сертификаты (proxy, Bolt Neo4j) |
+| `PD/observability/*` | 28 / 8 / 8 / 8 / 153 | `otel-collector.yml`, `prometheus.yml`, provisioning Grafana (datasource, provider), дашборд `archrag-poc.json` (4 панели) |
+| `PD/smoke.sh`, `PD/console-smoke.sh` | 89 / 126 | приёмка внешней границы (TLS, 401/200, сети, секреты) и консоли (PKCE, 401/403/200) |
+| `PD/scripts/{lib,backup,restore,graph-fingerprint,backup-restore-check,deployment-commit-check,measure}.sh` | 119 / 48 / 54 / 56 / 53 / 133 / 381 | backup/restore Neo4j, отпечаток графа, сценарий смены commit, замеры PoC |
+
+Образы приложений: `archrag/{ingestion,mcp-server,admin-console,demo-launcher}:dev` — четыре образа из одного Dockerfile; `demo-launcher` запускается в 9 ролях (4 адаптера, 4 заглушки, `eam-api-stub`) аргументами `command` (`PD/docker-compose.yml:6-12,312-313,382-383,435-436`). 🟢
+
+### W1.2 Карта сервисов compose
+
+Сети: `E`=edge, `B`=backend (internal), `G`=graph (internal), `O`=observability (internal), `OE`=obs-edge, `CE`=console-edge (`PD/docker-compose.yml:528-543`). Секреты — имена Docker secrets (`:546-564`). «Ждёт» = `depends_on` с условием `healthy`, если не указано иное. Подробности по переменным и портам — `data-dictionary.md` §W.1.
+
+| Сервис (стр.) | Образ / тег | Порты на хост | Сети | Ждёт | Healthcheck | Тома | Секреты |
+|---|---|---|---|---|---|---|---|
+| `certs` (41-49) одноразовый | `alpine/openssl:3.5.4` | — | B | — | — (`restart: "no"`) | `certs`, `ca-key`, `gen-certs.sh:ro` | — |
+| `neo4j` (51-85) | `neo4j:5-community` 🔴 плавающий | — (7474/7687 не публикуются) | G | `certs` completed | `cypher-shell … RETURN 1` по `bolt+ssc://localhost:7687`, 10 с/30 с/12 попыток/start 20 с (`:79-85`) | `neo4j-data`, `backups`, `certs:ro` | `neo4j_password` |
+| `neo4j-init` (89-100) одноразовый | `neo4j:5-community` | — | G | `neo4j` | — | `init-reader.sh:ro` | `neo4j_password`, `neo4j_reader_password` |
+| `postgres` (102-117) | `postgres:16` 🟡 плавающая мажорная | — | B | — | `pg_isready`, 3 с/3 с/20 | `pg-data` | `pg_password` (`POSTGRES_PASSWORD_FILE`) |
+| `seaweedfs` (119-135) | `chrislusf/seaweedfs:4.48` | — | B | — | `wget` к `:8333`, любой HTTP 1xx–4xx, 5 с/30 | `s3-data` | нет (ключи в `environment`) |
+| `keycloak` (137-175) | `quay.io/keycloak/keycloak:26.4`, `start-dev --import-realm` | `127.0.0.1:${ARCHRAG_KEYCLOAK_PORT:-8080}:8080` | E, B | — | `/dev/tcp` к mgmt-порту 9000 `/health/ready`, start 60 с, 60 попыток | realm-файл `:ro` (тома данных нет) | нет (пароли в `environment`) |
+| `ingestion` (178-220) | `archrag/ingestion:dev` | — | B, G, O | `neo4j`, `postgres`, `seaweedfs` | `curl -s http://127.0.0.1:8081/` (любой HTTP-ответ = готов), 30 попыток | — | `pg_password`, `neo4j_password`, `s3_access_key`, `s3_secret_key` |
+| `mcp-server` (222-252) | `archrag/mcp-server:dev` | — (масштабируется `--scale`) | E, G, O | `neo4j`, `neo4j-init` completed, `keycloak`, `ingestion` | `curl -fs :8080/actuator/health` | — | только `neo4j_reader_password` |
+| `console-pg-init` (256-270) одноразовый | `postgres:16` | — | B | `ingestion` (роль создаёт миграция V6) | — | `init-console-ro.sh:ro` | `pg_password`, `console_pg_password` |
+| `admin-console` (274-305) | `archrag/admin-console:dev` | `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}:8080` | B, G, CE | `neo4j`, `neo4j-init`, `console-pg-init` completed, `keycloak`, `ingestion` | `curl -fs :8080/actuator/health` | — | `neo4j_reader_password`, `console_pg_password` |
+| `adapter-eam` (311-336) | `archrag/demo-launcher:dev`, `adapter EAM` | — | E, B | `postgres`, `seaweedfs`, `ingestion`, `stub-eam`, `eam-api-stub` | `curl -fs :8090/health` (якорь `adapter-health`) | — | `pg_password`, `s3_*` ×2, `webhook_secret`, `eam_api_token` |
+| `adapter-scm` / `-cmdb` / `-deploymap` (338-378) | то же, `adapter SCM` / `CMDB` / `DEPLOY_MAP` | — | E, B | `postgres`, `seaweedfs`, `ingestion`, своя заглушка | как у `adapter-eam` | — | `pg_password`, `s3_*` ×2, `webhook_secret` (якорь `:22-26`) |
+| `stub-eam` / `-scm` / `-cmdb` / `-deploymap` (381-428) | `archrag/demo-launcher:dev`, `stub <СИСТЕМА>` | — | E | — | `curl -fs :8080/changes?limit=1` (якорь `stub-health`) | — | `webhook_secret` |
+| `eam-api-stub` (434-445) | `archrag/demo-launcher:dev`, `eam-api-stub` | — | E | — | `curl` с `Authorization: Token <secret>` к `/api/platforms/` | — | `eam_api_token` |
+| `reverse-proxy` (448-468) | `nginx:1.27-alpine` | `127.0.0.1:${ARCHRAG_PUBLIC_PORT:-8443}:8443` | E | `certs` completed, `mcp-server`, `keycloak`, 4 адаптера | `wget --no-check-certificate https://127.0.0.1:8443/healthz` | `nginx.conf:ro`, `certs:ro` | — |
+| `otel-collector` (473-481) профиль | `otel/opentelemetry-collector-contrib:0.140.1` | — | O | — | нет (в образе нет shell, `:480-481`) | `otel-collector.yml:ro` | — |
+| `prometheus` (483-499) профиль | `prom/prometheus:v3.7.3`, retention 2 дня | — | O | `otel-collector` **started** | `wget` к `/api/v1/targets`, цель `up` | `prometheus-data`, `prometheus.yml:ro` | — |
+| `grafana` (501-526) профиль | `grafana/grafana:12.2.1` | `127.0.0.1:${GRAFANA_PORT:-3000}:3000` | O, OE | `prometheus` | `wget /api/health` | `grafana-data`, provisioning и дашборды `:ro` | `grafana_admin_password` (`GF_SECURITY_ADMIN_PASSWORD__FILE`) |
+
+Итого: **23 сервиса**, из них 3 одноразовых (`certs`, `neo4j-init`, `console-pg-init`), 3 за профилем `observability` (`:474,484,502`), на хост публикуются 4 порта, все на `127.0.0.1`. 🟢
+
+**Сети и границы** 🟢 (`PD/docker-compose.yml:528-543`): `edge` — единственная не-internal сеть приложений (прокси, MCP, Keycloak, адаптеры, заглушки; из неё возможен исходящий выход наружу); `backend` (PostgreSQL, SeaweedFS, `certs`, ingestion, admin-console, адаптеры, Keycloak), `graph` (Neo4j, ingestion, mcp-server, admin-console, init), `observability` — все `internal: true`; `obs-edge` и `console-edge` не internal и нужны только затем, чтобы публикация порта на loopback вообще работала (комментарии `:517,290`). Сеть `default` не используется (`:2`). `mcp-server` не в `backend` (не видит PostgreSQL/S3), `ingestion` не в `edge` (админка недоступна с прокси) — обе границы проверяются `smoke.sh:42-57`.
+
+**YAML-якоря** 🟢: `x-demo-launcher` (сборка + образ, `:6-12`), `x-adapter-env` (`ARCHRAG_PG_URL/USER`, `ARCHRAG_S3_ENDPOINT/BUCKET`, `:16-20`), `x-adapter-secrets` (`:22-26`), `x-adapter-networks`, `x-adapter-depends`, `adapter-health`, `stub-health`. `adapter-eam` не использует `x-adapter-secrets` и перечисляет секреты сам (+`eam_api_token`, `:314-320`). Адаптеры жёстко `deploy.replicas: 1`: замок snapshot в `Poller` живёт внутри процесса (`:307-309,330`).
+
+### W1.3 Цепочка запуска
+
+1. **Сборка**: `./mvnw package -DskipTests` → jar с классификатором `exec` в `*/target/` (`PD/README.md:11`; пути зашиты в `build.args.JAR`, `PD/docker-compose.yml:11,183,227,279`). `docker compose build` копирует jar в образ (`Dockerfile:8`). 🟢
+   🔴 Имена jar содержат `0.1.0-SNAPSHOT` (`:11,183,227,279`): при повышении версии проекта сборка образов сломается без правки compose.
+2. **Entrypoint Java-образов** (`PD/entrypoint.sh:4-11`) 🟢: `set -eu`; каждый файл `/run/secrets/<ИМЯ>` экспортируется как переменная окружения `<ИМЯ>` (поэтому `target` секрета в compose = имя переменной Spring-конфигурации: `ARCHRAG_PG_PASSWORD`, `ARCHRAG_NEO4J_READER_PASSWORD`, …); затем `exec java -XX:MaxRAMPercentage=75 -jar /app/app.jar "$@"` (аргументы `command` compose — `adapter EAM`, `stub SCM` и т. п. — уходят в `DemoLauncher`). Эффект: секреты не попадают в `Config.Env` (`docker inspect`), но видны процессу и `/proc/<pid>/environ` внутри контейнера. 🟡
+3. **Порядок поднятия** (граф зависимостей — `flowcharts/docker.md`, схема 1) 🟢:
+   `certs` → (`neo4j`, `reverse-proxy`); `neo4j` → `neo4j-init` (создаёт `archrag_reader`, `PD/neo4j/init-reader.sh:11-20`); `postgres` + `seaweedfs` + `neo4j` → `ingestion` (миграции Flyway и схема Neo4j накатываются при старте контекста; порт 8081 открывается позже — поэтому «любой HTTP-ответ» = готов, `:214-216`); `ingestion` → `console-pg-init` (роль `archrag_console_ro` создаёт миграция V6, `PD/postgres/init-console-ro.sh:9`) → `admin-console`; `ingestion` + `keycloak` + `neo4j-init` → `mcp-server`; `ingestion` + заглушки → адаптеры; `mcp-server` + `keycloak` + 4 адаптера + `certs` → `reverse-proxy`. Прокси стартует последним, поэтому `up --wait` возвращается только когда вся цепочка healthy. Keycloak ничего не ждёт и поднимается параллельно (около минуты, `start_period: 60s`, `PD/README.md:18`).
+   🟡 `reverse-proxy` зависит от здоровья всех четырёх адаптеров (`:460-463`), хотя проксирует к ним только вебхуки: падение одного адаптера блокирует и вход MCP.
+4. **Init-скрипты** 🟢:
+   - `certs`: идемпотентен по маркеру `.ready` (`gen-certs.sh:7-10`); CA RSA 3072 на 825 дней (`:14-15`), серверные пары для `proxy` и `neo4j` с SAN `localhost, reverse-proxy, neo4j, 127.0.0.1` (`:12,17-26`); ключ CA — в отдельный том `ca-key`, доступный только `certs` (`:3-4` комментария, `compose:46`); владелец каталога Neo4j uid 7474, `chmod 600` ключей (`:33-37`).
+   - `neo4j-init`: `CREATE USER archrag_reader IF NOT EXISTS` (`init-reader.sh:13-14`), `ALTER USER` только если вход reader'ом с текущим паролем не проходит (`:18-20`); отклоняет пароль с `"` и `\` (`:7-9`); выход ненулевой при любой ошибке (`set -euo pipefail`, `:4`).
+   - `console-pg-init`: `ALTER ROLE archrag_console_ro PASSWORD :'p'`, пароль читается метакомандой psql из secret-файла, а не из argv/окружения (`init-console-ro.sh:2-3 комм., 8-9`).
+5. **Образы одноразовых сервисов** `restart: "no"`; `docker compose up --wait` считает их завершившимися успешно через `service_completed_successfully` (`:78,243,296,297`).
+
+### W1.4 Безопасность (ловушки CLAUDE.md 3, 12, 13)
+
+**Секреты в Git (ловушка 12).**
+- 🟢 В `docker-compose.yml` секретов нет: пароли и ключи — только `${VAR:?}` и блок `secrets: … environment:` (`:546-564`); `.env` исключён из Git (`.gitignore:31`). В Git лежит `.env.example` с демо-значениями (допускается CLAUDE.md репозитория/задачей; значения здесь не приводятся).
+- 🟢 Realm-файл не содержит значений секретов: секрет клиента и пароль пользователя — подстановки `${KEYCLOAK_CLIENT_SECRET}` (`archrag-realm.json:56`) и `${KEYCLOAK_CONSOLE_PASSWORD}` (`:44`), подставляются Keycloak из `environment` (`compose:149,155`). Секреты в `.env.example` — демонстрационные, README требует сменить их перед внешней публикацией (`PD/README.md:216,228`).
+- 🟢 Сделано правильно: секреты Java-сервисов, Postgres, Neo4j и Grafana — файлы `/run/secrets/*`, не `Config.Env` (`PD/README.md:106-108`). В скриптах: ключи S3 и секрет клиента для replay передаются через stdin (`lib.sh:53-60,101`), пароль консоли PG — метакомандой psql (`init-console-ro.sh:8`), токен — через временный файл заголовка (`lib.sh:110`).
+- 🟡 Остаются в `environment` и видны в `docker inspect`: `AWS_*` SeaweedFS (`compose:124-125`), `KC_BOOTSTRAP_ADMIN_*` (`:141-142`) — README это признаёт (`PD/README.md:215`). 🔴 Но README не упоминает, что туда же попадают `KEYCLOAK_CLIENT_SECRET` и `KEYCLOAK_CONSOLE_PASSWORD` (`compose:149,155`, нужны только для подстановки в realm).
+- 🔴 Секреты в argv (внутри контейнеров/на хосте), хотя заголовок `lib.sh:3` утверждает «Пароли и ключи в аргументы командной строки не попадают»: `cypher()` вызывает `cypher-shell -p "$(cat /run/secrets/neo4j_password)"` (`lib.sh:37-38`; то же в healthcheck Neo4j `compose:80`, в `platform/docker/neo4j/init-reader.sh:13,19` writer-пароль и `--param "p => …"` с reader-паролем); на хосте секрет клиента Keycloak идёт в `curl -d`/`--data-urlencode` (`smoke.sh:22`, `console-smoke.sh:68-69`, `scripts/deployment-commit-check.sh:26`), а пароль консоли — в `-d password=` (`console-smoke.sh:54-55`), хотя тот же скрипт для основного логина использует `password@файл` (`:33-35`). Видимость ограничена `ps` внутри контейнера/на хосте; в логи значения не выводятся. Комментарий «не попадает в argv» в `deployment-commit-check.sh:24` неточен.
+
+**Neo4j: разделение writer/reader (ловушка 3).**
+- 🟢 Раздельные креденшелы: writer (`neo4j`) выдан `ingestion` (`ARCHRAG_NEO4J_USER: neo4j`, `compose:192,204`) и `neo4j-init`; `mcp-server` и `admin-console` получают только `ARCHRAG_NEO4J_READER_USERNAME: archrag_reader` + `neo4j_reader_password` (`:233-234,239,285-289`). `smoke.sh:43-48` проверяет, что в окружении MCP нет `ARCHRAG_PG_*`, `NEO4J_PASSWORD`, `ARCHRAG_NEO4J_USER`, `ARCHRAG_S3_*`, а `/run/secrets` содержит ровно `ARCHRAG_NEO4J_READER_PASSWORD`; `console-smoke.sh:115-124` — то же для консоли (ровно два секрета).
+- 🟡 Это **разделение креденшелов, а не прав**: в Community нет ролей (`init-reader.sh:3`, `PD/README.md:111-112`, ADR 0004/0005), `archrag_reader` технически может писать; read-only гарантирует только `graph-query-core` (`executeRead`, `AccessMode.READ`, см. X1). Стенд-уровневой защиты записи нет; `graph-fingerprint.sh` и `deployment-commit-check.sh` читают граф под **writer**-учёткой (`lib.sh:36-39`) — осознанно, как операторские скрипты.
+- 🟢 Bolt только по TLS: `server.bolt.tls_level=REQUIRED` (`compose:62`), клиенты используют `bolt+ssc` (`:191,233,284`) — без проверки цепочки (демо-допущение, `PD/README.md:212`, gap 2.4); `smoke.sh:81-87` убеждается, что plain Bolt закрывается без ответа.
+
+**TLS, прокси, порты наружу.**
+- 🟢 Прокси слушает только `8443 ssl`, TLS 1.2/1.3 (`nginx.conf:7,10`); plain HTTP на порту не отвечает 200 (`smoke.sh:33-35`). Все 4 публикации — на `127.0.0.1`; 7474/7687/5432 с хоста закрыты (`smoke.sh:37-40`); консоль и Keycloak на не-loopback адресе хоста недоступны (`console-smoke.sh:98-112`). Админка Keycloak через прокси не проксируется — только `/realms/archrag/protocol/openid-connect/` (`nginx.conf:36-40`); `/control/snapshot` адаптеров наружу не публикуется (`nginx.conf:42`, UNLOCKER-169). Webhook идёт на фиксированный `/webhook` адаптера (`rewrite ^ /webhook break`, `:43-62`), подпись проверяет адаптер.
+- 🟡 В `nginx.conf` нет заголовков безопасности (HSTS, CSP, X-Content-Type-Options), `limit_req`/`client_max_body_size`, `ssl_ciphers`: для `/mcp` лимит тела задаёт приложение (`max-request-bytes: 1MB`, `access/mcp-server/src/main/resources/application.yml`). **CSP есть только у admin-console** (`default-src 'self'; connect-src 'self' <origin issuer>; frame-ancestors 'none'; base-uri 'self'; object-src 'none'` + `nosniff`, `ConsoleSecurityConfiguration.java:34-37,61-66`); консоль отдаётся по обычному HTTP на loopback, не через прокси (ADR 0026), TLS для неё нет.
+- 🟡 Через прокси публичен токен-endpoint Keycloak с демо-секретом `archrag-demo` (`PD/README.md:228`): допустимо только пока прокси на loopback. Прокси передаёт `Host $host` без порта и не ставит `X-Forwarded-Proto` (`nginx.conf:26,32,39`): Keycloak защищён от этого фиксированным `KC_HOSTNAME` (`compose:145`).
+- 🟢 Сертификаты: самоподписанный CA без `keyUsage` (поэтому `measure.sh:41-42` отключает `VERIFY_X509_STRICT`), срок 825 дней без автоперевыпуска (`PD/README.md:213`); скрипты используют `--cacert` из тома, а не `-k` (`smoke.sh:12`; `-k` есть только в healthcheck прокси `compose:465`).
+- 🟡 `edge` не internal: адаптеры, заглушки, MCP, Keycloak и прокси имеют исходящий доступ; в README это отмечено (`PD/README.md:218`).
+
+**Ловушка 13 (scope на каждый tool).** Docker-часть вносит три обязательные переменные и сверяет их со Spring-конфигурацией (таблица в W1.5). Каждый tool `mcp-server` закрыт строкой в `archrag.mcp.security.tool-scopes` (все шесть — `architecture.read`, `application.yml:29-34`), отсутствие записи ⇒ отказ (fail-closed). Прокси сам не аутентифицирует, `/mcp` защищён JWT приложения; `smoke.sh:18-25` проверяет 401 без токена и 200 с токеном. Проверки неверного audience/scope на MCP покрыты тестами `McpSecurityTest`, не стендом. 🟢
+
+### W1.5 Keycloak: клиенты, scopes, audience
+
+Realm `archrag` (`archrag-realm.json:3-4`): `sslRequired: none` (HTTP, dev-режим `start-dev`, gap 2.1); импорт при первом старте контейнера (`--import-realm`, `compose:139`). Тома данных у Keycloak нет ⇒ при `--force-recreate` realm импортируется заново, а всё созданное вручную в админке теряется 🟡 (`PD/README.md:127` описывает обязанность пересоздавать контейнер).
+
+**Client scopes** 🟢 (`:5-28`): `architecture.read` (без mapper'ов) и `architecture.admin` (mapper `admin-audience`, `oidc-audience-mapper`, `included.custom.audience = ${ARCHRAG_ADMIN_RESOURCE_URI}` = `urn:archrag:admin`, только access-token, `:17-22`).
+
+**Клиенты** 🟢:
+
+| Клиент | Тип / flow | Default scopes | Optional scopes | Audience-mapper (на клиенте) | Потребитель |
+|---|---|---|---|---|---|
+| `archrag-demo` (`:51-75`) | confidential, service account, `client_credentials`; standard/direct grants выключены (`:57-59`) | `architecture.read` (`:60`) | `architecture.admin` (`:61`) | `mcp-audience` → `${ARCHRAG_MCP_RESOURCE_URI}` = `https://localhost:${ARCHRAG_PUBLIC_PORT}/mcp` (`:64-69`) | MCP-клиенты/агенты, `smoke.sh`, `measure.sh`, `deployment-commit-check.sh`; с scope `architecture.admin` — `lib.sh:run_replay` (restore) |
+| `archrag-admin-console` (`:77-109`) | public, Authorization Code + **PKCE S256** (`:86`), implicit/direct/service account выключены (`:82-85`) | — (пусто, `:89`) | `architecture.admin`, `architecture.read` (`:90`) | `console-audience` → `urn:archrag:console` (`:93-98`) + mapper `sub` (`:104`) | `admin-ui` (SPA `oidc-client-ts`), `console-smoke.sh` |
+
+Redirect и web origin клиента консоли — только `http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}` (`:87-88`), а не `localhost` (PKCE требует secure context, `PD/README.md:122`).
+
+**Роль и пользователь.** Realm-роль `archrag-console-admin` (`:30-32`) и один пользователь (`:37-46`, имя и пароль из `KEYCLOAK_CONSOLE_USER/PASSWORD`, `emailVerified`, не временный пароль) с этой ролью. 🔴 **Роль нигде не проверяется**: код консоли требует только authority `SCOPE_architecture.admin` (`ConsoleSecurityConfiguration.java:25,44`), `scopeMappings` роль→scope в realm нет; любой пользователь realm получает токен консоли (признано владельцем: ADR 0026, `docs/05-production-gap-list.md:33`, gap 2.7).
+
+**Сверка с кодом `access/*` и `ingestion`** 🟢:
+
+| Контур | Ожидает приложение | Что даёт Keycloak/compose | Сверка |
+|---|---|---|---|
+| MCP (`mcp-server`) | issuer `ARCHRAG_OIDC_ISSUER_URI`, audience = `ARCHRAG_MCP_RESOURCE_URI`, scope `architecture.read` на каждый tool (`application.yml:17-34`) | issuer `http://keycloak:8080/realms/archrag` фиксирован `KC_HOSTNAME` (`compose:145,231`); `ARCHRAG_MCP_RESOURCE_URI` одинаков у Keycloak и mcp-server (`:150,232`); токен `archrag-demo` по умолчанию несёт aud MCP и scope read | совпадает |
+| Консоль (`admin-console`) | audience `ARCHRAG_CONSOLE_RESOURCE_URI`, authority `SCOPE_architecture.admin` на `/api/**`; клиент `archrag-admin-console`, scope `openid architecture.admin` (`application.yml:15-22`, `ConsoleProperties.java:17-20`) | `urn:archrag:console` в compose (`:151,283`) и в mapper клиента; `client-id` совпадает с realm | совпадает |
+| Admin REST ingestion | audience `ARCHRAG_ADMIN_RESOURCE_URI`, authority `SCOPE_architecture.admin` на `/admin/**`, дополнительно `azp ∈ ARCHRAG_ADMIN_ALLOWED_CLIENTS` (по умолч. `archrag-demo`; `application.yml:17-22`, `SecurityConfiguration.java:28-44`) | `urn:archrag:admin` (`compose:151,187`), mapper на scope `architecture.admin`; консольный клиент получает admin aud, но `azp=archrag-admin-console` ≠ `archrag-demo` ⇒ 401 | совпадает; проверяется `smoke.sh:59-79` (admin → 200, read → 401) и `console-smoke.sh:86-95` (токен консоли с admin aud → 401). `ARCHRAG_ADMIN_ALLOWED_CLIENTS` в compose не задан (берётся умолчание) 🟡 |
+
+Токены: `iss` одинаков при получении напрямую или через прокси; для браузера консоли нужна запись `127.0.0.1 keycloak` в `/etc/hosts`, а `ARCHRAG_KEYCLOAK_PORT` должен быть 8080 (`PD/README.md:121`); `console-smoke.sh` обходит это через `curl --connect-to` (`:19`).
+
+### W1.6 Наблюдаемость
+
+🟢 Профиль `observability` (`compose:474,484,502`). Поток: `mcp-server` и `ingestion` (в сети `observability`, `compose:208,240`) шлют метрики OTLP/HTTP в `otel-collector:4318`, только если `ARCHRAG_OBSERVABILITY=true` (`MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED`, `:200,235`; `otel-collector.yml:2-6`) → collector экспортирует для Prometheus на `:8889` с превращением resource-атрибутов в метки (`service.instance.id`, `:11-16`) → Prometheus скрейпит **только** collector, интервал 10 с (`prometheus.yml:2,6-8`), retention 2 дня (`compose:486`) → Grafana: datasource `Prometheus` (uid `prometheus`, по умолчанию, `provisioning/datasources/prometheus.yml:1-8`), provider папки «Arch RAG» (`provisioning/dashboards/archrag.yml:1-8`), дашборд `archrag-poc` (`archrag-poc.json:2-3`, обновление 10 с) из 4 панелей: p95 латентности tool (`archrag_mcp_tool_call_milliseconds_bucket`), sync lag по источнику, Error/DLQ rate (`archrag_ingestion_events_total{status=~"QUARANTINED|ERROR"}`, `archrag_ingestion_dlq_open`), throughput projection (`status="PROJECTED"`). Grafana — единственный порт профиля на хост, пароль из secret, анонимный доступ и регистрация выключены (`compose:505-508`).
+🟡 В `otel-collector.yml:18-20` включено расширение `health_check` на `:13133`, но healthcheck compose его не использует (нет shell в образе, `:480-481`); готовность проверяется косвенно через цель Prometheus. Метрики имеют имена `archrag_*` — их определение в коде вне этого раздела (X2/Q5).
+
+### W1.7 Скрипты (хостовые зависимости и коды выхода)
+
+Все скрипты — bash с `set -euo pipefail`; ненулевой код — `die`/`fail`/необработанная ошибка (код 1). На хосте нужны Docker Compose v2 и `.env` рядом (`lib.sh:9`); `curl`, `python3` и `openssl` — только там, где указано. Из CI запускается только `smoke.sh` и `backup-restore-check.sh` (+ `shellcheck -S warning scripts/*.sh`, `.github/workflows/ci.yml:60-101`).
+
+| Скрипт | Что проверяет / делает | Зависимости хоста | Выход |
+|---|---|---|---|
+| `smoke.sh` (89) | 401 на `/mcp` без токена; токен `client_credentials` через прокси → 200; вызов tool `ping`; plain HTTP на TLS-порту ≠ 200; 7474/7687/5432 закрыты; в `mcp-server` нет writer/PG/S3 окружения и секретов, кроме reader; положительные контроли (резолв `neo4j`, достижимость 7687) и отрицательные (нет `postgres`); прокси не резолвит `ingestion`; admin REST: scope admin → 200, read → 401; plain Bolt закрывается | docker, curl, python3 (`-c`) | 0 = «smoke ok…», 1 + `smoke FAILED: …` |
+| `console-smoke.sh` (126) | вход Authorization Code + PKCE S256 на curl; direct grant у публичного клиента выключен (400/401); `/api/*` без токена → 401; токен с `architecture.read` → 403; агентский токен (aud MCP) → 401; admin-токен → 200 на `/api/graph/stats` и `/api/sync/sources` (ровно 4 источника); токен консоли на admin REST ingestion → 401 (с предпосылкой: aud admin и `azp` консоли); порты консоли/Keycloak на loopback и недоступны по внешнему IP (шаг пропускается без не-loopback адреса); прокси не резолвит `admin-console`; в контейнере ровно 2 секрета | docker, curl, openssl, python3 (`-I`), `hostname -I` | 0 / 1; шаг 6 может дать `skip`. 🔴 В CI не запускается |
+| `scripts/lib.sh` (119) | общие функции: `dc`, `cypher` (cypher-shell в контейнере `neo4j` под writer), `vol_sh`, `neo4j_admin`, `aws_s3` (образ `amazon/aws-cli:2.27.50`, ключи через stdin), `psql_q`, `wait_queue_empty` (QUARANTINED ⇒ немедленная ошибка), `run_replay` (replay по 4 источникам `urn:corp:*` изнутри `ingestion`, токен scope `architecture.admin`) | docker | — |
+| `scripts/backup.sh` (48) | метка (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, `lib.sh:31-33`) → остановка `neo4j`, `ingestion`, `mcp-server` → `neo4j-admin database dump neo4j` → подъём → `pg_dump -Fc` → `manifest.json` (метка, `backup_started_at`, версия Neo4j, sha256 двух дампов) → загрузка в `s3://$BACKUP_BUCKET/<метка>/` (бакет создаётся при отсутствии) | docker | 0, печатает метку; 1 при сбое |
+| `scripts/restore.sh` (54) | скачивание из S3 → сверка sha256 и **точной версии** Neo4j с образом (до остановки сервисов) → остановка → `database load --overwrite-destination=true` → подъём → `POST /admin/replay` по 4 источникам за `[backup_started_at − 5 мин, now + 1 мин)` → ожидание пустой очереди (600 с). PostgreSQL **не** восстанавливается | docker | 0 / 1 |
+| `scripts/graph-fingerprint.sh` (56) | отпечаток графа: число узлов по меткам и связей по типам + sha256 ключей узлов, связей и свойств (кроме `fetchedAt, lastSeenAt, firstSeenAt, observedAt, startedAt, finishedAt, _lock` и `SyncRun.status`) | docker | 0 + вывод |
+| `scripts/backup-restore-check.sh` (53) | приёмка E5.4: F0 → backup → upsert двух объектов в `eam-api-stub` (новый `9001` и изменённый `5101`) → ожидание событий в `inbox_event` (до 300 с) → F1 (должен ≠ F0, иначе сценарий ничего не проверяет) → restore → F2 (должен = F1) | docker | 0 «OK…» / 1 с `diff` |
+| `scripts/deployment-commit-check.sh` (133) | приёмка H.4 (UNLOCKER-248, ADR 0029): `find_runtime_footprint` по `Payments Core` → upsert развёртывания `dep-payments-api-prod` с другим commit в `stub-deploymap` → новый commit в MCP → в Neo4j ровно одно открытое `DEPLOYED_FROM` (новый commit) и одно закрытое (старый): `1,1,1`; идемпотентен (переключает commit туда-обратно) | docker, curl, python3 (`-I`) | 0 / 1. 🟡 Константы commit/URL/id зашиты и дублируют `StubSources`/`EamApiSeed` (`:13-17`) |
+| `scripts/measure.sh` (381) | замеры критерия 9: p95 каждого tool (клиент и Prometheus; K=100, P=4), «источник → граф» по webhook (порог 30 с) и polling (интервал+5 с), burst M=200, sync lag, DLQ/QUARANTINED, `trace_dependencies` на глубинах 1…6, 7, 0 (7 и 0 обязаны быть отклонены, как в `CLAUDE.md`) | docker, bash, python3 (stdlib); стенд с профилем `observability` | 1 при: превышении порога p95, росте DLQ/QUARANTINED, ошибке tool, принятом `maxDepth` 0/7, отсутствии seed; иначе 0; таблица в stdout, сырьё в `measurements/<штамп>/` (в `.gitignore:32`) |
+
+🟡 Особенность отказоустойчивости `backup.sh`/`restore.sh`: `trap … ERR` (`backup.sh:21`, `restore.sh:39`) не срабатывает на сбой **внутри функций** `lib.sh` (`stop_graph_services`, `neo4j_admin`, `start_graph_services`), потому что нет `set -E`. Локальный эксперимент с `set -euo pipefail`+`trap ERR`: при `false` внутри функции скрипт завершается с кодом 1 без запуска обработчика. Следствие: если `neo4j-admin dump/load` упадёт, `neo4j`, `ingestion`, `mcp-server` останутся остановленными, вопреки комментарию «граф должен подняться обратно» (`backup.sh:20`). Сбой на «верхнем» уровне (подстановки `$(…)`) обработчик запускает.
+🟡 `backup.sh` останавливает/поднимает `neo4j`, `ingestion`, `mcp-server`, но не `admin-console` (читает Neo4j): во время dump консоль unhealthy, драйвер переподключается после старта. Пока Neo4j остановлен, MCP и ingestion недоступны (`PD/README.md:175-176`).
+
+### W1.8 Версии образов и ограничения CLAUDE.md репозитория
+
+| Требование | Факт | Статус |
+|---|---|---|
+| Neo4j 5.x Community, **точный тег** | compose: `neo4j:5-community` (`:52,90`) — плавающий; ITs: `neo4j:5.26.31-community` (`TestImages.java:9`) | 🔴 в compose тег не точный; последствие — `restore.sh` откажется читать копию после смены минорной версии (`PD/README.md:187-188`); известный техдолг, gap 1.7 |
+| PostgreSQL | `postgres:16` (`:103,257`), ITs тоже `postgres:16` | 🟡 мажорная версия зафиксирована, минорная плавает |
+| S3-совместимое хранилище (MinIO в тестах) | **SeaweedFS** `chrislusf/seaweedfs:4.48` (`:120`), в ITs тот же тег (`ContainersSmokeIT.java:35`) | 🟢 осознанное решение ADR 0007 (MinIO больше не публикует образы); формулировка про MinIO в общей инструкции агента устарела |
+| Keycloak / nginx / otel / prometheus / grafana | `26.4` / `1.27-alpine` / `0.140.1` / `v3.7.3` / `12.2.1` / `alpine/openssl:3.5.4` / `amazon/aws-cli:2.27.50` | 🟢 тег указан, `latest` не используется (`lib.sh:15`) |
+| Java 21 | `eclipse-temurin:21-jre` (`Dockerfile:3`) | 🟢; 🟡 тег плавающий в пределах 21 |
+| Новые библиотеки без задачи | в Docker-слое Maven-зависимостей нет | 🟢 |
+
+### W1.9 Сверка с `README.md` платформы, CLAUDE.md и docs/
+
+🔴 Расхождения (документация ↔ конфигурация):
+1. «Наружу публикуется только reverse-proxy» (`compose:2`; `PD/README.md:4,104`) — фактически публикуются 4 порта на loopback: прокси 8443, Keycloak 8080, консоль 8090, Grafana 3000 (`compose:161,293,451,516`); три из них — plain HTTP. README в других разделах это описывает (`:121,140`), но вводные утверждения устарели.
+2. Таблица сетей README (`:96-101`) неполна: у `backend` нет `admin-console` и `console-pg-init` (`compose:267,291`); нет сетей `observability` и `obs-edge`; в списке «Что поднимается» (`:24-37`) нет `otel-collector`, `prometheus`, `grafana` (описаны ниже, `:129-152`).
+3. `compose:214` («У ingestion-service нет actuator») и `PD/README.md:233` («actuator нужен только для метрик») — комментарий compose неточен: стартер actuator подключён (`ingestion-service/pom.xml:56-59`), эндпоинты закрыты `denyAll` (`application.yml:52` комментарий).
+4. `PD/README.md:215` называет `environment`-секретами только `AWS_*` и bootstrap-админа Keycloak; `KEYCLOAK_CLIENT_SECRET`/`KEYCLOAK_CONSOLE_PASSWORD` тоже в `environment` Keycloak (`compose:149,155`).
+5. `CLAUDE.md` (раздел «Демо-стенд»): «CI гоняет … `docker-stand` (весь список выше)» — в `ci.yml:60-101` нет `console-smoke.sh`, `scripts/deployment-commit-check.sh` и `scripts/measure.sh`; из `scripts/` запускается только `backup-restore-check.sh`. Консольная граница (ADR 0026) стендом в CI не проверяется.
+6. `PD/README.md:125` описывает `console-smoke.sh` как проверку «консоль недоступна по внешнему IP»; скрипт проверяет и Keycloak (`console-smoke.sh:101-111`), параметры `E2E_JITTER_MAX` у `measure.sh` в README не описаны (`measure.sh:7`).
+7. 🟢 Совпадают с кодом: сети, имена сервисов и секретов, раздельные reader/writer, audience-таблица, поведение backup/restore (версия Neo4j в manifest, replay-окно ±), поведение `measure.sh` (коды возврата, `N/M/K/P`), `E5` описание Keycloak-клиентов.
+
+### W1.10 Сомнения и открытые вопросы (🔴/🟡)
+
+| № | Вопрос | Ссылка | Кому |
+|---|---|---|---|
+| W1 | Плавающие теги `neo4j:5-community` (и `postgres:16`, `nginx`/`temurin` в пределах мажорной): нужен ли точный тег в compose (CLAUDE.md репозитория и ITs уже на `5.26.31`)? Иначе restore ломается при смене минорной версии | `docker-compose.yml:52,90`; `TestImages.java:9`; `docs/05-production-gap-list.md:21` | архитектор |
+| W2 | `trap ERR` в `backup.sh`/`restore.sh` не поднимает граф обратно при сбое внутри функций `lib.sh` (проверено локальным экспериментом bash, не на стенде): нужен `set -E` или явный `trap … EXIT` | `scripts/backup.sh:21`, `restore.sh:39`, `lib.sh:5` | разработчик |
+| W3 | Роль `archrag-console-admin` не принудительна, `architecture.admin` получает любой пользователь realm; Keycloak `start-dev` без тома и с master-админкой на loopback — принято владельцем для PoC | `archrag-realm.json:30-46`; ADR 0026; gap 2.7 | владелец (уже принято) |
+| W4 | Секреты в argv: заголовок `lib.sh:3` и комментарий `deployment-commit-check.sh:24` расходятся с `lib.sh:38`, `smoke.sh:22`, `console-smoke.sh` (direct grant, agent token), `init-reader.sh:13,19` | перечислены в W1.4 | разработчик |
+| W5 | Дрейф документации: «только reverse-proxy» в `compose:2` и `README:4,104`; неполная таблица сетей; CLAUDE.md обещает в CI весь список скриптов, а `console-smoke`/`deployment-commit-check`/`measure` в `ci.yml` отсутствуют | W1.9 | разработчик/архитектор |
+
+Дополнительно (🟡, ниже по важности): jar-пути с `0.1.0-SNAPSHOT` в compose; `reverse-proxy` зависит от здоровья всех адаптеров; нет заголовков безопасности и лимитов на прокси; у `archrag_reader` права записи (ограничение Community); `backup.sh` не трогает `admin-console`; хардкод commit-констант в `deployment-commit-check.sh`.
+
+### W1.11 Итоговая строка для таблицы итогов
+
+| Модуль | Файлов / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `platform/docker` (не Maven-модуль) | 24 файла / ≈2 415 строк (compose 574, 8 bash-скриптов ≈1 000) | 0 unit; приёмка скриптами `smoke.sh`, `console-smoke.sh`, `backup-restore-check.sh`, `deployment-commit-check.sh`, `measure.sh` (в CI — первые и третий) | цепочка `depends_on` по healthcheck; Docker secrets → env через `entrypoint.sh`; три сети `internal` + loopback-публикация; холодный dump/load Neo4j + replay с проверкой sha256 и версии; отпечаток графа | W1.10: плавающий тег Neo4j, `trap ERR` вне функций, роль консоли не принудительна, секреты в argv, дрейф README/CLAUDE.md |

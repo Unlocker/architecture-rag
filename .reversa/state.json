@@ -8,12 +8,12 @@
   "doc_level": "completo",
   "output_folder": "_reversa_sdd",
   "forward_folder": "_reversa_forward",
-  "phase": "escavacao",
+  "phase": "interpretacao",
   "completed": [
-    "reconhecimento"
+    "reconhecimento",
+    "escavacao"
   ],
   "pending": [
-    "escavacao",
     "interpretacao",
     "geracao",
     "revisao"
@@ -51,15 +51,14 @@
         "access/graph-query-core",
         "access/mcp-server",
         "access/admin-console",
-        "access/admin-ui"
-      ],
-      "modules_pending": [
-        "platform/integration-tests",
+        "access/admin-ui",
         "platform/source-stubs",
         "platform/demo-launcher",
+        "platform/integration-tests",
         "platform/docker"
       ],
-      "last_run_at": "2026-10-12T21:15:58Z",
+      "modules_pending": [],
+      "last_run_at": "2026-10-13T00:00:00Z",
       "files": [
         "_reversa_sdd/code-analysis.md",
         "_reversa_sdd/data-dictionary.md",
@@ -80,7 +79,11 @@
         "_reversa_sdd/flowcharts/graph-query-core.md",
         "_reversa_sdd/flowcharts/mcp-server.md",
         "_reversa_sdd/flowcharts/admin-console.md",
-        "_reversa_sdd/flowcharts/admin-ui.md"
+        "_reversa_sdd/flowcharts/admin-ui.md",
+        "_reversa_sdd/flowcharts/source-stubs.md",
+        "_reversa_sdd/flowcharts/demo-launcher.md",
+        "_reversa_sdd/flowcharts/integration-tests.md",
+        "_reversa_sdd/flowcharts/docker.md"
       ]
     }
   },
