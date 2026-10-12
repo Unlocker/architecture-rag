@@ -768,3 +768,368 @@ Feature flags и параметры окружения в модуле отсу�
 | `ingestion-service` | 27 / ≈1600 | 48 в 7 классах | диспетчер, `AdminLock`, replay/rebuild, crosswalk, аудит, метрики, безопасность | Q5.5: DLQ, повторы без лимита, rebuild стирает всё |
 
 Машины состояний ingestion: `ProcessingStatus` (`flowcharts/ingestion-service.md`, «Жизненный цикл `inbox_event`»), `source_conflict` (`flowcharts/identity-resolution.md`), версия записи (`flowcharts/graph-projector.md`). `UnresolvedReference` → `DeferRelation` → `PendingRelation` → достроенная связь (Q2.2 п.6, Q4.2 п.9). Tombstone — Q4.2 п.8. Описание модели и ADR не дублируется: `docs/02-data-model.md`, `docs/adr/`.
+
+---
+
+# R.2d — `access/*` (UNLOCKER-266)
+
+> Archaeologist, этап R.2d. Разделы X1–X4 — по одному на модуль группы `access/`; X5 — разбор сомнений R.2a–R.2c, относящихся к `access/`; X6 — итоги.
+> Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` — от корня репозитория. Skill `reversa-archaeologist` v1.1.0: в runtime этого прогона он не установлен (нет в `.agents/` и `.claude/skills/` рабочей копии), поэтому использована копия `SKILL.md` версии 1.1.0 из рабочей области другого прогона на той же машине; источники R.2b и R.2c в specs не зафиксированы, их совпадение с этой копией не проверено.
+> Не разбирается: `platform/*` (R.2e), полная схема Neo4j и Flyway (R.3), сторонние библиотеки `admin-ui`.
+
+## X1. `access/graph-query-core`
+
+Сокращения: `GQC` = `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore`, `GQT` = `GQC/templates`.
+
+**Назначение.** Единственный путь чтения графа для `mcp-server` и `admin-console`: реестр именованных Cypher-шаблонов, бюджет запроса и исполнитель `GraphQueryExecutor`, который принимает **ID шаблона**, а не текст Cypher (`GQC/GraphQueryExecutor.java:23-31,60-64`) 🟢. Зависит только от `canonical-model`, Neo4j Java Driver и Jackson 3 (подсчёт байт строки) (`access/graph-query-core/pom.xml:14-26`); `ingestion/*` и `adapters/*` не подключены, writer-учётных данных у модуля нет — они приходят из вызывающего приложения как готовый `Driver` 🟢. Состав: 14 Java-файлов main (+2 `package-info`), ≈1270 строк; тестов 47 `@Test` в 8 классах (`BudgetedCollectorTest` 6, `QueryTemplateRegistryTest` 13, `ResultBudgetTest` 3, `FulltextQueryTest` 3, `AssetTemplatesTest` 3, `ConsoleTemplatesTest` 4, `DependencyTemplatesTest` 9, `RuntimeTemplatesTest` 6). **`GraphQueryExecutor` в самом модуле не тестируется** — только IT `platform/integration-tests/.../GraphQueryCoreIT.java` (R.2e) 🟡.
+
+### X1.1 Поток управления
+
+`GraphQueryExecutor.execute(templateId, params, budget)` (`GQC/GraphQueryExecutor.java:60-97`) 🟢:
+1. `registry.find(id)`, иначе `IllegalArgumentException("Unknown template")` (`:61-64`).
+2. `checkParameters`: набор ключей `params` должен **в точности** совпасть с `template.parameters()`; лишний или недостающий ключ → `IllegalArgumentException` (`:133-146`). Параметр `limit` вызывающему недоступен: он зарезервирован (`QueryTemplate.java:53-56`) и добавляется исполнителем (`:72`).
+3. Бюджет: запрошенный (или потолки целиком, если `null`) режется `clampTo(limits)` до потолков конфигурации (`:67`, `ResultBudget.java:30-37`).
+4. `template.render(effective.maxDepth(), limits.maxDepth())` — подстановка `{maxDepth}`, единственная конкатенация в текст (`:68`, `QueryTemplate.java:133-138`).
+5. `maxRows = kind.maxRows(effective)`: `NODES` → `maxNodes`, `PATHS` → `maxPaths` (`ResultKind.java:11-13`); в Cypher уходит `LIMIT maxRows + 1` (`:72`), чтобы отличить «ровно maxRows» от «обрезано».
+6. `verifyReadOnly`: при первом исполнении шаблона выполняется `EXPLAIN <cypher>` в read-сессии, `queryType() == READ_ONLY` → вердикт `true` кэшируется в `ConcurrentHashMap` по ID шаблона; `false` кэшируется тоже и закрывает шаблон до перезапуска (`:99-124`). Ошибка планирования вердикта не создаёт и не кэшируется (`:120-123`).
+7. `driver.session(READ_SESSION_CONFIG)` (try-with-resources) → `session.executeRead(tx -> collector.collect(new RowIterator(tx.run(cypher, queryParams))), TransactionConfig.withTimeout(effective.timeout()))` (`:78-87`). Тело транзакции повторяемо: внутри только чтение Neo4j и накопление в локальных списках (`:79-80`); `BudgetedCollector` без состояния между вызовами `collect` 🟢.
+8. `Neo4jException` с кодом, содержащим `TransactionTimedOut`, превращается в `QueryTimeoutException(templateId)`; остальные пробрасываются как есть (`:94-96,126-131`).
+
+`BudgetedCollector.collect` (`GQC/BudgetedCollector.java:41-58`): читает из итератора не более `maxRows + 1` элементов; `(maxRows+1)`-я строка → `truncated=true` без добавления; после добавления каждой строки накопленные байты (`JsonMapper.writeValueAsBytes(row).length`, `:60-66`) сверяются с `maxBytes`, строка, которая **не влезла**, отбрасывается и ставит `truncated=true` (`:52-54`). Если уже первая строка больше `maxBytes`, результат пуст и `truncated=true` 🟡 (вызывающий видит «пусто, обрезано»).
+
+`RowIterator.next` + `check` (`GQC/GraphQueryExecutor.java:162-188`): значения читаются `asObject()`; `Node`, `Relationship`, `Path` — в том числе внутри `Map` и `List` — дают `IllegalStateException("… in result is forbidden: return projections")`. Шаблоны обязаны возвращать проекции (`n {.gid, …}`, скаляры, map) 🟢. Исключение не `Neo4jException`, поэтому драйвер его не повторяет и `translate` не вызывается.
+
+### X1.2 Алгоритмы и встроенные правила
+
+1. **Статическая валидация шаблона** в конструкторе `QueryTemplate` (`GQC/QueryTemplate.java:42-105`) 🟢:
+   - текст оканчивается `LIMIT $limit` (`ENDS_WITH_LIMIT`, `:32-33,74-76`);
+   - множество `$param` в тексте (минус `limit`) равно объявленному `parameters` (`:77-86`);
+   - из `{…}`-плейсхолдеров допустим только `{maxDepth}`, не более одного (`:61-73`);
+   - каждый variable-length путь `[..*..]` обязан иметь верхнюю границу — число или `{maxDepth}`; `*`, `*1..` отвергаются (`VAR_LENGTH`/`BOUNDED`, `:38-40,87-99`);
+   - `{maxDepth}` допустим **только** как верхняя граница такого пути: число использований `{maxDepth}` как границы должно равняться числу плейсхолдеров (`:100-104`). Это реализует ловушки 1–2 из `CLAUDE.md`.
+2. **Реестр** `QueryTemplateRegistry.of` проверяет потолок: литеральная глубина любого шаблона не выше `limits.maxDepth` и ID уникальны (`GQC/QueryTemplateRegistry.java:32-45`) 🟢. Реестр иммутабелен (`Map.copyOf`, `:25-27`).
+3. **Бюджет**: `ResultBudget` отвергает неположительные значения и нулевой/отрицательный `timeout` (`GQC/ResultBudget.java:20-27`); `QueryLimits` создаёт `ResultBudget` в компактном конструкторе, чтобы потолки подчинялись тем же инвариантам (`QueryLimits.java:17-20`). `clampTo` берёт минимум по каждому полю, таймаут — меньший из двух (`ResultBudget.java:30-37`) 🟢. `maxPaths` — потолок строк для шаблонов `PATHS`; Javadoc называет его «резервируемым для шаблонов обхода» (`ResultBudget.java:13`), фактически он применяется (`ResultKind.maxRows`) 🟢.
+4. **Read-only защита в три слоя** 🟢: (а) статика шаблонов + allowlist меток/типов связей; (б) `EXPLAIN → READ_ONLY` один раз на шаблон; (в) `AccessMode.READ` и `executeRead` (`GQC/GraphQueryExecutor.java:35-36,82`). Слой (в) **проверен как серверный отказ**: `GraphQueryCoreIT.readSessionConfigRejectsWritesAtDatabaseLevel` ждёт `Neo.ClientError.Statement.AccessMode` на `CREATE` в read-транзакции под пользователем без ролей (`platform/integration-tests/.../GraphQueryCoreIT.java:111-120`); `writingTemplatesFailExplainCheckOnFirstExecuteAndStayClosed` доказывает слой (б) (`:78-100`).
+5. **Allowlist меток и типов связей** подставляется в текст из констант классов, не из ввода: `AssetTemplates.SEARCHABLE_TYPES` (7 меток, `GQT/AssetTemplates.java:16-17`), `RELATION_TYPES` (8 типов, `:102-103`), `DependencyTemplates.TRACE_LABELS` (11 меток, `GQT/DependencyTemplates.java:22-25`), `TRACE_RELATION_TYPES` (7, `:18-19`), `IMPACT_RELATION_TYPES` (5, `:98-99`), `ConsoleTemplates.STATS_LABELS` (= `TRACE_LABELS` + `SourceRecord`, `:19-25`), `STATS_RELATION_TYPES` (= `RELATION_TYPES` + `HOSTED_ON`, `ASSERTS`, `:28-35`), `NEIGHBORHOOD_RELATION_TYPES` (= `RELATION_TYPES` + `HOSTED_ON`, `:38`). Значения, приходящие от вызывающего (`relationTypes`, `relTypes`, `types`), передаются параметрами и сверяются вызывающим по этим спискам (Javadoc `DependencyTemplates.java:11-13`); сам `graph-query-core` членство **не проверяет** 🟡 (проверка в `TraceDependenciesTool`, X2, и `GraphController`, X3).
+6. **Свежесть и темпоральность в запросах.** Открытая связь = `validTo IS NULL`; текущий узел = `isCurrent = true` — фильтры внутри шаблонов (`DependencyTemplates.java:29-33`, `RuntimeTemplates.java:33-41`, `ConsoleTemplates.java:115-116,145`). Исключения: `get_asset` и `explain_provenance` отдают закрытые узлы (`GQT/AssetTemplates.java:107-109,174-175`).
+7. **`FulltextQuery.escape`** (`GQT/FulltextQuery.java:25-40`): нижний регистр (`Locale.ROOT`), экранирование 19 спецсимволов Lucene обратным слешем, `null`, если после очистки нет ни одной буквы/цифры. Приведение к нижнему регистру отключает операторы `AND/OR/NOT` 🟢. Результат идёт параметром `$text` в `db.index.fulltext.queryNodes('asset_text', t)` (`AssetTemplates.java:52`) — имя индекса `asset_text` создаётся в `ingestion/graph-projector` (R.3) 🟡.
+
+### X1.3 Реестр шаблонов (14 шаблонов)
+
+Список не дублирует Cypher; указаны параметры, возврат и особенности. Полная схема меток/свойств графа — R.3.
+
+| ID шаблона | Параметры | `ResultKind` | Строка результата | Где |
+|---|---|---|---|---|
+| `search_assets` | `query`, `text`, `types`, `environment` | NODES | `gid, type, name, score, matchType (EXACT\|FULLTEXT), sources[], lastSeenAt`; только `isCurrent`; точные совпадения по `gid`, `SourceRecord.sourceId`, `ITSystem.eamCode` со score 1000, затем fulltext | `AssetTemplates.java:37-96` |
+| `get_asset` | `gid` | NODES | `gid, type, properties (properties(n)), firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources[]` (с неактивными записями) | `:112-141` |
+| `asset_relations` | `gid` | NODES | действующие связи 1 уровня в обе стороны: `relationType, direction, gid, type, name, isCurrent, validFrom` | `:150-168` |
+| `explain_provenance` | `gid` | NODES | `gid, type, isCurrent, deletedAt, records[]` (`contentHash`, `authority`, `confidence`, `conflicts`) без значений свойств | `:180-210` |
+| `trace_downstream` / `trace_upstream` | `gid`, `relationTypes` | PATHS | путь: `nodes[]` (c `conflicts`), `relations[]` (c `assertedBy*`, `sourceFetchedAt`, `sourceActive`); `[*1..{maxDepth}]` по/против стрелок | `DependencyTemplates.java:82-95` |
+| `trace_impact` | `gid`, `relationTypes`, `environment` | PATHS | как `trace_upstream`, но путь заканчивается на `Service`/`ITSystem`; фильтр окружения по каждому `Deployment` пути | `:112-123` |
+| `runtime_footprint` | `systemGid`, `environment` | NODES | строка на (service, deployment, compute): `system, service, deployment, compute, host` | `RuntimeTemplates.java:29-90` |
+| `graph_stats_nodes` / `graph_stats_relations` | — | NODES | `label,count` / `type,count` (UNION по `MATCH (n:L) count`) | `ConsoleTemplates.java:47-82` |
+| `graph_last_update` | — | NODES | `lastUpdatedAt = max(SourceRecord.fetchedAt)` | `:88-97` |
+| `console_neighborhood_nodes` / `console_neighborhood_edges` | `gid`,`relTypes` / `gids`,`relTypes` | NODES | узлы с `distance` и связи `type, source, target` | `:105-152` |
+| `console_latest_sync_runs` | `adapters` | NODES | последний `SyncRun` на адаптер: `runId, startedAt, endedAt, status, fetched, applied, failed` | `:159-179` |
+
+Всего объявлено 14 `QueryTemplate`: 4 в `AssetTemplates`, 3 в `DependencyTemplates`, 1 в `RuntimeTemplates`, 6 в `ConsoleTemplates` (`ConsoleTemplates.ALL`, `:182-189`). Реестр собирают приложения (X2: `GraphReaderConfiguration`, X3: `GraphReaderConfiguration`); `ConsoleTemplates.ALL` не включает шаблоны `AssetTemplates` — консоль регистрирует их отдельно (Javadoc `:13`, `:181`).
+
+### X1.4 Структуры данных
+
+Нет JSON-схемы: результат — `QueryResult(templateId, rows, truncated, rowCount, elapsed)` (`GQC/QueryResult.java:19-27`), `rows` — `List<Map<String,Object>>` из простых Java-структур; `rows` копируется (`List.copyOf`). `QueryTemplate`, `QueryLimits`, `ResultBudget`, `QueryResult`, `BudgetedCollector.Collected` — records; подробности — `data-dictionary.md` §X.1.
+
+### X1.5 Константы и конфигурация
+
+`TIMEOUT_CODE = "TransactionTimedOut"` (`GQC/GraphQueryExecutor.java:38`); `LIMIT_PARAMETER = "limit"`, `MAX_DEPTH_PLACEHOLDER = "{maxDepth}"` (`QueryTemplate.java:25,28`); `EXACT_SCORE = 1000.0` (`AssetTemplates.java:20`). Свойств Spring в модуле нет: `QueryLimits` создаёт вызывающее приложение (значения по умолчанию — X2.4, X3.4).
+
+### X1.6 Сомнения и расхождения
+
+- 🟡 **`GraphQueryExecutor` без unit-теста в модуле.** Вся логика исполнителя (clamp → render → EXPLAIN-кэш → обход строк → перевод таймаута) проверяется только IT в `platform/integration-tests` (`GraphQueryCoreIT.java:78-229`); `mvn -pl access/graph-query-core verify` их не запускает. Проверить в R.2e.
+- 🟡 **Расхождение ADR 0005 и кода по `EXPLAIN`.** ADR 0005 в таблице вариантов **отклоняет** «Разбор Cypher на лету (`EXPLAIN`)» (`docs/adr/0005-readonly-mcp-by-application.md:22`), а код и `docs/03-interfaces.md:42,655` используют `EXPLAIN` как дополнительный слой. Противоречия по сути нет (в ADR отклонён `EXPLAIN` как *замена* статических шаблонов, а не как проверка поверх них), но ADR слой не описывает. Документ вне этапа — не правится.
+- 🟡 **Обход фильтрует типы связей после раскрытия.** `[*1..{maxDepth}]` в `trace_*` и `console_neighborhood_nodes` не ограничен типами связей в самом паттерне; `type(r) IN $relationTypes` стоит в `WHERE all(...)` (`DependencyTemplates.java:31`, `ConsoleTemplates.java:113-115`). Перечисление путей по всем типам связей ограничивают только `LIMIT` и таймаут транзакции; стоимость на плотном графе не измерена в этом модуле (замеры — `docs/04-poc-measurements.md`).
+- 🟡 **Порядок путей не определён.** `trace_*` без `ORDER BY` (сортировка в Java, Javadoc `DependencyTemplates.java:35-38,79-80`): при усечении по `LIMIT` состав путей может меняться между вызовами. Усечение сообщается флагом `truncated` на уровне `QueryResult`.
+- 🟡 **Усечение по `LIMIT` ≠ усечение по `maxDepth`.** `truncated` выставляется только бюджетом строк/байт; обрезка глубиной (`maxDepth` меньше реальной цепочки) в результате не отражается. Вывод из `GQC/BudgetedCollector.java:41-58` и `QueryTemplate.java:133-138`.
+- 🟡 **Состав `LABELS` в `trace_*` включает `Environment`, `Team`.** Начать обход можно с любой из 11 меток (`DependencyTemplates.java:22-27,85`); допустимость старта проверяют tools (X2).
+- 🟡 **Дублирование `cypherList`.** Одноимённый приватный метод в `AssetTemplates.java:215`, `DependencyTemplates.java:128`, `ConsoleTemplates.java:200` (три копии).
+- 🟡 **Вердикт `EXPLAIN` по умолчанию передаёт `null` во все параметры** (`GQC/GraphQueryExecutor.java:112-114`). Для шаблонов с `UNWIND $gids`/`IN $gids` планировщик строит план на `null`; на корректность read-only это не влияет.
+- 🟢 Ловушка 2 (`*1..$depth` / `*` без верхней границы) закрыта на двух уровнях: валидация шаблона (`QueryTemplate.java:87-104`) и проверка `render` (`:133-136`); тесты — `QueryTemplateRegistryTest` (13 тестов).
+- 🟢 Ловушка 3 (MCP только читает): в модуле единственное обращение к драйверу — `executeRead` (`GQC/GraphQueryExecutor.java:82,118`); `executeWrite`/`session.run` отсутствуют (grep по `access/graph-query-core/src/main`).
+
+
+---
+
+## X2. `access/mcp-server`
+
+Сокращение: `MCP` = `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver`.
+
+**Назначение.** Spring Boot-приложение MCP-сервера: Streamable HTTP на `POST /mcp` в режиме `STATELESS`, 6 tools (из них 5 предметных и служебный `ping`), OAuth2 resource server (JWT: issuer + audience), scope на каждый `tools/call`, аудит и метрики каждого вызова, чтение графа только через `graph-query-core` (`access/mcp-server/src/main/resources/application.yml:11-13,19-20`; `MCP/McpServerApplication.java:6-8`) 🟢. Зависимости: `graph-query-core`, `neo4j-java-driver`, `spring-ai-starter-mcp-server-webmvc`, actuator, Micrometer OTLP, AspectJ, `oauth2-resource-server` (`access/mcp-server/pom.xml`); `ingestion/*` и `adapters/*` не подключены, writer-свойств Neo4j нет — только `archrag.neo4j.reader.*` (`access/mcp-server/src/main/resources/application.yml:36-41`) 🟢. Состав: 24 Java-файла main (без `package-info`), ≈2150 строк; тестов 100 `@Test` в 16 классах: tools — 39 (`TraceDependenciesToolTest` 15, `ExplainProvenanceToolTest` 8, `FindRuntimeFootprintToolTest` 6, `GetAssetToolTest` 6, `SearchAssetsToolTest` 4), через HTTP `@SpringBootTest` — 44 (`McpSecurityTest` 13, `McpAuditTest` 9, `TraceDependenciesMcpTest` 8, `McpServerInteropTest` 4, `GetAssetMcpTest` 4, `SearchAssetsMcpTest` 3, `FindRuntimeFootprintMcpTest` 3), прочее — 17 (`ToolArgumentsTest` 7, `ToolCallAuditorTest` 5, `GraphReaderConfigurationTest` 3, `ActuatorProbesTest` 2). Neo4j в тестах модуля не поднимается: драйвер ленивый, `GraphQueries` подменяется (`access/mcp-server/src/test/resources/config/application.yml:1-7`) 🟡 — сквозное чтение графа проверяют IT платформы (R.2e).
+
+### X2.1 Поток управления
+
+**Вызов tool** (последовательность по слоям) 🟢:
+1. Spring Security: `BearerTokenAuthenticationFilter` проверяет JWT (issuer из `ARCHRAG_OIDC_ISSUER_URI`, audience = `archrag.mcp.security.resource-uri`) (`access/mcp-server/src/main/resources/application.yml:19-20`; `MCP/security/McpSecurityConfiguration.java:48-50`). Без токена — 401. Открыты только `/actuator/health/**` и `/.well-known/oauth-protected-resource/**` (`:43-47`).
+2. `ToolScopeFilter` (после `AuthorizationFilter`, `:61`), только для `POST /mcp` (`MCP/security/ToolScopeFilter.java:51-54`): отвергает неизвестную кодировку (400), тело больше `max-request-bytes` (по умолчанию 1 МБ, `McpSecurityProperties.java:21`) → 413, не-JSON и всё, что не JSON-**объект** (в том числе JSON-RPC batch), → 400 (`:60-81`). Для `method == "tools/call"` берёт `params.name`, ищет scope в `tool-scopes`; нет записи → warn в лог, аудит `DENIED_UNKNOWN_TOOL`, 403; у токена нет `SCOPE_<scope>` → аудит `DENIED_SCOPE`, 403 с `WWW-Authenticate: Bearer error="insufficient_scope", scope=…, resource_metadata=…` (`:82-96,124-132`). Остальные методы MCP (`initialize`, `tools/list` и др.) требуют только валидный токен — подтверждено `McpSecurityTest.tokenWithoutScopeCanInitializeAndListTools` (`McpSecurityTest.java:96`). Тело передаётся дальше буферизованным (`BufferedRequest`, `:144-189`).
+3. Spring AI MCP (stateless): диспетчеризация в метод с `@McpTool`.
+4. `ToolCallAuditAspect` вокруг каждого метода `@McpTool`: открывает `ToolCallContext` (ThreadLocal) и наблюдение Micrometer, вызывает tool, в `finally` закрывает контекст и пишет аудит; исключение tool не глушится (`MCP/audit/ToolCallAuditAspect.java:29-60`). Решение: нет исключения → `ALLOWED`; `QueryTimeoutException` → `TIMEOUT`; иное → `ERROR` (`:43-46`).
+5. Tool валидирует аргументы (все ошибки — `IllegalArgumentException` без эха ввода), формирует `ResultBudget` и вызывает `GraphQueries.execute(templateId, params, budget)` (`MCP/graph/GraphQueries.java:27-31`), который вызывает `GraphQueryExecutor` и записывает шаблон/строки/`truncated` в `ToolCallContext` (`ToolCallContext.record`, `:35-42`).
+6. Tool собирает типизированный ответ (record) — Spring AI сериализует его в `content[0].text` JSON.
+
+**Tools** (все с `readOnlyHint=true, destructiveHint=false, idempotentHint=true, openWorldHint=false`) 🟢:
+
+| Tool | Scope | Параметры (обяз.*) | Шаблоны графа | Ошибки (`IllegalArgumentException`) | Файл |
+|---|---|---|---|---|---|
+| `ping` | `architecture.read` | — | — | — | `MCP/tools/PingTool.java:11-22` |
+| `search_assets` | `architecture.read` | `query`*, `types[]`, `environment`, `limit` (1..50, по умолч. 10) | `search_assets` | пустой/длиннее 200 `query`, `limit` вне диапазона, метка вне `SEARCHABLE_TYPES` | `MCP/tools/SearchAssetsTool.java:39-107` |
+| `get_asset` | `architecture.read` | `gid`*, `includeRelations` (по умолч. true) | `get_asset` (+ `asset_relations`) | `gid` не UUID, `asset not found` | `MCP/tools/GetAssetTool.java:42-92` |
+| `explain_provenance` | `architecture.read` | `gid`*, `property` (`^[A-Za-z][A-Za-z0-9_]{0,63}$`) | `explain_provenance` | `gid` не UUID, `property is invalid`, не найден | `MCP/tools/ExplainProvenanceTool.java:41-88` |
+| `trace_dependencies` | `architecture.read` | `gid`*, `direction`, `maxDepth` (1..лимит), `relationTypes[]`, `mode` (`trace`\|`impact`), `environment` (только impact, ≤128) | `trace_downstream` / `trace_upstream` / `trace_impact` (+ `get_asset` при пустом результате) | неизвестный режим/направление, `maxDepth` вне диапазона, тип связи вне allowlist режима, не найден | `MCP/tools/TraceDependenciesTool.java:82-158` |
+| `find_runtime_footprint` | `architecture.read` | `systemGid`*, `environment` | `runtime_footprint` | `systemGid` не UUID, `asset not found` (также если не `ITSystem`/не текущая) | `MCP/tools/FindRuntimeFootprintTool.java:46-77` |
+
+Все 6 строк `tool-scopes` ведут на единственный scope `architecture.read` (`access/mcp-server/src/main/resources/application.yml:28-34`) 🟢: разделения прав между tools нет.
+
+**Сборка ответов** 🟢:
+- `search_assets`: строка → `AssetHit`; `truncated` = результат обрезан бюджетом `min(limit, maxNodes)` (`SearchAssetsTool.java:84-92`).
+- `get_asset`: `properties` — `properties(n)` без служебных ключей; `java.time` → ISO-8601 UTC (`GetAssetTool.java:104-125`); `truncated` относится **только** к связям (`:75-80`).
+- `explain_provenance`: мастера по `AuthorityMatrix.defaults()` из `canonical-model` для метки узла (и свойства), неизвестная метка → пустое множество; `authoritative = source ∈ мастера`; с `property` конфликты фильтруются по имени; `conflictState = OPEN`, если у какой-либо записи остался конфликт (`ExplainProvenanceTool.java:76-87,111-120,130-150`).
+- `trace_dependencies`: строки-пути сортируются в Java по `(число узлов, gid узлов)` (`PATH_ORDER`, `:37-50,200-201`); узлы и связи дедуплицируются (связь по `(type, from, to)`); `stale` узла — `lastSeenAt` пуст или старше `now − stale-after`; `stale` связи — запись-источник не найдена, неактивна или старше порога; для `impact` `affected` = последние узлы путей (`:193-239`). Пустой результат при существующем узле допустим, иначе `asset not found` через `get_asset` (`:154-156,161-163`).
+- `find_runtime_footprint`: группировка строк в `service → deployment → compute (+host)`; `warnings` — по строке на устаревший узел (`FindRuntimeFootprintTool.java:79-150`); `truncated` из бюджета (`:139-149`).
+
+### X2.2 Алгоритмы и встроенные правила
+
+1. **Fail-closed для tools.** Любой `tools/call` без записи в `tool-scopes` отвергается (`ToolScopeFilter.java:84-90`); ловушка 13 из `CLAUDE.md` закрыта конфигурацией, а не аннотацией 🟢. Тест `unmappedToolIsForbiddenEvenWithScope` (`McpSecurityTest.java:178`).
+2. **Бюджет** — запрошенный глубины/лимита режется до `QueryLimits` в executor'е; tool `trace_dependencies` дополнительно проверяет `maxDepth ≤ limits.maxDepth` и выдаёт ошибку, а не молча режет (`TraceDependenciesTool.java:134-137`) 🟢. `search_assets` режет `limit` через `min(limit, maxNodes)` после проверки 1..50 (`SearchAssetsTool.java:70-73,87`).
+3. **Нет эха ввода в ошибках.** `gid must be a UUID`, `property is invalid`, `Unknown relation type; allowed: …` (список — из констант) — значения ввода в текст не попадают; исходное сообщение `UUID.fromString` специально не пробрасывается (`GetAssetTool.java:94-101`, `ExplainProvenanceTool.java:90-108`, `TraceDependenciesTool.java:165-185`) 🟢.
+4. **Аудит без утечки.** Запись логгера `archrag.audit.mcp` (`principal`, `tool`, `arguments`, `templates`, `durationMs`, `rows`, `truncated`, `decision`, `errorClass`) — одна на вызов, включая отказы фильтра (`MCP/audit/ToolCallAuditor.java:99-120`); `principal` = `sub` + `azp`/`client_id`, токен не читается (`:132-144`); аргументы нормализуются `ToolArguments`: ключи по алфавиту, строки до 256 символов, коллекции до 20 элементов, глубина до 5, значения ключей по маске `token|secret|password|authorization|credential` → `***` (`ToolArguments.java:20-26,35-79`); имя tool из запроса очищается от управляющих символов и режется до 64 (`:122-129`); метрики: наблюдение `archrag.mcp.tool.call` (теги `tool`, `decision`) и summary `archrag.mcp.tool.rows`; тег `tool` для неизвестного tool — `unknown` (низкая кардинальность) (`:29-33,91-97`) 🟢. Сбой самого аудита логируется классом исключения и не подменяет результат tool (`:79-82`).
+5. **Свежесть.** `stale-after` по умолчанию `P7D`, должен быть положительным (`MCP/graph/StalenessProperties.java:13-19`); сравнение строго: ровно на пороге — свежо (`TraceDependenciesTool.java:187-190`).
+6. **Потолки** (по умолчанию, `access/mcp-server/src/main/resources/application.yml:45-50`): `max-depth 6`, `max-nodes 500`, `max-paths 50`, `timeout 5s`, `max-response-bytes 512KB`; конфигурация — `GraphReaderProperties.Limits` (`MCP/graph/GraphReaderProperties.java:32-34`) → `QueryLimits` (`MCP/graph/GraphReaderConfiguration.java:41-49`). Значения без умолчаний в коде (`@ConfigurationProperties` record без `@DefaultValue`): при пропуске свойств `new QueryLimits` упадёт на инвариантах → приложение не стартует 🟡.
+7. **Драйвер**: один бин `Driver` (`destroyMethod = "close"`), `AuthTokens.basic`, создаётся лениво — соединение при первом запросе; `spring.neo4j.*` autoconfig не используется (`MCP/graph/GraphReaderConfiguration.java:35-39`, Javadoc `:20-26`). `GraphReaderProperties.toString` маскирует пароль (`MCP/graph/GraphReaderProperties.java:17-21`) 🟢.
+8. **Метаданные OAuth.** Protected Resource Metadata (RFC 9728) публикуется на `/.well-known/oauth-protected-resource` без токена: `resource`, `authorization_servers`, `scopes_supported` (уникальные scope из `tool-scopes`), `resource_name = arch-rag` (`McpSecurityConfiguration.java:33,51-60`) 🟢; в `WWW-Authenticate` 403 есть `resource_metadata` (`ToolScopeFilter.java:129,134-139`).
+
+### X2.3 Структуры данных
+
+Записи ответов — в `data-dictionary.md` §X.2 (`SearchAssetsResult`, `GetAssetResult`, `ExplainProvenanceResult`, `TraceDependenciesResult`, `FindRuntimeFootprintResult`), аудит-запись — §X.2.2, свойства — §X.2.3.
+
+### X2.4 Константы и конфигурация
+
+`DEFAULT_LIMIT=10`, `MAX_LIMIT=50`, `MAX_QUERY_LENGTH=200` (`SearchAssetsTool.java:21-23`); `MAX_ENVIRONMENT_LENGTH=128` (`TraceDependenciesTool.java:35`); `PROPERTY` regex (`ExplainProvenanceTool.java:24`); `ToolArguments.MAX_STRING/ITEMS/DEPTH=256/20/5` (`:20-22`); `ToolCallAuditor.LOGGER="archrag.audit.mcp"`, `OBSERVATION="archrag.mcp.tool.call"`, `MAX_TOOL_NAME=64` (`:29-33`); `MCP_PATH="/mcp"` (`ToolScopeFilter.java:40`). Обязательные env без значения по умолчанию: `ARCHRAG_OIDC_ISSUER_URI`, `ARCHRAG_MCP_RESOURCE_URI`, `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD` (`access/mcp-server/src/main/resources/application.yml:19,25,39-41`). Actuator: наружу только `health` с probes; OTLP-метрики выключены по умолчанию (`access/mcp-server/src/main/resources/application.yml:55-80`).
+
+### X2.5 Сомнения и расхождения
+
+- 🟡 **`find_runtime_footprint` не нормализует `systemGid`.** `UUID.fromString` лишь проверяет формат, а в Cypher уходит **исходная строка** без `strip`/`toString` (`FindRuntimeFootprintTool.java:62-69`), тогда как `get_asset`, `explain_provenance`, `trace_dependencies` приводят `gid` к каноническому нижнему регистру (`GetAssetTool.java:94-101`). `UUID.fromString` допускает и заглавные буквы, и укороченные формы (`1-1-1-1-1`): такой ввод пройдёт валидацию, не совпадёт с `gid` в графе и вернёт `asset not found`. Пробелы по краям `systemGid` приведут к `must be a UUID` (в других tools `strip` их убирает).
+- 🟡 **Один scope `architecture.read` на все tools.** Разграничения по tools нет (`access/mcp-server/src/main/resources/application.yml:28-34`). Схема `tool-scopes` позволяет завести разные scope; сейчас это единственный.
+- 🟡 **Согласованность `@McpTool` ↔ `tool-scopes` проверяется только в рантайме.** На старте нет проверки, что для каждого зарегистрированного tool есть запись; забытый tool будет отвергаться 403 как «неизвестный» (`ToolScopeFilter.java:84-90`). В тестах модуля есть только негативный `unmappedToolIsForbiddenEvenWithScope` и `McpSecurityTest.toolsListMarksAllToolsReadOnly` (`:111`), не сверка списков.
+- 🟡 **Недоверенный текст в ответах.** `get_asset` отдаёт `properties(n)` целиком (`access/graph-query-core/.../templates/AssetTemplates.java:119`, `GetAssetTool.java:104-114`) — включая любые текстовые поля источников (описания и т. п.) без пометки «недоверенные данные»; на стороне сервера они не интерпретируются, но MCP-клиент (LLM) получит их как обычный JSON. Ловушка 11 про логи соблюдена (аргументы усекаются, значения свойств не логируются), про выдачу агенту — решения в коде нет.
+- 🟡 **`tools/list` и `initialize` доступны токену без scope.** Это зафиксировано тестом (`McpSecurityTest.java:96`) и описывает метаданные tools (имена, описания, схемы) любому владельцу валидного токена с нужным audience.
+- 🟡 **Ограничение аудита: ThreadLocal.** Tool, исполняющий запросы в другом потоке, не попадёт в `templates`/`rows` (Javadoc `ToolCallContext.java:7-13`). Сейчас все tools синхронны.
+- 🟡 **Описание `search_assets` и шаблон.** Описание tool говорит «точное совпадение по gid или sourceId» (`SearchAssetsTool.java:47-50`), шаблон дополнительно ищет `ITSystem.eamCode` (`access/graph-query-core/.../templates/AssetTemplates.java:48-50`); fulltext-индекс `asset_text` построен только по `ITSystem|Service` (`ingestion/graph-projector/.../Neo4jSchema.java:57`) — описание это отражает.
+- 🟡 **`get_asset`: `truncated` только по связям** (`GetAssetTool.java:75-91`); обрезка карточки (`sources`) бюджетом ответа в флаге не видна — шаблон возвращает одну строку с вложенным списком, при превышении `max-response-bytes` строка будет отброшена целиком, и вызов закончится `asset not found` 🟡 (поведение выведено из `BudgetedCollector.java:51-55` и `GetAssetTool.java:69-71`, тестом не подтверждено).
+- 🟡 **Дубликат `AuthorityMatrix.defaults()`.** `ExplainProvenanceTool` создаёт собственный экземпляр (`:28`), как и два места в `ingestion-service` (Q5.5). Таблица одна (`canonical-model`), а экземпляров три — при смене правил менять придётся только `defaults()`, но кастомизации по конфигурации нет.
+- 🟢 **ADR 0017 / `STATELESS`.** Код использует `protocol=STATELESS`, что отражено в ADR 0017 (уточнение 2026-10-07, UNLOCKER-224) и `docs/03-interfaces.md` §8 п.1; формулировка `STREAMABLE` в `docs/00-vision.md:555` устарела относительно ADR — расхождение закрыто документами, не кодом.
+- 🟢 Ловушка 3 (MCP только читает): `GraphQueries` — единственная точка (Javadoc `GraphQueries.java:10-16`), tool'ы обращаются к `queries.execute`, не к `GraphQueryExecutor` (проверено чтением всех 5 tools); writer-учётных данных в конфигурации нет (`access/mcp-server/src/main/resources/application.yml:36-41`).
+- 🟢 Ловушка 12: пароль Neo4j не печатается (`GraphReaderProperties.toString`), токен не читается и не попадает в аудит (`McpAuditTest.deniedCallsDoNotContainToken`, `McpAuditTest.java:134`).
+
+---
+
+## X3. `access/admin-console`
+
+Сокращение: `AC` = `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole`.
+
+**Назначение.** Отдельное Spring Boot-приложение «админ-консоль»: раздаёт собранный SPA (`admin-ui`) как статику с fallback на `index.html` и даёт **только читающий** REST под `/api/**`: сводка и обзор графа (через `graph-query-core`), журнал событий/DLQ/checkpoint'ы/идентичность/аудит админских операций (прямые `SELECT` в PostgreSQL ролью `archrag_console_ro`) (`AC/AdminConsoleApplication.java:6`, `docs/adr/0026-admin-console-readonly-loopback.md`) 🟢. Все 11 маршрутов контроллеров — `@GetMapping` (`GraphController.java:56,68,105,127`, `SyncController.java:56,78,97,113`, `IdentityController.java:30,41`, `AuditController.java:25`). **Вызовов в ingestion нет**: в `src/main` нет `RestClient`/`WebClient`/`HttpClient` и обращений к `/admin/*` (grep), replay/rebuild/reconcile/crosswalk остаются в admin REST ingestion (ADR 0013, 0026) 🟢. Зависит от `admin-ui` (jar со статикой в `META-INF/resources`), `graph-query-core`, `neo4j-java-driver`, Spring MVC/JDBC/Security (`access/admin-console/pom.xml:19-58`); `ingestion/*` не подключён: коды источников и статусы продублированы константами (`AC/pg/SyncSources.java:9-12`). Артефакты: обычный jar (его берёт `platform/integration-tests`) и `-exec` для запуска (`pom.xml:75-77`). Состав: 25 Java-файлов main (без `package-info`), ≈1775 строк; тестов 31 `@Test` в 3 классах (`ConsoleApiTest` 20, `SyncApiTest` 8, `ConsoleStartupTest` 3), все `@SpringBootTest(RANDOM_PORT)` с подменёнными `GraphQueryExecutor` и `ConsoleReadRepository` (`ConsoleApiTest.java:38-45`, `SyncApiTest.java:34-50`) — **SQL репозитория в модуле не выполняется**, его проверяет `platform/integration-tests/.../SyncConsoleIT.java` и `AdminConsoleIT.java` (R.2e) 🟡.
+
+### X3.1 Поток управления и REST
+
+**Запрос `/api/**`** 🟢:
+1. JWT (issuer, обязательный audience = `archrag.console.resource-uri`) → `hasAuthority(SCOPE_architecture.admin)`; нет токена — 401, нет scope — 403 (`AC/security/ConsoleSecurityConfiguration.java:38-53`; `ConsoleApiTest.java:94,100,108`).
+2. Spring MVC → `ReadAuditInterceptor.preHandle` создаёт `ReadAuditContext` в атрибутах запроса (`AC/audit/ReadAuditInterceptor.java:31-35`, регистрация на `/api/**` в `AC/config/SpaWebConfiguration.java:42-45`).
+3. Контроллер валидирует параметры (`InvalidRequestException` → 400 `{error: invalid_request, message}`), читает граф через `GraphReads` (шаблон + бюджет, результат пишется в контекст аудита) либо PG через `ConsoleReadRepository` (`recordSql("sql:<table>", rows)`).
+4. `afterCompletion` пишет одну запись `archrag.audit.console`: `sub`, `endpoint` (метод + шаблон маршрута), `templates`, `rows`, `truncated`, `status`, `durationMs` (`:38-53`).
+
+**Маршруты** 🟢 (все требуют scope `architecture.admin`):
+
+| Маршрут | Параметры (валидация) | Источник | Ответ | Файл |
+|---|---|---|---|---|
+| `GET /api/graph/stats` | — | шаблоны `graph_stats_nodes`, `graph_stats_relations`, `graph_last_update` | `Stats{nodes[Count], relations[Count], lastUpdatedAt}` | `GraphController.java:56-65` |
+| `GET /api/graph/search` | `q`* (≤ 200), `types[]` (allowlist `SEARCHABLE_TYPES`), `limit` 1..50 (по умолч. 10) | `search_assets` (`environment=null`) | `SearchResponse{items[AssetHit], truncated}` | `:68-102` |
+| `GET /api/graph/nodes/{gid}` | `gid` UUID | `get_asset` + `explain_provenance` | `NodeCard` (404 `asset not found`); `sources` = записи provenance | `:105-124` |
+| `GET /api/graph/nodes/{gid}/neighborhood` | `depth` 1..2 (по умолч. 1), `relTypes[]` (allowlist `NEIGHBORHOOD_RELATION_TYPES`) | `console_neighborhood_nodes`, `console_neighborhood_edges` | `Neighborhood{center, nodes, edges, truncated}` | `:127-167` |
+| `GET /api/sync/sources` | — | PG: `consumer_checkpoint`, счётчики и `max(updated_at)` по `inbox_event`; граф: `console_latest_sync_runs` | `[SourceStatus]` для всех 4 источников (`eam, scm, cmdb, deploymap`), включая нули; `lagSeconds = now − последний PROJECTED` | `SyncController.java:56-75` |
+| `GET /api/sync/events` | `source`, `status` (allowlist), `from`<`to` (Instant), `page`, `size` ≤ 200 | PG `inbox_event` | `Page<Event>` | `:78-91` |
+| `GET /api/sync/events/{source}/{eventId}` | `source` в allowlist | PG `inbox_event`, `error_reason`, `dlq_entry` | `EventDetail{event, errorReason, dlqEntries, historyNote}`; 404 | `:97-110` |
+| `GET /api/sync/dlq` | `source`, `replayed` (bool), `page`, `size` | PG `dlq_entry` | `Page<DlqEntry>` | `:113-121` |
+| `GET /api/identity/conflicts` | `status` (по умолч. `OPEN`), `gid` UUID, `page`, `size` | PG `source_conflict` | `Page<Conflict>` (с усечёнными до 500 символов значениями) | `IdentityController.java:30-38` |
+| `GET /api/identity/candidates` | `status` (по умолч. `OPEN`), `labelFamily`, `page`, `size` | PG `identity_candidate` | `Page<Candidate>` | `:41-49` |
+| `GET /api/audit` | `operation`, `status` (токены `[A-Za-z_]{1,64}`), `from`<`to`, `page`, `size` | PG `admin_audit` | `Page<Audit>` (`request`/`result` длиннее 4000 символов не отдаются, флаги `…Truncated`) | `AuditController.java:25-39` |
+
+Вне `/api`: `GET /console-config.json` (публично: `issuer`, `clientId`, `scope` — без секретов, `AC/config/ConsoleConfigController.java:18,27-30`), `GET /actuator/health/**` (публично), остальной `/actuator/**` и любой неGET вне `/api` — `denyAll` (`ConsoleSecurityConfiguration.java:42-52`), статика и маршруты SPA — `GET /**` публично (`:48-50`).
+
+**Ошибки** (`AC/api/ApiExceptionHandler.java:23-41`) 🟢: `InvalidRequestException`/ошибка типа параметра → 400 `invalid_request`; `NotFoundException` → 404 `not_found`; `QueryTimeoutException` → 504 `query_timeout` (`graph query timed out`). Значения ввода в сообщения не попадают (`gid must be a UUID`, `Unknown source; allowed: …`). `Neo4jException`, `IllegalStateException` («not read-only», «Node in result is forbidden») и `DataAccessException` отдельных обработчиков не имеют — отвечают стандартным 500 Spring Boot 🟡.
+
+**SPA-раздача** (`AC/config/SpaWebConfiguration.java:33-71`) 🟢: ресурсы из `classpath:/META-INF/resources/`, `Cache-Control: no-cache`; `SpaFallbackResolver` отдаёт `index.html` для путей **без точки в последнем сегменте**, кроме `api/**` и `actuator/**`; отсутствующий файл с расширением → 404, а не HTML (инвариант Javadoc `:17-18`; тест `staticFilesAndSpaRoutesArePublicAndFallBackToIndex`, `ConsoleApiTest.java:172`). Дефолтные маппинги Boot выключены (`access/admin-console/src/main/resources/application.yml:9`).
+
+**Заголовки безопасности** (`ConsoleSecurityConfiguration.java:34-37,61-66`) 🟢: `X-Content-Type-Options: nosniff` и CSP `default-src 'self'; connect-src 'self' <origin issuer>; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`; в `connect-src` — **origin** issuer, а не полный URI (источник с путём совпадает только с точным путём и блокировал бы token endpoint) (Javadoc `:57-60`). Тест `securityHeadersArePresentOnStaticAndApi` (`ConsoleApiTest.java:146`) и `bundleIndexIsServedWithCspAndHasNoInlineScriptsOrStyles` (`:183`).
+
+### X3.2 Алгоритмы и встроенные правила
+
+1. **Только читающие источники.** Граф — reader-учётка Neo4j, `GraphQueryExecutor` (X1), реестр = `ConsoleTemplates.ALL` + `search_assets`, `get_asset`, `explain_provenance` (`AC/graph/GraphReaderConfiguration.java:44-52`). PG — пул Hikari: `readOnly=true`, `connectionInitSql = SET default_transaction_read_only = on`, максимум 4 соединения, `initializationFailTimeout = -1` (ленивое соединение, консоль живёт без PG) (`AC/pg/ConsolePgConfiguration.java:22-36`); `management.health.db.enabled=false` (`access/admin-console/src/main/resources/application.yml:49`). Ловушка 3 соблюдена: ни `executeWrite`, ни DML в `src/main` (grep по `INSERT|UPDATE|DELETE|MERGE`) 🟢.
+2. **SQL без конкатенации ввода.** Условия `WHERE` собираются из константных фрагментов `Where.eq(fragment, name, value)`, значения — именованные параметры JdbcClient; `null`-фильтры пропускаются; таблица, колонки и `ORDER BY` — константы вызывающего кода (`AC/pg/ConsoleReadRepository.java:270-290,343-365`) 🟢. `ORDER BY` везде детерминирован составным ключом (`…, id`/`event_id`).
+3. **Пагинация**: `PageRequest.of(page, size)` — `page ≥ 0`, `1 ≤ size ≤ 200`, по умолчанию 0 и 50 (`AC/pg/PageRequest.java:10-24`); ответ `Page{items, page, size, total}`, `total` — отдельный `count(*)` под тем же фильтром (`ConsoleReadRepository.java:273-277`) 🟢. `OFFSET` не ограничен сверху (глубокие страницы дорогие) 🟡; `count` и страница читаются двумя запросами без общей транзакции — `total` может разойтись с `items` при параллельной записи ingestion 🟡.
+4. **Allowlist'ы и токены.** Источник ∈ `{eam, scm, cmdb, deploymap}` → в БД `urn:corp:<код>`; статус ∈ 10 статусов `ProcessingStatus`; `status`/`labelFamily`/`operation` — `[A-Za-z_]{1,64}` (`AC/pg/SyncSources.java:19-62`, `IdentityController.java:21,51-63`). Значения ввода в ошибку не попадают.
+5. **Payload не читается и не отдаётся**: в выборках нет колонок payload, отдаются `payloadRef` (= `payload_key`) и `contentHash` (= `payload_hash`) (`AC/pg/Rows.java:7-8,14-32`) 🟢; тест `responseTypesDeclareNoPayloadComponent` (`SyncApiTest.java:136`).
+6. **Тексты источников недоверенные (ловушка 11)**: `reason`, `error_reason`, `dissent_value`, `master_value`, `error` режутся до 500 символов (`ConsoleReadRepository.java:34,338-340`); `request`/`result` аудита больше 4000 символов не отдаются совсем (`CASE WHEN length(…::text) > 4000 THEN NULL`, `:35,242-245`) 🟢; аргументы запроса в журнал аудита не пишутся (`auditDoesNotLogSearchQuery`, `ConsoleApiTest.java:391`).
+7. **Отставание**: `lagSeconds = max(0, now − max(updated_at) среди PROJECTED)` на UTC-часах `Clock`, `null` если PROJECTED не было (`SyncController.java:62-70`); тест `lagIsComputedFromInjectedClock` (`SyncApiTest.java:176`) 🟢. Источники в сводке — всегда 4 (с нулями), статусы — все 10 (`:63-73`).
+8. **Окрестность**: глубина ≤ 2 (константа контроллера, независимо от потолка конфигурации 6), узлы затем рёбра между ними одним запросом по списку `gids`, `truncated = nodes.truncated || edges.truncated` (`GraphController.java:44,127-167`); тест IT `neighborhoodAcceptsDeployedFromRelType`, `neighborhoodOverNodeBudgetIsTruncated` (`AdminConsoleIT.java:246,272`) 🟢.
+9. **Аудит консоли и отказы безопасности**: аудит консоли пишется **только для запросов, дошедших до контроллера** (`HandlerInterceptor`), 401/403 из Spring Security в него не попадают (в отличие от MCP, где отказы пишутся явно) 🟡.
+
+### X3.3 Структуры данных
+
+Ответы API — `data-dictionary.md` §X.3 (`GraphResponses`, `Rows`, `Page`, `ApiError`, `ConsoleConfig`); конфигурация — §X.3.3.
+
+### X3.4 Константы и конфигурация
+
+`DEFAULT_LIMIT=10`, `MAX_LIMIT=50`, `MAX_QUERY_LENGTH=200`, `MAX_DEPTH=2` (`GraphController.java:40-44`); `PageRequest.DEFAULT_SIZE=50`, `MAX_SIZE=200`; `ConsoleReadRepository.MAX_TEXT=500`, `MAX_RESULT_CHARS=4000`; `ConsoleProperties.ADMIN_SCOPE="architecture.admin"` (`AC/config/ConsoleProperties.java:20`); `HISTORY_NOTE` (`SyncController.java:39-40`); `LOGGER="archrag.audit.console"` (`ReadAuditInterceptor.java:25`). Обязательные env: `ARCHRAG_OIDC_ISSUER_URI`, `ARCHRAG_CONSOLE_RESOURCE_URI` (пустое значение → отказ запуска, `ConsoleProperties.java:22-27`, `ConsoleStartupTest.java:15,33`), `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD`, `ARCHRAG_CONSOLE_PG_URL/PASSWORD`; `ARCHRAG_CONSOLE_PG_USERNAME` по умолчанию `archrag_console_ro` (`access/admin-console/src/main/resources/application.yml:14-34`). Тест `configurationHasReadOnlyCredentialsOnly` проверяет, что writer-свойств нет (`ConsoleStartupTest.java:40`).
+
+### X3.5 Сомнения и расхождения
+
+- 🟡 **Консоль отдаёт значения свойств в конфликтах** (`dissentValue`, `masterValue`, до 500 символов), тогда как MCP `explain_provenance` значений намеренно не отдаёт (`ExplainProvenanceResult.java:6-7`). Для оператора со scope `architecture.admin` это ожидаемо; ADR 0026 об этом не говорит. Стоит зафиксировать как осознанное различие.
+- 🟡 **Любой пользователь realm может получить токен консоли** (ADR 0026: «ограничение PoC», принято владельцем 2026-10-08, gap list п. 2.7) — в коде консоли проверки `azp`/роли нет; `AuthorizedPartyValidator` есть только в ingestion (Q5). Расхождения с ADR нет.
+- 🟡 **Копипаст с MCP.** `GraphReaderConfiguration` и `GraphReaderProperties` (`AC/graph/*`) почти дословно повторяют `MCP/graph/*`; в `GraphController` повторены `normalizeGid`, `hit`, `properties`, `jsonValue`, `SERVICE_KEYS`, `GraphResponses.AssetHit` ≡ `SearchAssetsResult.AssetHit` (`GraphController.java:46-47,190-250`, `GetAssetTool.java:25-26,94-125`). Общего модуля нет (Spring-конфигурация не может жить в `graph-query-core` без зависимости на Spring); при изменении правил нормализации придётся менять в двух местах.
+- 🟡 **Пятая копия таблицы кодов источников** — `SyncSources.CODES` и `ADAPTERS = CODES.toUpperCase()` (`SyncSources.java:19`, `SyncController.java:37`). R.2c насчитал четыре копии (Q6.1), эта — вне их; `SyncRun.adapter` в графе должен быть в верхнем регистре (`DEPLOYMAP` ↔ `deploymap`), что держится на соглашении, а не на тесте.
+- 🟡 **Статусы журнала продублированы** списком `STATUSES` вместо `ProcessingStatus` (`SyncSources.java:22-33`) — консоль сознательно не зависит от ingestion; при добавлении статуса фильтр консоли его не примет (400).
+- 🟡 **Метрика/фильтр DLQ «открытые»** опирается на `dlq_entry.replayed_at` (`ConsoleReadRepository.java:157-159`), которое нигде не заполняется (Н1/Q5.5): фильтр `replayed=false` вернёт всё, `replayed=true` — ничего. Подтверждено: в консоли это проявляется так же.
+- 🟡 **`GET /api/sync/events/{source}/{eventId}` не работает для `eventId` с `/`** (Javadoc `SyncController.java:94`) — события `poll:…`/`snap:…` с косой чертой в идентификаторе в консоли открыть нельзя; список `/api/sync/events` их показывает.
+- 🟡 **Необработанные исключения → стандартный 500.** `Neo4jException` (кроме таймаута), `IllegalStateException` из executor'а и ошибки БД обработчиков не имеют (`ApiExceptionHandler.java:23-41`); тело ошибки определяет Spring Boot.
+- 🟡 **`/api/**` с не-GET методом.** Правило безопасности для `/api/**` не фильтрует метод (`ConsoleSecurityConfiguration.java:44-45`): POST с admin-токеном проходит авторизацию и отклоняется уже MVC (в контроллерах нет не-GET). Тест `otherActuatorEndpointsAndWritesAreDenied` проверяет только «не 2xx» (`ConsoleApiTest.java:129-143`), не конкретный код.
+- 🟡 **Токен консоли и audience.** Audience консоли (`urn:archrag:console`) — отдельный от MCP и admin REST (ADR 0026); токены не взаимозаменяемы по `aud` (`ConsoleApiTest.apiWithForeignAudienceIsUnauthorized`, `:108`).
+- 🟢 Ловушка 12: пароли Neo4j/PG не печатаются (`GraphReaderProperties.toString`, `ConsolePgProperties.toString`), токен не читается (`ReadAuditInterceptor.subject`, `:61-68`).
+- 🟢 Соответствие SQL и прав: V6 даёт `SELECT` ровно на `inbox_event, consumer_checkpoint, dlq_entry, identity_candidate, source_conflict, admin_audit` (Q.5.2), репозиторий читает ровно эти таблицы (`ConsoleReadRepository.java:55,70,85,120,129,141,275`).
+
+---
+
+## X4. `access/admin-ui`
+
+Сокращение: `UI` = `access/admin-ui/src`.
+
+**Назначение.** SPA админ-консоли: React 18 + TypeScript + Webpack, собирается Maven-модулем (`packaging` jar) через `frontend-maven-plugin`; бандл попадает в `target/classes/META-INF/resources` и отдаётся `admin-console` как статика (`access/admin-ui/pom.xml:26-80`, `access/admin-ui/webpack.config.js:6,13-14`, ADR 0027) 🟢. В Java-иерархии у модуля нет кода: он зависит только от `admin-console` как от потребителя (`admin-console/pom.xml:19-24`). Состав: 26 файлов TS/TSX без тестов, ≈1730 строк (+ `index.html`, `styles.css`); тестов Jest 53 в 6 файлах (`GraphPage.test.tsx` 17, `SyncPage.test.tsx` 16, `api.test.tsx` 7, `authService.test.ts` 7, `App.test.tsx` 4, `useHashRoute.test.ts` 2). Сторонние библиотеки не разбираются; прямые зависимости (`access/admin-ui/package.json:10-14`): `react`/`react-dom` 18.3.1, `oidc-client-ts` 3.1.0, `cytoscape` 3.30.4; версии закреплены точно, `package-lock.json` в Git (ADR 0027) 🟢.
+
+### X4.1 Поток управления
+
+**Сборка (Maven)** 🟢: `install-node-and-npm` (Node v22.12.0, npm 10.9.0) и `npm ci` в `generate-resources`; `npm test` в `test` (пропускается `-DskipTests`); `npm run build` (`webpack --mode production`) в `prepare-package` (`access/admin-ui/pom.xml:18-24,35-77`; `package.json:7-9`). Webpack: вход `src/index.tsx`, `ts-loader`, CSS выносится в файл `MiniCssExtractPlugin` (`style-loader` не используется — он вставляет `<style>`, а CSP консоли запрещает inline), имена с `contenthash`, `devtool: false` в production (исходники в jar не публикуются), HTML не минифицируется самим webpack, чтобы тесты Java могли искать `id="root"` (`webpack.config.js:22-35`). `webpack serve` — порт 3000, прокси `/console-config.json` и `/api` на `ADMIN_CONSOLE_URL` (по умолчанию `http://localhost:8082`) (`:9,36-45`).
+
+**Старт приложения** (`UI/index.tsx:8-10`, `UI/App.tsx:12-49`) 🟢: `loadConsoleConfig()` читает `/console-config.json` (`issuer`, `clientId`, `scope`; пустое поле или не-2xx — ошибка, UI показывает «Не удалось загрузить конфигурацию консоли», `UI/auth/authService.ts:22-32`) → `createOidcAuthService(config)` → `App`: `auth.init()`; `true` → состояние `ready`, `false` → `auth.login()` (редирект на IdP), исключение → «Не удалось выполнить вход».
+
+**Аутентификация** (`UI/auth/authService.ts:39-80`) 🟢: `oidc-client-ts` `UserManager`, Authorization Code + PKCE (`response_type: 'code'`), `redirect_uri = origin + "/"`, **пользователь и токены в `InMemoryWebStorage`** (в `sessionStorage` остаётся лишь `state`/`code_verifier` библиотеки на время редиректа). `init()`: при `?code=…&state=…` вызывает `signinRedirectCallback()`; при любой ошибке сбрасывает `code/state` из адреса (`history.replaceState`) и возвращает `false` (повторный вход); при успехе — также чистит адрес и, если `user.state` начинается с `#/`, восстанавливает маршрут. Иначе берёт пользователя из памяти. `getAccessToken()` возвращает `null`, если пользователь отсутствует или просрочен. `login()` передаёт `state = location.hash`. `logout()` определён в интерфейсе, но **нигде в UI не вызывается** (нет кнопки) 🟡.
+
+**Маршруты** (`UI/useHashRoute.ts`, `UI/components/Layout.tsx`) 🟢: hash-роутинг `#/graph`, `#/sync`; неизвестный hash → «Граф» (`parseRoute`, `:11-14`). `App` рисует `Layout` с навигацией и `ApiProvider key={route}`: ключ пересоздаёт провайдер при смене раздела, 403 в одном разделе сбрасывается (`App.tsx:43-45`).
+
+**Вызовы API** (`UI/api/endpoints.ts:47-72`, всё — `GET`) 🟢:
+
+| Метод клиента | Запрос | Где используется |
+|---|---|---|
+| `stats()` | `GET /api/graph/stats` | `GraphSummary` |
+| `search(q, types)` | `GET /api/graph/search?q=&types=…` | `AssetSearch` |
+| `node(gid)` | `GET /api/graph/nodes/{gid}` | `AssetCard` |
+| `neighborhood(gid, depth, relTypes)` | `GET /api/graph/nodes/{gid}/neighborhood?depth=&relTypes=…` | `NeighborhoodView` |
+| `sources()` | `GET /api/sync/sources` | `SourcesTab` (автообновление 30 с) |
+| `events(filter)` | `GET /api/sync/events?source&status&from&to&page&size` | `EventsTab` |
+| `event(source, eventId)` | `GET /api/sync/events/{source}/{eventId}` | `EventDetailCard` |
+| `dlq(p)` | `GET /api/sync/dlq?source&replayed&page&size` | `DlqTab` |
+| `conflicts(p)`, `candidates(p)` | `GET /api/identity/conflicts|candidates?status&page&size` | `IdentityTab` |
+| `audit(p)` | `GET /api/audit?page&size` | `AuditTab` |
+
+Параметры кодируются `URLSearchParams` без пустых значений, массивы повторяют ключ; сегменты пути — `encodeURIComponent` (`endpoints.ts:20-32`). Клиент `createApiClient` (`UI/api/apiClient.ts:40-75`): `Accept: application/json`, `Authorization: Bearer <token>` если токен есть; 401 → `onUnauthorized` (повторный вход) + `UnauthorizedError`; 403 → `onForbidden` (экран «Нет прав») + `ForbiddenError`; другие не-2xx → `ApiError(status)`. `ApiProvider` запускает вход при 401 **один раз** на параллельные ошибки (`UI/api/ApiContext.tsx:12-37`).
+
+**Состояние** 🟢: глобального хранилища нет. Данные — `useAsync(load, deps, refreshMs?)` (состояния `loading/ready/error`, отмена устаревшего ответа через флаг `cancelled`, тихое обновление по таймеру без сброса экрана, `UI/hooks/useAsync.ts:19-56`); сообщение об ошибке — только «Ошибка запроса (HTTP N)» или общее, тело ответа сервера в текст не попадает (`:10-13`). Поиск хранит локальное состояние и защищён счётчиком `latest` от затирания новым ответом старым (`AssetSearch.tsx:14-26`). Выбранный актив — `useState` в `GraphPage`.
+
+**Экраны** 🟢:
+- «Граф» (`UI/pages/GraphPage.tsx`): `GraphSummary` (узлы по меткам, связи по типам, «последнее обновление») → `AssetSearch` (запрос ≤ 200 символов, фильтр типов, пустой запрос не отправляется) → `AssetCard` (свойства текстом, жизненный цикл `isCurrent/firstSeenAt/lastSeenAt/deletedAt`, бейджи «закрыт» и «устарел», блок «Исходный код» для `Deployment` с `sourceCommit`, таблица записей источников со статусом `tombstone`/`активна` и расхождениями) и `NeighborhoodView` (глубина 1/2, фильтр типов связей, баннер `truncated`, `GraphCanvas` на Cytoscape с раскладкой `cose`, клик по узлу выбирает его).
+- «Синхронизация» (`UI/pages/SyncPage.tsx`): вкладки «Источники» (светофор `health()`), «Журнал событий» (фильтры источник/статус/период в `datetime-local` → UTC ISO, пагинация по 50, карточка события без payload), «DLQ» (по умолчанию `replayed=false`, флажок «Включая повторённые»), «Identity» (конфликты и кандидаты, статус `OPEN`/`RESOLVED`), «Аудит» (операции ingestion, флаг «обрезано»).
+
+### X4.2 Алгоритмы и встроенные правила
+
+1. **Светофор источника** `health(s)` (`UI/pages/sync/SourcesTab.tsx:11-18`) 🟢: `bad`, если есть события в `QUARANTINED`/`RETRYING`, либо последний прогон `FAILED` или `failed > 0`, либо `lagSeconds > 3600`; иначе `warn`, если нет `lastProjectedAt`, нет `lastSyncRun` или `lagSeconds > 900`; иначе `ok`. Пороги — константы UI `LAG_WARN_SECONDS = 15·60`, `LAG_BAD_SECONDS = 60·60` (`UI/api/constants.ts:62-63`). Подписи бейджа: «норма» / «нет данных» / «проблемы». Автообновление раз в 30 с (`SOURCES_REFRESH_MS`).
+2. **Устаревший актив** `isStale(card)` (`UI/pages/graph/AssetCard.tsx:9-13`): `isCurrent` и `lastSeenAt` старше 7 суток (`STALE_AFTER_MS`, `constants.ts:56`) 🟢.
+3. **Безопасность вывода** 🟢: все значения (свойства, причины, значения конфликтов) выводятся как текст React (экранируются), `dangerouslySetInnerHTML` не используется (grep); URL репозитория показывается текстом, без ссылки (`AssetCard.tsx:15,25`); подписи узлов графа рисуются Cytoscape на canvas, HTML не интерпретируется (Javadoc `UI/components/GraphCanvas.tsx:6-9`). Это закрывает ловушку 11 на стороне клиента (тексты источников — недоверенные данные).
+4. **Allowlist'ы продублированы в UI** (`UI/api/constants.ts:1-63`): `ASSET_TYPES` (7), `RELATION_TYPES` (9), `SOURCES` (4), `EVENT_STATUSES` (10) — как в `AssetTemplates`/`ConsoleTemplates`/`SyncSources`; бэкенд всё равно отвергает неизвестные значения (400). Список `RELATION_TYPES` = `NEIGHBORHOOD_RELATION_TYPES` (8 + `HOSTED_ON`) 🟢.
+5. **Цвета узлов** по метке (`LABEL_COLORS`, `DEFAULT_LABEL_COLOR`) и полупрозрачность закрытых узлов (`GraphCanvas.tsx:30-50`).
+6. **Сброс страницы** при смене любого фильтра журнала и DLQ (`EventsTab.tsx:64-69`, `DlqTab.tsx:27-38`); `Pager` блокирует «Назад» на первой и «Вперёд» на последней странице (`UI/components/common.tsx:34-59`).
+7. **CSP-совместимость**: бандл без inline-скриптов и стилей (CSS вынесен в файл) — сверка в Java-тесте `bundleIndexIsServedWithCspAndHasNoInlineScriptsOrStyles` (`access/admin-console/src/test/java/io/github/unlocker/archrag/adminconsole/ConsoleApiTest.java:183`) 🟢.
+
+### X4.3 Структуры данных
+
+TypeScript-интерфейсы ответов (`UI/api/types.ts`) — зеркало Java-records `GraphResponses`/`Rows`/`Page`; сопоставление полей — `data-dictionary.md` §X.4. Состояние: `AsyncState<T>` (`loading | error | ready`), `AuthState` (`pending | ready | failed`), `Route` (`graph | sync`).
+
+### X4.4 Константы и конфигурация
+
+Всё в `UI/api/constants.ts`: `STALE_AFTER_MS`, `SOURCES_REFRESH_MS = 30_000`, `LAG_WARN_SECONDS`, `LAG_BAD_SECONDS`, цвета узлов; `PAGE_SIZE = 50` в каждой вкладке; `maxLength=200` поля поиска (`AssetSearch.tsx:41`). Переменных окружения в рантайме нет: конфигурация OIDC приходит с сервера (`/console-config.json`); в сборке — только `ADMIN_CONSOLE_URL` для dev-прокси.
+
+### X4.5 Сомнения и расхождения
+
+- 🟡 **`logout()` не подключён к UI.** Метод есть в `AuthService` и протестирован как часть интерфейса, но кнопки «Выйти» и вызова в коде нет; вход заканчивается только закрытием вкладки/истечением токена. В ADR 0026 выход не упомянут.
+- 🟡 **`ApiClient.post` объявлен, но не используется** (`UI/api/apiClient.ts:37-38,73`; в страницах только `GET`) — соответствует «в UI нет изменяющих операций» (ADR 0026), но лишняя возможность оставлена в клиенте.
+- 🟡 **Константы UI продублированы с бэкендом и друг с другом.** Allowlist'ы и порог `STALE_AFTER_MS` (7 суток) не связаны с `archrag.query.stale-after` (`P7D`, MCP): если порог MCP сменят, UI продолжит помечать «устарел» по 7 суткам. У консоли собственной настройки порога нет.
+- 🟡 **Вкладка DLQ опирается на неработающий признак.** По умолчанию UI просит `replayed=false` («только открытые»), но `dlq_entry.replayed_at` никто не заполняет (Н1, Q5.5), поэтому флажок «Включая повторённые» ничего не меняет, а «Повтор» везде «—». Подтверждает Н1 на уровне UI.
+- 🟡 **Вкладка Identity: фильтр `RESOLVED` для кандидатов практически пуст.** `identity_candidate.status` задаётся только `DEFAULT 'OPEN'` (`ingestion/identity-resolution/.../V4__identity_candidate.sql:31`) и нигде не меняется (Н2, Q3.5); для конфликтов `RESOLVED` осмыслен (`source_conflict.resolved_at`).
+- 🟡 **События с `/` в `eventId` не открываются** (`encodeURIComponent` даёт `%2F`; сервер не принимает `/` в path-переменной — X3.5): ссылка в таблице журнала приведёт к ошибке карточки.
+- 🟡 **Токен просрочивается без тихого обновления.** `getAccessToken()` возвращает `null` для просроченного пользователя → запрос уходит без `Authorization` → 401 → повторный вход редиректом (теряется несохранённое состояние экрана, сохраняется только `#hash`) (`authService.ts:76-77`, `ApiContext.tsx:20-28`). Поведение `automaticSilentRenew` библиотеки здесь не проверялось.
+- 🟡 **Cytoscape под строгой CSP (`default-src 'self'`) проверяется только в jsdom.** Jest-тесты рисуют граф в jsdom (`data-testid="graph-canvas"`), реальное поведение под CSP проверяет только смоук платформы (`platform/docker/console-smoke.sh`, R.2e).
+- 🟡 **Время:** `Time` показывает значение в локальной зоне браузера (`toLocaleString`), ISO — во всплывающей подсказке (`components/common.tsx:5-14`); `datetime-local` фильтры трактуются в локальной зоне и уходят в API как UTC (`toIso`, `:102-106`) — на границе суток может удивлять оператора в другом часовом поясе.
+- 🟢 **Токен не пишется в `localStorage`/`sessionStorage`** (ADR 0026; `InMemoryWebStorage`, тест `init without code reads the in-memory user`, `authService.test.ts:42`).
+- 🟢 **Ошибки сервера не раскрываются:** текст берётся из статуса, а не из тела (`describeError`, `useAsync.ts:10-13`).
+
+---
+
+## X5. Сомнения R.2a–R.2c, относящиеся к `access/`, — результат разбора
+
+### X5.1 Н1 (`dlq_entry.replayed_at` не заполняется) — **подтверждено, проявляется в консоли и в UI, 🔴**
+
+Консоль фильтрует DLQ по этой колонке (`access/admin-console/.../pg/ConsoleReadRepository.java:157-159`), а UI по умолчанию просит `replayed=false` и подписывает флажок «Включая повторённые» (`access/admin-ui/src/pages/sync/DlqTab.tsx:16-18,40-41`). Пока колонка не заполняется, «открытые» = все записи, «Повтор» = «—» у каждой, а `replayed=true` возвращает пусто. Тесты консоли и UI проверяют только передачу параметра (`DLQ shows reasons and asks only for open entries by default`, `SyncPage.test.tsx:174`), не семантику. Вопрос к архитектору (DLQ — история или очередь?) остаётся открытым.
+
+### X5.2 Н2 (`identity_candidate.status` не меняется) — **подтверждено в UI, 🔴**
+
+Вкладка Identity предлагает статусы `OPEN`/`RESOLVED` для кандидатов (`access/admin-ui/src/pages/sync/IdentityTab.tsx:9,71`), хотя в БД статус задаётся только `DEFAULT 'OPEN'` (`ingestion/identity-resolution/.../V4__identity_candidate.sql:31`) и после crosswalk не меняется. `RESOLVED` для кандидатов всегда пуст; для конфликтов (`source_conflict`) фильтр осмыслен. Консоль честно отдаёт то, что есть в таблице; расхождение — в самом ingestion.
+
+### X5.3 Н7 (checkpoint `projector` читает только консоль) — **уточнено, 🟡**
+
+Консоль читает **все** строки `consumer_checkpoint` (`ConsoleReadRepository.java:55`) и возвращает их в `SourceStatus.checkpoints` (`SyncController.java:71-72`), то есть Н7 верна: единственный читатель — `access/admin-console`. Но UI **не показывает** checkpoints: колонки вкладки «Источники» — источник, состояние, последний SyncRun, lag, события по статусам, ошибки (`access/admin-ui/src/pages/sync/SourcesTab.tsx:39-47`); значение `checkpoints` оператору нигде не выводится и в `health()` не участвует (`:11-18`). Фактически читатель — только сырой JSON API.
+
+### X5.4 Н8 / Q6.1 / A5 (копии таблицы кодов источников) — **подтверждено, найдены новые копии в `access/`, 🟡**
+
+К четырём копиям из Q6.1 добавляются:
+5. `SyncSources.CODES = [eam, scm, cmdb, deploymap]` + `URN_PREFIX` (`access/admin-console/.../pg/SyncSources.java:16,19`) и `ADAPTERS = CODES.toUpperCase()` для фильтра `SyncRun.adapter` (`SyncController.java:37`);
+6. `SOURCES = ['eam','scm','cmdb','deploymap']` в UI (`access/admin-ui/src/api/constants.ts:27`).
+Верхний регистр `ADAPTERS` согласован с тем, что пишет проектор: `SyncRun.adapter = SourceKey.source().name()` — имя `SourceSystemCode` (`ingestion/graph-projector/.../GraphProjector.java:697-698,715`, `contracts/canonical-model/.../SourceSystemCode.java:5`). Теста, который это связывает, нет: перепутанный регистр дал бы пустой `lastSyncRun` без ошибки. В ответах разных API источник пишется по-разному: `eam|scm|cmdb|deploymap` (журнал, консоль), `EAM|SCM|CMDB|DEPLOYMAP` (`SourceRecord.source` в графе → `sources`, MCP, карточка актива) — оператор видит обе формы в соседних экранах (A5, `docs/03-interfaces.md` §8 п.8).
+
+### X5.5 `SyncRun` без жизненного цикла — **подтверждено документом, влияет на консоль и UI, 🟡/🔴**
+
+Проектор создаёт `SyncRun` с `status = 'RUNNING'` и `startedAt = min(время событий)`; `endedAt`, `fetched`, `applied`, `failed` не пишутся, перевода в `SUCCEEDED`/`FAILED` нет нигде в `src/main` (grep по `endedAt|SyncRunStatus|"FAILED"` вне `AdminAudit`) (`GraphProjector.java:687-704`). Документы это признают (`docs/02-data-model.md:59,357,362`, `docs/03-interfaces.md:410`). Последствия для `access/`: `console_latest_sync_runs` всегда отдаёт `RUNNING` и `null`-счётчики (`ConsoleTemplates.java:159-179`); ветка `failedRun` в `health()` (`status === 'FAILED'` или `failed > 0`, `SourcesTab.tsx:13`) **недостижима**, светофор опирается только на события и lag. Решение «писать ли итоговый статус» — за архитектором.
+
+### X5.6 Q6.5 / Н (`datetime == null → Instant.EPOCH`) — **влияние на `access/`, 🟡 (выведено)**
+
+Проектор пишет `lastSeenAt = max(lastSeenAt, eventTime)` и `firstSeenAt = min(…)` (`GraphProjector.java:458-459`). Узел, у которого единственным источником был объект без `datetime` (EPOCH, Q6.5), получит `lastSeenAt = 1970-01-01`. Тогда `trace_dependencies` и `find_runtime_footprint` пометят его `stale: true` (`TraceDependenciesTool.java:187-190`, `FindRuntimeFootprintTool.java:200-202`), UI — «устарел» (`AssetCard.tsx:9-13`), а `Time` покажет 01.01.1970. Для MCP-клиента это выглядит как «давно не виден», хотя причина — отсутствие `datetime` в источнике.
+
+### X5.7 Прочее, что подтверждено или снято
+
+- 🟢 **Q4 «`access/*` не использует `graph-projector` и не получает writer-доступ»** — подтверждено: `access/graph-query-core/pom.xml` → только `canonical-model`; `mcp-server` → `graph-query-core`; `admin-console` → `admin-ui`, `graph-query-core` (`pom.xml` модулей). В конфигурации приложений — только `archrag.neo4j.reader.*` (`access/mcp-server/src/main/resources/application.yml:36-41`, `access/admin-console/src/main/resources/application.yml:25-29`); в консоли дополнительно PG-роль `archrag_console_ro` (SELECT, V6). Ловушка 3 соблюдена, ловушка 1 тоже: ни одного динамического Cypher из ввода.
+- 🟡 **`mcp-server` использует `canonical-model` без явной зависимости.** `ExplainProvenanceTool` импортирует `AuthorityMatrix`, `NodeLabel`, `SourceSystemCode` (`MCP/tools/ExplainProvenanceTool.java:3-5,111-117`), но `access/mcp-server/pom.xml` объявляет только `graph-query-core`; доступ идёт транзитивно. Схема зависимостей не нарушена (`contracts` разрешён), но при смене зависимостей `graph-query-core` сборка модуля сломается неочевидно.
+- 🟡 **`ASSERTS.confidence` всегда `1.0`.** Проектор записывает `a.confidence = 1.0` константой (`GraphProjector.java:462`), поэтому поле `confidence` в `explain_provenance` и в карточке консоли не несёт информации; `authority` и `conflicts` — настоящие. Выведено из кода записи; проверка по `docs/02` — R.3.
+- 🟢 **Три состояния узла на стороне чтения согласованы с ADR 0020 (tombstone вместо hard delete).** `search_assets`, `trace_*`, `runtime_footprint` фильтруют `isCurrent = true`; `get_asset`, `explain_provenance` отдают закрытые узлы и неактивные записи с `deletedAt` (`AssetTemplates.java:107-109,174-175`). `access/` не предполагает физического удаления.
+- 🟢 **R.2a A5 «`SourceRecord` не содержит `deletedAt`»** — со стороны чтения поле используется: `explain_provenance` читает `r.deletedAt` (`AssetTemplates.java:199`), UI показывает бейдж `tombstone` (`AssetCard.tsx:101-102`). Подтверждает, что поле живёт в графе, а не в Java-типе.
+- 🟡 **Имена свойств, которые читают шаблоны, согласованы с записью проектора (выборочная сверка).** `eamCode`, `isCurrent`, `firstSeenAt`, `lastSeenAt`, `deletedAt`, `contentHash`, `assertedBySource/Type/Id`, `validTo`, `authority`, `confidence`, `conflicts` присутствуют в `GraphProjector`/`canonical-model`; полный словарь и контрольная сверка — R.3.
+- 🟡 **`STREAMABLE` против `STATELESS`:** `docs/00-vision.md:555` называет `STREAMABLE`, код и ADR 0017 (уточнение UNLOCKER-224) — `STATELESS` (`access/mcp-server/src/main/resources/application.yml:11`). Расхождение закрыто документами; сомнение Scout (`inventory.md` п.3) подтверждено как «осознанное».
+
+---
+
+## X6. Итоги по модулям R.2d
+
+| Модуль | Java-файлов main / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `graph-query-core` | 14 (+2 `package-info`) / ≈1270 | 47 в 8 классах (executor — только IT) | статическая валидация шаблона, clamp бюджета, EXPLAIN-кэш, сбор строк с лимитом строк/байт | X1.6: executor без unit-теста, фильтр типов связей после раскрытия, порядок путей не определён |
+| `mcp-server` | 24 (+3) / ≈2150 | 100 в 16 классах | scope на `tools/call` до диспетчеризации, аспект аудита, сборка путей и `stale`, группировка footprint | X2.5: `systemGid` не нормализован, один scope на всё, недоверенный текст в `properties` |
+| `admin-console` | 25 (+3) / ≈1775 | 31 в 3 классах (SQL — только IT) | WHERE из константных фрагментов, пагинация, SPA fallback, расчёт lag | X3.5: значения конфликтов отдаются, копипаст с MCP, `eventId` с `/` |
+| `admin-ui` | 26 TS/TSX / ≈1730 | 53 в 6 файлах Jest | PKCE с токеном в памяти, `useAsync`, светофор источника | X4.5: `logout` не подключён, константы продублированы, DLQ/Identity опираются на незаполняемые поля |
+
+Сквозное по группе:
+- **Read-only доказывается в трёх слоях** (статические шаблоны + allowlist; `EXPLAIN → READ_ONLY`; `AccessMode.READ` с серверным отказом `Statement.AccessMode`) — IT `GraphQueryCoreIT` и `AdminConsoleIT` (`everyConsoleTemplatePassesReadOnlyExplainAndWritingTemplateIsClosed`, `platform/integration-tests/.../AdminConsoleIT.java:280`) (X1.2 п.4).
+- **Три контура аутентификации** с разными audience и scope: MCP (`architecture.read`, audience = `ARCHRAG_MCP_RESOURCE_URI`), консоль (`architecture.admin`, `urn:archrag:console`), admin REST ingestion (`architecture.admin` + `azp`) — токены не взаимозаменяемы по `aud`.
+- **Открытые вопросы к архитектору** (🔴/🟡, не блокируют): Н1 (смысл DLQ), Н2 (статусы кандидатов), `SyncRun` без итогового статуса (X5.5), нормализация `systemGid` в `find_runtime_footprint` (X2.5), разграничение scope tools (X2.5), кто и когда показывает `checkpoints` оператору (X5.3).
+- **Не проверялось в этом этапе** (передано в R.2e/R.3): фактическая работа IT с Neo4j/PG (`platform/integration-tests`), Keycloak-клиенты и CSP в смоуке (`platform/docker`), полный словарь меток и свойств графа.

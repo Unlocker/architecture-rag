@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:00:00Z",
+  "generated_at": "2026-10-12T21:15:58Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -2936,6 +2936,1092 @@
         "pg advisory lock как монопольный замок"
       ],
       "complexity": "high"
+    },
+    {
+      "name": "access/graph-query-core",
+      "path": "access/graph-query-core",
+      "purpose": "Реестр именованных Cypher-шаблонов и исполнитель GraphQueryExecutor: только executeRead, бюджет запроса (глубина, строки, пути, таймаут, байты), EXPLAIN=READ_ONLY перед первым исполнением, запрет узлов/связей/путей в результате",
+      "primary_files": [
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/ResultBudget.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryLimits.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryResult.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/AssetTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/DependencyTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/RuntimeTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/ConsoleTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/FulltextQuery.java"
+      ],
+      "functions": [
+        {
+          "name": "GraphQueryExecutor.execute",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java",
+          "params": [
+            "String templateId",
+            "Map params",
+            "ResultBudget budget"
+          ],
+          "returns": "QueryResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryTemplate.render",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java",
+          "params": [
+            "int depth",
+            "int ceiling"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryTemplateRegistry.of",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java",
+          "params": [
+            "Collection templates",
+            "QueryLimits limits"
+          ],
+          "returns": "QueryTemplateRegistry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ResultBudget.clampTo",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/ResultBudget.java",
+          "params": [
+            "QueryLimits limits"
+          ],
+          "returns": "ResultBudget",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "BudgetedCollector.collect",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java",
+          "params": [
+            "Iterator source"
+          ],
+          "returns": "Collected",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FulltextQuery.escape",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/FulltextQuery.java",
+          "params": [
+            "String input"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "QueryTemplate",
+          "fields": [
+            {
+              "name": "id",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "cypher",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "parameters",
+              "type": "Set<String>",
+              "required": true
+            },
+            {
+              "name": "kind",
+              "type": "ResultKind",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ResultBudget",
+          "fields": [
+            {
+              "name": "maxDepth",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "maxNodes",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "maxPaths",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "timeout",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "maxResponseBytes",
+              "type": "long",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryResult",
+          "fields": [
+            {
+              "name": "templateId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "rows",
+              "type": "List<Map<String,Object>>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "rowCount",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "elapsed",
+              "type": "Duration",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Шаблон обязан оканчиваться LIMIT $limit, объявленные параметры = используемые, единственный плейсхолдер {maxDepth} только как верхняя граница variable-length пути, любой variable-length путь ограничен сверху",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java:60-105",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Реестр: уникальные ID; литеральная глубина шаблона не выше потолка maxDepth",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java:32-45",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Исполнитель принимает ID шаблона, набор параметров должен совпасть с объявленным; limit задаёт только исполнитель (maxRows+1)",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:60-76,133-146",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Перед первым исполнением EXPLAIN обязан дать READ_ONLY; вердикт кэшируется по ID, провал закрывает шаблон до перезапуска",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:99-124",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Узлы, связи и пути в результате запрещены (в т.ч. внутри Map/List), шаблоны возвращают проекции",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:172-188",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Усечение: читается не больше maxRows+1 строк, строка сверх лимита или байтового порога отбрасывается, truncated=true",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java:41-58",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Таймаут транзакции (TransactionTimedOut) -> QueryTimeoutException без частичного результата",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:94-96,126-131",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "contracts/canonical-model",
+        "neo4j-java-driver",
+        "jackson-databind (tools.jackson)"
+      ],
+      "algorithms": [
+        "статическая валидация Cypher-шаблона регулярными выражениями",
+        "clamp бюджета к потолкам конфигурации",
+        "ленивый сбор строк с лимитом строк и байт",
+        "кэш вердикта EXPLAIN по ID шаблона"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "access/mcp-server",
+      "path": "access/mcp-server",
+      "purpose": "MCP-сервер (Streamable HTTP, STATELESS, POST /mcp): 6 read-only tools поверх graph-query-core, OAuth2 resource server с проверкой scope на tools/call, аудит и метрики каждого вызова",
+      "primary_files": [
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/McpServerApplication.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphQueries.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphReaderConfiguration.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphReaderProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/StalenessProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditAspect.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallContext.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolArguments.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/PingTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/ExplainProvenanceTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java",
+        "access/mcp-server/src/main/resources/application.yml"
+      ],
+      "functions": [
+        {
+          "name": "ToolScopeFilter.doFilterInternal",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java",
+          "params": [
+            "HttpServletRequest",
+            "HttpServletResponse",
+            "FilterChain"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ToolCallAuditAspect.audit",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditAspect.java",
+          "params": [
+            "ProceedingJoinPoint",
+            "McpTool"
+          ],
+          "returns": "Object",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SearchAssetsTool.searchAssets",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java",
+          "params": [
+            "String query",
+            "List types",
+            "String environment",
+            "Integer limit"
+          ],
+          "returns": "SearchAssetsResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GetAssetTool.getAsset",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java",
+          "params": [
+            "String gid",
+            "Boolean includeRelations"
+          ],
+          "returns": "GetAssetResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ExplainProvenanceTool.explainProvenance",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/ExplainProvenanceTool.java",
+          "params": [
+            "String gid",
+            "String property"
+          ],
+          "returns": "ExplainProvenanceResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "TraceDependenciesTool.traceDependencies",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java",
+          "params": [
+            "String gid",
+            "String direction",
+            "Integer maxDepth",
+            "List relationTypes",
+            "String mode",
+            "String environment"
+          ],
+          "returns": "TraceDependenciesResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FindRuntimeFootprintTool.findRuntimeFootprint",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java",
+          "params": [
+            "String systemGid",
+            "String environment"
+          ],
+          "returns": "FindRuntimeFootprintResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ToolArguments.normalize",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolArguments.java",
+          "params": [
+            "Map arguments"
+          ],
+          "returns": "Map",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "SearchAssetsResult",
+          "fields": [
+            {
+              "name": "items",
+              "type": "List<AssetHit>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GetAssetResult",
+          "fields": [
+            {
+              "name": "gid",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "properties",
+              "type": "Map<String,Object>",
+              "required": true
+            },
+            {
+              "name": "sources",
+              "type": "List<SourceRef>",
+              "required": true
+            },
+            {
+              "name": "relations",
+              "type": "List<RelationRef>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ExplainProvenanceResult",
+          "fields": [
+            {
+              "name": "authorities",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "conflictState",
+              "type": "OPEN|NONE",
+              "required": true
+            },
+            {
+              "name": "records",
+              "type": "List<RecordRef>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "TraceDependenciesResult",
+          "fields": [
+            {
+              "name": "nodes",
+              "type": "List<NodeRef>",
+              "required": true
+            },
+            {
+              "name": "relations",
+              "type": "List<RelationRef>",
+              "required": true
+            },
+            {
+              "name": "paths",
+              "type": "List<TracePath>",
+              "required": true
+            },
+            {
+              "name": "affected",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FindRuntimeFootprintResult",
+          "fields": [
+            {
+              "name": "services",
+              "type": "List<ServiceFootprint>",
+              "required": true
+            },
+            {
+              "name": "warnings",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "tools/call без записи в tool-scopes отклоняется 403 (fail-closed); нет scope у токена -> 403 insufficient_scope; прочие методы MCP требуют только валидный токен",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:82-96",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Тело POST /mcp: не больше max-request-bytes (1 МБ), только JSON-объект (batch отвергается), поддерживаемая кодировка",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:60-81",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "JWT: issuer и audience (= resource-uri); PRM по RFC 9728 публичен",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java:37-62",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "В граф tools ходят только через GraphQueries; ID шаблона, число строк и truncated попадают в аудит",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphQueries.java:27-31",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Аудит: одна запись и одно наблюдение на каждый tools/call, включая отказы; аргументы усечены и замаскированы по ключам; токен не читается",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java:99-144",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "trace_dependencies: maxDepth 1..лимит, типы связей из allowlist режима, environment только для impact, пути сортируются в Java, stale по stale-after",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java:101-239",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Ошибки валидации не содержат значений ввода",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java:94-101",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "find_runtime_footprint не нормализует systemGid (в отличие от остальных tools)",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:62-70",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "access/graph-query-core",
+        "contracts/canonical-model",
+        "spring-ai-starter-mcp-server-webmvc",
+        "spring-security-oauth2-resource-server",
+        "micrometer",
+        "aspectj",
+        "neo4j-java-driver"
+      ],
+      "algorithms": [
+        "проверка scope tools/call до диспетчеризации MCP по телу запроса",
+        "аспект аудита с ThreadLocal-контекстом",
+        "нормализация аргументов tool для аудита (усечение, маскирование)",
+        "сборка дедуплицированного графа путей и оценка stale"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "access/admin-console",
+      "path": "access/admin-console",
+      "purpose": "Read-only админ-консоль: статика SPA (admin-ui) и REST /api/** (граф через graph-query-core, журнал/DLQ/идентичность/аудит из PostgreSQL ролью archrag_console_ro), OAuth2 resource server со scope architecture.admin, аудит чтений",
+      "primary_files": [
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/AdminConsoleApplication.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/SpaWebConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/ConsoleConfigController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/ConsoleProperties.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/ApiExceptionHandler.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/graph/GraphReads.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/graph/GraphReaderConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsolePgConfiguration.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/Rows.java",
+        "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java",
+        "access/admin-console/src/main/resources/application.yml"
+      ],
+      "functions": [
+        {
+          "name": "GraphController.search",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String q",
+            "List types",
+            "Integer limit"
+          ],
+          "returns": "SearchResponse",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphController.node",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String gid"
+          ],
+          "returns": "NodeCard",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphController.neighborhood",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+          "params": [
+            "String gid",
+            "Integer depth",
+            "List relTypes"
+          ],
+          "returns": "Neighborhood",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.sources",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [],
+          "returns": "List<SourceStatus>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.events",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [
+            "source",
+            "status",
+            "from",
+            "to",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Event>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncController.dlq",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java",
+          "params": [
+            "source",
+            "replayed",
+            "page",
+            "size"
+          ],
+          "returns": "Page<DlqEntry>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "IdentityController.conflicts",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java",
+          "params": [
+            "status",
+            "gid",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Conflict>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AuditController.audit",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java",
+          "params": [
+            "operation",
+            "status",
+            "from",
+            "to",
+            "page",
+            "size"
+          ],
+          "returns": "Page<Audit>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ConsoleReadRepository.page",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java",
+          "params": [
+            "table",
+            "columns",
+            "Where",
+            "orderBy",
+            "PageRequest",
+            "RowMapper"
+          ],
+          "returns": "Page<T>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ReadAuditInterceptor.afterCompletion",
+          "file": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java",
+          "params": [
+            "request",
+            "response",
+            "handler",
+            "ex"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Page",
+          "fields": [
+            {
+              "name": "items",
+              "type": "List<T>",
+              "required": true
+            },
+            {
+              "name": "page",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "size",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Event",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "eventId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "payloadRef",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "contentHash",
+              "type": "String",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceStatus",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "checkpoints",
+              "type": "List<Checkpoint>",
+              "required": true
+            },
+            {
+              "name": "eventsByStatus",
+              "type": "Map<String,Long>",
+              "required": true
+            },
+            {
+              "name": "lagSeconds",
+              "type": "Long",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Neighborhood",
+          "fields": [
+            {
+              "name": "center",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "nodes",
+              "type": "List<GraphNode>",
+              "required": true
+            },
+            {
+              "name": "edges",
+              "type": "List<GraphEdge>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "/api/** требует JWT (issuer + audience консоли) и scope architecture.admin; health и console-config.json публичны; остальной actuator и не-GET вне /api закрыты",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java:38-53",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Контроллеры содержат только GET; вызовов ingestion (replay/rebuild/reconcile/crosswalk) нет",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "PG: пул readOnly + SET default_transaction_read_only = on, максимум 4 соединения, ленивое соединение",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsolePgConfiguration.java:22-36",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "SQL: константные фрагменты WHERE + именованные параметры; payload не читается; тексты источников режутся до 500 символов, request/result аудита >4000 символов не отдаются",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:34-36,270-365",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Окрестность: глубина 1..2, relTypes из allowlist, узлы затем рёбра, truncated по обоим запросам",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:127-167",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Пагинация page>=0, 1<=size<=200 (по умолчанию 50)",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/PageRequest.java:14-24",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "lagSeconds = max(0, now - max(updated_at) PROJECTED) по источнику; сводка всегда содержит 4 источника и 10 статусов",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:56-75",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "SPA fallback на index.html только для путей без расширения, кроме api/ и actuator/",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/SpaWebConfiguration.java:48-71",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Аудит чтения: одна запись на запрос, дошедший до контроллера; отказы 401/403 в неё не попадают",
+          "location": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java:31-58",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "access/admin-ui",
+        "access/graph-query-core",
+        "neo4j-java-driver",
+        "spring-boot-webmvc",
+        "spring-boot-jdbc",
+        "postgresql",
+        "spring-security-oauth2-resource-server"
+      ],
+      "algorithms": [
+        "построение WHERE из константных фрагментов и именованных параметров",
+        "постраничный вывод count + LIMIT/OFFSET",
+        "SPA fallback resolver",
+        "расчёт отставания по последнему PROJECTED"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "access/admin-ui",
+      "path": "access/admin-ui",
+      "purpose": "SPA админ-консоли (React 18 + TypeScript + Webpack), собирается Maven-модулем через frontend-maven-plugin; hash-роутинг graph/sync, OIDC Authorization Code + PKCE с токеном в памяти, только GET-вызовы /api/**",
+      "primary_files": [
+        "access/admin-ui/package.json",
+        "access/admin-ui/pom.xml",
+        "access/admin-ui/webpack.config.js",
+        "access/admin-ui/src/index.tsx",
+        "access/admin-ui/src/App.tsx",
+        "access/admin-ui/src/useHashRoute.ts",
+        "access/admin-ui/src/auth/authService.ts",
+        "access/admin-ui/src/api/apiClient.ts",
+        "access/admin-ui/src/api/ApiContext.tsx",
+        "access/admin-ui/src/api/endpoints.ts",
+        "access/admin-ui/src/api/types.ts",
+        "access/admin-ui/src/api/constants.ts",
+        "access/admin-ui/src/hooks/useAsync.ts",
+        "access/admin-ui/src/components/GraphCanvas.tsx",
+        "access/admin-ui/src/pages/GraphPage.tsx",
+        "access/admin-ui/src/pages/SyncPage.tsx",
+        "access/admin-ui/src/pages/graph/AssetCard.tsx",
+        "access/admin-ui/src/pages/graph/NeighborhoodView.tsx",
+        "access/admin-ui/src/pages/sync/SourcesTab.tsx"
+      ],
+      "functions": [
+        {
+          "name": "App",
+          "file": "access/admin-ui/src/App.tsx",
+          "params": [
+            "auth: AuthService"
+          ],
+          "returns": "JSX",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "createOidcAuthService",
+          "file": "access/admin-ui/src/auth/authService.ts",
+          "params": [
+            "config: ConsoleConfig"
+          ],
+          "returns": "AuthService",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "loadConsoleConfig",
+          "file": "access/admin-ui/src/auth/authService.ts",
+          "params": [
+            "fetchFn"
+          ],
+          "returns": "Promise<ConsoleConfig>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "createApiClient",
+          "file": "access/admin-ui/src/api/apiClient.ts",
+          "params": [
+            "options: ApiClientOptions"
+          ],
+          "returns": "ApiClient",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "endpoints",
+          "file": "access/admin-ui/src/api/endpoints.ts",
+          "params": [
+            "api: ApiClient"
+          ],
+          "returns": "Endpoints",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "useAsync",
+          "file": "access/admin-ui/src/hooks/useAsync.ts",
+          "params": [
+            "load",
+            "deps",
+            "refreshMs?"
+          ],
+          "returns": "{state, reload}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "health",
+          "file": "access/admin-ui/src/pages/sync/SourcesTab.tsx",
+          "params": [
+            "s: SourceStatus"
+          ],
+          "returns": "ok|warn|bad",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "isStale",
+          "file": "access/admin-ui/src/pages/graph/AssetCard.tsx",
+          "params": [
+            "card: NodeCard",
+            "now"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "NodeCard",
+          "fields": [
+            {
+              "name": "gid",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "properties",
+              "type": "Record<string, unknown>",
+              "required": true
+            },
+            {
+              "name": "isCurrent",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "sources",
+              "type": "SourceRecordInfo[]",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceStatus",
+          "fields": [
+            {
+              "name": "source",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "eventsByStatus",
+              "type": "Record<string, number>",
+              "required": true
+            },
+            {
+              "name": "lagSeconds",
+              "type": "number|null",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Page",
+          "fields": [
+            {
+              "name": "items",
+              "type": "T[]",
+              "required": true
+            },
+            {
+              "name": "page",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "size",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "total",
+              "type": "number",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ConsoleConfig",
+          "fields": [
+            {
+              "name": "issuer",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "clientId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "scope",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Токены хранятся только в InMemoryWebStorage; code/state убираются из адреса при любом исходе callback",
+          "location": "access/admin-ui/src/auth/authService.ts:39-75",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "401 запускает повторный вход один раз на параллельные ошибки; 403 заменяет раздел экраном «Нет прав»",
+          "location": "access/admin-ui/src/api/ApiContext.tsx:12-37",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Светофор источника: bad при QUARANTINED/RETRYING, FAILED/failed>0 или lag>3600 с; warn при отсутствии данных или lag>900 с",
+          "location": "access/admin-ui/src/pages/sync/SourcesTab.tsx:11-18",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Актив устарел, если текущий и lastSeenAt старше 7 суток (константа UI)",
+          "location": "access/admin-ui/src/pages/graph/AssetCard.tsx:9-13",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Значения свойств и тексты источников выводятся как текст React; URL репозитория без ссылки; подписи графа на canvas",
+          "location": "access/admin-ui/src/pages/graph/AssetCard.tsx:15-28",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Бандл без inline-скриптов и стилей (CSS в файл) ради CSP консоли",
+          "location": "access/admin-ui/webpack.config.js:22-30",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Только GET-вызовы API; ApiClient.post объявлен, но не используется",
+          "location": "access/admin-ui/src/api/endpoints.ts:47-72",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "react 18.3.1",
+        "react-dom 18.3.1",
+        "oidc-client-ts 3.1.0",
+        "cytoscape 3.30.4",
+        "webpack 5",
+        "typescript 5.7",
+        "jest 29",
+        "frontend-maven-plugin"
+      ],
+      "algorithms": [
+        "OIDC Authorization Code + PKCE с токеном в памяти",
+        "useAsync: загрузка с отменой устаревшего ответа и тихим автообновлением",
+        "светофор здоровья источника по статусам, прогону и отставанию"
+      ],
+      "complexity": "medium"
     }
   ]
 }

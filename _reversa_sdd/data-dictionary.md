@@ -624,3 +624,227 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` | `Normalizer`/`EventProcessor` | `QUARANTINED` | входные данные |
 | `INVALID_COMMANDS`, `GRAPH_REJECTED` | `EventProcessor.write` | `QUARANTINED` | отказ графа по запросу |
 | `UNRESOLVED_ENDPOINT`, `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `GRAPH_UNAVAILABLE`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RECONCILIATION_TRIGGER_FAILED` | `EventProcessor` | `RETRYING` | инфраструктура / гонка |
+
+---
+
+# R.2d — `access/*` (UNLOCKER-266)
+
+> Разделы X.1–X.4 — по одному на модуль `access/`. Столбцы «Обяз.» как выше. Сокращения путей: `GQC/` = `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/`, `MCP/` = `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/`, `AC/` = `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/`, `UI/` = `access/admin-ui/src/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
+> Словарь узлов и связей Neo4j (метки, свойства) — R.3; здесь только поля, которые читают шаблоны и отдают ответы.
+
+## X.1 graph-query-core: внутренние типы и результат шаблонов
+
+### X.1.1 Records модуля 🟢
+
+| Тип | Поле | Тип | Обяз. | Правило |
+|---|---|---|---|---|
+| `QueryTemplate` (`GQC/QueryTemplate.java:21-22`) | `id` | String | да | не пусто |
+| | `cypher` | String | да | не пусто; оканчивается `LIMIT $limit` (`:74-76`) |
+| | `parameters` | Set<String> | да | `Set.copyOf`; без `limit`; равно множеству `$param` в тексте (`:52-56,77-86`) |
+| | `kind` | ResultKind | да | `NODES` / `PATHS` (`GQC/ResultKind.java:6-9`) |
+| `ResultBudget` (`GQC/ResultBudget.java:17-18`) | `maxDepth`, `maxNodes`, `maxPaths`, `maxResponseBytes` | int / int / int / long | да | ≥ 1 (`:21-23`) |
+| | `timeout` | Duration | да | > 0 (`:24-26`) |
+| `QueryLimits` (`GQC/QueryLimits.java:14-15`) | те же 5 полей | | да | проверяются через `new ResultBudget(...)` (`:17-20`) |
+| `QueryResult` (`GQC/QueryResult.java:19-25`) | `templateId`, `rows`, `truncated`, `rowCount`, `elapsed` | String, List<Map>, boolean, int, Duration | да | `rows` копируется; `rowCount` — размер возвращённого списка (в `execute` задаётся `rows().size()`, `GraphQueryExecutor.java:92`) |
+| `BudgetedCollector.Collected` (`GQC/BudgetedCollector.java:25`) | `rows`, `truncated` | | да | — |
+
+Исключения: `QueryTimeoutException(templateId, cause)` (`GQC/QueryTimeoutException.java`).
+
+### X.1.2 Строки результата по шаблонам 🟢
+
+Все значения — скаляры, списки и map; времена отдаются **строкой** `toString(datetime)` (ISO-8601, UTC), `null` если свойства нет.
+
+| Шаблон | Поле | Тип в Java | Источник в графе / примечание |
+|---|---|---|---|
+| `search_assets` | `gid` | String | `n.gid` |
+| | `type` | String | первая метка из `SEARCHABLE_TYPES` (`AssetTemplates.java:16-17`) |
+| | `name` | String | `coalesce(name, hostname, url, code)` |
+| | `score` | double | `1000.0` для EXACT, иначе fulltext score |
+| | `matchType` | String | `EXACT` \| `FULLTEXT` |
+| | `sources` | List<String> | `SourceRecord.source` активных записей |
+| | `lastSeenAt` | String | |
+| `get_asset` | `gid`, `type`, `isCurrent` | String, String, Boolean | |
+| | `properties` | Map | `properties(n)` — **все** свойства узла (кроме значений-узлов) 🟡 |
+| | `firstSeenAt`, `lastSeenAt`, `deletedAt` | String | |
+| | `sources[]` | Map | `source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority` (с неактивными, активные первыми) |
+| `asset_relations` | `relationType`, `direction (OUT\|IN)`, `gid`, `type`, `name`, `isCurrent`, `validFrom` | | сосед |
+| `explain_provenance` | `gid`, `type`, `isCurrent`, `deletedAt`, `records[]` | | запись: `source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, active, deletedAt, authority, confidence, conflicts` |
+| `trace_downstream`, `trace_upstream`, `trace_impact` | `nodes[]` | Map | `gid, label, name, lastSeenAt, conflicts[{source, sourceType, sourceId, properties}]` |
+| | `relations[]` | Map | `type, from, to, validFrom, assertedBySource, assertedByType, assertedById, sourceFetchedAt, sourceActive` |
+| `runtime_footprint` | `system`, `service`, `deployment`, `compute`, `host` | Map \| null | `deployment`: `gid, name, version, status, environment, sourceCommit, repositoryUrl, lastSeenAt, sources, hasDeployment{…}, source{repository{gid,name,url}, deployedFrom{source,sourceType,sourceId,validFrom,commit}}`; `compute`: `gid, type, hostname, state, lastSeenAt, sources, runsOn{…}`; `host`: `gid, hostname, state, lastSeenAt, sources, hostedOn{…}` |
+| `graph_stats_nodes` | `label`, `count` | String, long | |
+| `graph_stats_relations` | `type`, `count` | String, long | |
+| `graph_last_update` | `lastUpdatedAt` | String \| null | `max(SourceRecord.fetchedAt)` |
+| `console_neighborhood_nodes` | `gid, type, name, isCurrent, distance` | | `distance` = `min(length(p))`, сам узел — 0 |
+| `console_neighborhood_edges` | `type, source, target` | | gid концов |
+| `console_latest_sync_runs` | `adapter, runId, startedAt, endedAt, status, fetched, applied, failed` | | свойства `SyncRun`; ненаписанные — `null` |
+
+Источники: `GQT` = `GQC/templates/` (`AssetTemplates.java:37-210`, `DependencyTemplates.java:40-69`, `RuntimeTemplates.java:29-90`, `ConsoleTemplates.java:47-179`).
+
+### X.1.3 Allowlist'ы (константы) 🟢
+
+| Константа | Значения | Где |
+|---|---|---|
+| `AssetTemplates.SEARCHABLE_TYPES` | `ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance` | `AssetTemplates.java:16-17` |
+| `AssetTemplates.RELATION_TYPES` | `DECOMPOSED_INTO, IMPLEMENTED_IN, HAS_DEPLOYMENT, IN_ENVIRONMENT, RUNS_ON, DEPENDS_ON, OWNED_BY, DEPLOYED_FROM` | `:102-103` |
+| `DependencyTemplates.TRACE_LABELS` | SEARCHABLE_TYPES + `VirtualMachine, PhysicalServer, Namespace, KubernetesCluster` | `DependencyTemplates.java:22-25` |
+| `DependencyTemplates.TRACE_RELATION_TYPES` | `DEPENDS_ON, DECOMPOSED_INTO, HAS_DEPLOYMENT, RUNS_ON, HOSTED_ON, OWNED_BY, DEPLOYED_FROM` | `:18-19` |
+| `DependencyTemplates.IMPACT_RELATION_TYPES` | `RUNS_ON, HOSTED_ON, HAS_DEPLOYMENT, DECOMPOSED_INTO, DEPENDS_ON` | `:98-99` |
+| `DependencyTemplates.IMPACT_TARGET_LABELS` | `Service, ITSystem` | `:102` |
+| `ConsoleTemplates.STATS_LABELS` | TRACE_LABELS + `SourceRecord` | `ConsoleTemplates.java:19-25` |
+| `ConsoleTemplates.STATS_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON, ASSERTS` | `:28-35` |
+| `ConsoleTemplates.NEIGHBORHOOD_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON` | `:38` |
+
+---
+
+## X.2 mcp-server: ответы tools, аудит, свойства
+
+Ответ каждого tool — record из `MCP/tools/`; Spring AI отдаёт его JSON в `result.content[0].text`. Ошибка валидации — `isError=true` без значений ввода (`docs/03-interfaces.md` §8 п.10 описывает дублирование текста). Все времена — строки ISO-8601 UTC. Поля не имеют аннотаций обязательности: «Обяз.» ниже — «заполняется всегда» по коду сборки.
+
+### X.2.1 Ответы 🟢
+
+| Тип | Поле | Тип | Обяз. | Примечание |
+|---|---|---|---|---|
+| `SearchAssetsResult` (`MCP/tools/SearchAssetsResult.java:11`) | `items` | List<AssetHit> | да | точные совпадения первыми |
+| | `truncated` | boolean | да | |
+| `AssetHit` (`:24-31`) | `gid, type, name, matchType, lastSeenAt` | String | да (`name`, `lastSeenAt` могут быть `null`) | |
+| | `score` | double | да | 1000 для `EXACT` |
+| | `sources` | List<String> | да | `source` активных записей |
+| `GetAssetResult` (`MCP/tools/GetAssetResult.java:21-31`) | `gid, type, firstSeenAt, lastSeenAt` | String | да | |
+| | `properties` | Map<String,Object> | да | без `gid, isCurrent, firstSeenAt, lastSeenAt, deletedAt` (`GetAssetTool.java:25-26`) |
+| | `deletedAt` | String | нет | |
+| | `isCurrent` | boolean | да | `false` у закрытого узла |
+| | `sources` | List<SourceRef> | да | `source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority` (`:39-46`) |
+| | `relations` | List<RelationRef> | да | пусто при `includeRelations=false`; `relationType, direction, gid, type, name, isCurrent, validFrom` (`:57-64`) |
+| | `truncated` | boolean | да | только про связи |
+| `ExplainProvenanceResult` (`MCP/tools/ExplainProvenanceResult.java:19-27`) | `gid, type` | String | да | |
+| | `property` | String | нет | прошло регулярное выражение |
+| | `isCurrent`, `deletedAt` | boolean, String | да, нет | |
+| | `authorities` | List<String> | да | имена `SourceSystemCode`, отсортированы |
+| | `conflictState` | String | да | `OPEN` \| `NONE` |
+| | `records` | List<RecordRef> | да | `source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, confidence (Double), authority, authoritative, active, deletedAt, conflictProperties` (`:39-51`) |
+| `TraceDependenciesResult` (`MCP/tools/TraceDependenciesResult.java:25-35`) | `startGid, mode, direction, staleAfter` | String | да | `staleAfter` — ISO-8601 Duration (`PT168H`) |
+| | `environment` | String | нет | только `impact` |
+| | `nodes` | List<NodeRef> | да | `gid, label, name, lastSeenAt, stale, conflicts[{source, sourceType, sourceId, properties[]}]` (`:47,57`) |
+| | `relations` | List<RelationRef> | да | `type, from, to, validFrom, assertedBySource/Type/Id, sourceFetchedAt, sourceActive, stale` (`:73-83`) |
+| | `paths` | List<TracePath> | да | `nodes[]` (gid), `relations[]` (`RelationKey{type, from, to}`) (`:91-94`) |
+| | `affected` | List<String> | да | пусто при `trace` |
+| | `truncated` | boolean | да | |
+| `FindRuntimeFootprintResult` (`MCP/tools/FindRuntimeFootprintResult.java:24-34`) | `systemGid, systemName, systemLastSeenAt, systemStale, systemSources, environment, services, staleAfter, warnings, truncated` | | см. код | `warnings` — «stale: <Type> <gid> lastSeenAt=<…>» |
+| `ServiceFootprint` → `DeploymentFootprint` → `ComputeFootprint` → `HostFootprint` (`:37-92`) | | | | `DeploymentFootprint` несёт `sourceCommit, repositoryUrl, repository{gid,name,url}, deployedFrom{source,sourceType,sourceId,validFrom,commit}, hasDeployment{EdgeProvenance}`; `ComputeFootprint.type` ∈ `VirtualMachine, PhysicalServer, ComputeInstance` |
+| `EdgeProvenance`, `FactSource` (`:95-98`) | `source, sourceType, sourceId, validFrom` / `…, authority` | | | `validFrom` — только у темпоральных связей |
+
+### X.2.2 Аудит-запись `archrag.audit.mcp` (`MCP/audit/ToolCallAuditor.java:108-119`) 🟢
+
+Структурированный лог INFO, сообщение `mcp tool call`; ключи: `principal` (`sub=… client=…` или `anonymous`), `tool` (очищен, ≤ 64), `arguments` (нормализованная map, `ToolArguments`), `templates` (список ID шаблонов), `durationMs`, `rows`, `truncated`, `decision` (`ALLOWED, DENIED_SCOPE, DENIED_UNKNOWN_TOOL, TIMEOUT, ERROR` — `MCP/audit/ToolDecision.java:4-15`), `errorClass` (имя класса исключения или `null`). Метрики: `archrag.mcp.tool.call` (теги `tool`, `decision`; гистограмма включена, `access/mcp-server/src/main/resources/application.yml:71-72`), `archrag.mcp.tool.rows` (тег `tool`).
+
+### X.2.3 Свойства mcp-server 🟢
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `spring.ai.mcp.server.{name,version,protocol,streamable-http.mcp-endpoint}` | — | `arch-rag`, `0.1.0`, `STATELESS`, `/mcp` | Spring AI |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | обязательно | Spring Boot |
+| `spring.security.oauth2.resourceserver.jwt.audiences` | = `archrag.mcp.security.resource-uri` | | |
+| `archrag.mcp.security.resource-uri` | `ARCHRAG_MCP_RESOURCE_URI` | обязательно | `McpSecurityProperties` (`MCP/security/McpSecurityProperties.java:16-17`) |
+| `archrag.mcp.security.max-request-bytes` | — | `1MB` | |
+| `archrag.mcp.security.tool-scopes.<tool>` | — | 6 записей `architecture.read` | |
+| `archrag.neo4j.reader.{uri,username,password}` | `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD` | обязательно | `GraphReaderProperties` (`MCP/graph/GraphReaderProperties.java:14-15`) |
+| `archrag.query.stale-after` | — | `P7D` | `StalenessProperties` (`MCP/graph/StalenessProperties.java:12-13`) |
+| `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
+| `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
+| `management.otlp.metrics.export.{enabled,step}` | `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED`, `…_URL` | `false`, `10s` | Micrometer |
+
+---
+
+## X.3 admin-console: ответы REST, чтение PostgreSQL, конфигурация
+
+`AC/` = `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/`. Времена `Instant` сериализуются Jackson в ISO-8601 UTC; времена из графа приходят строкой. 🟢
+
+### X.3.1 Ответы `/api/graph/**` (`AC/api/GraphResponses.java`)
+
+| Тип | Поля |
+|---|---|
+| `Stats` (`:21`) | `nodes: [Count{name, count}]`, `relations: [Count]`, `lastUpdatedAt: String\|null` |
+| `SearchResponse` (`:29`) | `items: [AssetHit]`, `truncated` |
+| `AssetHit` (`:32-39`) | `gid, type, name, score (double), matchType, sources[String], lastSeenAt` |
+| `NodeCard` (`:47-55`) | `gid, type, properties (Map, без gid/isCurrent/firstSeenAt/lastSeenAt/deletedAt), firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources: [Map]` — записи `explain_provenance` (`source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, active, deletedAt, authority, confidence, conflicts`) |
+| `Neighborhood` (`:68`) | `center, nodes: [GraphNode{gid, type, name, isCurrent, distance}], edges: [GraphEdge{type, source, target}], truncated` |
+| `ApiError` (`AC/api/ApiExceptionHandler.java:21`) | `error` (`invalid_request`, `not_found`, `query_timeout`), `message` |
+| `ConsoleConfig` (`AC/config/ConsoleConfigController.java:18`) | `issuer, clientId, scope` |
+
+### X.3.2 Ответы `/api/sync|identity|audit` (`AC/pg/Rows.java`, `AC/pg/Page.java`)
+
+`Page<T>{items, page (с 0), size, total}` (`Page.java:13`); запрос `page ≥ 0`, `size 1..200`, по умолчанию `0`/`50` (`PageRequest.java:10-24`).
+
+| Тип | Поля | Таблица / колонки (`ConsoleReadRepository`) |
+|---|---|---|
+| `Event` (`Rows.java:15-32`) | `source` (короткий код), `eventId, type, subject, sourceType, sourceId, sourceVersion, correlationId, syncRunId, schemaVersion, status, attempts, errorCode, payloadRef, contentHash, receivedAt, updatedAt` | `inbox_event` (`payloadRef` = `payload_key`, `contentHash` = `payload_hash`) — `ConsoleReadRepository.java:38-40` |
+| `EventDetail` (`:35`) | `event, errorReason (≤ 500), dlqEntries[], historyNote` | `inbox_event.error_reason`, `dlq_entry` |
+| `DlqEntry` (`:38-46`) | `id, source, eventId, errorCode, reason (≤ 500), payloadRef, createdAt, replayedAt` | `dlq_entry` |
+| `Conflict` (`:49-64`) | `gid, property, dissentSource/Type/Id, dissentValue (≤ 500), masterSource/Type/Id, masterValue (≤ 500), status, openedAt, updatedAt, resolvedAt, kind` | `source_conflict` |
+| `Candidate` (`:67-79`) | `leftSource/Type/Id, rightSource/Type/Id, labelFamily, matched (JSON), score, status, firstSeenAt, updatedAt` | `identity_candidate` (`matched::text`) |
+| `Audit` (`:82-94`) | `id, operation, actor, status, replayId, request (JSON\|null), requestTruncated, result (JSON\|null), resultTruncated, error (≤ 500), startedAt, finishedAt` | `admin_audit` (`request`/`result` > 4000 символов → `null` + флаг) |
+| `Checkpoint` (`:97`) | `consumer, cursor, updatedAt` | `consumer_checkpoint` |
+| `SyncRunInfo` (`:100-107`) | `runId, startedAt, endedAt, status, fetched, applied, failed` | граф: `SyncRun` (`console_latest_sync_runs`) |
+| `SourceStatus` (`:110-116`) | `source, checkpoints[], lastSyncRun, eventsByStatus (Map всех 10 статусов), lastProjectedAt, lagSeconds` | агрегат |
+
+Читаемые колонки согласованы с миграциями V1/V4/V5/V7/V3 (`ingestion/*/src/main/resources/db/migration/`, проверено поиском колонок `error_reason, payload_hash, attempts, replayed_at, kind, matched, label_family, dissent_value, payload_key, sync_run_id, correlation_id`), права — с V6 (`SELECT` на 6 таблиц) 🟢.
+
+Фильтры (константные значения): `SyncSources.CODES = [eam, scm, cmdb, deploymap]`, `URN_PREFIX = "urn:corp:"`, `STATUSES = RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION` (`AC/pg/SyncSources.java:16-33`).
+
+### X.3.3 Свойства admin-console (`access/admin-console/src/main/resources/application.yml`)
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | обязательно | Spring Boot |
+| `spring.security.oauth2.resourceserver.jwt.audiences` | = `archrag.console.resource-uri` | | |
+| `spring.web.resources.add-mappings` | — | `false` | Spring MVC |
+| `archrag.console.resource-uri` | `ARCHRAG_CONSOLE_RESOURCE_URI` | обязательно (пусто → не стартует) | `ConsoleProperties` (`AC/config/ConsoleProperties.java:13-17`) |
+| `archrag.console.client-id` | — | `archrag-admin-console` | |
+| `archrag.console.scope` | — | `openid architecture.admin` | |
+| `archrag.neo4j.reader.{uri,username,password}` | `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD` | обязательно | `GraphReaderProperties` (`AC/graph/GraphReaderProperties.java:14-15`) |
+| `archrag.console-pg.{url,username,password}` | `ARCHRAG_CONSOLE_PG_URL`, `…_USERNAME`, `…_PASSWORD` | `username` = `archrag_console_ro` | `ConsolePgProperties` (`AC/pg/ConsolePgProperties.java:12-13`) |
+| `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
+| `management.health.db.enabled` | — | `false` | Spring Boot |
+| `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
+
+---
+
+## X.4 admin-ui: типы ответов, константы, состояние
+
+`UI/` = `access/admin-ui/src/`. Поля — зеркало Java-records `admin-console` (§X.3); `T | null` означает «может прийти `null`». 🟢
+
+### X.4.1 Типы API (`UI/api/types.ts`)
+
+| Интерфейс | Поля (строки `types.ts`) | Java-источник |
+|---|---|---|
+| `Count`, `Stats` (`:3-12`) | `name, count`; `nodes[], relations[], lastUpdatedAt\|null` | `GraphResponses.Count/Stats` |
+| `AssetHit`, `SearchResponse` (`:14-27`) | `gid, type, name, score, matchType, sources[], lastSeenAt\|null`; `items[], truncated` | `GraphResponses.AssetHit/SearchResponse` |
+| `SourceRecordInfo` (`:30-42`) | `source, sourceType, sourceId, sourceVersion\|null, fetchedAt\|null, contentHash\|null, active\|null, deletedAt\|null, authority (string\|number)\|null, confidence\|null, conflicts[]\|null` | запись `explain_provenance` |
+| `NodeCard` (`:44-53`) | `gid, type, properties: Record<string, unknown>, firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources: SourceRecordInfo[]` | `GraphResponses.NodeCard` |
+| `GraphNode`, `GraphEdge`, `Neighborhood` (`:55-74`) | `gid, type, name, isCurrent, distance`; `type, source, target`; `center, nodes, edges, truncated` | `GraphResponses` |
+| `Page<T>` (`:76-81`) | `items, page, size, total` | `pg.Page` |
+| `Checkpoint`, `SyncRunInfo`, `SourceStatus` (`:83-106`) | как §X.3.2 | `Rows` |
+| `SyncEvent` (`:109-127`) | 17 полей `Event`; `receivedAt`, `updatedAt` — обязательные строки | `Rows.Event` |
+| `DlqEntry`, `EventDetail` (`:129-145`) | как §X.3.2 | `Rows` |
+| `Conflict` (`:147-164`) | как `Rows.Conflict`; `kind?: 'PROPERTY' \| 'RELATION'` (в UI необязательное: «поля нет у старых ответов») | `Rows.Conflict` |
+| `MatchedFeature`, `Candidate` (`:166-184`) | `feature, value`; `matched: MatchedFeature[]\|null` | `Rows.Candidate` |
+| `Audit` (`:186-199`) | как `Rows.Audit`; `request`, `result` — `unknown` | `Rows.Audit` |
+
+Расхождения между сторонами: `authority` в UI допускает число (`string \| number`), сервер отдаёт строку `MASTER`/`SUPPLEMENTARY` 🟡; `Conflict.kind` в UI необязателен, в БД (`V7__source_conflict_kind.sql`) и Java-record — всегда задан 🟡; `AssetHit.lastSeenAt` в UI допускает `null`, в Java — `String` без проверок 🟢.
+
+### X.4.2 Константы и состояние
+
+| Имя | Значение | Где |
+|---|---|---|
+| `ASSET_TYPES` | `ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance` | `UI/api/constants.ts:5-13` |
+| `RELATION_TYPES` | 9 типов (`DECOMPOSED_INTO … DEPLOYED_FROM`, `HOSTED_ON`) | `:15-25` |
+| `SOURCES` | `eam, scm, cmdb, deploymap` | `:27` |
+| `EVENT_STATUSES` | 10 статусов `ProcessingStatus` | `:29-40` |
+| `STALE_AFTER_MS` | 7 суток | `:56` |
+| `SOURCES_REFRESH_MS` | 30 000 | `:59` |
+| `LAG_WARN_SECONDS`, `LAG_BAD_SECONDS` | 900, 3600 | `:62-63` |
+| `Route` | `'graph' \| 'sync'` | `UI/useHashRoute.ts:3` |
+| `AsyncState<T>` | `loading \| error{message} \| ready{data}` | `UI/hooks/useAsync.ts:4-7` |
+| `AuthState` | `pending \| ready \| failed` | `UI/App.tsx:9` |
+| `ConsoleConfig` | `issuer, clientId, scope` | `UI/auth/authService.ts:4-8` |
