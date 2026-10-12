@@ -559,3 +559,68 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `environment_code` | `UNIQUE Environment.code` |
 | `it_system_eam_code` | индекс `ITSystem.eamCode` |
 | `asset_text` | FULLTEXT `ITSystem\|Service` по `name`, `description` |
+
+## Q.5 ingestion-service: таблицы, DTO админского REST, конфигурация
+
+> `IS/` = `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/`. 🟢
+
+### Q.5.1 `admin_audit` (`ingestion/ingestion-service/src/main/resources/db/migration/V3__admin_audit.sql`)
+
+| Колонка | Тип | NULL | Назначение |
+|---|---|---|---|
+| `id` | bigserial | нет | PK |
+| `operation` | text | нет | `REPLAY`, `REBUILD`, `RECONCILE`, `CROSSWALK` |
+| `actor` | text | нет | `sub` токена |
+| `request` | jsonb | нет | параметры запроса без payload; у crosswalk — ключи и усечённая `reason` (≤ 200) |
+| `replay_id` | text | да | UUID replay/rebuild |
+| `status` | text | нет | `STARTED` → `SUCCEEDED` / `FAILED` |
+| `result` | jsonb | да | счётчики (`total`, `statuses`) / `adapterStatus` / `status`+`gid` |
+| `error` | text | да | класс исключения, ≤ 200 символов |
+| `started_at`, `finished_at` | timestamptz | нет / да | |
+
+Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`).
+
+### Q.5.2 Роль БД `archrag_console_ro` (`V6__console_readonly_role.sql`)
+
+`CREATE ROLE … LOGIN` (идемпотентно, пароль не задаётся), `GRANT USAGE ON SCHEMA public`, `GRANT SELECT` на `inbox_event, consumer_checkpoint, dlq_entry, identity_candidate, source_conflict, admin_audit`. Raw payload в PostgreSQL не хранится. Любое новое чтение консоли требует нового GRANT 🟡.
+
+### Q.5.3 Админский REST (`IS/AdminController.java`)
+
+| Запрос | Тело / параметры | Ответ | Ошибки |
+|---|---|---|---|
+| `POST /admin/replay` | `ReplayRequest{source*, receivedFrom?, receivedTo?, replayId?}`; `[from, to)` по `received_at` | `ReplayResult{replayId, total, statuses: Map<String,Long>}` | 400 (`source`, интервал, `replayId`), 409 (замок) |
+| `POST /admin/rebuild` | `confirm=true` | `ReplayResult` | 400 без `confirm`, 409 |
+| `POST /admin/reconcile/{source}` | путь: `urn:corp:<код>` или `<код>` | тело и статус адаптера (202 / 409) | 400, 404 (источник не настроен), 409 (замок), 502 |
+| `POST /admin/crosswalks` | `[CrosswalkItem{left, right, reason}]`, 1..1000; `KeyDto{source, sourceType, sourceId}` | `[CrosswalkResult{index, status, gid?}]`; `status ∈ APPLIED, CONFLICT, INVALID` | 400 (размер списка), 409 |
+
+Статусы в `ReplayResult.statuses`: имена `ProcessingStatus` и два служебных — `SKIPPED_SNAPSHOT_MARKER`, `SKIPPED_NO_RAW`. Аутентификация: JWT со scope `architecture.admin`, `aud` = `ARCHRAG_ADMIN_RESOURCE_URI`, `azp ∈ archrag.admin.allowed-clients`. Остальные пути — `denyAll`.
+
+### Q.5.4 Свойства (`application.yml`; env-переменные без значения по умолчанию обязательны)
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `server.port` | `ARCHRAG_ADMIN_PORT` | 8081 | — |
+| `spring.datasource.{url,username,password}` | `ARCHRAG_PG_URL/USER/PASSWORD` | — (обяз.) | Boot |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | — (обяз.) | Boot |
+| `…jwt.audiences` | `ARCHRAG_ADMIN_RESOURCE_URI` | — (обяз.) | Boot |
+| `archrag.admin.allowed-clients` | `ARCHRAG_ADMIN_ALLOWED_CLIENTS` | `archrag-demo` | `AdminProperties` (непустой список) |
+| `archrag.neo4j.{uri,username,password}` | `ARCHRAG_NEO4J_URI/USER/PASSWORD` | — (обяз.) | `Neo4jProperties` (`toString` без пароля) |
+| `archrag.s3.{endpoint,access-key,secret-key,bucket}` | `ARCHRAG_S3_*` | — (обяз.) | `S3Properties` (`toString` без ключей) |
+| `archrag.adapters.<eam\|scm\|cmdb\|deploymap>.control-url` | `ARCHRAG_<КОД>_CONTROL_URL` | пусто → источник не настроен (404) | `AdaptersProperties` |
+| `archrag.dispatcher.enabled` | `ARCHRAG_DISPATCHER_ENABLED` | true | `DispatcherProperties` |
+| `archrag.dispatcher.poll-interval` | `…_POLL_INTERVAL` | 1s (> 0) | то же |
+| `archrag.dispatcher.batch-size` | `…_BATCH_SIZE` | 100 (1..1000) | то же |
+| `archrag.dispatcher.retry-delay` | `…_RETRY_DELAY` | 30s (≥ 0) | то же |
+| `archrag.dispatcher.shutdown-timeout` | `…_SHUTDOWN_TIMEOUT` | 30s | то же |
+| `archrag.metrics.refresh-interval` | — | 15s | `@Scheduled` в `IngestionMetrics` |
+| `management.otlp.metrics.export.enabled` | — | false | Boot |
+| `management.endpoints.web.exposure.include` | — | `health` | Boot (путь закрыт `denyAll`) |
+
+### Q.5.5 Коды ошибок журнала, которые выставляет ingestion (сводка) 🟢
+
+| Код | Откуда | Статус | Тип |
+|---|---|---|---|
+| `NO_RAW_PAYLOAD`, `MARKER_NO_RAW`, `INVALID_RAW_PAYLOAD` | `JournalDispatcher` | `QUARANTINED` (DLQ) | входные данные |
+| `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` | `Normalizer`/`EventProcessor` | `QUARANTINED` | входные данные |
+| `INVALID_COMMANDS`, `GRAPH_REJECTED` | `EventProcessor.write` | `QUARANTINED` | отказ графа по запросу |
+| `UNRESOLVED_ENDPOINT`, `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `GRAPH_UNAVAILABLE`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RECONCILIATION_TRIGGER_FAILED` | `EventProcessor` | `RETRYING` | инфраструктура / гонка |
