@@ -34,11 +34,12 @@
       ]
     },
     "archaeologist": {
-      "modules_analyzed": [],
-      "modules_pending": [
+      "modules_analyzed": [
         "contracts/canonical-model",
         "contracts/event-schemas",
-        "contracts/source-spi",
+        "contracts/source-spi"
+      ],
+      "modules_pending": [
         "adapters/adapter-core",
         "adapters/eam-adapter",
         "adapters/scm-adapter",
@@ -57,6 +58,15 @@
         "platform/source-stubs",
         "platform/demo-launcher",
         "platform/docker"
+      ],
+      "last_run_at": "2026-10-12T18:07:10Z",
+      "files": [
+        "_reversa_sdd/code-analysis.md",
+        "_reversa_sdd/data-dictionary.md",
+        "_reversa_sdd/flowcharts/canonical-model.md",
+        "_reversa_sdd/flowcharts/event-schemas.md",
+        "_reversa_sdd/flowcharts/source-spi.md",
+        ".reversa/context/modules.json"
       ]
     }
   },
