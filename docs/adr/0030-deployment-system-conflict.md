@@ -2,7 +2,7 @@
 
 - **Статус:** Принято
 - **Дата:** 2026-10-12
-- **Источник:** решение 3 фичи UNLOCKER-248 (владелец 2026-10-10); UNLOCKER-254 (H.5); [ADR 0019](0019-identity-resolution-no-auto-merge.md); [ADR 0024](0024-open-source-id-format.md)
+- **Источник:** решение 3 фичи UNLOCKER-248 (владелец 2026-10-10); UNLOCKER-254 (H.5); [ADR 0029](0029-helm-chart-system-repo-commit.md) (решение 4: система служит проверкой); [ADR 0019](0019-identity-resolution-no-auto-merge.md); [ADR 0024](0024-open-source-id-format.md)
 - **Кто принял:** архитектор по решению владельца
 
 ## Контекст
