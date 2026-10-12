@@ -3,9 +3,11 @@ package io.github.unlocker.archrag.ingestionservice;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -70,6 +72,34 @@ class IngestionMetricsTest {
     metrics.recordEvent("scm", null);
 
     assertThat(count("scm", IngestionMetrics.STATUS_ERROR)).isEqualTo(1);
+  }
+
+  @Test
+  void unmappedSeriesExistsWithZeroBeforeFirstWarning() {
+    var c = registry.find(IngestionMetrics.UNMAPPED_VALUES).tag("source", SourceSystem.EAM.code()).tag("property", "criticality").counter();
+
+    assertThat(c).isNotNull();
+    assertThat(c.count()).isZero();
+  }
+
+  @Test
+  void unmappedCriticalityIncrementsCounter() {
+    metrics.recordWarnings(SourceSystemCode.EAM, List.of("UNMAPPED_CRITICALITY"));
+    metrics.recordWarnings(SourceSystemCode.EAM, List.of("UNMAPPED_CRITICALITY"));
+
+    assertThat(registry.get(IngestionMetrics.UNMAPPED_VALUES).tag("source", SourceSystem.EAM.code())
+        .tag("property", "criticality").counter().count()).isEqualTo(2);
+  }
+
+  @Test
+  void otherWarningCodesAreNotCountedAndDoNotCreateSeries() {
+    int before = registry.find(IngestionMetrics.UNMAPPED_VALUES).counters().size();
+
+    metrics.recordWarnings(SourceSystemCode.EAM, List.of("DEPENDS_ON_NOT_SUPPORTED", "DEPLOYMENT_SERVICE_UNRESOLVED"));
+    metrics.recordWarnings(SourceSystemCode.EAM, List.of("UNMAPPED_CRITICALITY"));
+
+    assertThat(registry.find(IngestionMetrics.UNMAPPED_VALUES).counters()).hasSize(before);
+    assertThat(registry.find(IngestionMetrics.UNMAPPED_VALUES).counters().stream().mapToDouble(c -> c.count()).sum()).isEqualTo(1);
   }
 
   @Test

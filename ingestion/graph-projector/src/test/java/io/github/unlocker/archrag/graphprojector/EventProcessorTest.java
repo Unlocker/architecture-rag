@@ -655,6 +655,60 @@ class EventProcessorTest {
     }
   }
 
+  // ---- предупреждения нормализации (порт NormalizationWarnings) -----------------------------
+
+  private final List<String> reportedWarnings = new ArrayList<>();
+
+  private EventProcessor withWarnings() {
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> true), identity, projection, (source, run, eventId, count) -> {}, candidates,
+        conflicts, DeploymentLookup.NONE, EamLookup.NONE,
+        (source, warnings) -> reportedWarnings.add(source + ":" + warnings));
+  }
+
+  private static CanonicalEvent eamSystem(String id, String version, Map<String, Object> attrs) {
+    Map<String, Object> payload = new java.util.LinkedHashMap<>();
+    payload.put("id", 5101L);
+    payload.put("ver", 1L);
+    payload.put("datetime", "2026-10-01T09:00:00Z");
+    payload.put("attrs", attrs);
+    return new CanonicalEvent(
+        id, "urn:corp:eam", CanonicalEvent.TYPE_ASSET_UPSERTED, "it_system/5101", T, "urn:corp:schema:asset-upserted:1", null,
+        new AssetEventData("IT_SYSTEM", "5101", new SourceVersion(version), payload));
+  }
+
+  @Test
+  void unmappedCriticalityIsReportedToWarningsPortOnce() {
+    processor = withWarnings();
+
+    var result = run(eamSystem("e1", "5", Map.of("name", "A", "criticality", "BUSINESS-CRITICAL-X")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(reportedWarnings).containsExactly("EAM:[UNMAPPED_CRITICALITY]");
+  }
+
+  @Test
+  void eventWithoutWarningsDoesNotCallWarningsPort() {
+    processor = withWarnings();
+
+    run(eamSystem("e1", "5", Map.of("name", "A", "criticality", "HIGH")));
+
+    assertThat(reportedWarnings).isEmpty();
+  }
+
+  @Test
+  void duplicateAndQuarantinedEventsDoNotCallWarningsPort() {
+    processor = withWarnings();
+    projection.applied = Optional.of(new AppliedRecord(new SourceVersion("5"), true));
+    assertThat(run(eamSystem("e1", "5", Map.of("name", "A", "criticality", "X"))).status())
+        .isEqualTo(ProcessingStatus.DUPLICATE);
+
+    projection.applied = Optional.empty();
+    assertThat(run(eamSystem("e2", "6", Map.of("criticality", "X"))).status()).isEqualTo(ProcessingStatus.QUARANTINED);
+
+    assertThat(reportedWarnings).isEmpty();
+  }
+
   // ---- система EAM из chart (H.5) -----------------------------------------------------------
 
   private static final SourceKey SERVICE = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-1");

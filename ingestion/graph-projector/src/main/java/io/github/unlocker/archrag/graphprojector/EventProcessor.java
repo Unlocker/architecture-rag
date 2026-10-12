@@ -113,6 +113,7 @@ public final class EventProcessor {
   private final SourceConflicts conflicts;
   private final DeploymentLookup lookup;
   private final EamLookup eamLookup;
+  private final NormalizationWarnings warnings;
 
   /** Без чтения графа для проверки системы EAM из chart: такие конфликты не открываются. */
   public EventProcessor(
@@ -148,6 +149,21 @@ public final class EventProcessor {
       SourceConflicts conflicts,
       DeploymentLookup lookup,
       EamLookup eamLookup) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, eamLookup, NormalizationWarnings.NONE);
+  }
+
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup,
+      NormalizationWarnings warnings) {
+    this.warnings = Objects.requireNonNull(warnings, "warnings");
     this.lookup = Objects.requireNonNull(lookup, "lookup");
     this.eamLookup = Objects.requireNonNull(eamLookup, "eamLookup");
     this.journal = Objects.requireNonNull(journal, "journal");
@@ -199,6 +215,9 @@ public final class EventProcessor {
       return quarantine(event, q.errorCode(), q.reason());
     }
     var result = (NormalizationResult.Normalized) normalized;
+    if (!result.warnings().isEmpty()) {
+      warnings.record(source, result.warnings());
+    }
     List<GraphCommand> commands = new ArrayList<>(result.commands());
     // Связь с двумя неизвестными концами приходит дважды (по ссылке на каждый конец): откладываем один раз.
     result.unresolved().stream().map(UnresolvedReference::relation).distinct().map(DeferRelation::new).forEach(commands::add);
