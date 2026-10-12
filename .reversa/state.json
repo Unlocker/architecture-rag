@@ -37,14 +37,14 @@
       "modules_analyzed": [
         "contracts/canonical-model",
         "contracts/event-schemas",
-        "contracts/source-spi"
-      ],
-      "modules_pending": [
+        "contracts/source-spi",
         "adapters/adapter-core",
         "adapters/eam-adapter",
         "adapters/scm-adapter",
         "adapters/asset-adapter",
-        "adapters/deploymap-adapter",
+        "adapters/deploymap-adapter"
+      ],
+      "modules_pending": [
         "ingestion/event-journal",
         "ingestion/normalizer",
         "ingestion/identity-resolution",
@@ -59,14 +59,19 @@
         "platform/demo-launcher",
         "platform/docker"
       ],
-      "last_run_at": "2026-10-12T18:07:10Z",
+      "last_run_at": "2026-10-12T19:07:43Z",
       "files": [
         "_reversa_sdd/code-analysis.md",
         "_reversa_sdd/data-dictionary.md",
         "_reversa_sdd/flowcharts/canonical-model.md",
         "_reversa_sdd/flowcharts/event-schemas.md",
         "_reversa_sdd/flowcharts/source-spi.md",
-        ".reversa/context/modules.json"
+        ".reversa/context/modules.json",
+        "_reversa_sdd/flowcharts/adapter-core.md",
+        "_reversa_sdd/flowcharts/eam-adapter.md",
+        "_reversa_sdd/flowcharts/scm-adapter.md",
+        "_reversa_sdd/flowcharts/asset-adapter.md",
+        "_reversa_sdd/flowcharts/deploymap-adapter.md"
       ]
     }
   },

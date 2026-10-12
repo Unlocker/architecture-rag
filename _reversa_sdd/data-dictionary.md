@@ -1,6 +1,6 @@
 # Data Dictionary → Словарь данных
 
-> Archaeologist, этап R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`). Разделы остальных модулей добавят R.2b–R.2e.
+> Archaeologist, этапы R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`); R.2b (UNLOCKER-264): раздел P (`adapters/*`). Разделы остальных модулей добавят R.2c–R.2e.
 > Столбец «Обяз.»: **да** — `null`/пустое отвергается конструктором; **нет** — допускается `null`, пустая строка отвергается (`Invariants.optionalText`, `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java:30-35`); **—** — проверки нет.
 > Пути сокращены: `CM/` = `contracts/canonical-model/.../canonicalmodel/`, `ES/` = `contracts/event-schemas/.../eventschemas/`, `SPI/` = `contracts/source-spi/.../sourcespi/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
 > Семантику узлов и связей смотри в `docs/02-data-model.md` §2; здесь только то, что утверждает код.
@@ -220,3 +220,135 @@
 **SourceSystem** (enum, `SPI/SourceSystem.java:5-9`) 🟢: EAM(`eam`), SCM(`scm`), CMDB(`cmdb`), DEPLOY_MAP(`deploymap`).
 **SourceUnavailableException** (`SPI/SourceUnavailableException.java:18-22`) 🟢: `statusCode` (int; 0 = timeout), `retryAfter` (Duration, нет); `isRateLimited()` ⇔ 429; сообщение `"<code> unavailable, status=<n>"`.
 **WebhookSignature.Result** (`SPI/WebhookSignature.java:36-42`) 🟢: VALID, MALFORMED, BAD_SIGNATURE, OUT_OF_WINDOW.
+
+---
+
+## P. adapters
+
+> Пути: `AC/` = `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/`, `EA/` = `adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/`. Столбец «Обяз.» — как выше. Метки 🟢/🟡/🔴 — по шкале Reversa.
+
+### P.1 `AdapterConfig` (`AC/AdapterConfig.java:21-29`) 🟢
+
+| Поле | Тип | Обяз. | Правило / значение по умолчанию |
+|---|---|---|---|
+| `system` | `SourceSystem` | да | `requireNonNull` (`:35`) |
+| `sourceBaseUri` | `URI` | да | `requireNonNull` (`:36`) |
+| `webhookSecret` | String | да | не `null` и не пробельная (`:39-41`); в `toString` — `***` (`:73`) |
+| `replayWindow` | `Duration` | да | `> 0` (`:42`); по умолчанию 5 мин (`:32`); `null` → NPE без имени поля 🟡 |
+| `pageSize` | int | да | `≥ 1` (`:45`); по умолчанию 100 (`:61`) |
+| `pollInterval` | `Duration` | да | `> 0` (`:48`); по умолчанию 30 с; `null` → NPE 🟡 |
+| `reconcileInterval` | `Duration` | да | `requireNonNull` (`:38`), `> 0` (`:51`); по умолчанию 6 ч (`:57`) |
+| `retry` | `RetryPolicy` | да | `requireNonNull` (`:37`); по умолчанию `RetryPolicy.defaults()` |
+
+Производное: `sourceUrn()` = `urn:corp:<system.code()>` (`:66-68`).
+
+### P.2 `RetryPolicy` (`AC/RetryPolicy.java:19-28`) 🟢
+
+| Поле | Тип | Правило | По умолчанию |
+|---|---|---|---|
+| `maxAttempts` | int | `≥ 1` | 5 |
+| `baseDelay` | `Duration` | `> 0` | 500 мс |
+| `maxDelay` | `Duration` | `≥ baseDelay` | 30 с |
+
+### P.3 `PollResult` (`AC/PollResult.java:10`) 🟢
+
+| Поле | Тип | Обяз. | Значение |
+|---|---|---|---|
+| `outcome` | `Outcome` | — | `UP_TO_DATE`, `ADVANCED`, `SNAPSHOT_COMPLETED`, `GAVE_UP`, `ALREADY_RUNNING` (`:13-24`) |
+| `appended` | long | — | число записанных изменений, включая дубликаты |
+| `syncRunId` | String | нет | только для snapshot, иначе `null` |
+
+### P.4 Каноническое событие, формируемое адаптером (`AC/EventMapper.java:52-95`) 🟢
+
+Конверт — `CanonicalEvent` (поля — раздел E.1). Что подставляет адаптер:
+
+| Поле события | `upserted` / `deleted` | `snapshot-complete` |
+|---|---|---|
+| `id` | `poll:<type>/<id>/v<ver>` (`:98-100`) · `snap:<runId>:<type>/<id>/v<ver>` (`:103-105`) · `eventId` webhook'а | `snapshot-complete:<syncRunId>` (`:83`) |
+| `source` | `urn:corp:<code>` | то же |
+| `type` | `architecture.asset.upserted.v1` / `architecture.asset.deleted.v1` (`:29`) | `architecture.sync.snapshot-complete.v1` (`:32`) |
+| `subject` | `<sourceType в нижнем регистре, '_' → '-'>/<sourceId>` (`:107-109`) | `sync-run/<syncRunId>` |
+| `time` | `SourceChange.updatedAt` | время завершения (`clock.instant()`, `Poller.java:169`) |
+| `dataschema` | `urn:corp:schema:asset-upserted:1` / `asset-deleted:1` | `urn:corp:schema:snapshot-complete:1` |
+| `correlationid` | `eventId` (webhook) · `syncRunId` (snapshot) · `null` (polling) | `syncRunId` |
+| `data.sourceType` / `sourceId` | как у изменения | `SYNC_RUN` / `<syncRunId>` |
+| `data.sourceVersion` | `Long.toString(sourceVersion)` (`:75`) | `"1"` |
+| `data.payload` | поля источника без `null`-значений верхнего уровня + `_completeness`; для `DELETE` пусто (`:55-63`) | `{syncRunId, objectCount}` (`:94`) |
+
+Зарезервированный ключ payload `_completeness` ∈ {`COMPLETE`, `PARTIAL`} (`:35`); `SYNC_RUN_SOURCE_TYPE = "SYNC_RUN"` (`:38`).
+
+### P.5 Raw-объекты в S3 (`AC/InboxWriter.java:51-70`) 🟢
+
+| Объект | Поля JSON |
+|---|---|
+| изменение | `sourceType`, `sourceId`, `sourceVersion`, `operation`, `completeness`, `updatedAt`, `payload` (с `null`-значениями — **без** фильтрации) |
+| маркер snapshot | `syncRunId`, `objectCount`, `updatedAt` |
+
+Ключ в хранилище: `rawStore.put(system.code(), bytes)` (`:37, 46`); адресация по содержимому — на стороне `RawPayloadStore` (Javadoc `InboxWriter.java:17`) 🟡.
+
+### P.6 Checkpoint-ы адаптера 🟢
+
+| Consumer (`Poller.java:79-86`) | Source | Значение курсора |
+|---|---|---|
+| `<code>-poller` | `urn:corp:<code>` | непрозрачный курсор коннектора (`Poller.java:136, 171`) |
+| `<code>-snapshot` | `urn:corp:<code>` | `run:<syncRunId>` пока snapshot идёт, `done:<syncRunId>` после маркера (`:39-40, 170, 186`) |
+
+### P.7 Webhook: вход и ответ
+
+Тело — `WebhookEvent` (раздел S); обязательные для обработчика ключи: `eventId`, `sourceType`, `sourceId` (строки, не пустые), `source` = код источника адаптера (**код**, не URN), `sourceVersion` — число ≥ 0 для `DELETE` без объекта в источнике, заголовки `X-Archrag-Signature`, `X-Archrag-Timestamp`, `X-Archrag-Event-Id` (`AC/WebhookHandler.java:56-100`) 🟢.
+Коды ответа `/webhook`: `202`, `400`, `401`, `404`, `405`, `413`, `500`, `503` (`WebhookHandler.java:20-25`, `WebhookServer.java:99-122`); `/control/snapshot`: `202`, `405`, `409`, `500`, `503`, тело `{"outcome","appended","syncRunId"}` (`WebhookServer.java:73-88`) 🟢.
+
+### P.8 EAM-коннектор
+
+**`EamAdapter.EamApi`** (`EA/EamAdapter.java:47`) 🟢: `baseUri` (URI), `token` (String; в `toString` — `***`).
+
+**`EamApiCursor`** (`EA/EamApiCursor.java:18`) 🟢
+
+| Поле | Тип | Смысл |
+|---|---|---|
+| `mode` | `SNAPSHOT` / `INCREMENTAL` / `WATERMARK` | кодируется как `S` / `I` / `W` |
+| `type` | int | индекс в `TYPES` (0 `PLATFORM`, 1 `SOLUTION`, 2 `IT_SYSTEM`), `≥ 0` |
+| `page` | int | `≥ 1` |
+| `size` | int | `≥ 1` |
+| `from` | `Instant` | нижняя граница инкремента (не включительно) |
+| `watermark` | `Instant` | максимум `datetime`, увиденный за проход |
+
+Форматы: `S,<type>,<page>,<size>,<wm>`, `I,<type>,<page>,<size>,<from>,<wm>`, `W,<wm>` (`:39-44`).
+
+**Составной курсор** (`EA/CompositeEamConnector.java:118-122`) 🟢: `S|I ; A|L ; eamapi:<base64url|-> | legacy:<base64url|->` — `snapshot` (boolean), `legacyPhase` (boolean), `api` (String|null), `legacy` (String|null).
+
+**Соответствие типов** (`EA/EamApiConnector.java:51-54`) 🟢
+
+| `sourceType` в журнале | Тип EAM API | Источник |
+|---|---|---|
+| `PLATFORM` | `platforms` | `eam-api` |
+| `SOLUTION` | `itproducts` (`SOLUTION_TYPE`, допущение 1) | `eam-api` |
+| `IT_SYSTEM` | `itsystems` | `eam-api` |
+| `TEAM`, `SERVICE_DEPENDENCY` | — | legacy-заглушка (`CompositeEamConnector.java:30`) |
+
+**`ArchObject`** (вход `EamApiConnector.change`, `EA/EamApiConnector.java:169-188`) 🟢: `id` (Long, обяз.), `ver` (Long, обяз.), `datetime` (ISO-8601, `null` → `EPOCH` 🟡), `attrs` (объект, обяз.; схема не описана в OpenAPI — `docs/06-eam-integration.md:27`). Поля `attrs` по допущению 2: `name`, `status`, `description`, `lifecycle`, `criticality`, `eam_id`, `product_id`, `platform_id`, `ownerTeam` (нормализатор, R.2c).
+
+### P.9 Привязки `scm`, `asset`, `deploymap`
+
+Собственных данных нет; каждая даёт `SYSTEM`, `config(URI, String)` и `create(config, journal, rawStore)` (`SC/ScmAdapter.java:18-38`, `AS/AssetAdapter.java:18-38`, `DM/DeploymapAdapter.java:18-38`). Соответствие: `ScmAdapter` → `SCM` (`scm`), `AssetAdapter` → `CMDB` (`cmdb`), `DeploymapAdapter` → `DEPLOY_MAP` (`deploymap`) 🟢.
+
+### P.10 Временные форматы заглушек (поля — только справочно; нормативно — исходник формата)
+
+**Deploy map / Helm chart** (`platform/source-stubs/.../DeployMapFormat.java:24-45`) 🟢 — формат `deploymap-poc-0`, `deploymap-poc-1`
+
+| Узел | Поле payload | Тип | Обяз. | Примечание |
+|---|---|---|---|---|
+| `ENVIRONMENT` | `name` | String | да | |
+| `DEPLOYMENT` | `service` | String | да | id сервиса SCM |
+| | `environment` | String | да | id `ENVIRONMENT` |
+| | `chart`, `chartVersion` | String | да | дублируют `chartMeta.name/version` в `poc-1` |
+| | `hosts` | String[] | да | hostname'ы CMDB |
+| | `format` | String | да | `deploymap-poc-0` / `deploymap-poc-1` |
+| | `chartMeta` | объект | только `poc-1` | `name`, `version`, `appVersion`, `annotations` |
+| `chartMeta.annotations` | `archrag.io/eam-system-id` | String | `poc-1` | `id` EAM, не `eam_id` |
+| | `archrag.io/git-repo-url` | String | `poc-1` | нормализуется `GitUrls.normalize` |
+| | `archrag.io/git-commit` | String | `poc-1` | 40 hex, нижний регистр |
+
+Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элемент массива — `{sourceId, sourceVersion, payload}`; `deploymap/README.md:3-4`).
+
+**EAM API** (`docs/eam-api.yaml`, `docs/06-eam-integration.md`; формат разбирает `platform/source-stubs/.../EamApiFormat.java`) 🟡 — реальный контракт не проверен (ADR 0010); допущения 1–9 в `docs/06-eam-integration.md:87-131`.
