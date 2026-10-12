@@ -4,6 +4,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -26,7 +27,30 @@ public interface SourceConflicts {
    */
   List<SourceConflict> assertProperties(SourceKey key, UUID gid, NodeLabel label, Map<String, String> values);
 
-  /** Удаляет утверждения записи (tombstone), пересчитывает конфликты и возвращает открытые. */
+  /**
+   * Сверяет ссылку записи {@code dissent} с ключом, который известен из другого источника (конфликт вида
+   * {@code RELATION}). Строка ключуется {@code (gid, property, dissent)}; граф не меняется.
+   *
+   * <p>{@code master} пуст (вторая сторона неизвестна): открытые {@code RELATION}-строки этой записи закрываются,
+   * новые не открываются. Значения равны: строка закрывается. Значения расходятся: upsert {@code OPEN}
+   * (повторное открытие сохраняет {@code opened_at}). Конфликты свойств не затрагиваются.
+   *
+   * @param dissent запись, чья ссылка проверяется
+   * @param gid canonical-узел записи
+   * @param property имя свойства, несущего ссылку
+   * @param dissentValue значение ссылки в {@code dissent}
+   * @param master запись второй стороны, если известна
+   * @param masterValue значение той же ссылки у второй стороны; игнорируется при пустом {@code master}
+   * @return открытые конфликты {@code gid} (всех видов) после пересчёта
+   * @throws IdentityStoreException при отказе хранилища
+   */
+  List<SourceConflict> assertRelation(
+      SourceKey dissent, UUID gid, String property, String dissentValue, Optional<SourceKey> master, String masterValue);
+
+  /**
+   * Удаляет утверждения записи (tombstone), закрывает {@code RELATION}-конфликты, где она {@code dissent},
+   * пересчитывает конфликты и возвращает открытые.
+   */
   List<SourceConflict> retract(SourceKey key, UUID gid);
 
   /** Открытые конфликты {@code gid}. */

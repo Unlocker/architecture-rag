@@ -60,7 +60,8 @@ public final class Rows {
       String status,
       Instant openedAt,
       Instant updatedAt,
-      Instant resolvedAt) {}
+      Instant resolvedAt,
+      String kind) {}
 
   /** Запись {@code identity_candidate}; {@code matched} — массив {@code {feature, value}}. */
   public record Candidate(

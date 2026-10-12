@@ -52,4 +52,20 @@ public interface DeploymentLookup {
 
   /** Активные записи SCM {@code SERVICE} с открытой {@code IMPLEMENTED_IN} на репозиторий {@code repository}. */
   List<SourceKey> servicesImplementedIn(SourceKey repository);
+
+  /**
+   * Запись EAM {@code IT_SYSTEM} системы сервиса: активная запись ИТ-системы с открытой {@code DECOMPOSED_INTO}
+   * на сервис. Пусто, если системы нет или их несколько (сервис не угадывается).
+   */
+  default Optional<SourceKey> eamSystemOfService(SourceKey service) {
+    return Optional.empty();
+  }
+
+  /** Развёртывание сервиса с системой EAM из chart: ключ записи DEPLOYMAP и {@code Deployment.eamSystemId}. */
+  record ChartDeployment(SourceKey key, long eamSystemId) {}
+
+  /** Активные развёртывания DEPLOYMAP с открытой {@code HAS_DEPLOYMENT} от сервиса и заданным {@code eamSystemId}. */
+  default List<ChartDeployment> chartDeploymentsOfService(SourceKey service) {
+    return List.of();
+  }
 }

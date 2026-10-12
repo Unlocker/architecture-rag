@@ -188,6 +188,12 @@ class ReconcilerTest {
     }
 
     @Override
+    public List<SourceConflict> assertRelation(
+        SourceKey dissent, UUID gid, String property, String dissentValue, Optional<SourceKey> master, String masterValue) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<SourceConflict> retract(SourceKey key, UUID gid) {
       if (fail) {
         throw new IdentityStoreException("down", null);

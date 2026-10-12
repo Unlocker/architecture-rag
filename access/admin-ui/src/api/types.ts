@@ -159,6 +159,8 @@ export interface Conflict {
   openedAt: string;
   updatedAt: string;
   resolvedAt: string | null;
+  /** PROPERTY — расхождение свойства, RELATION — связи; поля нет у старых ответов. */
+  kind?: 'PROPERTY' | 'RELATION';
 }
 
 export interface MatchedFeature {

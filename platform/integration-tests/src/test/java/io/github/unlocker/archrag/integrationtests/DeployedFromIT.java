@@ -18,6 +18,7 @@ import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.normalizer.Normalizer;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,6 +61,7 @@ class DeployedFromIT {
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16");
 
   static Driver driver;
+  static PGSimpleDataSource dataSource;
   static PostgresEventJournal journal;
   static EventProcessor processor;
 
@@ -72,6 +74,7 @@ class DeployedFromIT {
     ds.setUser(POSTGRES.getUsername());
     ds.setPassword(POSTGRES.getPassword());
     JournalMigrations.apply(ds);
+    dataSource = ds;
     journal = new PostgresEventJournal(ds);
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor =
@@ -82,12 +85,16 @@ class DeployedFromIT {
             projector,
             (source, run, id, count) -> {},
             new PostgresIdentityCandidates(ds),
-            new PostgresSourceConflicts(ds, AuthorityMatrix.defaults()));
+            new PostgresSourceConflicts(ds, AuthorityMatrix.defaults()),
+            projector);
   }
 
   @BeforeEach
-  void clearGraph() {
+  void clearGraph() throws SQLException {
     driver.executableQuery("MATCH (n) DETACH DELETE n").execute();
+    try (var c = dataSource.getConnection(); var st = c.createStatement()) {
+      st.executeUpdate("DELETE FROM source_conflict");
+    }
   }
 
   // ---- helpers -----------------------------------------------------------------------------
@@ -134,6 +141,48 @@ class DeployedFromIT {
     return handle("deploymap", "DEPLOYMENT", "dep-1", version, time, p);
   }
 
+  /** Система EAM {@code id=5101} с кодом {@code EAM-1042}; сервис SCM ссылается на неё по {@code systemCode}. */
+  private static ProcessingResult eamSystem(String version, Instant time) {
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put("id", 5101L);
+    m.put("ver", Long.parseLong(version));
+    m.put("datetime", time.toString());
+    m.put("attrs", Map.of("name", "Payments Core", "eam_id", "EAM-1042"));
+    return handle("eam", "IT_SYSTEM", "5101", version, time, m);
+  }
+
+  private static ProcessingResult serviceInSystem(String version, Instant time) {
+    return handle(
+        "scm", "SERVICE", "svc-payments-api", version, time,
+        Map.of("name", "svc-payments-api", "repositoryId", "repo-payments-api", "systemCode", "EAM-1042"));
+  }
+
+  private static ProcessingResult deleteDeployment(String version, Instant time) {
+    var event =
+        new CanonicalEvent(
+            "del-" + UUID.randomUUID(), "urn:corp:deploymap", "architecture.asset.deleted.v1", "DEPLOYMENT/dep-1", time,
+            "urn:corp:schema:asset-deleted:1", null,
+            new AssetEventData("DEPLOYMENT", "dep-1", new SourceVersion(version), Map.of()));
+    journal.append(event, RAW, null);
+    return processor.process(event, RAW);
+  }
+
+  /** Строки {@code source_conflict} вида RELATION: {@code status|dissent_value|master_value}. */
+  private static List<String> relationConflicts() throws SQLException {
+    List<String> rows = new java.util.ArrayList<>();
+    try (var c = dataSource.getConnection();
+        var st = c.createStatement();
+        var rs =
+            st.executeQuery(
+                "SELECT status, property, dissent_value, master_id, master_value FROM source_conflict"
+                    + " WHERE kind = 'RELATION' ORDER BY opened_at")) {
+      while (rs.next()) {
+        rows.add(rs.getString(1) + "|" + rs.getString(2) + "|" + rs.getString(3) + "|" + rs.getString(4) + "|" + rs.getString(5));
+      }
+    }
+    return rows;
+  }
+
   private static List<Record> query(String cypher, Object... params) {
     Map<String, Object> map = new TreeMap<>();
     for (int i = 0; i < params.length; i += 2) {
@@ -174,17 +223,71 @@ class DeployedFromIT {
   }
 
   @Test
-  void systemMismatchGivesOrdinaryBindingWithoutConflict() {
+  void systemMismatchOpensRelationConflict() throws SQLException {
+    eamSystem("1", T1);
     repository("1", T1);
-    service("svc-payments-api", "1", T1);
+    serviceInSystem("1", T1);
 
     assertThat(deployment("1", T2, COMMIT_A, null, "5102").status()).isEqualTo(ProcessingStatus.PROJECTED);
 
     assertThat(deployedFrom()).hasSize(1);
     assertThat(query("MATCH (:Service)-[rel:HAS_DEPLOYMENT]->(d:Deployment) RETURN d.eamSystemId AS id").get(0).get("id").asLong())
         .isEqualTo(5102L);
-    assertThat(query("MATCH ()-[a:ASSERTS]->() WHERE a.conflicts IS NOT NULL RETURN count(a) AS c").get(0).get("c").asLong())
+    assertThat(relationConflicts()).containsExactly("OPEN|eamSystemId|5102|5101|5101");
+    assertThat(query("MATCH (:SourceRecord {source: 'DEPLOYMAP'})-[a:ASSERTS]->(:Deployment) RETURN a.conflicts AS c")
+        .get(0).get("c").asList()).containsExactly("eamSystemId");
+  }
+
+  @Test
+  void matchingSystemOpensNoConflict() throws SQLException {
+    eamSystem("1", T1);
+    repository("1", T1);
+    serviceInSystem("1", T1);
+
+    deployment("1", T2, COMMIT_A, null, "5101");
+
+    assertThat(relationConflicts()).isEmpty();
+  }
+
+  @Test
+  void deployMapBeforeScmOpensConflictWhenScmArrives() throws SQLException {
+    eamSystem("1", T1);
+    repository("1", T1);
+
+    deployment("1", T2, COMMIT_A, "svc-payments-api", "5102");
+    assertThat(relationConflicts()).as("service unknown yet").isEmpty();
+
+    serviceInSystem("1", T3);
+
+    assertThat(relationConflicts()).containsExactly("OPEN|eamSystemId|5102|5101|5101");
+  }
+
+  @Test
+  void correctedChartResolvesConflictAndRegressionReopensIt() throws SQLException {
+    eamSystem("1", T1);
+    repository("1", T1);
+    serviceInSystem("1", T1);
+    deployment("1", T2, COMMIT_A, null, "5102");
+
+    deployment("2", T3, COMMIT_A, null, "5101");
+    assertThat(relationConflicts()).containsExactly("RESOLVED|eamSystemId|5102|5101|5101");
+    assertThat(query("MATCH ()-[a:ASSERTS]->(:Deployment) WHERE a.conflicts IS NOT NULL RETURN count(a) AS c").get(0).get("c").asLong())
         .isZero();
+
+    deployment("3", T3.plusSeconds(60), COMMIT_A, null, "5102");
+    assertThat(relationConflicts()).containsExactly("OPEN|eamSystemId|5102|5101|5101");
+  }
+
+  @Test
+  void deploymentTombstoneResolvesConflict() throws SQLException {
+    eamSystem("1", T1);
+    repository("1", T1);
+    serviceInSystem("1", T1);
+    deployment("1", T2, COMMIT_A, null, "5102");
+
+    assertThat(deleteDeployment("2", T3).status()).isEqualTo(ProcessingStatus.PROJECTED);
+
+    assertThat(relationConflicts()).singleElement().asString().startsWith("RESOLVED|");
   }
 
   @Test

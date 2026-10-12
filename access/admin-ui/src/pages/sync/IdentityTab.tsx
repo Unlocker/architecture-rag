@@ -24,6 +24,7 @@ function Conflicts() {
               <thead>
                 <tr>
                   <th>gid</th>
+                  <th>Вид</th>
                   <th>Свойство</th>
                   <th>Расходящийся источник</th>
                   <th>Значение</th>
@@ -38,6 +39,7 @@ function Conflicts() {
                     <td>
                       <code>{c.gid}</code>
                     </td>
+                    <td>{c.kind === 'RELATION' ? 'связь' : 'свойство'}</td>
                     <td>{c.property}</td>
                     <td>{`${c.dissentSource}/${c.dissentType}/${c.dissentId}`}</td>
                     <td>{text(c.dissentValue)}</td>

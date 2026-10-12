@@ -80,6 +80,7 @@ import org.neo4j.driver.TransactionContext;
  */
 public final class GraphProjector implements GraphProjection, DeploymentLookup {
 
+  private static final System.Logger LOG = System.getLogger(GraphProjector.class.getName());
   private static final String REPOSITORY = "REPOSITORY";
   private static final String SERVICE = "SERVICE";
   private static final String IT_SYSTEM = "IT_SYSTEM";
@@ -208,6 +209,53 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
                           + "WHERE rel.validTo IS NULL RETURN DISTINCT s.sourceId AS sourceId ORDER BY sourceId",
                       Map.of("id", repository.sourceId()))
                   .list(row -> new SourceKey(SourceSystemCode.SCM, SERVICE, row.get("sourceId").asString())));
+    }
+  }
+
+  /** Единственная активная запись EAM {@code IT_SYSTEM} с открытой {@code DECOMPOSED_INTO} на сервис SCM; иначе пусто. */
+  @Override
+  public Optional<SourceKey> eamSystemOfService(SourceKey service) {
+    try (Session session = driver.session()) {
+      List<SourceKey> systems =
+          session.executeRead(
+              tx ->
+                  tx.run(
+                          "MATCH (:SourceRecord {source: 'SCM', sourceType: 'SERVICE', sourceId: $id, active: true})"
+                              + "-[:ASSERTS]->(:Service)<-[rel:DECOMPOSED_INTO]-(:ITSystem)"
+                              + "<-[:ASSERTS]-(s:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true}) "
+                              + "WHERE rel.validTo IS NULL RETURN DISTINCT s.sourceId AS sourceId ORDER BY sourceId",
+                          Map.of("id", service.sourceId()))
+                      .list(row -> new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString())));
+      if (systems.size() > 1) {
+        LOG.log(System.Logger.Level.WARNING, "service has {0} EAM systems; system conflict check skipped", systems.size());
+        return Optional.empty();
+      }
+      return systems.stream().findFirst();
+    }
+  }
+
+  /** Развёртывания DEPLOYMAP сервиса, у которых в chart задан {@code eamSystemId}. */
+  @Override
+  public List<ChartDeployment> chartDeploymentsOfService(SourceKey service) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'SCM', sourceType: 'SERVICE', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(:Service)-[rel:HAS_DEPLOYMENT]->(d:Deployment)"
+                          + "<-[:ASSERTS]-(s:SourceRecord {source: 'DEPLOYMAP', active: true}) "
+                          + "WHERE rel.validTo IS NULL AND d.eamSystemId IS NOT NULL "
+                          + "RETURN DISTINCT s.sourceType AS sourceType, s.sourceId AS sourceId, d.eamSystemId AS eamSystemId "
+                          + "ORDER BY sourceType, sourceId",
+                      Map.of("id", service.sourceId()))
+                  .list(
+                      row ->
+                          new ChartDeployment(
+                              new SourceKey(
+                                  SourceSystemCode.DEPLOYMAP,
+                                  row.get("sourceType").asString(),
+                                  row.get("sourceId").asString()),
+                              row.get("eamSystemId").asLong())));
     }
   }
 

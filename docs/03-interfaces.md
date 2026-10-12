@@ -409,7 +409,7 @@ flowchart LR
 | `GET /api/sync/events?source&status&from&to` | журнал `inbox_event`, `received_at` в `[from, to)` |
 | `GET /api/sync/events/{source}/{eventId}` | событие, `errorReason` и записи `dlq_entry` как история (отдельной истории статусов нет) |
 | `GET /api/sync/dlq?source&replayed` | `dlq_entry` с причиной |
-| `GET /api/identity/conflicts`, `/candidates` | `source_conflict`, `identity_candidate`; `status` по умолчанию `OPEN` |
+| `GET /api/identity/conflicts`, `/candidates` | `source_conflict`, `identity_candidate`; `status` по умолчанию `OPEN`; у конфликта поле `kind`: `PROPERTY` (свойство узла) или `RELATION` (связь, ADR 0030) |
 | `GET /api/audit?operation&status&from&to` | `admin_audit` по `started_at DESC`; `result` больше 4000 символов не отдаётся (`resultTruncated`, `request` — аналогично, `requestTruncated`) |
 
 SQL-чтения попадают в аудит чтения консоли как `sql:<таблица>`.
