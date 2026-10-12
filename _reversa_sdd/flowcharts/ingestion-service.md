@@ -107,6 +107,6 @@ stateDiagram-v2
   RETRYING --> VALIDATED: повтор диспетчером после retry-delay
   RETRYING --> PROJECTED
   RETRYING --> QUARANTINED
-  QUARANTINED --> RETRYING: только действием оператора (в коде ingestion нет вызова)
-  PROJECTED --> SUPERSEDED: допустим контрактом; в коде ingestion не используется
+  QUARANTINED --> RETRYING: допустим контрактом; вызова нет ни в одном модуле (выход — replay новой строкой)
+  PROJECTED --> SUPERSEDED: допустим контрактом; вызова нет ни в одном модуле
 ```

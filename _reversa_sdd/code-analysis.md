@@ -402,7 +402,7 @@ Feature flags и параметры окружения в модуле отсу�
 ## Q1. `ingestion/event-journal`
 
 **Назначение.** Реализация портов `EventJournal`, `JournalReader`, `CanonicalEventPublisher` на PostgreSQL (чистый JDBC) и `RawPayloadStore` на S3; Flyway-миграция `V1__event_journal.sql` 🟢 (`EJ/PostgresEventJournal.java:31-38`, `EJ/S3RawPayloadStore.java:26-30`, `EJ/package-info.java:1-9`).
-Состав: 5 классов main (`PostgresEventJournal`, `S3RawPayloadStore`, `JournalMigrations`, `JournalException`, `package-info`) + 1 SQL. Тесты модуля: только `S3RawPayloadStoreTest` (2 `@Test`) 🟢; поведение журнала на реальном PostgreSQL в модуле не тестируется — это делает `platform/integration-tests` (R.2e) 🟡.
+Состав: 5 Java-файлов main, 550 строк (`PostgresEventJournal`, `S3RawPayloadStore`, `JournalMigrations`, `JournalException`, `package-info`) + 1 SQL. Тесты модуля: только `S3RawPayloadStoreTest` (2 `@Test`) 🟢; поведение журнала на реальном PostgreSQL в модуле не тестируется — это делает `platform/integration-tests` (R.2e) 🟡.
 
 ### Q1.1 Поток управления
 
@@ -460,7 +460,7 @@ Feature flags и параметры окружения в модуле отсу�
 Сокращение: `NZ` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer`.
 
 **Назначение.** Чистая функция `CanonicalEvent + RawPayloadRef → NormalizationResult` (`Normalized(commands, unresolved, warnings)` либо `Quarantined(code, reason)`); единственное место, где существует source DTO (payload `Map<String,Object>`) (`NZ/Normalizer.java:14-24`, `NZ/CanonicalMapper.java:10-13`, `NZ/NormalizationResult.java:6-34`) 🟢.
-Состав: 14 файлов main (`Normalizer`, 4 маппера, `CanonicalMapper`, `CommandSink`, `Payload`, `NormalizationResult`, `NormalizationException`, `UnresolvedReference`, `ReferenceResolver`, `DeploymentLookup`, маркер, `package-info`). Тесты: 71 `@Test` в 5 классах (`NormalizerTest` 35, `EamArchObjectMapperTest` 16, `DeployMapMapperTest` 16, `ScmMapperTest` 3, smoke 1) + `Fixtures`; `platform/source-stubs` — тестовая зависимость для фикстур (`ingestion/normalizer/pom.xml:30-34`) 🟢.
+Состав: 15 Java-файлов main, ≈1200 строк (`Normalizer`, 4 маппера, `CanonicalMapper`, `CommandSink`, `Payload`, `NormalizationResult`, `NormalizationException`, `UnresolvedReference`, `ReferenceResolver`, `DeploymentLookup`, маркер, `package-info`). Тесты: 71 `@Test` в 5 классах (`NormalizerTest` 35, `EamArchObjectMapperTest` 16, `DeployMapMapperTest` 16, `ScmMapperTest` 3, smoke 1) + `Fixtures`; `platform/source-stubs` — тестовая зависимость для фикстур (`ingestion/normalizer/pom.xml:30-34`) 🟢.
 
 ### Q2.1 Поток управления
 
@@ -514,7 +514,7 @@ Feature flags и параметры окружения в модуле отсу�
 Сокращение: `IR` = `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution`.
 
 **Назначение.** Три ступени идентичности, всё в PostgreSQL (JDBC): (1) детерминированный `(source, sourceType, sourceId) → gid` и approved crosswalk; (2) признаки и кандидаты на совпадение; (3) утверждения свойств и конфликты источников по `AuthorityMatrix` (`IR/package-info.java:1-18`) 🟢.
-Состав: 20 файлов main — интерфейсы `IdentityMapping`, `IdentityCandidates`, `SourceConflicts`; реализации `PostgresIdentityMapping`, `PostgresIdentityCandidates`, `PostgresSourceConflicts`; чистые `FeatureExtractor`, `FeatureNormalizer`, `FeatureKind`, `LabelFamily`, `SourceKeys`; записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict`; исключения `CrosswalkConflictException`, `IdentityStoreException`; маркер и `package-info`; миграции `V2`, `V4`, `V5`, `V7`. Тесты: 20 `@Test` в 4 классах (`FeatureExtractorTest` 8, `FeatureNormalizerTest` 7, `CrosswalkTest` 4, smoke 1); **реализации Postgres в модуле не тестируются** (их покрывают IT в других модулях, R.2e) 🟡.
+Состав: 19 Java-файлов main, ≈1300 строк — интерфейсы `IdentityMapping`, `IdentityCandidates`, `SourceConflicts`; реализации `PostgresIdentityMapping`, `PostgresIdentityCandidates`, `PostgresSourceConflicts`; чистые `FeatureExtractor`, `FeatureNormalizer`, `FeatureKind`, `LabelFamily`, `SourceKeys`; записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict`; исключения `CrosswalkConflictException`, `IdentityStoreException`; маркер и `package-info`; миграции `V2`, `V4`, `V5`, `V7`. Тесты: 20 `@Test` в 4 классах (`FeatureExtractorTest` 8, `FeatureNormalizerTest` 7, `CrosswalkTest` 4, smoke 1); **реализации Postgres в модуле не тестируются** (их покрывают IT в других модулях, R.2e) 🟡.
 
 ### Q3.1 Поток управления
 
@@ -571,7 +571,7 @@ Feature flags и параметры окружения в модуле отсу�
 Сокращение: `GP` = `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector`.
 
 **Назначение.** Ведёт событие журнала до конечного статуса (`EventProcessor`), пишет `GraphCommand`'ы в Neo4j одной транзакцией (`GraphProjector`), добирает отложенные связи (`PendingRelations`), обрабатывает missing set после `snapshot-complete` (`Reconciler`) и применяет схему Neo4j (`schema/Neo4jSchema`) 🟢.
-Состав: 25 файлов main (самые объёмные: `GraphProjector` 750 строк, `EventProcessor` 646, `PropertyJson` 263, `Reconciler` 221, `PendingRelations` 203). Тесты: 86 `@Test` в 7 классах (`EventProcessorTest` 46, `ProjectionRequestTest` 12, `ReconcilerTest` 12, `Neo4jSchemaTest` 8, `VersionDecisionTest` 4, `PropertyJsonTest` 3, smoke 1); **`GraphProjector` против реального Neo4j в модуле не тестируется** — покрывает `platform/integration-tests` (R.2e) 🟡.
+Состав: 21 Java-файл main, ≈2700 строк (самые объёмные: `GraphProjector` 750 строк, `EventProcessor` 646, `PropertyJson` 263, `Reconciler` 221, `PendingRelations` 203). Тесты: 86 `@Test` в 7 классах (`EventProcessorTest` 46, `ProjectionRequestTest` 12, `ReconcilerTest` 12, `Neo4jSchemaTest` 8, `VersionDecisionTest` 4, `PropertyJsonTest` 3, smoke 1); **`GraphProjector` против реального Neo4j в модуле не тестируется** — покрывает `platform/integration-tests` (R.2e) 🟡.
 
 ### Q4.1 Поток управления
 
@@ -652,7 +652,7 @@ Feature flags и параметры окружения в модуле отсу�
 Сокращение: `IS` = `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice`.
 
 **Назначение.** Единственное запускаемое Spring Boot-приложение группы: собирает компоненты ingestion (журнал, raw storage, identity, projector), крутит диспетчер журнала (`RECEIVED/RETRYING → EventProcessor`), даёт админский REST (`/admin/replay`, `/admin/rebuild`, `/admin/reconcile/{source}`, `/admin/crosswalks`), пишет аудит и метрики. Во внешний ingress не публикуется (`IS/IngestionServiceApplication.java:7`) 🟢.
-Состав: 28 файлов main + `application.yml` + миграции `V3__admin_audit.sql`, `V6__console_readonly_role.sql`. Тесты: 48 `@Test` в 7 классах (`JournalDispatcherTest` 9, `AdminControllerTest` 11, `IngestionMetricsTest` 11, `StoredEventReaderContractTest` 7, `AuthorizedPartyValidatorTest` 4, `AdapterControlClientTest` 3, `AdminOperationsTest` 3). `adapter-core` подключён со `scope=test` ради контрактного теста `StoredEventReader` против `EventMapper` адаптеров (`ingestion/ingestion-service/pom.xml:71-76`) — на схему зависимостей не влияет 🟢. Приложение целиком (`@SpringBootTest` + Testcontainers) в модуле не поднимается — это IT в `platform/integration-tests` (R.2e) 🟡.
+Состав: 27 Java-файлов main, ≈1600 строк, + `application.yml` + миграции `V3__admin_audit.sql`, `V6__console_readonly_role.sql`. Тесты: 48 `@Test` в 7 классах (`JournalDispatcherTest` 9, `AdminControllerTest` 11, `IngestionMetricsTest` 11, `StoredEventReaderContractTest` 7, `AuthorizedPartyValidatorTest` 4, `AdapterControlClientTest` 3, `AdminOperationsTest` 3). `adapter-core` подключён со `scope=test` ради контрактного теста `StoredEventReader` против `EventMapper` адаптеров (`ingestion/ingestion-service/pom.xml:71-76`) — на схему зависимостей не влияет 🟢. Приложение целиком (`@SpringBootTest` + Testcontainers) в модуле не поднимается — это IT в `platform/integration-tests` (R.2e) 🟡.
 
 ### Q5.1 Поток управления
 
@@ -705,3 +705,65 @@ Feature flags и параметры окружения в модуле отсу�
 - 🟡 Конфликт `CONFLICT` crosswalk не обновляет `identity_candidate.status` (Q3.5); успешный crosswalk меняет `gid` только для будущих событий — «узлы графа под новый `gid` переписывает следующий replay или rebuild» (Javadoc `CrosswalkService.java:17-20`) 🟡.
 - 🟡 V6 требует `CREATEROLE` у пользователя приложения; без него миграция падает и сервис не стартует (комментарий в `V6__console_readonly_role.sql:3`).
 - 🟡 Все `AuthorityMatrix.defaults()` создаются дважды (для `SourceConflicts` и `GraphProjector`) — одинаковые, но не общий экземпляр (`IngestionServiceConfiguration.java:62-65,84-87`).
+
+---
+
+## Q6. Сомнения R.2a / R.2b, отнесённые к `ingestion/`, — результат разбора
+
+### Q6.1 п.1 — ручное сопоставление кодов источников — **подтверждено, 🟡**
+
+Таблица «код источника ↔ `SourceSystemCode`/URN» существует в четырёх независимых копиях:
+1. адаптер: `urn:corp:<код>` из `SourceSystem` (`adapters/adapter-core/.../EventMapper.java:47-49`);
+2. `Normalizer.sourceCode` — `switch` `eam|scm|cmdb|deploymap` (`ingestion/normalizer/.../Normalizer.java:92-103`);
+3. `EventProcessor.sourceCode` — тот же `switch` (`ingestion/graph-projector/.../EventProcessor.java:633-646`); его же использует `Reconciler` (`Reconciler.java:101`);
+4. `IngestionMetrics.sourceTag` / `AdapterControlClient.code` — срез префикса `urn:corp:` и проверка по `SourceSystem.values()` (`IngestionMetrics.java:149-154`, `AdapterControlClient.java:33-35`).
+Все копии сейчас согласованы; `asset`-адаптер публикует источник `cmdb` (имя адаптера ≠ код источника), поэтому в каждой копии `cmdb`, а не `asset`. Теста, который перебирает все `SourceSystemCode` и проверяет согласованность копий, нет. Добавление пятого источника потребует правки не менее трёх мест; пропуск в `Normalizer`/`EventProcessor` проявится как `QUARANTINED / UNKNOWN_SOURCE` только в рантайме.
+
+### Q6.2 п.3 — литералы `TYPE_ASSET_DELETED`, `snapshot-complete.v1` и удаление/snapshot — **подтверждено, 🟡/🔴**
+
+- Определения: `EventProcessor.java:92-94` (пакетно-приватные), `StoredEventReader.java:34`, `ReplayService.java:37` (только `snapshot-complete`), адаптеры — `EventMapper.java:29,32,41,42` (публичные). `contracts/event-schemas` содержит только `TYPE_ASSET_UPSERTED` (`CanonicalEvent`). Запрет `ingestion → adapters` в `CLAUDE.md` исключает ссылку на константы адаптера; единственный допустимый общий дом — `contracts/event-schemas`. Теста на совпадение копий между адаптерами и проекцией нет, кроме контрактного `StoredEventReaderContractTest`, который сверяет формат raw, а не строки типов 🟡.
+- **Как обрабатывается удаление.** Тип `architecture.asset.deleted.v1` → `EventProcessor.delete`: требует `dataschema == urn:corp:schema:asset-deleted:1`, версия сравнивается по `VersionDecision.forTombstone`, граф: `active=false`, закрытие темпоральных связей, архивирование узла без других активных мастеров, **без физического удаления** (`EventProcessor.java:254-287`, `GraphProjector.java:507-550`). Источники удалений: (а) событие `DELETE` от адаптера (webhook), (б) `Reconciler` по missing set (синтетическое `reconcile:…`, фиксируется в журнале до записи в граф — `Reconciler.java:156-182`) 🟢.
+- **Как обрабатывается завершение snapshot.** Маркер `snapshot-complete:<syncRunId>` — не проецируется; `EventProcessor.snapshotComplete` проводит его по статусам и вызывает `Reconciler`; сбой → `RETRYING / RECONCILIATION_TRIGGER_FAILED` (`EventProcessor.java:289-300`). Маркер без raw → DLQ `MARKER_NO_RAW` (восстановление — `POST /admin/reconcile/{source}`) (`JournalDispatcher.java:144-145`). Replay маркеры **пропускает** (`SKIPPED_SNAPSHOT_MARKER`), поэтому удаления при replay/rebuild воспроизводятся только через сохранённые события `reconcile:…` 🟢. Ловушка 9 соблюдена: удалений до маркера нет 🟢.
+- 🔴 `dataschema` маркера не проверяется (в отличие от `deleted`); проверка полноты прогона отключается, если у маркера нет числа `objectCount` (Q4.5).
+
+### Q6.3 События `poll:` и `snap:` с одной версией, но разными `eventId` — **снято (идемпотентно по версии), 🟢 с оговоркой 🟡**
+
+Дедупликация по `source + eventId` (`uq_inbox_event`) пропустит оба события в журнал как разные. Далее `EventProcessor.decideBeforeWrite` сравнивает `SourceVersion` с применённой в графе: равная версия → `DUPLICATE` (до нормализации), ниже → `IGNORED_OLD_VERSION`; в транзакции Neo4j проверка повторяется под блокировкой записи и даёт `NOOP_SAME_VERSION` (`EventProcessor.java:303-322`, `GraphProjector.java:305-324`). Проекция идемпотентна по версии объекта, а не по `eventId`. Оговорка: содержимое при равной версии не сравнивается — `contentHash` в решении не участвует, поэтому изменение без роста `ver` отбрасывается (Q4.2 п.1). Что именно EAM считает `ver`, — вопрос к `docs/06-eam-integration.md`/R.3.
+
+### Q6.4 Вложенные `null` в `attrs` EAM — **снято (не падает, не затирает), 🟢; побочный 🟡**
+
+`Payload.optionalObject` копирует вложенную карту, допуская `null`-значения; `optional`/`optionalIdRef` читают `null` как «не передано» (`Payload.java:30-61, 113-122`). Для ArchObject это значит: `name: null` → `MISSING_REQUIRED_FIELD`; необязательные поля `null` → `null` в record → не пишутся в граф (`NodeProperties.of`); ссылки `platform_id`/`product_id` = `null` → связь не строится и существующая **не закрывается** (`EamMapper.java:208-214`; закрытие делает только `closeReplacedRelations` для типов, которые версия утверждает, `GraphProjector.java:611-647`). Побочный эффект: нет способа «явно удалить» значение — это соответствует ловушке 5 (нет явной семантики удаления). Ещё: `attrs: null` у `IT_SYSTEM` уходит в плоскую ветку и даёт вводящую в заблуждение причину `required field is missing: name` (Q2.5).
+
+### Q6.5 `datetime == null → Instant.EPOCH` — **влияние на проекцию: 🟡**
+
+Адаптер подставляет `EPOCH`, если у ArchObject нет `datetime` (`adapters/eam-adapter/.../EamApiConnector.java:181`). Дальше значение становится `event.time()` и `SourceRecord.fetchedAt`, а проекция использует `event.time()` как `eventTime` (`EventProcessor.java:358`). Последствия (подробно — Q4.5): `firstSeenAt = 1970-01-01`, `validFrom` связей без собственного `validFrom` = `1970-01-01`, замещение связей при `eventTime = EPOCH` закрывает старые связи интервалом нулевой длины. **Версии не затрагиваются**: порядок решает `SourceVersion`, а не время. Решение «что делать с отсутствующим `datetime`» — за архитектором (вариант: брать время приёма из журнала `received_at`).
+
+### Q6.6 Новые вопросы, найденные в `ingestion/`
+
+| № | Метка | Суть | Где |
+|---|---|---|---|
+| Н1 | 🔴 | `dlq_entry.replayed_at` нигде не заполняется → метрика `dlq.open` и «открытые» DLQ в консоли не отражают состояние | Q1.5, Q5.5 |
+| Н2 | 🔴 | `identity_candidate.status` не меняется ни crosswalk'ом, ни чем-либо ещё → подтверждённые кандидаты остаются `OPEN` | Q3.5 |
+| Н3 | 🔴 | Нет кода, выводящего событие из `QUARANTINED` (`QUARANTINED → RETRYING` допустим контрактом, но не вызывается ни одним модулем) и переводящего `PROJECTED → SUPERSEDED`; `ProcessingStatus.java:38-39`, grep по `.transition(` | Q5 |
+| Н4 | 🔴 | `snapshot-complete` без `objectCount` отключает проверку полноты и разрешает удаление всего missing set | Q4.5 |
+| Н5 | 🟡 | Нет лимита повторов `RETRYING` и эскалации «ядовитых» событий | Q5.2 п.3 |
+| Н6 | 🟡 | Устаревшее `RETRYING`-событие обновляет `identity_feature` до проверки версии | Q4.2 п.2 |
+| Н7 | 🟡 | Checkpoint `projector` записывается, но не читается | Q4.2 п.13 |
+| Н8 | 🟡 | Дублирование типов событий/таблицы кодов источников; нет теста согласованности | Q6.1, Q6.2 |
+| Н9 | 🟡 | Тело дубля `(source, eventId)` и содержимое при равной версии не сравниваются | Q1.2 п.1, Q4.2 п.1 |
+| Н10 | 🟡 | Rebuild стирает все узлы Neo4j (`MATCH (n)`) | Q5.5 |
+| Н11 | 🟡 | Реализации Postgres/Neo4j в модулях не покрыты тестами самих модулей (только IT платформы) — проверить в R.2e | Q1, Q3, Q4 |
+
+---
+
+## Q7. Итоги по модулям R.2c
+
+| Модуль | Java-файлов main / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `event-journal` | 5 (+1 SQL) / 550 | 2 в 1 классе | идемпотентный append, переходы под `FOR UPDATE`, `pending`, DLQ, S3 по hash | Q1.5: `replayed_at`, затирание ошибок, `DUPLICATE` не персистируется в `append` |
+| `normalizer` | 15 / ≈1200 | 71 в 5 классах | `Payload` («не передано»), `CommandSink`, отложенные ссылки, привязка Deployment | Q2.5: копии таблицы кодов, два словаря критичности, `attrs: null` |
+| `identity-resolution` | 19 / ≈1300 | 20 в 4 классах | gid в PG, crosswalk без слияния, признаки/кандидаты, конфликты по authority | Q3.5: `status` кандидата, `retract` мастера, потеря признака при > 50 |
+| `graph-projector` | 21 / ≈2700 | 86 в 7 классах | версия-решатель, MERGE по ключам, замещение темпоральных связей, tombstone, pending/alias, Reconciler | Q4.5: `objectCount`, EPOCH, порядок candidates/stale, checkpoint write-only |
+| `ingestion-service` | 27 / ≈1600 | 48 в 7 классах | диспетчер, `AdminLock`, replay/rebuild, crosswalk, аудит, метрики, безопасность | Q5.5: DLQ, повторы без лимита, rebuild стирает всё |
+
+Машины состояний ingestion: `ProcessingStatus` (`flowcharts/ingestion-service.md`, «Жизненный цикл `inbox_event`»), `source_conflict` (`flowcharts/identity-resolution.md`), версия записи (`flowcharts/graph-projector.md`). `UnresolvedReference` → `DeferRelation` → `PendingRelation` → достроенная связь (Q2.2 п.6, Q4.2 п.9). Tombstone — Q4.2 п.8. Описание модели и ADR не дублируется: `docs/02-data-model.md`, `docs/adr/`.

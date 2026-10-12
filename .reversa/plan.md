@@ -40,11 +40,11 @@
 
 ### R.2c ingestion (UNLOCKER-265)
 
-- [ ] **Archaeologist** — `ingestion/event-journal`: Postgres-журнал, S3 raw store
-- [ ] **Archaeologist** — `ingestion/normalizer`: мапперы источников → `GraphCommand`
-- [ ] **Archaeologist** — `ingestion/identity-resolution`: crosswalk, кандидаты, конфликты
-- [ ] **Archaeologist** — `ingestion/graph-projector`: проекция в Neo4j, reconcile, `Neo4jSchema`
-- [ ] **Archaeologist** — `ingestion/ingestion-service`: диспетчер журнала, админ-эндпоинт, replay/rebuild
+- [x] ✅ **Archaeologist** — `ingestion/event-journal`: Postgres-журнал, S3 raw store
+- [x] ✅ **Archaeologist** — `ingestion/normalizer`: мапперы источников → `GraphCommand`
+- [x] ✅ **Archaeologist** — `ingestion/identity-resolution`: crosswalk, кандидаты, конфликты
+- [x] ✅ **Archaeologist** — `ingestion/graph-projector`: проекция в Neo4j, reconcile, `Neo4jSchema`
+- [x] ✅ **Archaeologist** — `ingestion/ingestion-service`: диспетчер журнала, админ-эндпоинт, replay/rebuild
 
 ### R.2d access (UNLOCKER-266)
 

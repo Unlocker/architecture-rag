@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T19:07:43Z",
+  "generated_at": "2026-10-12T21:00:00Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -1591,6 +1591,1351 @@
       ],
       "algorithms": [],
       "complexity": "low"
+    },
+    {
+      "name": "ingestion/event-journal",
+      "path": "ingestion/event-journal",
+      "purpose": "Журнал событий на PostgreSQL (inbox_event, consumer_checkpoint, dlq_entry) и raw payload в S3; миграция V1",
+      "primary_files": [
+        "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+        "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/S3RawPayloadStore.java",
+        "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/JournalMigrations.java",
+        "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/JournalException.java",
+        "ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql"
+      ],
+      "functions": [
+        {
+          "name": "PostgresEventJournal.append",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "CanonicalEvent event",
+            "RawPayloadRef payloadRef",
+            "String syncRunId"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.transition",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "String source",
+            "String eventId",
+            "ProcessingStatus status",
+            "String errorCode",
+            "String errorReason"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.toDlq",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "String source",
+            "String eventId",
+            "String errorCode",
+            "String reason"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.pending",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "JournalKey after",
+            "Instant retryNotAfter",
+            "int limit"
+          ],
+          "returns": "List<StoredEvent>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.read",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "JournalQuery q"
+          ],
+          "returns": "List<StoredEvent>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.snapshotContents",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "String source",
+            "String syncRunId"
+          ],
+          "returns": "SnapshotContents",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresEventJournal.saveCheckpoint",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+          "params": [
+            "String consumer",
+            "String source",
+            "String cursor"
+          ],
+          "returns": "Checkpoint",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "S3RawPayloadStore.put",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/S3RawPayloadStore.java",
+          "params": [
+            "String source",
+            "byte[] content"
+          ],
+          "returns": "RawPayloadRef",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "S3RawPayloadStore.get",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/S3RawPayloadStore.java",
+          "params": [
+            "RawPayloadRef ref"
+          ],
+          "returns": "byte[]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "JournalMigrations.apply",
+          "file": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/JournalMigrations.java",
+          "params": [
+            "DataSource dataSource"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "inbox_event",
+          "fields": [
+            {
+              "name": "source",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "event_id",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "attempts",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "source_version",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "payload_key",
+              "type": "text",
+              "required": false
+            },
+            {
+              "name": "payload_hash",
+              "type": "text",
+              "required": false
+            },
+            {
+              "name": "received_at",
+              "type": "timestamptz",
+              "required": true
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamptz",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "consumer_checkpoint",
+          "fields": [
+            {
+              "name": "consumer",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "source",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "cursor",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamptz",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "dlq_entry",
+          "fields": [
+            {
+              "name": "id",
+              "type": "bigserial",
+              "required": true
+            },
+            {
+              "name": "source",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "event_id",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "error_code",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "replayed_at",
+              "type": "timestamptz",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Идемпотентность по (source,eventId): INSERT ON CONFLICT DO NOTHING; дубль возвращается как DUPLICATE только в памяти",
+          "location": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:53-97",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Переход статуса под SELECT FOR UPDATE с проверкой canTransitionTo; attempts растёт только на RETRYING; error_code/reason перезаписываются",
+          "location": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:320-354",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "pending: RECEIVED сразу; RETRYING/VALIDATED/NORMALIZED/RESOLVED — после retryDelay",
+          "location": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:209-237",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Одна открытая запись DLQ на событие (частичный уникальный индекс); причина усекается до 500 символов",
+          "location": "ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:41",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Ключ S3 raw/<source>/<sha256>; source по [A-Za-z0-9:._-]{1,200}, не только точки; get проверяет hash",
+          "location": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/S3RawPayloadStore.java:68-89",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "dlq_entry.replayed_at нигде не заполняется (расхождение)",
+          "location": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:131-160",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/event-schemas",
+        "postgresql",
+        "flyway",
+        "aws-sdk-s3"
+      ],
+      "algorithms": [
+        "keyset-пагинация (received_at, source, event_id)",
+        "sha256-адресация raw payload"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "ingestion/normalizer",
+      "path": "ingestion/normalizer",
+      "purpose": "Преобразование CanonicalEvent + raw в GraphCommand: мапперы EAM/SCM/CMDB/DEPLOYMAP, отложенные ссылки, предупреждения",
+      "primary_files": [
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CanonicalMapper.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Payload.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/EamMapper.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/ScmMapper.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CmdbMapper.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/DeployMapMapper.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/DeploymentLookup.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/ReferenceResolver.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/NormalizationResult.java",
+        "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/UnresolvedReference.java"
+      ],
+      "functions": [
+        {
+          "name": "Normalizer.normalize",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java",
+          "params": [
+            "CanonicalEvent event",
+            "RawPayloadRef raw"
+          ],
+          "returns": "NormalizationResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Normalizer.standard",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java",
+          "params": [
+            "ReferenceResolver resolver",
+            "DeploymentLookup lookup"
+          ],
+          "returns": "Normalizer",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CanonicalMapper.map",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CanonicalMapper.java",
+          "params": [
+            "Input input",
+            "CommandSink sink"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CommandSink.relation",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java",
+          "params": [
+            "RelationType type",
+            "SourceKey from",
+            "NodeLabel fromLabel",
+            "SourceKey to",
+            "NodeLabel toLabel",
+            "Map properties",
+            "Validity validity",
+            "String field"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CommandSink.link",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java",
+          "params": [
+            "RelationType type",
+            "SourceKey from",
+            "SourceKey to",
+            "..."
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamMapper.map",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/EamMapper.java",
+          "params": [
+            "Input input",
+            "CommandSink sink"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DeployMapMapper.bindToRepository",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/DeployMapMapper.java",
+          "params": [
+            "ChartMeta chart",
+            "Payload p",
+            "SourceKey key",
+            "Validity validity",
+            "CommandSink sink"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Payload.optional",
+          "file": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Payload.java",
+          "params": [
+            "String field"
+          ],
+          "returns": "Optional<String>",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "NormalizationResult.Normalized",
+          "fields": [
+            {
+              "name": "commands",
+              "type": "List<GraphCommand>",
+              "required": true
+            },
+            {
+              "name": "unresolved",
+              "type": "List<UnresolvedReference>",
+              "required": true
+            },
+            {
+              "name": "warnings",
+              "type": "List<String>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "NormalizationResult.Quarantined",
+          "fields": [
+            {
+              "name": "errorCode",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "String",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "UnresolvedReference",
+          "fields": [
+            {
+              "name": "from",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "field",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "relationType",
+              "type": "RelationType",
+              "required": true
+            },
+            {
+              "name": "target",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "relation",
+              "type": "UpsertRelation",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Только architecture.asset.upserted.v1; источник urn:corp:{eam,scm,cmdb,deploymap}; dataschema asset-upserted:<версия> из supportedSchemaVersions",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java:54-66",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "IllegalArgumentException инварианта модели -> INVALID_PAYLOAD с фиксированным текстом без значений",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java:76-84",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "null, отсутствие и пустая строка = поле не передано; неверный тип = INVALID_PAYLOAD",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Payload.java:24-41",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Связь с неизвестным вторым концом не создаёт фиктивный узел, а уходит в UnresolvedReference",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:53-69",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "ArchObject EAM: критичность только HIGH/MEDIUM/LOW, иное -> criticalityRaw + UNMAPPED_CRITICALITY",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/EamMapper.java:128-130",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "CMDB: kind обязателен, чтобы не затирать известный тип",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CmdbMapper.java:36-37",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "deploymap-poc-1: три аннотации chart обязательны; commit [0-9a-f]{40}; выбор сервиса для HAS_DEPLOYMENT в 4 шага",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/DeployMapMapper.java:142-225",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Таблица кодов источников продублирована вручную (Normalizer/EventProcessor/адаптер)",
+          "location": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java:92-103",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "contracts/source-spi"
+      ],
+      "algorithms": [
+        "выбор сервиса Deployment по репозиторию",
+        "отложенные ссылки через alias-ключи"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "ingestion/identity-resolution",
+      "path": "ingestion/identity-resolution",
+      "purpose": "gid и approved crosswalk в PostgreSQL, признаки и кандидаты на совпадение, конфликты источников по AuthorityMatrix",
+      "primary_files": [
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityMapping.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidates.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/SourceConflicts.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureExtractor.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureNormalizer.java",
+        "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureKind.java"
+      ],
+      "functions": [
+        {
+          "name": "PostgresIdentityMapping.resolve",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java",
+          "params": [
+            "SourceKey key"
+          ],
+          "returns": "UUID",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresIdentityMapping.approve",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java",
+          "params": [
+            "Crosswalk crosswalk"
+          ],
+          "returns": "UUID",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresIdentityCandidates.record",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java",
+          "params": [
+            "SourceKey key",
+            "NodeLabel label",
+            "Set<Feature> features"
+          ],
+          "returns": "List<IdentityCandidate>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresSourceConflicts.assertProperties",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java",
+          "params": [
+            "SourceKey key",
+            "UUID gid",
+            "NodeLabel label",
+            "Map<String,String> values"
+          ],
+          "returns": "List<SourceConflict>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresSourceConflicts.assertRelation",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java",
+          "params": [
+            "SourceKey dissent",
+            "UUID gid",
+            "String property",
+            "String dissentValue",
+            "Optional<SourceKey> master",
+            "String masterValue"
+          ],
+          "returns": "List<SourceConflict>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PostgresSourceConflicts.retract",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java",
+          "params": [
+            "SourceKey key",
+            "UUID gid"
+          ],
+          "returns": "List<SourceConflict>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FeatureExtractor.extract",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureExtractor.java",
+          "params": [
+            "SourceKey key",
+            "List<GraphCommand> commands",
+            "Map<SourceKey,UUID> gids"
+          ],
+          "returns": "Set<Feature>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FeatureKind.score",
+          "file": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureKind.java",
+          "params": [
+            "Collection<FeatureKind> matched"
+          ],
+          "returns": "BigDecimal",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "identity_mapping",
+          "fields": [
+            {
+              "name": "source,source_type,source_id",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "gid",
+              "type": "uuid",
+              "required": true
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "approved_crosswalk",
+          "fields": [
+            {
+              "name": "left_*/right_*",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "approved_by",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "approved_at",
+              "type": "timestamptz",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "identity_feature",
+          "fields": [
+            {
+              "name": "source,source_type,source_id,feature",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "value",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "label_family",
+              "type": "text",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "identity_candidate",
+          "fields": [
+            {
+              "name": "left_*/right_*",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "matched",
+              "type": "jsonb",
+              "required": true
+            },
+            {
+              "name": "score",
+              "type": "numeric(3,2)",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "text",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "property_assertion",
+          "fields": [
+            {
+              "name": "source,source_type,source_id,property",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "gid",
+              "type": "uuid",
+              "required": true
+            },
+            {
+              "name": "value",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "authoritative",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "source_conflict",
+          "fields": [
+            {
+              "name": "gid,property,dissent_*",
+              "type": "uuid/text",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "kind",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "resolved_at",
+              "type": "timestamptz",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "gid выдаётся один раз и навсегда; параллельные resolve сходятся к одному gid",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java:45-60,124-132",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Crosswalk между ключами с разными gid -> CrosswalkConflictException, слияния нет",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java:103-122",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "score = min(1.00, сумма весов различных видов); HOSTNAME 0.6, REPOSITORY_URL 0.8, NAME 0.4, OWNER 0.2 (только усиливает)",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureKind.java:15-47",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Предохранитель: больше 50 совпадений по признаку -> кандидаты по нему не создаются",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:33,212-216",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Конфликт = неавторитетное значение, отличное от авторитетного; закрытый остаётся RESOLVED",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:41-63",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "identity_candidate.status не меняется ни одним кодом (расхождение)",
+          "location": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:54-61",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/canonical-model",
+        "postgresql"
+      ],
+      "algorithms": [
+        "advisory-lock по ключу и значению признака",
+        "delete+insert признаков и утверждений"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "ingestion/graph-projector",
+      "path": "ingestion/graph-projector",
+      "purpose": "Обработка события журнала до конечного статуса, запись GraphCommand в Neo4j одной транзакцией, отложенные связи, reconciliation после snapshot, схема Neo4j",
+      "primary_files": [
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/Reconciler.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/PendingRelations.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/VersionDecision.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/ProjectionRequest.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/NodeProperties.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/PropertyJson.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/ConflictMarkers.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/TemporalRelationMigration.java",
+        "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/schema/Neo4jSchema.java"
+      ],
+      "functions": [
+        {
+          "name": "EventProcessor.process",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java",
+          "params": [
+            "CanonicalEvent event",
+            "RawPayloadRef raw"
+          ],
+          "returns": "ProcessingResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjector.project",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+          "params": [
+            "ProjectionRequest request"
+          ],
+          "returns": "ProjectionResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjector.write",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+          "params": [
+            "TransactionContext tx",
+            "ProjectionRequest request"
+          ],
+          "returns": "ProjectionResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjector.upsertRelation",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+          "params": [
+            "TransactionContext tx",
+            "UpsertRelation relation",
+            "UUID fromGid",
+            "UUID toGid",
+            "Instant eventTime",
+            "List<String> skipped"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjector.closeReplacedRelations",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+          "params": [
+            "TransactionContext tx",
+            "ProjectionRequest request"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjector.tombstone",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+          "params": [
+            "TransactionContext tx",
+            "ProjectionRequest request",
+            "TombstoneSourceRecord tombstone"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Reconciler.reconcile",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/Reconciler.java",
+          "params": [
+            "String source",
+            "String syncRunId",
+            "String eventId",
+            "long objectCount"
+          ],
+          "returns": "Report",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "VersionDecision.forUpsert",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/VersionDecision.java",
+          "params": [
+            "SourceVersion incoming",
+            "SourceVersion applied"
+          ],
+          "returns": "VersionDecision",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PendingRelations.candidates",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/PendingRelations.java",
+          "params": [
+            "TransactionContext tx",
+            "SourceKey endpoint"
+          ],
+          "returns": "List<Pending>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Neo4jSchema.apply",
+          "file": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/schema/Neo4jSchema.java",
+          "params": [
+            "Driver driver"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "ProjectionRequest",
+          "fields": [
+            {
+              "name": "key",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "version",
+              "type": "SourceVersion",
+              "required": true
+            },
+            {
+              "name": "eventTime",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "syncRunId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "gids",
+              "type": "Map<SourceKey,UUID>",
+              "required": true
+            },
+            {
+              "name": "commands",
+              "type": "List<GraphCommand>",
+              "required": true
+            },
+            {
+              "name": "conflicts",
+              "type": "ConflictMarkers",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ProjectionResult",
+          "fields": [
+            {
+              "name": "outcome",
+              "type": "ProjectionOutcome",
+              "required": true
+            },
+            {
+              "name": "skippedProperties",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "skippedRelations",
+              "type": "List<String>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceRecord (Neo4j)",
+          "fields": [
+            {
+              "name": "source,sourceType,sourceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "contentHash",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "active",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "deletedAt",
+              "type": "datetime",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PendingRelation (Neo4j)",
+          "fields": [
+            {
+              "name": "key",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "props",
+              "type": "string(JSON)",
+              "required": true
+            },
+            {
+              "name": "referrerVersion",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Версии сравниваются как числа; равная версия = DUPLICATE/NOOP, ниже = IGNORED_OLD_VERSION; tombstone с равной версией применяется к активной записи",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/VersionDecision.java:20-38",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "MERGE только по ключам под constraint (SourceRecord, gid, SourceSystem.code, SyncRun.runId, PendingRelation.key)",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:451-461",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Свойства узла пишутся только если источник авторитетен; null не записывается",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:417-432",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Темпоральная связь: замещение открытых связей записи вне набора (from,to,identity props); tombstone закрывает и архивирует узел без другого MASTER",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:507-550,611-647",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Checkpoint projector сохраняется только после коммита Neo4j и конечного статуса",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:612-617",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Отказ запроса Neo4j (Statement/Request) -> QUARANTINED, транзиентные -> RETRYING",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:354-373",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Missing set обрабатывается только по маркеру snapshot-complete; неполный прогон (eventCount < objectCount) удалений не делает",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/Reconciler.java:100-144",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "snapshot-complete без objectCount отключает проверку полноты (расхождение)",
+          "location": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:629-631",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution",
+        "neo4j-java-driver"
+      ],
+      "algorithms": [
+        "версионный решатель",
+        "замещение темпоральных связей",
+        "достраивание отложенных связей и alias",
+        "missing set после полного snapshot"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "ingestion/ingestion-service",
+      "path": "ingestion/ingestion-service",
+      "purpose": "Spring Boot-приложение ingestion: сборка компонентов, диспетчер журнала, админский REST (replay, rebuild, reconcile, crosswalk), аудит, метрики, безопасность",
+      "primary_files": [
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/DispatcherRunner.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminOperations.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminLock.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminAudit.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/RebuildService.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/SecurityConfiguration.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AuthorizedPartyValidator.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java",
+        "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdapterControlClient.java",
+        "ingestion/ingestion-service/src/main/resources/application.yml"
+      ],
+      "functions": [
+        {
+          "name": "JournalDispatcher.runOnce",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java",
+          "params": [],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AdminOperations.run",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminOperations.java",
+          "params": [
+            "String operation",
+            "String actor",
+            "Map request",
+            "String replayId",
+            "Supplier body",
+            "Function summary"
+          ],
+          "returns": "T",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ReplayService.replay",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java",
+          "params": [
+            "String source",
+            "Instant receivedFrom",
+            "Instant receivedTo",
+            "String replayId"
+          ],
+          "returns": "ReplayResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "RebuildService.rebuild",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/RebuildService.java",
+          "params": [
+            "String replayId"
+          ],
+          "returns": "ReplayResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CrosswalkService.load",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java",
+          "params": [
+            "List<CrosswalkItem> items",
+            "String approvedBy"
+          ],
+          "returns": "List<CrosswalkResult>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StoredEventReader.toEvent",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java",
+          "params": [
+            "StoredEvent stored",
+            "byte[] raw"
+          ],
+          "returns": "CanonicalEvent",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AdminLock.tryAcquire",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminLock.java",
+          "params": [],
+          "returns": "Optional<Lease>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AdapterControlClient.snapshot",
+          "file": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdapterControlClient.java",
+          "params": [
+            "String source"
+          ],
+          "returns": "Response",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "admin_audit",
+          "fields": [
+            {
+              "name": "id",
+              "type": "bigserial",
+              "required": true
+            },
+            {
+              "name": "operation",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "actor",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "request",
+              "type": "jsonb",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "text",
+              "required": true
+            },
+            {
+              "name": "result",
+              "type": "jsonb",
+              "required": false
+            },
+            {
+              "name": "started_at",
+              "type": "timestamptz",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ReplayResult",
+          "fields": [
+            {
+              "name": "replayId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "total",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "statuses",
+              "type": "Map<String,Long>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CrosswalkResult",
+          "fields": [
+            {
+              "name": "index",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "APPLIED|CONFLICT|INVALID",
+              "required": true
+            },
+            {
+              "name": "gid",
+              "type": "UUID",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Диспетчер: страница под AdminLock; после RETRYING/исключения последующие события того же объекта в проходе пропускаются",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:94-130",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Нет raw / битый raw / маркер без raw -> DLQ (NO_RAW_PAYLOAD, INVALID_RAW_PAYLOAD, MARKER_NO_RAW)",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:139-155",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Админская операция: замок -> запись STARTED в аудит -> выполнение -> итог; без записи в аудит операция не начинается",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminOperations.java:38-61",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Replay создаёт новые строки replay:<replayId>:<id>, исходные не меняются; маркеры snapshot-complete пропускаются",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java:63-100",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Rebuild: удаляет все узлы Neo4j и переигрывает журнал; gid сохраняются (identity_mapping в PG)",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/RebuildService.java:18,33-39",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "/admin/** только со scope architecture.admin, aud админки и azp из allow-list; остальное denyAll",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/SecurityConfiguration.java:36-46",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Нет лимита повторов RETRYING и эскалации ядовитых событий (расхождение)",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:139-163",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/event-schemas",
+        "contracts/canonical-model",
+        "ingestion/event-journal",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution",
+        "ingestion/graph-projector",
+        "spring-boot-webmvc",
+        "spring-security-oauth2-resource-server",
+        "micrometer"
+      ],
+      "algorithms": [
+        "keyset-проход по журналу с блокировкой объекта",
+        "pg advisory lock как монопольный замок"
+      ],
+      "complexity": "high"
     }
   ]
 }

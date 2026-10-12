@@ -42,14 +42,14 @@
         "adapters/eam-adapter",
         "adapters/scm-adapter",
         "adapters/asset-adapter",
-        "adapters/deploymap-adapter"
-      ],
-      "modules_pending": [
+        "adapters/deploymap-adapter",
         "ingestion/event-journal",
         "ingestion/normalizer",
         "ingestion/identity-resolution",
         "ingestion/graph-projector",
-        "ingestion/ingestion-service",
+        "ingestion/ingestion-service"
+      ],
+      "modules_pending": [
         "access/graph-query-core",
         "access/mcp-server",
         "access/admin-console",
@@ -59,7 +59,7 @@
         "platform/demo-launcher",
         "platform/docker"
       ],
-      "last_run_at": "2026-10-12T19:07:43Z",
+      "last_run_at": "2026-10-12T21:00:00Z",
       "files": [
         "_reversa_sdd/code-analysis.md",
         "_reversa_sdd/data-dictionary.md",
@@ -71,7 +71,12 @@
         "_reversa_sdd/flowcharts/eam-adapter.md",
         "_reversa_sdd/flowcharts/scm-adapter.md",
         "_reversa_sdd/flowcharts/asset-adapter.md",
-        "_reversa_sdd/flowcharts/deploymap-adapter.md"
+        "_reversa_sdd/flowcharts/deploymap-adapter.md",
+        "_reversa_sdd/flowcharts/event-journal.md",
+        "_reversa_sdd/flowcharts/normalizer.md",
+        "_reversa_sdd/flowcharts/identity-resolution.md",
+        "_reversa_sdd/flowcharts/graph-projector.md",
+        "_reversa_sdd/flowcharts/ingestion-service.md"
       ]
     }
   },

@@ -474,7 +474,7 @@ PK `(source, source_type, source_id, feature)` — **одно значение �
 | `status` | text NOT NULL DEFAULT `'OPEN'` | 🔴 других значений код не выставляет |
 | `first_seen_at`, `updated_at` | timestamptz | `first_seen_at` не меняется при повторе |
 
-Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-23`) 🟡.
+Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-22`) 🟡.
 
 ### Q.3.5 `property_assertion` (V5:6-17)
 
