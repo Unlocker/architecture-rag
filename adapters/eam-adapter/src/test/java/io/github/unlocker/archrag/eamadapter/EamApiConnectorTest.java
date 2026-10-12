@@ -196,12 +196,12 @@ class EamApiConnectorTest {
   }
 
   @Test
-  void referencesAcceptListSingleValueAndNullInPayload() {
-    store.upsert("itsystems", 5201, Map.of("name", "A", "solution", 7201L));
-    store.upsert("itsystems", 5202, Map.of("name", "B", "solution", List.of(7201L, 7202L)));
+  void referencesAcceptSingleValueAndNullInPayload() {
+    store.upsert("itsystems", 5201, Map.of("name", "A", "product_id", 7201L));
+    store.upsert("itsystems", 5202, Map.of("name", "B", "product_id", 7202L, "platform_id", 3102L));
     java.util.Map<String, Object> nullRef = new java.util.LinkedHashMap<>();
     nullRef.put("name", "C");
-    nullRef.put("solution", null);
+    nullRef.put("product_id", null);
     store.upsert("itsystems", 5203, nullRef);
     // Коннектор отдаёт attrs как есть, разбор форм ссылок — задача нормализатора.
     Read r = readSnapshot(connector, 100);

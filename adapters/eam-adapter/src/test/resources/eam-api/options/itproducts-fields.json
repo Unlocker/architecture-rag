@@ -17,10 +17,10 @@
       "type": "select"
     },
     {
-      "name": "platform",
+      "name": "platform_id",
       "type": "reference",
       "target": "platforms",
-      "multiple": true
+      "multiple": false
     }
   ]
 }

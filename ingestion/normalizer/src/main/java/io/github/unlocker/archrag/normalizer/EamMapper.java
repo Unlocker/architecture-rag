@@ -154,7 +154,7 @@ public final class EamMapper implements CanonicalMapper {
                     attrs.required("name"),
                     attrs.optional("lifecycle").orElse(null),
                     attrs.optional("description").orElse(null))));
-        references(attrs, "platform", RelationType.USES_PLATFORM, key, NodeLabel.SOLUTION, PLATFORM, NodeLabel.PLATFORM, sink);
+        reference(attrs, "platform_id", RelationType.USES_PLATFORM, key, NodeLabel.SOLUTION, PLATFORM, NodeLabel.PLATFORM, sink);
       }
       default -> {
         Optional<String> rawCriticality = attrs.optional("criticality");
@@ -175,7 +175,8 @@ public final class EamMapper implements CanonicalMapper {
                     attrs.optional("description").orElse(null),
                     attrs.optional("eam_id").orElse(null),
                     unmapped)));
-        references(attrs, "solution", RelationType.USES_SOLUTION, key, NodeLabel.IT_SYSTEM, SOLUTION, NodeLabel.SOLUTION, sink);
+        // itsystems.platform_id не читается: прямой связи «система → платформа» нет, платформа системы — через решение (docs/06).
+        reference(attrs, "product_id", RelationType.USES_SOLUTION, key, NodeLabel.IT_SYSTEM, SOLUTION, NodeLabel.SOLUTION, sink);
         attrs
             .optional("ownerTeam")
             .ifPresent(
@@ -192,8 +193,8 @@ public final class EamMapper implements CanonicalMapper {
     }
   }
 
-  /** Связь на каждый {@code id} из поля-ссылки; неизвестная цель откладывается штатным {@code DeferRelation}. */
-  private static void references(
+  /** Связь на объект из одиночного поля-ссылки; неизвестная цель откладывается штатным {@code DeferRelation}. */
+  private static void reference(
       Payload attrs,
       String field,
       RelationType type,
@@ -202,8 +203,11 @@ public final class EamMapper implements CanonicalMapper {
       String targetType,
       NodeLabel targetLabel,
       CommandSink sink) {
-    for (String id : attrs.optionalIdRefs(field)) {
-      sink.relation(type, from, fromLabel, new SourceKey(SourceSystemCode.EAM, targetType, id), targetLabel, null, field);
-    }
+    attrs
+        .optionalIdRef(field)
+        .ifPresent(
+            id ->
+                sink.relation(
+                    type, from, fromLabel, new SourceKey(SourceSystemCode.EAM, targetType, id), targetLabel, null, field));
   }
 }

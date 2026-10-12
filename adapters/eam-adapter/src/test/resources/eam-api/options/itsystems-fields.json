@@ -17,10 +17,16 @@
       "type": "select"
     },
     {
-      "name": "solution",
+      "name": "product_id",
       "type": "reference",
       "target": "itproducts",
-      "multiple": true
+      "multiple": false
+    },
+    {
+      "name": "platform_id",
+      "type": "reference",
+      "target": "platforms",
+      "multiple": false
     }
   ]
 }

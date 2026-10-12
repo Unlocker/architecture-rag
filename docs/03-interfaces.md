@@ -197,6 +197,7 @@ flowchart LR
 | `environment` | string | нет | код окружения | фильтр; сервис без развёртываний в окружении остаётся с пустым `deployments` |
 
 - **Ответ:** `{systemGid, systemName, systemLastSeenAt, systemStale, systemSources[], environment, services[{gid, name, lastSeenAt, stale, sources[], deployments[{gid, name, version, status, environment, lastSeenAt, stale, sources[], sourceCommit, repositoryUrl, repository{gid, name, url}|null, hasDeployment{source, sourceType, sourceId, validFrom}, deployedFrom{source, sourceType, sourceId, validFrom, commit}|null, compute[{gid, type (VirtualMachine|PhysicalServer|ComputeInstance), hostname, state, lastSeenAt, stale, sources[], runsOn{…}, hostedOn{gid, hostname, state, lastSeenAt, stale, sources[], hostedOn{…}}|null}]}]}], staleAfter, warnings[], truncated}`. `sourceCommit`, `repositoryUrl`, `repository` и `deployedFrom` — источник кода из Helm chart ([ADR 0029](adr/0029-helm-chart-system-repo-commit.md)); все четыре `null`, если у развёртывания нет открытой связи `DEPLOYED_FROM` (формат `deploymap-poc-0`). `repository` и `deployedFrom` всегда от одной связи; при нескольких открытых берётся связь с наибольшим `validFrom`. Строка результата — тройка (service, deployment, compute), на большой системе `truncated=true`. `warnings` — по строке на устаревший узел. Ошибки: `systemGid must be a UUID`, `asset not found`.
+- **Примечание:** `sourceId` вида `EAM-1042` в примере получен со старой заглушкой `StubSources.eam`. У реального EAM `sourceId` — целочисленный `id` объекта (ADR 0024; [06-eam-integration.md](06-eam-integration.md)).
 - **Пример вызова и ответа** (ответ сокращён):
 
 ```text
@@ -279,6 +280,7 @@ flowchart LR
 | `property` | string | нет | `^[A-Za-z][A-Za-z0-9_]{0,63}$` | имя свойства: сужает мастеров и конфликты до него |
 
 - **Ответ:** `{gid, type, property, isCurrent, deletedAt, authorities[] (источники-мастера по матрице для узла или свойства), conflictState (OPEN|NONE), records[{source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, confidence, authority (MASTER|SUPPLEMENTARY), authoritative, active, deletedAt, conflictProperties[]}]}`. Активные записи идут первыми, tombstone-записи (`active=false`) тоже возвращаются. Ошибки: `gid must be a UUID`, `property is invalid`, `asset not found`.
+- **Примечание:** `sourceId` вида `EAM-1042` в примере получен со старой заглушки `StubSources.eam`. У реального EAM `sourceId` — целочисленный `id` объекта (ADR 0024; [06-eam-integration.md](06-eam-integration.md)).
 - **Пример вызова и ответа:**
 
 ```text

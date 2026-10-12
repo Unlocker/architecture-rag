@@ -52,7 +52,7 @@ docker compose exec eam-api-stub sh -c 'curl -s -H "Authorization: Token $(cat /
 
 ```bash
 docker compose exec eam-api-stub curl -s -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' \
-  -d '{"type":"itsystems","id":5101,"attrs":{"name":"Payments Core","eam_id":"EAM-1042","solution":[7201],"ownerTeam":"TEAM-PAY"}}'
+  -d '{"type":"itsystems","id":5101,"attrs":{"name":"Payments Core","eam_id":"EAM-1042","product_id":7201,"platform_id":3101,"ownerTeam":"TEAM-PAY"}}'
 docker compose exec eam-api-stub curl -s -X POST http://127.0.0.1:8091/control/archive -H 'Content-Type: application/json' -d '{"type":"platforms","id":3102}'
 ```
 
