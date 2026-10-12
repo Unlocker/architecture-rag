@@ -202,7 +202,7 @@ flowchart LR
 ```text
 >>> {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"find_runtime_footprint","arguments":{"systemGid":"e833c322-80f7-4938-9cde-7f0671d09b22","environment":"prod"}}}
 <<< {"systemGid":"e833c322-…","systemName":"Payments Core","systemLastSeenAt":"2026-10-06T09:10:24.075410506Z","systemStale":false,
-     "systemSources":[{"source":"EAM","sourceType":"IT_SYSTEM","sourceId":"EAM-1042","authority":"MASTER"}],"environment":"prod",
+     "systemSources":[{"source":"EAM","sourceType":"IT_SYSTEM","sourceId":"5101","authority":"MASTER"}],"environment":"prod",
      "services":[{"gid":"fbf12197-…","name":"payments-api","stale":false,"sources":[…],
        "deployments":[{"gid":"4ea7832d-…","name":"payments-api","version":"1.4.2","status":null,"environment":"prod","stale":false,
          "sourceCommit":"9fceb02d0ae598e95dc970b74767f19372d61af8","repositoryUrl":"https://git.example.org/pay/payments-api",
@@ -243,7 +243,7 @@ flowchart LR
 <<< {"startGid":"e833c322-…","mode":"trace","direction":"downstream","environment":null,"staleAfter":"PT168H",
      "nodes":[{"gid":"e833c322-…","label":"ITSystem","name":"Payments Core","stale":false,"conflicts":[]}, …],
      "relations":[
-       {"type":"OWNED_BY","from":"e833c322-…","to":"9c1df916-…","assertedBySource":"EAM","assertedByType":"IT_SYSTEM","assertedById":"EAM-1042","sourceFetchedAt":"2026-10-06T09:10:24.075410506Z","sourceActive":true,"stale":false},
+       {"type":"OWNED_BY","from":"e833c322-…","to":"9c1df916-…","assertedBySource":"EAM","assertedByType":"IT_SYSTEM","assertedById":"5101","sourceFetchedAt":"2026-10-06T09:10:24.075410506Z","sourceActive":true,"stale":false},
        {"type":"DEPENDS_ON","from":"fbf12197-…","to":"01703823-…","assertedBySource":"EAM","assertedByType":"SERVICE_DEPENDENCY","assertedById":"dep-payments-api-ledger-api","sourceFetchedAt":null,"sourceActive":true,"stale":true},
        …],
      "paths":[{"nodes":["e833c322-…","9c1df916-…"],"relations":[{"type":"OWNED_BY","from":"e833c322-…","to":"9c1df916-…"}]}, …],
@@ -285,7 +285,7 @@ flowchart LR
 >>> {"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"explain_provenance","arguments":{"gid":"e833c322-80f7-4938-9cde-7f0671d09b22"}}}
 <<< {"gid":"e833c322-80f7-4938-9cde-7f0671d09b22","type":"ITSystem","property":null,"isCurrent":true,"deletedAt":null,
      "authorities":["EAM"],"conflictState":"NONE",
-     "records":[{"source":"EAM","sourceType":"IT_SYSTEM","sourceId":"EAM-1042","sourceVersion":"1","fetchedAt":"2026-10-06T09:10:24.075410506Z",
+     "records":[{"source":"EAM","sourceType":"IT_SYSTEM","sourceId":"5101","sourceVersion":"1","fetchedAt":"2026-10-06T09:10:24.075410506Z",
                  "contentHash":"db06ab38…af4c","confidence":1.0,"authority":"MASTER","authoritative":true,"active":true,"deletedAt":null,"conflictProperties":[]}]}
 ```
 
@@ -535,7 +535,7 @@ public interface CanonicalMapper {
 
 **Отправка webhook** — `StubWebhookSender(target, secret, clock)`: `send`, `sendAt(event, timestamp)` (проверка replay window), `sendWithBadSignature`; тело — `WebhookEvent` в JSON, заголовки из раздела 3.
 
-**Начальные данные** — `StubSources.seeded(clock)`: EAM (`TEAM-PAY`, `EAM-1042` Payments Core, `EAM-2001` Ledger, зависимость `svc-payments-api` → `svc-ledger-api`), SCM (`svc-payments-api`, `svc-ledger-api`, `repo-payments-api`), CMDB (`vm-pay-01`), deploy map (`ENVIRONMENT/prod`, `DEPLOYMENT/dep-payments-api-prod`). `addServiceWithBrokenReference` добавляет сервис с несуществующей системой (сценарий unresolved reference).
+**Начальные данные** (режим `ARCHRAG_EAM_MODE=legacy`; в compose по умолчанию `eam-api`, там `ITSystem` приходят из `EamApiSeed` с ключом `id`: `5101` Payments Core, `5102` Ledger) — `StubSources.seeded(clock)`: EAM (`TEAM-PAY`, `EAM-1042` Payments Core, `EAM-2001` Ledger, зависимость `svc-payments-api` → `svc-ledger-api`), SCM (`svc-payments-api`, `svc-ledger-api`, `repo-payments-api`), CMDB (`vm-pay-01`), deploy map (`ENVIRONMENT/prod`, `DEPLOYMENT/dep-payments-api-prod`). `addServiceWithBrokenReference` добавляет сервис с несуществующей системой (сценарий unresolved reference).
 
 **Формат `deploymap-poc-1`** (`DeployMapFormat.FORMAT_V1`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)). У `DEPLOYMENT` добавляется `format: "deploymap-poc-1"` и `chartMeta` — метаданные `Chart.yaml`: `name`, `version`, `appVersion`, `annotations` (map строк). Обязательны все три аннотации: `archrag.io/eam-system-id` (целое `id` системы EAM, не `eam_id`), `archrag.io/git-repo-url` (любая форма URL, нормализуется `GitUrls`), `archrag.io/git-commit` (40 hex в нижнем регистре). Строковые `chart` и `chartVersion` остаются и дублируют `chartMeta.name` и `chartMeta.version`. Формат `deploymap-poc-0` и запись без `format` по-прежнему валидны. Пример `annotations`:
 

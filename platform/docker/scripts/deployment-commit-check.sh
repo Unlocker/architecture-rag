@@ -31,7 +31,9 @@ token=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/realms/archrag/protocol/o
 mcp() {
   local out
   for _ in 1 2 3; do
-    if out=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/mcp" -H 'Content-Type: application/json'         -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $token"         -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" |
+    if out=$(curl -sf --cacert "$tmp/ca.crt" -X POST "$base/mcp" -H 'Content-Type: application/json' \
+      -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $token" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" |
         python3 -I -c '
 import json, sys
 r = json.load(sys.stdin)["result"]
