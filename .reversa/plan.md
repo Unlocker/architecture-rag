@@ -55,10 +55,10 @@
 
 ### R.2e platform (UNLOCKER-267)
 
-- [ ] **Archaeologist** — `platform/source-stubs`: заглушки мастер-систем
-- [ ] **Archaeologist** — `platform/demo-launcher`: запуск адаптеров и заглушек
-- [ ] **Archaeologist** — `platform/integration-tests`: IT-набор, фикстуры, приёмочные сценарии
-- [ ] **Archaeologist** — `platform/docker (не модуль)`: compose, Dockerfile, Keycloak, observability, скрипты
+- [x] ✅ **Archaeologist** — `platform/source-stubs`: заглушки мастер-систем
+- [x] ✅ **Archaeologist** — `platform/demo-launcher`: запуск адаптеров и заглушек
+- [x] ✅ **Archaeologist** — `platform/integration-tests`: IT-набор, фикстуры, приёмочные сценарии
+- [x] ✅ **Archaeologist** — `platform/docker (не модуль)`: compose, Dockerfile, Keycloak, observability, скрипты
 
 ## Fase 3: Interpretação 🧠
 

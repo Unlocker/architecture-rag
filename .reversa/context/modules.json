@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:15:58Z",
+  "generated_at": "2026-10-13T00:00:00Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -4020,6 +4020,1913 @@
         "OIDC Authorization Code + PKCE с токеном в памяти",
         "useAsync: загрузка с отменой устаревшего ответа и тихим автообновлением",
         "светофор здоровья источника по статусам, прогону и отставанию"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "platform/source-stubs",
+      "path": "platform/source-stubs",
+      "purpose": "Заглушки мастер-систем PoC: in-memory StubSource с HTTP-фасадом /changes и /objects, заглушка формата реального EAM API (ArchObject), seed и негативные сценарии, отправитель подписанных webhook, мини-JSON",
+      "primary_files": [
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSourceServer.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/DeployMapFormat.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiSeed.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiTypeMeta.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiFormat.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubWebhookSender.java",
+        "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/Json.java"
+      ],
+      "functions": [
+        {
+          "name": "StubSource.upsert",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "String type",
+            "String id",
+            "Map<String,Object> payload"
+          ],
+          "returns": "SourceChange",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.upsertPartial",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "String type",
+            "String id",
+            "Map<String,Object> payload"
+          ],
+          "returns": "SourceChange",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.delete",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "String type",
+            "String id"
+          ],
+          "returns": "SourceChange",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.fetchChanges",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "String cursor",
+            "int limit"
+          ],
+          "returns": "ChangePage",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.fetchById",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "String sourceType",
+            "String sourceId"
+          ],
+          "returns": "Optional<SourceChange>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.suppressWebhooks",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "boolean suppressed"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.reorderNextPage",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.failNext",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [
+            "int times",
+            "int status",
+            "Duration retryAfter"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSource.webhookEvents",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java",
+          "params": [],
+          "returns": "List<WebhookEvent>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSourceServer.failOnCall",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSourceServer.java",
+          "params": [
+            "int callNumber",
+            "int status",
+            "Duration retryAfter"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSourceServer.respond",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSourceServer.java",
+          "params": [
+            "HttpExchange ex",
+            "Handler handler"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.seeded",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "Clock clock"
+          ],
+          "returns": "Map<SourceSystem,StubSource>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.deployMap",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "Clock clock"
+          ],
+          "returns": "StubSource",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.addDeploymentWithUnknownRepository",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "StubSource deployMap"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.addDeploymentWithSystemMismatch",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "StubSource deployMap"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.addDeploymentWithInvalidCommit",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "StubSource deployMap"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.addDeploymentRedeploy",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "StubSource deployMap"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.addServiceWithBrokenReference",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "StubSource scm"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubSources.fields",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java",
+          "params": [
+            "Object... kv"
+          ],
+          "returns": "Map<String,Object>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStore.upsert",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java",
+          "params": [
+            "String type",
+            "long id",
+            "Map<String,Object> attrs"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStore.archive",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java",
+          "params": [
+            "String type",
+            "long id"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStore.page",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java",
+          "params": [
+            "String type",
+            "String sort",
+            "int page",
+            "int pageSize"
+          ],
+          "returns": "List<Entry>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStore.version",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java",
+          "params": [
+            "String type",
+            "long id"
+          ],
+          "returns": "Optional<Long>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStub.route",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java",
+          "params": [
+            "HttpExchange ex"
+          ],
+          "returns": "Reply",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStub.list",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java",
+          "params": [
+            "String type",
+            "Map<String,String> q"
+          ],
+          "returns": "Reply",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStub.types",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java",
+          "params": [
+            "String[] parts",
+            "Map<String,String> q"
+          ],
+          "returns": "Reply",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiSeed.seeded",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiSeed.java",
+          "params": [
+            "Clock clock"
+          ],
+          "returns": "EamApiStore",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiTypeMeta.options",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiTypeMeta.java",
+          "params": [
+            "String type",
+            "String kind"
+          ],
+          "returns": "List<Map<String,Object>>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiFormat.parseArchObjects",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiFormat.java",
+          "params": [
+            "String json"
+          ],
+          "returns": "List<Map<String,Object>>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiFormat.checkArchObject",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiFormat.java",
+          "params": [
+            "Object element"
+          ],
+          "returns": "Map<String,Object>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubWebhookSender.send",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubWebhookSender.java",
+          "params": [
+            "WebhookEvent event"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubWebhookSender.sendAt",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubWebhookSender.java",
+          "params": [
+            "WebhookEvent event",
+            "Instant timestamp"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubWebhookSender.sendWithBadSignature",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubWebhookSender.java",
+          "params": [
+            "WebhookEvent event"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Json.write",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/Json.java",
+          "params": [
+            "Object value"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Json.parse",
+          "file": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/Json.java",
+          "params": [
+            "String text"
+          ],
+          "returns": "Object",
+          "confidence": "inferred"
+        }
+      ],
+      "entities": [
+        {
+          "name": "StubSource.Entry (журнал)",
+          "fields": [
+            {
+              "name": "seq",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "change",
+              "type": "SourceChange",
+              "required": true
+            },
+            {
+              "name": "notified",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiStore.Entry",
+          "fields": [
+            {
+              "name": "id",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "ver",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "ctime",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "mtime",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "attrs",
+              "type": "Map<String,Object>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ArchObject (ответ EamApiStub)",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "ver",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "datetime",
+              "type": "string ISO-8601 UTC",
+              "required": true
+            },
+            {
+              "name": "attrs",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "typeObject (/api/types)",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "ver",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "datetime",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "attrs",
+              "type": "{name, typeurl}",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ChangePage JSON (/changes)",
+          "fields": [
+            {
+              "name": "changes",
+              "type": "SourceChange[]",
+              "required": true
+            },
+            {
+              "name": "nextCursor",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "hasMore",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "snapshotComplete",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceChange JSON",
+          "fields": [
+            {
+              "name": "sourceType",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "operation",
+              "type": "UPSERT|DELETE",
+              "required": true
+            },
+            {
+              "name": "completeness",
+              "type": "COMPLETE|PARTIAL",
+              "required": true
+            },
+            {
+              "name": "updatedAt",
+              "type": "Instant UTC",
+              "required": true
+            },
+            {
+              "name": "payload",
+              "type": "object",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Webhook-тело",
+          "fields": [
+            {
+              "name": "eventId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "source",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceType",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "operation",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "occurredAt",
+              "type": "Instant UTC",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Версия объекта монотонна на ключ type/id и растёт также на DELETE; повторный upsert после delete продолжает нумерацию",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java:185",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Snapshot отдаёт последнюю UPSERT-запись каждого живого объекта на момент bound; удалённые не возвращаются; snapshotComplete=true только на последней странице; следующий курсор i<bound>",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java:144-167",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Инкрементальный курсор i<seq> отдаёт записи с seq > seq, включая DELETE; reorderNextPage разворачивает следующую страницу и добавляет дубль первой записи один раз",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java:113-131",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Неполная запись (PARTIAL) сохраняет null-значения полей payload: заглушка проверяет, что потребитель не затирает известные поля",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java:62-65",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Сбои failNext/failOnCall отдаются как HTTP-статус; 0 → 504; Retry-After в секундах; не-GET → 405; ошибки без эха ввода",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSourceServer.java:102-127",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "EamApiStub: Authorization: Token обязателен (401), только GET (405), page_size зажимается до 500, sort только id/ctime/mtime, ответ — голый массив ArchObject",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java:92-131",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "EamApiStore: ver растёт только при изменении attrs; повторная запись тех же attrs — no-op; архив физически удаляет запись",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java:28-45",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Тело webhook содержит только уведомление, без состояния объекта; подпись HMAC-SHA256 над timestamp.body; секрет в исключения не попадает",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubWebhookSender.java:59-69,83-85",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Негативные сценарии deploy map (неизвестный репозиторий, несовпадение системы, невалидный commit, redeploy, битая ссылка SCM) не входят в seed",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSources.java:121-211",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Расхождение со спекой EAM: options kind=groups|computed и параметры search/enrich/only_names не поддержаны",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java:43,148-153",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Курсор s… без ':' и sort=',' дают необработанное исключение вместо 400 (также: platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStore.java:73-79)",
+          "location": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/StubSource.java:138-140",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "contracts/source-spi",
+        "JDK com.sun.net.httpserver",
+        "JDK java.net.http",
+        "junit-jupiter (test)",
+        "assertj-core (test)"
+      ],
+      "algorithms": [
+        "Журнал изменений с монотонной версией на ключ и курсорами snapshot s<after>:<bound> / инкремент i<seq>",
+        "Snapshot по границе bound: последняя UPSERT-запись ключа, постраничный TreeMap по seq",
+        "Расписание сбоев по номеру вызова (failOnCall) и по счётчику (failNext)",
+        "ver по изменению attrs, сортировка по списку ключей с цепочкой компараторов",
+        "Рекурсивный спуск JSON без внешних библиотек"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "platform/demo-launcher",
+      "path": "platform/demo-launcher",
+      "purpose": "Единый исполняемый jar стенда: запуск адаптера источника, заглушки источника или заглушки EAM API по аргументам и env; управляющие эндпоинты /control/* заглушек; /health адаптера",
+      "primary_files": [
+        "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+        "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java",
+        "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/StubControl.java",
+        "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java"
+      ],
+      "functions": [
+        {
+          "name": "DemoLauncher.main",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "String[] args"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.runAdapter",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "LauncherConfig.Adapter config"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.runStub",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "LauncherConfig.Stub config"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.runEamApiStub",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "LauncherConfig.EamApiStub config"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.create",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "AdapterConfig config",
+            "EamAdapter.EamApi eamApi",
+            "PostgresEventJournal journal",
+            "S3RawPayloadStore store"
+          ],
+          "returns": "SourceAdapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.healthServer",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [
+            "int port",
+            "AtomicBoolean started"
+          ],
+          "returns": "HttpServer",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DemoLauncher.awaitShutdown",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.parseSystem",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java",
+          "params": [
+            "String arg"
+          ],
+          "returns": "SourceSystem",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.adapter",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java",
+          "params": [
+            "SourceSystem system",
+            "Map<String,String> env"
+          ],
+          "returns": "LauncherConfig.Adapter",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.stub",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java",
+          "params": [
+            "SourceSystem system",
+            "Map<String,String> env"
+          ],
+          "returns": "LauncherConfig.Stub",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.eamApiStub",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java",
+          "params": [
+            "Map<String,String> env"
+          ],
+          "returns": "LauncherConfig.EamApiStub",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubControl.handleUpsert",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/StubControl.java",
+          "params": [
+            "StubSource source",
+            "StubWebhookSender webhooks",
+            "HttpExchange ex"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubControl.notifyAdapter",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/StubControl.java",
+          "params": [
+            "StubSource source",
+            "StubWebhookSender webhooks",
+            "String type",
+            "String id"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiControl.upsert",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java",
+          "params": [
+            "EamApiStore store",
+            "Map<String,Object> request"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiControl.archive",
+          "file": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java",
+          "params": [
+            "EamApiStore store",
+            "Map<String,Object> request"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "LauncherConfig.Adapter",
+          "fields": [
+            {
+              "name": "system",
+              "type": "SourceSystem",
+              "required": true
+            },
+            {
+              "name": "pgUrl",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "pgUser",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "pgPassword",
+              "type": "String (секрет)",
+              "required": true
+            },
+            {
+              "name": "s3Endpoint",
+              "type": "URI",
+              "required": true
+            },
+            {
+              "name": "s3AccessKey",
+              "type": "String (секрет)",
+              "required": true
+            },
+            {
+              "name": "s3SecretKey",
+              "type": "String (секрет)",
+              "required": true
+            },
+            {
+              "name": "s3Bucket",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceUrl",
+              "type": "URI",
+              "required": true
+            },
+            {
+              "name": "webhookSecret",
+              "type": "String (секрет)",
+              "required": true
+            },
+            {
+              "name": "webhookPort",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "healthPort",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "pollInterval",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "reconcileInterval",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "eamApi",
+              "type": "EamAdapter.EamApi",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.Stub",
+          "fields": [
+            {
+              "name": "system",
+              "type": "SourceSystem",
+              "required": true
+            },
+            {
+              "name": "port",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "webhookTarget",
+              "type": "URI",
+              "required": false
+            },
+            {
+              "name": "webhookSecret",
+              "type": "String (секрет)",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LauncherConfig.EamApiStub",
+          "fields": [
+            {
+              "name": "port",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "token",
+              "type": "String (секрет)",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubControl запрос POST /control/upsert",
+          "fields": [
+            {
+              "name": "type",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "id",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "payload",
+              "type": "object",
+              "required": true
+            },
+            {
+              "name": "notify",
+              "type": "boolean (умолч. true)",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "StubControl ответ",
+          "fields": [
+            {
+              "name": "sourceVersion",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "webhookStatus",
+              "type": "int (0 = не доставлено)",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiControl запрос",
+          "fields": [
+            {
+              "name": "type",
+              "type": "platforms|itproducts|itsystems",
+              "required": true
+            },
+            {
+              "name": "id",
+              "type": "integer",
+              "required": true
+            },
+            {
+              "name": "attrs",
+              "type": "object (только upsert)",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiControl ответ upsert",
+          "fields": [
+            {
+              "name": "ver",
+              "type": "long",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Конфигурация только из env; при пустых обязательных переменных или неверных аргументах процесс завершается с кодом 2, сообщение содержит имена переменных, но не значения (также: platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:107-121)",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:58-83",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Секреты (PG, S3, webhook, токен EAM API) не попадают в toString записей конфигурации",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:66-70,82-84,91-93",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Порт 1..65535, интервалы ≥ 1 секунды, умолчания: webhook 8080, health 8090, stub 8080, poll 30 с, reconcile 21600 с",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:122-124,174-203",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "ARCHRAG_EAM_MODE: legacy (по умолчанию) или eam-api; в eam-api нужны ARCHRAG_EAM_API_URL и ARCHRAG_EAM_API_TOKEN; для не-EAM игнорируется",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:128-139",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "WEBHOOK_SECRET обязателен для stub тогда и только тогда, когда задан ARCHRAG_WEBHOOK_TARGET",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:142-153",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Адаптер стартует после миграций (их накатывает ingestion-service); /health отвечает 200 только после startWebhook, startPolling и startReconciliation; экземпляр адаптера одного источника ровно один",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:46-47,119-128",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Control-эндпоинты на порту 8091 без аутентификации; тело ≤ 64 KiB, ошибки разбора дают 400 без эха ввода; порт не публикуется (также: platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:25,100-106)",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/StubControl.java:31,113-119",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "После upsert через control заглушка шлёт подписанный webhook (notify=false отключает); сбой доставки не откатывает upsert, статус 0 в webhookStatus",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/StubControl.java:69-76,89-104",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "EamApiControl: допустимые type — литерал Set.of(platforms, itproducts, itsystems), id только JSON-целое, upsert заменяет attrs целиком, archive идемпотентен",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:27,42-71",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Любое IllegalArgumentException внутри runAdapter/runStub выдаётся как configuration error с кодом 2",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:72-82",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Корректное закрытие ресурсов при SIGTERM не гарантировано: shutdown hook только снимает защёлку",
+          "location": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:162-167",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "platform/source-stubs",
+        "contracts/source-spi",
+        "adapters/adapter-core",
+        "adapters/eam-adapter",
+        "adapters/scm-adapter",
+        "adapters/asset-adapter",
+        "adapters/deploymap-adapter",
+        "ingestion/event-journal",
+        "contracts/event-schemas",
+        "org.postgresql:postgresql",
+        "spring-boot-maven-plugin (repackage, classifier exec)",
+        "junit-jupiter (test)",
+        "assertj-core (test)"
+      ],
+      "algorithms": [
+        "Диспетчер аргументов адаптер/заглушка/eam-api-stub с кодом выхода 2 на ошибках конфигурации",
+        "Разбор env с накоплением списка недостающих имён и проверкой диапазонов",
+        "Порядок старта адаптера: журнал → S3 → адаптер → health(503) → webhook → polling → reconciliation → health(200)",
+        "Control-вход: ограниченное чтение тела, разбор JSON с лимитом глубины, upsert и необязательная webhook-нотификация по последнему событию (type, id)"
+      ],
+      "complexity": "low"
+    },
+    {
+      "name": "platform/integration-tests",
+      "path": "platform/integration-tests",
+      "purpose": "Сквозная приёмка на Testcontainers (Neo4j 5.26.31-community, postgres:16, SeaweedFS 4.48): 31 класс *IT (298 @Test) + smoke-тест; проверяет ingest/журнал, identity, projector, query-core, консоль, admin REST, приёмку F1-F4 через MCP по Streamable HTTP (STATELESS), sync/reconcile; failsafe только в профиле integration-tests, src/main содержит лишь маркер",
+      "primary_files": [
+        "platform/integration-tests/pom.xml",
+        "platform/integration-tests/src/main/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsModule.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/TestImages.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/CanonicalGraph.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/EamApiSupport.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ScmItSystemMapper.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F2AcceptanceIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F3AcceptanceIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminConsoleIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ReconciliationIT.java",
+        "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphQueryCoreIT.java"
+      ],
+      "functions": [
+        {
+          "name": "TestImages.NEO4J",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/TestImages.java",
+          "params": [],
+          "returns": "DockerImageName neo4j:5.26.31-community",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ContainersSmokeIT.s3Container",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java",
+          "params": [],
+          "returns": "GenericContainer<?> (chrislusf/seaweedfs:4.48, server -s3, порт 8333, startup timeout 120 s)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "McpTestJwt.token",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java",
+          "params": [
+            "String... scopes"
+          ],
+          "returns": "String (RS256 JWT, sub=test-user, aud=iss=https://mcp.test/mcp, azp=archrag-demo)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "McpTestJwt.tokenFor",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java",
+          "params": [
+            "String subject",
+            "String audience",
+            "String... scopes"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "McpTestJwt.tokenForClient",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java",
+          "params": [
+            "String azp",
+            "String subject",
+            "String audience",
+            "String... scopes"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "McpTestJwt.jwkSetUri",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java",
+          "params": [],
+          "returns": "String http://localhost:<port>/jwks (локальный HttpServer на loopback)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetFixtures.node",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java",
+          "params": [
+            "UUID gid",
+            "String sourceType",
+            "String sourceId",
+            "NodeData data",
+            "Instant at"
+          ],
+          "returns": "SourceKey (засев через настоящий GraphProjector, исход должен быть APPLIED)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetFixtures.nodeFrom",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java",
+          "params": [
+            "SourceSystemCode source",
+            "UUID gid",
+            "String sourceType",
+            "String sourceId",
+            "NodeData data",
+            "Instant at"
+          ],
+          "returns": "SourceKey",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetFixtures.tombstone",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java",
+          "params": [
+            "SourceKey key",
+            "UUID gid",
+            "Instant at"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetFixtures.relation",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java",
+          "params": [
+            "RelationType type",
+            "SourceKey from",
+            "UUID fromGid",
+            "SourceKey to",
+            "UUID toGid",
+            "Validity validity",
+            "Instant at"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CanonicalGraph.dump",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/CanonicalGraph.java",
+          "params": [
+            "Driver driver"
+          ],
+          "returns": "List<String> (отсортированный дамп узлов, SourceRecord и связей для сравнения до/после)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EamApiSupport.adapter",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/EamApiSupport.java",
+          "params": [
+            "URI legacyUri",
+            "String webhookSecret",
+            "EventJournal journal",
+            "RawPayloadStore rawStore"
+          ],
+          "returns": "SourceAdapter (eam-api + старая заглушка)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ScmItSystemMapper.map",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ScmItSystemMapper.java",
+          "params": [
+            "CanonicalMapper.Input input",
+            "CommandSink sink"
+          ],
+          "returns": "void (IT_SYSTEM -> UpsertNode(ITSystem), остальное -> ScmMapper)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "F1AcceptanceIT.startMcp",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java",
+          "params": [],
+          "returns": "ConfigurableApplicationContext (McpServerApplication, protocol=STATELESS, /mcp, tool-scopes, reader-учётка)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "F1AcceptanceIT.awaitTrue",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java",
+          "params": [
+            "BooleanSupplier condition"
+          ],
+          "returns": "void (опрос sleep 200 мс, таймаут 90 с; копия в F2-F4/EamKeyMigrationIT)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SyncAcceptanceIT.awaitTrue",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java",
+          "params": [
+            "BooleanSupplier condition",
+            "Duration timeout"
+          ],
+          "returns": "void (sleep 200 мс, по умолчанию 60 с)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphProjectorIT.handle",
+          "file": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java",
+          "params": [
+            "CanonicalEvent event",
+            "String syncRunId"
+          ],
+          "returns": "ProcessingResult (journal.append + processor.process)",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "McpTestJwt claims",
+          "fields": [
+            {
+              "name": "iss",
+              "type": "String (https://mcp.test/mcp)",
+              "required": true
+            },
+            {
+              "name": "sub",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "aud",
+              "type": "String (по умолчанию https://mcp.test/mcp)",
+              "required": true
+            },
+            {
+              "name": "azp",
+              "type": "String (archrag-demo по умолчанию)",
+              "required": true
+            },
+            {
+              "name": "iat",
+              "type": "Instant (now-60s)",
+              "required": true
+            },
+            {
+              "name": "exp",
+              "type": "Instant (now+5min, не настраивается)",
+              "required": true
+            },
+            {
+              "name": "scope",
+              "type": "String (пробел-разделённый)",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CanonicalEvent (формат фикстуры IT)",
+          "fields": [
+            {
+              "name": "eventId",
+              "type": "String (e-<UUID>)",
+              "required": true
+            },
+            {
+              "name": "source",
+              "type": "String (urn:corp:eam|scm|cmdb|deploymap)",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "String (architecture.asset.upserted.v1|deleted.v1|sync.snapshot-complete.v1)",
+              "required": true
+            },
+            {
+              "name": "subject",
+              "type": "String (<TYPE>/<id>)",
+              "required": true
+            },
+            {
+              "name": "schema",
+              "type": "String (urn:corp:schema:asset-upserted:1)",
+              "required": true
+            },
+            {
+              "name": "data",
+              "type": "AssetEventData(type,id,SourceVersion,payload)",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Payload eam-api в IT",
+          "fields": [
+            {
+              "name": "id",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "ver",
+              "type": "long",
+              "required": true
+            },
+            {
+              "name": "datetime",
+              "type": "String ISO-8601",
+              "required": false
+            },
+            {
+              "name": "attrs",
+              "type": "Map (name, eam_id, product_id, platform_id, criticality)",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryLimits в IT",
+          "fields": [
+            {
+              "name": "maxDepth",
+              "type": "int (6)",
+              "required": true
+            },
+            {
+              "name": "maxNodes",
+              "type": "int (500)",
+              "required": true
+            },
+            {
+              "name": "maxPaths",
+              "type": "int (50)",
+              "required": true
+            },
+            {
+              "name": "timeout",
+              "type": "Duration (5 s; -Darchrag.it.queryTimeoutSeconds)",
+              "required": true
+            },
+            {
+              "name": "maxResponseBytes",
+              "type": "long (512 KiB)",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Контейнеры IT",
+          "fields": [
+            {
+              "name": "neo4j",
+              "type": "neo4j:5.26.31-community",
+              "required": true
+            },
+            {
+              "name": "postgres",
+              "type": "postgres:16",
+              "required": true
+            },
+            {
+              "name": "s3",
+              "type": "chrislusf/seaweedfs:4.48 (ключи test-access-key/test-secret-key)",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Дамп CanonicalGraph",
+          "fields": [
+            {
+              "name": "N",
+              "type": "строка: labels + properties узла 7 канонических меток",
+              "required": true
+            },
+            {
+              "name": "S",
+              "type": "строка: properties SourceRecord",
+              "required": true
+            },
+            {
+              "name": "R",
+              "type": "строка: связь из 10 типов (включая ASSERTS) с обоими концами",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "failsafe подключён только профилем integration-tests: обычный verify не запускает *IT и не требует Docker; surefire выполняет единственный IntegrationTestsSmokeTest",
+          "location": "platform/integration-tests/pom.xml:136-157",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Контейнеры поднимаются на каждый класс, без withReuse и фиксированных портов (≈60 запусков за прогон: 26 Neo4j, 23 PostgreSQL, 11 S3)",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java:37-60",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Схема применяется тем же кодом, что в проде: Neo4jSchema.apply / JournalMigrations.apply напрямую, либо через IngestionServiceConfiguration; GraphQueryCoreIT и RuntimeFootprintIT работают без схемы",
+          "location": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:47,68-72",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Read-only чтения доказываются: EXPLAIN-проверка шаблонов, READ_SESSION_CONFIG отвергает CREATE кодом Statement.AccessMode, роль archrag_console_ro не пишет (SQLSTATE 42501)",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphQueryCoreIT.java:79-120",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Удаление только после полного snapshot: сбой на середине, маркер с завышенным числом объектов, карантин и webhook в окне snapshot ничего не удаляют",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ReconciliationIT.java:202-290",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Дедупликация по source+eventId, IGNORED_OLD_VERSION по числовой версии, checkpoint не сдвигается при сбое графа",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:222-300",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Реальная цепочка JWT ingestion (подпись + issuer + audience + azp) проверяется только в AdminEndpointIT; в F1-F4/SyncAcceptanceIT/EamKeyMigrationIT/JournalDispatcherIT декодер подменён на HS256",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:375-401",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "MCP: 401 без токена и 403 insufficient_scope для search_assets, find_runtime_footprint, trace_dependencies, explain_provenance; неверный audience/exp и get_asset/ping отдельно не проверяются",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:350-358",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Консоль: 401/403 проверены лишь на /api/sync/events и /api/audit; audience и azp не проверяются нигде",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:211-218",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Тесты F1-F4, Sync и EamKeyMigration зависят от @Order и общего состояния; в F2 два метода с @Order(2)",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F2AcceptanceIT.java:255,360",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "MCP в IT работает с protocol=STATELESS (ADR 0017), что расходится с текстом CLAUDE.md (STREAMABLE); S3 в IT - SeaweedFS (ADR 0007), а не MinIO",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:201",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Правило закрытия узла при tombstone мастера (нет активных MASTER-assertions) уже формулировки ADR 0020 (других активных assertions)",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java:432-433",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Временные утверждения хрупки: p95 при n=10 равен максимуму, порог холодного вызова 3 с, SLA webhook p95 30 с на реальных часах",
+          "location": "platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F3AcceptanceIT.java:392-410",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "canonical-model",
+        "event-schemas",
+        "source-spi",
+        "adapter-core",
+        "source-stubs",
+        "eam-adapter",
+        "scm-adapter",
+        "asset-adapter",
+        "deploymap-adapter",
+        "event-journal",
+        "normalizer",
+        "identity-resolution",
+        "graph-projector",
+        "ingestion-service",
+        "graph-query-core",
+        "mcp-server",
+        "admin-console",
+        "spring-boot-starter-test",
+        "testcontainers-junit-jupiter 2.0.5",
+        "testcontainers-neo4j",
+        "testcontainers-postgresql",
+        "neo4j-java-driver",
+        "postgresql",
+        "maven-failsafe-plugin 3.5.6 (профиль integration-tests)",
+        "nimbus-jose-jwt, MCP client, logback (транзитивно)"
+      ],
+      "algorithms": [
+        "Поднятие окружения: Testcontainers на класс, @DynamicPropertySource либо SpringApplicationBuilder с аргументами командной строки",
+        "Сквозная цепочка заглушки -> адаптеры -> inbox/S3 -> диспетчер -> Neo4j -> MCP-клиент (Streamable HTTP) с @Order-сценарием",
+        "JWT: RSA-ключ в памяти + локальный JWKS (McpTestJwt) против HS256-заглушки декодера",
+        "Опрос awaitTrue (sleep 100/200 мс, таймаут 30/60/90 с) вместо Awaitility",
+        "Канонический дамп графа для сравнения до/после rebuild и повторной доставки (CanonicalGraph.dump)",
+        "Засев графа через настоящий GraphProjector (AssetFixtures) с выбором мастера по AuthorityMatrix"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "platform/docker",
+      "path": "platform/docker",
+      "purpose": "Демо-стенд PoC на Docker Compose (не Maven-модуль): 23 сервиса (инфраструктура, приложения, заглушки мастер-систем, TLS reverse-proxy, профиль observability), Docker secrets из .env, раздельные сети edge/backend/graph и скрипты приёмки smoke, backup/restore, замеры",
+      "primary_files": [
+        "platform/docker/docker-compose.yml",
+        "platform/docker/Dockerfile",
+        "platform/docker/entrypoint.sh",
+        "platform/docker/Dockerfile.dockerignore",
+        "platform/docker/.env.example",
+        "platform/docker/README.md",
+        "platform/docker/keycloak/archrag-realm.json",
+        "platform/docker/neo4j/init-reader.sh",
+        "platform/docker/postgres/init-console-ro.sh",
+        "platform/docker/proxy/nginx.conf",
+        "platform/docker/certs/gen-certs.sh",
+        "platform/docker/observability/otel-collector.yml",
+        "platform/docker/observability/prometheus.yml",
+        "platform/docker/observability/grafana/provisioning/datasources/prometheus.yml",
+        "platform/docker/observability/grafana/provisioning/dashboards/archrag.yml",
+        "platform/docker/observability/grafana/dashboards/archrag-poc.json",
+        "platform/docker/smoke.sh",
+        "platform/docker/console-smoke.sh",
+        "platform/docker/scripts/lib.sh",
+        "platform/docker/scripts/backup.sh",
+        "platform/docker/scripts/restore.sh",
+        "platform/docker/scripts/graph-fingerprint.sh",
+        "platform/docker/scripts/backup-restore-check.sh",
+        "platform/docker/scripts/deployment-commit-check.sh",
+        "platform/docker/scripts/measure.sh"
+      ],
+      "functions": [
+        {
+          "name": "entrypoint.sh",
+          "file": "platform/docker/entrypoint.sh",
+          "params": [
+            "аргументы command compose"
+          ],
+          "returns": "exec java -jar; экспортирует /run/secrets/<ИМЯ> в переменную <ИМЯ>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "gen-certs.sh",
+          "file": "platform/docker/certs/gen-certs.sh",
+          "params": [],
+          "returns": "демо-CA и сертификаты proxy/neo4j в томе certs; идемпотентен по .ready; код 0",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "init-reader.sh",
+          "file": "platform/docker/neo4j/init-reader.sh",
+          "params": [
+            "secrets neo4j_password, neo4j_reader_password"
+          ],
+          "returns": "создаёт или обновляет пользователя archrag_reader; код 1 при пароле с кавычкой или обратной косой",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "init-console-ro.sh",
+          "file": "platform/docker/postgres/init-console-ro.sh",
+          "params": [
+            "secrets pg_password, console_pg_password"
+          ],
+          "returns": "задаёт пароль роли archrag_console_ro (роль создаёт миграция V6 ingestion)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "smoke.sh",
+          "file": "platform/docker/smoke.sh",
+          "params": [],
+          "returns": "код 0 или 1: TLS, 401/200, ping, сетевые границы, секреты MCP, admin REST aud, plain Bolt отклонён",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "console-smoke.sh",
+          "file": "platform/docker/console-smoke.sh",
+          "params": [],
+          "returns": "код 0 или 1: PKCE-вход, 401/403/200 консоли, граница с admin REST, loopback, секреты консоли",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "lib.sh",
+          "file": "platform/docker/scripts/lib.sh",
+          "params": [],
+          "returns": "общие функции dc, cypher, vol_sh, neo4j_admin, aws_s3, psql_q, wait_queue_empty, run_replay, start/stop_graph_services, check_label",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "backup.sh",
+          "file": "platform/docker/scripts/backup.sh",
+          "params": [
+            "метка (необязательно)"
+          ],
+          "returns": "холодный dump Neo4j + pg_dump + manifest.json в s3://BACKUP_BUCKET/метка/; печатает метку",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "restore.sh",
+          "file": "platform/docker/scripts/restore.sh",
+          "params": [
+            "метка"
+          ],
+          "returns": "проверка sha256 и версии Neo4j, database load, replay журнала по 4 источникам, ожидание пустой очереди; PostgreSQL не восстанавливается",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "graph-fingerprint.sh",
+          "file": "platform/docker/scripts/graph-fingerprint.sh",
+          "params": [],
+          "returns": "счётчики узлов и связей и sha256 ключей, связей, свойств (без временных свойств обработки)",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "backup-restore-check.sh",
+          "file": "platform/docker/scripts/backup-restore-check.sh",
+          "params": [],
+          "returns": "код 0 если F2 равен F1 и F1 не равен F0",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "deployment-commit-check.sh",
+          "file": "platform/docker/scripts/deployment-commit-check.sh",
+          "params": [],
+          "returns": "код 0 если смена commit дошла до MCP и в Neo4j 1 открытое и 1 закрытое ребро DEPLOYED_FROM",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "measure.sh",
+          "file": "platform/docker/scripts/measure.sh",
+          "params": [
+            "env N, M, K, P, E2E_PATH, E2E_JITTER_MAX"
+          ],
+          "returns": "markdown-таблица замеров в stdout, сырьё в measurements/штамп; код 1 при превышении порогов, росте DLQ, ошибке tool",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Сервис compose",
+          "fields": [
+            {
+              "name": "certs, neo4j-init, console-pg-init",
+              "type": "одноразовые",
+              "required": true
+            },
+            {
+              "name": "neo4j, postgres, seaweedfs, keycloak",
+              "type": "инфраструктура",
+              "required": true
+            },
+            {
+              "name": "ingestion, mcp-server, admin-console",
+              "type": "приложения",
+              "required": true
+            },
+            {
+              "name": "adapter-eam/scm/cmdb/deploymap, stub-eam/scm/cmdb/deploymap, eam-api-stub",
+              "type": "demo-launcher",
+              "required": true
+            },
+            {
+              "name": "reverse-proxy",
+              "type": "nginx 1.27-alpine",
+              "required": true
+            },
+            {
+              "name": "otel-collector, prometheus, grafana",
+              "type": "профиль observability",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Docker secret",
+          "fields": [
+            {
+              "name": "pg_password",
+              "type": "POSTGRES_PASSWORD",
+              "required": true
+            },
+            {
+              "name": "neo4j_password",
+              "type": "NEO4J_PASSWORD (writer)",
+              "required": true
+            },
+            {
+              "name": "neo4j_reader_password",
+              "type": "NEO4J_READER_PASSWORD",
+              "required": true
+            },
+            {
+              "name": "console_pg_password",
+              "type": "CONSOLE_PG_PASSWORD",
+              "required": true
+            },
+            {
+              "name": "s3_access_key, s3_secret_key",
+              "type": "S3_ACCESS_KEY, S3_SECRET_KEY",
+              "required": true
+            },
+            {
+              "name": "webhook_secret",
+              "type": "WEBHOOK_SECRET",
+              "required": true
+            },
+            {
+              "name": "eam_api_token",
+              "type": "EAM_API_TOKEN",
+              "required": true
+            },
+            {
+              "name": "grafana_admin_password",
+              "type": "GRAFANA_ADMIN_PASSWORD",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Сеть compose",
+          "fields": [
+            {
+              "name": "edge",
+              "type": "не internal",
+              "required": true
+            },
+            {
+              "name": "backend, graph, observability",
+              "type": "internal",
+              "required": true
+            },
+            {
+              "name": "obs-edge, console-edge",
+              "type": "только публикация порта на loopback",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Realm Keycloak archrag",
+          "fields": [
+            {
+              "name": "client archrag-demo",
+              "type": "confidential, client_credentials, default architecture.read, optional architecture.admin, audience MCP",
+              "required": true
+            },
+            {
+              "name": "client archrag-admin-console",
+              "type": "public, Authorization Code + PKCE S256, optional architecture.admin и architecture.read, audience консоли",
+              "required": true
+            },
+            {
+              "name": "client scope architecture.admin",
+              "type": "mapper audience urn:archrag:admin",
+              "required": true
+            },
+            {
+              "name": "роль archrag-console-admin",
+              "type": "назначена демо-пользователю, не проверяется кодом",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Секреты раздаются как Docker secrets из .env, entrypoint.sh превращает /run/secrets/ИМЯ в переменную ИМЯ; значений секретов в compose и realm нет, в Git только .env.example",
+          "location": "platform/docker/docker-compose.yml:546-564; platform/docker/entrypoint.sh:4-11; platform/docker/keycloak/archrag-realm.json:44,56",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "mcp-server получает единственный секрет neo4j_reader_password, без writer, PostgreSQL и S3; admin-console только reader и console_pg; проверяется smoke.sh и console-smoke.sh",
+          "location": "platform/docker/docker-compose.yml:237-240,287-291; platform/docker/smoke.sh:42-53; platform/docker/console-smoke.sh:115-124",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Reader и writer Neo4j разделены только креденшелами: в Community нет ролей, read-only обеспечивает приложение",
+          "location": "platform/docker/neo4j/init-reader.sh:1-3; platform/docker/README.md:111-112",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Наружу публикуются только порты на 127.0.0.1: proxy 8443 TLS, Keycloak 8080, admin-console 8090, Grafana 3000; Neo4j, PostgreSQL, S3 и ingestion не публикуются; backend, graph, observability internal",
+          "location": "platform/docker/docker-compose.yml:161,293,451,516,528-543",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Bolt только по TLS (tls_level REQUIRED), клиенты bolt+ssc без проверки цепочки — демо-допущение",
+          "location": "platform/docker/docker-compose.yml:62,191,233,284; platform/docker/smoke.sh:81-87",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Три контура аудиенций: MCP (architecture.read, aud URI MCP), консоль (architecture.admin, aud urn:archrag:console), admin REST ingestion (architecture.admin, aud urn:archrag:admin и azp archrag-demo); токены не взаимозаменяемы",
+          "location": "platform/docker/keycloak/archrag-realm.json:12-28,51-109; platform/docker/smoke.sh:59-79; platform/docker/console-smoke.sh:65-95",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Адаптер каждого источника в одном экземпляре (replicas 1); mcp-server масштабируется --scale за proxy с DNS-резолвом при запросе",
+          "location": "platform/docker/docker-compose.yml:330,229; platform/docker/proxy/nginx.conf:1-4",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Backup холодный: останов neo4j, ingestion, mcp-server; restore проверяет sha256 и точную версию Neo4j до остановки, затем load и replay окна [backup_started_at-5 мин, now+1 мин); PostgreSQL не откатывается",
+          "location": "platform/docker/scripts/backup.sh:25-30; platform/docker/scripts/restore.sh:24-53",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Образ neo4j:5-community в compose с плавающим тегом, тогда как ITs используют точный 5.26.31-community; restore старой копии откажется работать при смене минорной версии",
+          "location": "platform/docker/docker-compose.yml:52,90; platform/docker/README.md:187-188; docs/05-production-gap-list.md:21",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "trap ERR в backup.sh и restore.sh не срабатывает на сбой внутри функций lib.sh (нет set -E, проверено локальным экспериментом bash): сервисы графа могут остаться остановленными",
+          "location": "platform/docker/scripts/backup.sh:21; platform/docker/scripts/restore.sh:39; platform/docker/scripts/lib.sh:5",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Роль archrag-console-admin назначена, но не принуждается: токен консоли получает любой пользователь realm (принято владельцем для PoC)",
+          "location": "platform/docker/keycloak/archrag-realm.json:30-46; docs/05-production-gap-list.md:33",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "CI запускает только smoke.sh и backup-restore-check.sh; console-smoke.sh, deployment-commit-check.sh и measure.sh в ci.yml отсутствуют, хотя CLAUDE.md обещает весь список",
+          "location": ".github/workflows/ci.yml:60-101; CLAUDE.md (раздел Демо-стенд)",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "Docker Compose v2 на хосте",
+        "bash, curl, openssl, python3 на хосте (скрипты smoke, measure, deployment-commit-check)",
+        "jar с классификатором exec из access/mcp-server, access/admin-console, ingestion/ingestion-service, platform/demo-launcher",
+        "образы neo4j:5-community, postgres:16, chrislusf/seaweedfs:4.48, keycloak 26.4, nginx 1.27-alpine, eclipse-temurin:21-jre, otel-collector-contrib 0.140.1, prometheus v3.7.3, grafana 12.2.1, alpine/openssl 3.5.4, amazon/aws-cli 2.27.50",
+        "миграция V6 ingestion-service (роль archrag_console_ro)",
+        "конфигурация безопасности access/mcp-server, access/admin-console, ingestion/ingestion-service (issuer, audience, scope, azp)",
+        "StubSources и EamApiSeed из platform/source-stubs (константы deployment-commit-check.sh)"
+      ],
+      "algorithms": [
+        "Порядок запуска через depends_on с условиями service_healthy и service_completed_successfully",
+        "Docker secrets в переменные окружения процесса через entrypoint",
+        "Холодный dump и load Neo4j с проверкой sha256 и версии плюс replay журнала",
+        "Отпечаток графа: sha256 отсортированных ключей, связей и свойств без временных полей обработки",
+        "PKCE S256 вход на curl и проверка границ аудиторий"
       ],
       "complexity": "medium"
     }
