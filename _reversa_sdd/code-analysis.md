@@ -1,7 +1,7 @@
 # Code Analysis → Технический анализ кода
 
-> Archaeologist, этапы R.2a (UNLOCKER-263: `contracts/*`, разделы A, E, S) и R.2b (UNLOCKER-264: `adapters/*`, раздел R.2b / P в конце файла).
-> Остальные модули (R.2c–R.2e) добавят свои разделы позже.
+> Archaeologist, этапы R.2a (UNLOCKER-263: `contracts/*`, разделы A, E, S), R.2b (UNLOCKER-264: `adapters/*`, раздел R.2b / P) и R.2c (UNLOCKER-265: `ingestion/*`, раздел «R.2c — `ingestion/*`», Q1–Q7, в конце файла).
+> Остальные модули (R.2d–R.2e) добавят свои разделы позже.
 > Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` даны относительно корня репозитория.
 > Описания источников не дублируются: модель — `docs/02-data-model.md`, интерфейсы — `docs/03-interfaces.md`, решения — `docs/adr/`.
 
@@ -390,3 +390,381 @@ Feature flags и параметры окружения в модуле отсу�
 | `deploymap-adapter` | 3 / 16 в 3 классах | `DeploymapAdapter` | P5/P7.1: формат вне модуля, временный |
 
 Новые сомнения R.2b (для комментария к задаче): 🟡 `AdapterConfig` (NPE вместо `requireNonNull`, нет теста на пустой секрет); 🟡 вложенные `null` в `attrs` EAM доходят до normalizer'а; 🟡 `datetime == null → EPOCH`; 🟡 одинаковая версия у `poll:` и `snap:` событий; 🔴 дубли литералов типов событий; 🔴 нет теста согласованности `SourceSystem` ↔ `SourceSystemCode`; 🟡 устаревшая ссылка в Javadoc `SourceSystem.DEPLOY_MAP`.
+
+---
+
+# R.2c — `ingestion/*` (UNLOCKER-265)
+
+> Archaeologist, этап R.2c. Разделы Q1–Q5 — по одному на модуль ingestion; Q6 — разбор сомнений R.2a/R.2b; Q7 — итоги.
+> Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` — от корня репозитория.
+> Сокращения: `EJ` = `ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal`. Статусы и переходы `ProcessingStatus` описаны в `data-dictionary.md` §E.3, не дублируются.
+
+## Q1. `ingestion/event-journal`
+
+**Назначение.** Реализация портов `EventJournal`, `JournalReader`, `CanonicalEventPublisher` на PostgreSQL (чистый JDBC) и `RawPayloadStore` на S3; Flyway-миграция `V1__event_journal.sql` 🟢 (`EJ/PostgresEventJournal.java:31-38`, `EJ/S3RawPayloadStore.java:26-30`, `EJ/package-info.java:1-9`).
+Состав: 5 Java-файлов main, 550 строк (`PostgresEventJournal`, `S3RawPayloadStore`, `JournalMigrations`, `JournalException`, `package-info`) + 1 SQL. Тесты модуля: только `S3RawPayloadStoreTest` (2 `@Test`) 🟢; поведение журнала на реальном PostgreSQL в модуле не тестируется — это делает `platform/integration-tests` (R.2e) 🟡.
+
+### Q1.1 Поток управления
+
+| Операция | Что делает | Где |
+|---|---|---|
+| `append(event, ref, syncRunId)` | `INSERT … ON CONFLICT (source,event_id) DO NOTHING RETURNING`; новая строка → `RECEIVED`, `attempts=0`; при конфликте читает существующую и **возвращает копию со статусом `DUPLICATE` только в памяти** (строка в БД не меняется) | `EJ/PostgresEventJournal.java:53-97` 🟢 |
+| `publish` | `append(...).status() != DUPLICATE` | `:99-102` 🟢 |
+| `find` | `SELECT … WHERE source=? AND event_id=?` | `:104-111` 🟢 |
+| `transition` | `SELECT … FOR UPDATE` → `canTransitionTo` → `UPDATE … RETURNING`; одна транзакция | `:113-129`, `:320-354` 🟢 |
+| `toDlq` | `transition(→QUARANTINED)` + вставка в `dlq_entry` в одной транзакции; `errorCode` обязателен | `:131-160` 🟢 |
+| `read(JournalQuery)` | страница по keyset `(received_at, source, event_id)`, фильтры источник/интервал/`excludeReplays` | `:162-207` 🟢 |
+| `pending(after, retryNotAfter, limit)` | выборка для диспетчера (см. Q1.2) | `:209-237` 🟢 |
+| `loadCheckpoint` / `saveCheckpoint` | upsert в `consumer_checkpoint` по `(consumer, source)` | `:239-272` 🟢 |
+| `snapshotContents(source, syncRunId)` | объекты и число событий snapshot-прогона | `:274-299` 🟢 |
+| `objectsReceivedSince(source, since)` | `DISTINCT (source_type, source_id)` за период | `:301-318` 🟢 |
+| `S3RawPayloadStore.put/get/ensureBucket/close` | запись по ключу `raw/<source>/<sha256>`, чтение с проверкой hash | `EJ/S3RawPayloadStore.java:59-113` 🟢 |
+
+Обработка ошибок: `SQLException` → `JournalException` с cause (`PostgresEventJournal.java:94-96`, `EJ/JournalException.java:4-8`); при ошибке внутри транзакции — `rollback` и повторный `throw` (`:90-93`, `:122-125`, `:153-156`). Пустых `catch` нет 🟢. Исключение: `exists()` в S3 перехватывает `NoSuchKeyException` как штатный ответ «нет объекта» (`S3RawPayloadStore.java:92-99`) 🟢.
+
+### Q1.2 Алгоритмы и встроенные правила
+
+1. **Идемпотентность по `source + eventId`.** Обеспечена ограничением `uq_inbox_event UNIQUE (source,event_id)` и `ON CONFLICT DO NOTHING` (`V1__event_journal.sql:21`, `PostgresEventJournal.java:59`); тело дубля **не сравнивается** с первой записью — повтор с тем же `eventId` и другой версией/полезной нагрузкой молча отбрасывается 🟡.
+2. **`DUPLICATE` не персистируется.** Статус `DUPLICATE` существует только в возвращаемом `JournalEntry` (`:89`, `:393-397`); в таблице строка остаётся в исходном статусе. Следовательно, `inbox_event.status = 'DUPLICATE'` в БД не появляется через `append`, хотя `ProcessingStatus` допускает `RECEIVED → DUPLICATE` 🟢/🟡 (переход `RECEIVED → DUPLICATE` используется проекцией: `EventProcessor.decideBeforeWrite`, Q4.2 п.1 — там он персистируется).
+3. **Переходы под блокировкой.** `FOR UPDATE` берётся до проверки `canTransitionTo`, поэтому гонка двух воркеров исключена; запрещённый переход → `IllegalStateException` (не `JournalException`), неизвестное событие → `IllegalArgumentException` (`:322-338`) 🟢. Ошибка содержит только 12-символьный SHA-256-отпечаток `source+eventId`, не сами значения (`:356-359`) 🟢 (ловушка 11/12).
+4. **`attempts`.** Растёт только при `status == RETRYING` (`+1` на каждый вызов, включая переход RETRYING→RETRYING) (`:345`) 🟢. `error_code`/`error_reason` **перезаписываются** при каждом переходе: переход без ошибки (например, → `VALIDATED`) обнуляет их (`:340-345`) 🟢 — история причин в строке не хранится.
+5. **Выборка `pending`.** Условие: `status='RECEIVED'` (без задержки) **или** `status IN ('RETRYING','VALIDATED','NORMALIZED','RESOLVED') AND updated_at <= retryNotAfter` (`:214-215`) 🟢. `QUARANTINED`, `PROJECTED`, `DUPLICATE`, `SUPERSEDED`, `IGNORED_OLD_VERSION` не выбираются. Промежуточные статусы попадают в повтор по таймауту — защита от «зависшего» после падения процесса события 🟡 (намерение не задокументировано в коде). Порядок `received_at, source, event_id`, keyset-курсор `(received_at, source, event_id) > (?,?,?)` (`:216-217`) 🟢.
+6. **`read`.** Динамический SQL собирается из фиксированных фрагментов, значения только параметрами (`:164`, `:194-196`) 🟢 (ловушка 1). `excludeReplays` — `event_id NOT LIKE 'replay:%'`, префикс — константа `JournalQuery.REPLAY_PREFIX` (`:179-182`) 🟢. `limit` берётся из `JournalQuery` (валидация в контракте, см. data-dictionary §E.2); в `pending` проверяется отдельно `1..MAX_LIMIT` (`:211-213`) 🟢.
+7. **`snapshotContents`.** Отбор событий прогона через `starts_with(event_id, 'snap:'||syncRunId||':')`, а не `LIKE`, т.к. `syncRunId` приходит снаружи и может содержать `%`/`_` (`:276-284`) 🟢. Статус событий **не учитывается** (считаются и `QUARANTINED`); весь результат грузится в память (`HashSet<ObjectRef>`) 🟡 — для больших snapshot это линейная память.
+8. **DLQ.** Вставка в `dlq_entry` идемпотентна: `ON CONFLICT (source,event_id) WHERE replayed_at IS NULL DO NOTHING` по частичному уникальному индексу `uq_dlq_entry_open` (`:140-142`, `V1__event_journal.sql:47-48`) 🟢. `reason` усекается до 500 символов (`MAX_REASON_LENGTH`, `:40`, `:399-402`); `error_reason` в `inbox_event` — тоже (`:344`) 🟢. `toDlq` из `PROJECTED`/конечных статусов невозможен (исключение перехода) 🟢.
+9. **S3: ключ и целостность.** `put`: валидация `source` по `[A-Za-z0-9:._-]{1,200}` и запрет «только точки» (защита от `.`/`..` в ключе) → `key = raw/<source>/<sha256>`; `HEAD` и `PUT`, если нет (`:70-78`) 🟢. Гонка двух `put` одного содержимого безвредна (одинаковые байты) 🟡. `get`: пересчёт SHA-256 и `IllegalStateException` при расхождении (`:82-89`) 🟢; `NoSuchKeyException` из `get` не перехватывается и уходит вызывающему 🟢.
+10. **Клиент S3.** path-style, регион-заглушка `us-east-1`, `WHEN_REQUIRED` для checksum-ов (комментарий: не все S3-совместимые хранилища понимают дефолтные доп. checksum SDK), HTTP-клиент `UrlConnectionHttpClient` (`:39-51`) 🟢. Ключи доступа приходят аргументами, в сообщения исключений не попадают 🟢.
+11. **Миграции.** `JournalMigrations.apply` вызывает Flyway с `classpath:db/migration` (`EJ/JournalMigrations.java:11-13`). Каталог `db/migration` **разделён между модулями**: `V1` — здесь, `V2/V4/V5/V7` — `identity-resolution`, `V3/V6` — `ingestion-service` (см. Q3, Q5, раздел Q в `data-dictionary.md`). Итоговая схема получается только при запуске с classpath всех трёх модулей; в одиночку `event-journal` применяет лишь `V1` 🟢.
+
+### Q1.3 Структуры данных
+
+Таблицы `inbox_event`, `consumer_checkpoint`, `dlq_entry` и индексы — `data-dictionary.md` §Q.1. DTO (`JournalEntry`, `StoredEvent`, `Checkpoint`, `SnapshotContents`, `ObjectRef`) определены в `contracts/event-schemas` (R.2a, `data-dictionary.md` §E.2) и здесь только маппятся (`PostgresEventJournal.java:372-391`) 🟢.
+
+### Q1.4 Константы и конфигурация
+
+`MAX_REASON_LENGTH=500` (`:40`); `COLUMNS` — список 16 колонок для чтения (`:42-44`); `SOURCE_PATTERN` (`S3RawPayloadStore.java:33`); префиксы ключей `raw/`, `snap:` (`:74`, `PostgresEventJournal.java:284`). Конфигурация модуля — только аргументы конструкторов/`create`; свойства Spring лежат в `ingestion-service` (Q5).
+
+### Q1.5 Сомнения и расхождения
+
+- 🔴 **`dlq_entry.replayed_at` нигде не заполняется.** Колонка читается (`ingestion/ingestion-service/.../IngestionMetrics.java:71`, `access/admin-console/.../ConsoleReadRepository.java:141,158`), но в Java-коде нет ни одного `UPDATE dlq_entry`/`SET replayed_at` (`grep` по репозиторию, только main). Значит, запись остаётся «открытой» навсегда, метрика открытых DLQ-записей и фильтр консоли «replayed» не отражают реальность; повторный `toDlq` того же события после ручного replay не создаст новую запись из-за `uq_dlq_entry_open`. Нужно уточнить у архитектора, считается ли это намеренным (replay = создание нового события `replay:…`, а DLQ-запись остаётся историей) — см. Q5.
+- 🟡 Тело дубля не сравнивается с оригиналом (п.1) — подмена содержимого при повторном `eventId` невидима.
+- 🟡 `DUPLICATE` не сохраняется в БД (п.2); подсчёт дублей возможен только по логам/метрикам вызывающей стороны.
+- 🟡 `error_code`/`error_reason` затираются при успешном переходе (п.4): после `RETRYING → PROJECTED` причина последней ошибки теряется (остаётся только `attempts`).
+- 🟡 `snapshotContents` не фильтрует статус и держит всё в памяти (п.7).
+- 🟡 Покрытие: единственный unit-тест модуля — S3 (2 теста); для журнала нет ни одного теста внутри модуля.
+
+---
+
+## Q2. `ingestion/normalizer`
+
+Сокращение: `NZ` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer`.
+
+**Назначение.** Чистая функция `CanonicalEvent + RawPayloadRef → NormalizationResult` (`Normalized(commands, unresolved, warnings)` либо `Quarantined(code, reason)`); единственное место, где существует source DTO (payload `Map<String,Object>`) (`NZ/Normalizer.java:14-24`, `NZ/CanonicalMapper.java:10-13`, `NZ/NormalizationResult.java:6-34`) 🟢.
+Состав: 15 Java-файлов main, ≈1200 строк (`Normalizer`, 4 маппера, `CanonicalMapper`, `CommandSink`, `Payload`, `NormalizationResult`, `NormalizationException`, `UnresolvedReference`, `ReferenceResolver`, `DeploymentLookup`, маркер, `package-info`). Тесты: 71 `@Test` в 5 классах (`NormalizerTest` 35, `EamArchObjectMapperTest` 16, `DeployMapMapperTest` 16, `ScmMapperTest` 3, smoke 1) + `Fixtures`; `platform/source-stubs` — тестовая зависимость для фикстур (`ingestion/normalizer/pom.xml:30-34`) 🟢.
+
+### Q2.1 Поток управления
+
+`Normalizer.normalize` (`NZ/Normalizer.java:54-86`):
+
+1. тип события ≠ `architecture.asset.upserted.v1` → `Quarantined(UNSUPPORTED_EVENT_TYPE)` (`:55-57`);
+2. `sourceCode(urn)` → `SourceSystemCode`; нет маппера → `UNKNOWN_SOURCE` (`:58-62`);
+3. версия схемы — суффикс `dataschema` после `urn:corp:schema:asset-upserted:`; нет в `supportedSchemaVersions()` → `UNKNOWN_SCHEMA_VERSION` (`:63-66`; все 4 маппера поддерживают только `"1"`);
+4. собирается `SourceRecord(SourceKey, sourceVersion, raw.contentHash(), event.time(), active=true)` (`:68-75`);
+5. маппер пишет в `CommandSink`; `NormalizationException` → `Quarantined(e.code(), e.getMessage())`, `IllegalArgumentException` (нарушение инварианта record'а модели) → `INVALID_PAYLOAD` с **фиксированным** текстом без значений (`:76-84`);
+6. `sink.result()`.
+
+Маппер по `sourceType` ключа выбирает ветку; неизвестный `sourceType` → `UNKNOWN_SOURCE_TYPE` (`EamMapper.java:116`, `ScmMapper.java:95`, `CmdbMapper.java:32-34`, `DeployMapMapper.java:134`) 🟢.
+
+### Q2.2 Алгоритмы и встроенные правила
+
+1. **`Payload` — единая семантика «поле не передано».** `null`, отсутствие и пустая/пробельная строка → `Optional.empty()` (`NZ/Payload.java:30-41`); значение неверного типа → `INVALID_PAYLOAD` с именем поля (`:124-126`); `optionalList` отбрасывает пустые элементы, но не-строка → ошибка (`:89-107`); `optionalIdRef` принимает только `Long`/`Integer` (`:113-122`) 🟢. Строки «ужимаются» `strip()` — значения из источника **нормализуются по пробелам** до записи 🟢.
+2. **Неполная запись не затирает известное (ловушка 5).** Необязательные поля узла передаются как `null`, а не как значение по умолчанию (`CmdbMapper.java:36-48`, `ScmMapper.java:57-58`, `EamMapper.java:145-148`); запись `null` в граф должна блокироваться проектором (`NZ/NormalizationResult.java:12-17`, проверка — Q4) 🟢. Для CMDB `kind` обязателен именно потому, что подстановка `UNSPECIFIED` затёрла бы известный тип (`CmdbMapper.java:36-37`).
+3. **Вложенные `null` в `attrs` EAM (сомнение R.2b).** `Payload.optionalObject` копирует вложенную карту в `HashMap` с `null`-значениями (`:52-59`), поэтому `{"attrs":{"description":null,"platform_id":null}}` не падает: `optional(...)` и `optionalIdRef(...)` читают `null` как «не передано» (`EamMapper.java:145-148, 157, 161, 177-179`). Итог: обязательные `name` → `MISSING_REQUIRED_FIELD`, необязательные → `null` → граф не затирается; связи `USES_*` из `null`-ссылок **не строятся и не закрываются** (`EamMapper.java:208-214`) 🟢. **Сомнение снято: падения нет, но и «явного удаления» через `null` нет.** Побочное: сам `attrs: null` у `IT_SYSTEM` неотличим от плоского формата и ведёт в плоскую ветку → `MISSING_REQUIRED_FIELD: name` (`:73-76, 81`) 🟡 — причина вводит в заблуждение.
+4. **Критичность EAM: две таблицы.** Для ArchObject — `Map.of("HIGH","MEDIUM","LOW")`, остальное → `criticality=null`, сырое значение сохраняется в `criticalityRaw`, в warnings — `UNMAPPED_CRITICALITY` (`EamMapper.java:128-130, 161-168, 175-178`); для плоского формата — `Criticality.valueOf` (включая `CRITICAL`), неизвестное → `INVALID_PAYLOAD` (`:120-126`) 🟡 — значение `CRITICAL` в ArchObject уходит в `criticalityRaw`, в плоском — принимается; расхождение намеренное или нет, из кода не видно.
+5. **Два формата EAM** выбираются по `sourceType` и наличию `attrs`: `PLATFORM`/`SOLUTION` — всегда ArchObject; `IT_SYSTEM` — ArchObject при `attrs`, иначе плоский (без `eamCode`, «только реплей старого журнала») (`EamMapper.java:69-84`, Javadoc `:30-34`); `TEAM`, `SERVICE_DEPENDENCY` — плоские 🟢. Поля ArchObject `id/ver/datetime` маппер **не читает**: ключ и версия приходят из `SourceKey`/`sourceVersion` события, время — из `event.time()` 🟢.
+6. **Связи и отложенные ссылки.** `CommandSink.relation` определяет «другой конец» (`other = from.equals(self) ? to : from`), проверяет `resolver.exists(other)`; неизвестен — `UnresolvedReference` с полной `UpsertRelation`, фиктивный узел не создаётся (`NZ/CommandSink.java:53-69`). `link` (связь между двумя внешними сторонами, `DEPENDS_ON`) — отдельная `UnresolvedReference` на каждую неизвестную сторону; команда добавляется, только если известны обе (`:80-102`) 🟢. Допустимость пары меток и identity-свойств проверяет конструктор `UpsertRelation` → нарушение превращается в `INVALID_PAYLOAD` (`contracts/canonical-model/.../command/UpsertRelation.java:32-41`).
+7. **Alias-ключи.** SCM `systemCode` → `lookup.itSystemByEamCode(code)` или `LookupKeys.itSystemCode(code)`; deploy map `git-repo-url` → `lookup.repositoryByUrl(url)` или `LookupKeys.repositoryUrl(url)` — неразрешённые ссылки уходят в отложенные и достраиваются проектором (`ScmMapper.java:68-82`, `DeployMapMapper.java:194-198`) 🟢.
+8. **Выбор сервиса для `HAS_DEPLOYMENT`** (только `deploymap-poc-1`): (1) `service` из payload, если он среди `servicesImplementedIn(repo)`; (2) единственный сервис репозитория; (3) `service` из payload как есть (отложенная связь); (4) иначе предупреждение `DEPLOYMENT_SERVICE_UNRESOLVED` (`DeployMapMapper.java:209-224`). Снимок на момент нормализации, без переоценки (Javadoc `:38-42`); переоценку делает `EventProcessor` (Q4/Q5, `EventProcessor.java:443-470`) 🟢.
+9. **`deploymap-poc-1`.** Нужны три аннотации `archrag.io/{eam-system-id,git-repo-url,git-commit}` (иначе `MISSING_REQUIRED_FIELD`); commit — `[0-9a-f]{40}`; `eam-system-id` — положительное `long` из цифр; URL нормализуется `GitUrls.normalize` (`DeployMapMapper.java:142-190`). Неизвестный `format` → `INVALID_PAYLOAD` (`:143-146`). Класс окружения — `class` или код окружения, затем `switch` по строке (`dev|development`, `test|qa`, `preprod|stage|staging`, `prod|production`), иначе `INVALID_PAYLOAD` (`:244-252`) 🟢.
+10. **Время связей.** `validity` создаётся только как `Validity(validFrom, null)` при наличии `validFrom`/`ownerSince` в payload, иначе `null` — «выбор за проектором» (`EamMapper.java:94, 112, 192`, `ScmMapper.java:115-117`, `DeployMapMapper.java:240-242`) 🟢. `Deployment.observedAt = event.time()` (`DeployMapMapper.java:105`).
+11. **Warnings** — только коды без значений: `DEPENDS_ON_NOT_SUPPORTED` (`EamMapper.java:96-98`), `UNMAPPED_CRITICALITY`, `DEPLOYMENT_SERVICE_UNRESOLVED`. Единственное логирование — `DEBUG` без значения (`EamMapper.java:167`) 🟢 (ловушка 11).
+
+### Q2.3 Структуры данных
+
+Выход — `NormalizationResult` (`Normalized`: три неизменяемых списка; `Quarantined`: код и причина). Вход маппера — `Input(record, payload, time)` (`NZ/CanonicalMapper.java:36-42`). Форматы payload по источникам — `data-dictionary.md` §Q.2.
+
+### Q2.4 Константы
+
+Префиксы `urn:corp:` и `urn:corp:schema:asset-upserted:` (`Normalizer.java:27-28`); коды ошибок: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD`; `sourceType` по источникам: EAM `PLATFORM|SOLUTION|IT_SYSTEM|TEAM|SERVICE_DEPENDENCY`, SCM `REPOSITORY|SERVICE`, CMDB `COMPUTE_INSTANCE`, DEPLOYMAP `ENVIRONMENT|DEPLOYMENT` 🟢.
+
+### Q2.5 Сомнения и расхождения
+
+- 🟡 **Ручное сопоставление кодов источников (R.2a/R.2b п.1).** `Normalizer.sourceCode` (`Normalizer.java:92-103`) — `switch` по строке `eam|scm|cmdb|deploymap` → `SourceSystemCode`. Адаптерная сторона (`adapters/adapter-core/.../EventMapper.java:47-49`) формирует `urn:corp:<код>`, поэтому для `asset` источник — `cmdb`. Сопоставление **продублировано вручную** в трёх местах (адаптер, `Normalizer`, `EventProcessor.java:633-646` — см. Q4/Q6), общего источника правды и теста «все `SourceSystemCode` покрыты» нет. Подтверждено: работает, не защищено от рассинхрона.
+- 🟡 Не-`IllegalArgumentException` (в частности `NullPointerException` из `Objects.requireNonNull` в record'ах или `raw == null`, `Normalizer.java:72`) из `normalize` **не перехватываются** и уходят вызывающему; как с ними поступает `EventProcessor` — Q4. `raw` не проверяется на `null`, хотя журнал допускает `payload_key IS NULL` (`PostgresEventJournal.java:75-76`).
+- 🟡 Конструктор `Normalizer` молча перезаписывает маппер при двух мапперах одного источника (`Normalizer.java:35`).
+- 🟡 Два разных словаря критичности (п.4).
+- 🟡 `attrs: null` у IT_SYSTEM → вводящая в заблуждение причина (п.3).
+- 🟡 TODO в коде: функции нормализации Git URL в `ScmMapper` (`GitUrls.normalize`) и `FeatureNormalizer.repositoryUrl` (identity-resolution) различаются (`ScmMapper.java:103-104`).
+- 🟢 `platform/source-stubs` подключён со `scope=test` (`ingestion/normalizer/pom.xml:30-34`): зависимость только для фикстур, на схему модулей не влияет.
+
+---
+
+## Q3. `ingestion/identity-resolution`
+
+Сокращение: `IR` = `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution`.
+
+**Назначение.** Три ступени идентичности, всё в PostgreSQL (JDBC): (1) детерминированный `(source, sourceType, sourceId) → gid` и approved crosswalk; (2) признаки и кандидаты на совпадение; (3) утверждения свойств и конфликты источников по `AuthorityMatrix` (`IR/package-info.java:1-18`) 🟢.
+Состав: 19 Java-файлов main, ≈1300 строк — интерфейсы `IdentityMapping`, `IdentityCandidates`, `SourceConflicts`; реализации `PostgresIdentityMapping`, `PostgresIdentityCandidates`, `PostgresSourceConflicts`; чистые `FeatureExtractor`, `FeatureNormalizer`, `FeatureKind`, `LabelFamily`, `SourceKeys`; записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict`; исключения `CrosswalkConflictException`, `IdentityStoreException`; маркер и `package-info`; миграции `V2`, `V4`, `V5`, `V7`. Тесты: 20 `@Test` в 4 классах (`FeatureExtractorTest` 8, `FeatureNormalizerTest` 7, `CrosswalkTest` 4, smoke 1); **реализации Postgres в модуле не тестируются** (их покрывают IT в других модулях, R.2e) 🟡.
+
+### Q3.1 Поток управления
+
+Вызывающая сторона — `EventProcessor` (Q4): `IdentityMapping.resolve` для всех ключей события → `FeatureExtractor.extract` → `IdentityCandidates.record` → `SourceConflicts.assertProperties` / `assertRelation` / `retract`; `CrosswalkService` (Q5) вызывает `approve`.
+
+| Операция | Что делает | Где |
+|---|---|---|
+| `IdentityMapping.find` / `resolve` | чтение / `INSERT … ON CONFLICT DO NOTHING` + чтение; параллельные вызовы сходятся к одному `gid` | `IR/PostgresIdentityMapping.java:36-60, 124-132` 🟢 |
+| `keysOf(gid)` | все ключи `gid`, порядок по `source, source_type, source_id` | `:62-78` 🟢 |
+| `approve(Crosswalk)` | нормализует порядок пары, даёт обоим ключам общий `gid`, пишет `approved_crosswalk` (идемпотентно) | `:80-101, 103-118, 134-145` 🟢 |
+| `IdentityCandidates.record` | под advisory-lock'ами заменяет признаки ключа, ищет совпадения, upsert кандидатов | `IR/PostgresIdentityCandidates.java:78-102` 🟢 |
+| `forget` / `candidatesOf` | удаляет признаки ключа (кандидаты остаются) / читает кандидатов пары | `:104-120, 122-152` 🟢 |
+| `SourceConflicts.assertProperties` | заменяет утверждения записи, пересчитывает конфликты `gid` | `IR/PostgresSourceConflicts.java:81-103` 🟢 |
+| `assertRelation` | конфликт вида `RELATION` (ссылка расходится с ключом из другого источника) | `:105-119` 🟢 |
+| `retract` | tombstone: удаляет утверждения, закрывает `RELATION`-конфликты записи, пересчитывает | `:121-131` 🟢 |
+
+Все операции — одна транзакция; `SQLException` → `IdentityStoreException` с cause; конфликт crosswalk → `CrosswalkConflictException` (не обёрнут) (`PostgresIdentityMapping.java:94-100`, `PostgresSourceConflicts.java:146-160`) 🟢. Пустых `catch` нет.
+
+### Q3.2 Алгоритмы и встроенные правила
+
+1. **`gid` назначается один раз и навсегда.** Хранится в `identity_mapping` (PK ключ → `gid`), а не выводится из графа, поэтому rebuild Neo4j даёт те же `gid` (`V2__identity_mapping.sql:1-2`, `IR/IdentityMapping.java:8-14`) 🟢. `UUID.randomUUID()` — недетерминированный генератор: «детерминированность» означает стабильность после первого назначения, не вычисление из ключа 🟡 (при потере таблицы `gid` не восстановить).
+2. **Crosswalk без слияния.** `approve` берёт `gid` у любого из ключей (или создаёт новый) и присваивает второму; если оба уже имеют **разные** `gid` — `CrosswalkConflictException`, состояние не меняется (транзакция откатывается) (`PostgresIdentityMapping.java:103-122`; `IR/CrosswalkConflictException.java:3-6`). Повтор идемпотентен (`ON CONFLICT DO NOTHING`, `:137`) 🟢. Рассогласование, возникшее из-за гонки с параллельным `resolve` между чтением и вставкой, также ведёт к конфликту (`:113-116`). Обратной операции (разделить/удалить crosswalk) в модуле нет 🟡.
+3. **Порядок пары.** `SourceKeys.compare` — по `source().name()`, затем `sourceType`, `sourceId` (лексикографически); комментарий в `V2` прямо оговаривает, что CHECK `left < right` не ставится, чтобы не зависеть от коллации БД (`IR/SourceKeys.java:10-16`, `V2__identity_mapping.sql:14`) 🟢.
+4. **Признаки (`FeatureExtractor.extract`).** По типу узла события: `ComputeInstance` → `HOSTNAME`; `Repository` → `REPOSITORY_URL`; `ITSystem`, `Service`, `Team` → `NAME`; для `ITSystem`/`Service` дополнительно `OWNER` = `gid` конца связи `OWNED_BY`, если он уже разрешён в `gids`. Остальные метки признаков не дают; запись только со связью (нет `UpsertNode`) — пустой набор (`IR/FeatureExtractor.java:43-69`) 🟢. Сомнение: `OWNED_BY` строит только EAM (`EamMapper`), `Service` приходит из SCM, где `OWNED_BY` нет, поэтому `OWNER` практически достижим только для `ITSystem` 🟡.
+5. **Нормализация значений** (точное равенство, нечёткости нет): hostname — trim, lower-case, без завершающих точек, FQDN целиком; URL репозитория — `host/path` в lower-case без схемы, `user@`, `.git`, `/` (scp-форма поддержана); имя — NFKC, lower-case, серии не-букв/цифр → один пробел (`IR/FeatureNormalizer.java:22-62`) 🟢. Пустой результат → признака нет. Это **вторая** реализация нормализации URL наряду с `GitUrls.normalize` (TODO в `normalizer/ScmMapper.java:103-104`): `GitUrls` сохраняет регистр пути, `FeatureNormalizer` приводит весь путь к lower-case 🟡.
+6. **Оценка совпадения.** `FeatureKind`: `HOSTNAME 0.6`, `REPOSITORY_URL 0.8`, `NAME 0.4` — сильные; `OWNER 0.2` — только усиливает. `score = min(1.00, сумма весов различных видов)`, шкала 2, `HALF_UP` (`IR/FeatureKind.java:15-47`). Веса в коде, не в конфигурации 🟢.
+7. **Поиск кандидатов (`record`).** Сортировка признаков → advisory-lock на `key|<ключ>` и на `<семейство>|<вид>|<значение>` для **сильных** признаков (детерминированный порядок исключает взаимную блокировку) → `DELETE`+`INSERT` признаков ключа (`identity_feature`) → для каждого сильного признака `FIND_OTHERS`: другие ключи того же `feature`+`label_family`+`value`, **не делящие `gid`** с данным (`NOT EXISTS … identity_mapping`), `ORDER BY`, `LIMIT 51` → слабые признаки добавляются к найденным парам, если у партнёра такой же `OWNER` → `upsertCandidate` с нормализованным порядком пары (`PostgresIdentityCandidates.java:78-102, 154-188, 190-239`) 🟢.
+8. **Предохранитель MAX_MATCHES = 50.** Если у одного признака больше 50 совпадений, по нему кандидаты не создаются (WARN с количеством без значения), а `matched` у уже существующих пар при следующем upsert перезаписывается без него — «допущение PoC» в Javadoc класса (`:33, :212-216`) 🟢/🟡: пара может «потерять» совпавший признак и score.
+9. **Идемпотентность кандидата.** `ON CONFLICT … DO UPDATE SET matched, score, updated_at`; `first_seen_at` и `status` не трогаются (`:54-61`); `status` по умолчанию `OPEN` 🟢. **Семейство меток**: подтипы `ComputeInstance` объединены (`IR/LabelFamily.java:10-12`), остальные метки сравниваются только сами с собой — кросс-метковых кандидатов нет 🟢.
+10. **Утверждения свойств и конфликты (`assertProperties`).** Под advisory-lock'ом `conflict|<gid>`: `DELETE` утверждений записи → `INSERT` по каждому свойству с флагом `authoritative = matrix.isAuthoritative(label, property, source)` → `recompute(gid)` (`PostgresSourceConflicts.java:81-103`). Расходящаяся пара: неавторитетное утверждение `d` и **один** авторитетный `m` (если мастеров несколько — первый по `source, source_type, source_id`), `d.value <> m.value` (точное сравнение строк) (`:41-47`) → upsert `OPEN` (повторное открытие обнуляет `resolved_at`, сохраняет `opened_at`; `updated_at` меняется, только если изменилась пара значений или статус) (`:48-58`) → пары, ранее `OPEN` (`kind='PROPERTY'`), но больше не расходящиеся, → `RESOLVED` (`:59-63, 226-269`) 🟢.
+11. **Конфликт связи (`assertRelation`).** Нет второй стороны или значения равны → закрыть открытые `RELATION`-строки этой записи и свойства; иначе upsert `OPEN` вида `RELATION` (`:105-119, 176-208`) 🟢. `retract` закрывает `RELATION`-конфликты, где запись — `dissent`, но **не** те, где она — мастер (`:121-131`, `RESOLVE_RELATION` фильтрует `dissent_*`, `:64-66`) 🟡.
+12. **Что пишется в граф.** Ничего: модуль работает только с PostgreSQL; canonical-значение выбирает проектор (`SourceConflicts` Javadoc, `IR/SourceConflicts.java:13-17`) 🟢. `SourceConflict.toString()` не содержит значений источника (ловушка 11) (`IR/SourceConflict.java:77-81`) 🟢.
+
+### Q3.3 Структуры данных
+
+Таблицы `identity_mapping`, `approved_crosswalk` (V2), `identity_feature`, `identity_candidate` (V4), `property_assertion`, `source_conflict` (V5, + колонка `kind` в V7) — `data-dictionary.md` §Q.3. Записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict` — там же.
+
+### Q3.4 Константы
+
+`MAX_MATCHES=50` (`PostgresIdentityCandidates.java:33`); веса `FeatureKind` (`FeatureKind.java:15-18`); `hashtextextended(?, 0)` для advisory-lock'ов — ключи блокировок строковые: `key|…`, `<семейство>|<вид>|<значение>`, `conflict|<gid>` (хэш 64 бит, коллизия лишь лишняя сериализация) 🟡.
+
+### Q3.5 Сомнения и расхождения
+
+- 🔴 **`identity_candidate.status` никогда не меняется.** В коде нет ни одного `UPDATE identity_candidate SET status`; `approve` (crosswalk) не помечает кандидата подтверждённым, `CrosswalkService` вызывает только `identity.approve(...)` (`ingestion/ingestion-service/.../CrosswalkService.java:49`). `package-info` обещает «подтверждение остаётся за approved crosswalk» (`IR/package-info.java:11-12`), но связь «кандидат ↔ crosswalk» через `status` не реализована; консоль фильтрует по `status` (по умолчанию `OPEN`) (`access/admin-console/.../IdentityController.java:40`) — подтверждённые кандидаты останутся `OPEN` навсегда, пока их не отфильтрует общий `gid` в `FIND_OTHERS` (то есть они исчезнут из новых совпадений, но останутся в таблице).
+- 🟡 Кандидаты ищутся только внутри одного семейства меток и только по равенству нормализованных значений (п.7, п.9). Условие `NOT f.source/type/id = self` не исключает пары внутри одного источника: два `ITSystem` EAM с одним именем тоже станут кандидатами. Есть ли в данных PoC реальные кросс-источниковые совпадения, из кода не видно — вопрос для Detective/R.3.
+- 🟡 `UUID.randomUUID()` для `gid` (п.1); нет обратной операции для crosswalk (п.2); `OWNER` почти недостижим для `Service` (п.4); потеря признака при превышении `MAX_MATCHES` (п.8); `retract` не закрывает конфликты, где запись — мастер (п.11).
+- 🟡 Тесты Postgres-реализаций вне модуля; в модуле только чистые функции.
+- 🟡 Две реализации нормализации URL (п.5).
+
+---
+
+## Q4. `ingestion/graph-projector`
+
+Сокращение: `GP` = `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector`.
+
+**Назначение.** Ведёт событие журнала до конечного статуса (`EventProcessor`), пишет `GraphCommand`'ы в Neo4j одной транзакцией (`GraphProjector`), добирает отложенные связи (`PendingRelations`), обрабатывает missing set после `snapshot-complete` (`Reconciler`) и применяет схему Neo4j (`schema/Neo4jSchema`) 🟢.
+Состав: 21 Java-файл main, ≈2700 строк (самые объёмные: `GraphProjector` 750 строк, `EventProcessor` 646, `PropertyJson` 263, `Reconciler` 221, `PendingRelations` 203). Тесты: 86 `@Test` в 7 классах (`EventProcessorTest` 46, `ProjectionRequestTest` 12, `ReconcilerTest` 12, `Neo4jSchemaTest` 8, `VersionDecisionTest` 4, `PropertyJsonTest` 3, smoke 1); **`GraphProjector` против реального Neo4j в модуле не тестируется** — покрывает `platform/integration-tests` (R.2e) 🟡.
+
+### Q4.1 Поток управления
+
+**`EventProcessor.process(event, raw)`** (`GP/EventProcessor.java:185-199`): читает строку журнала (нет — `IllegalArgumentException`); статусы `PROJECTED`, `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED` возвращаются без изменений (`:99-105, 190-192`); далее маршрут по `type`:
+
+| `type` | Ветка | Где |
+|---|---|---|
+| `architecture.asset.upserted.v1` | `upsert`: нормализация → gid → кандидаты → конфликты → запись | `:201-252` 🟢 |
+| `architecture.asset.deleted.v1` | `delete`: tombstone без normalizer | `:254-287` 🟢 |
+| `architecture.sync.snapshot-complete.v1` | `snapshotComplete`: в `ReconciliationTrigger`, граф не пишется | `:289-300` 🟢 |
+| прочее | `QUARANTINED / UNSUPPORTED_EVENT_TYPE` | `:197` 🟢 |
+
+Шаги `upsert` (в этом порядке): `sourceCode` → `decideBeforeWrite` (только из `RECEIVED`) → `VALIDATED` → `normalize` → warnings → `DeferRelation` для `UnresolvedReference` (с `distinct`) → `NORMALIZED` → `resolveGids` → `recordCandidates` → `ignoreIfOlderOnRetry` → `assertProperties` + `assertSystemRelation` + `assertSystemPlatform` → `RESOLVED` → `write` → `recheck*` → `PROJECTED`/`IGNORED_OLD_VERSION` + `saveCheckpoint` (`:201-252, 346-388, 612-617`) 🟢.
+
+**Обработка ошибок** (`write`, `:354-373`) 🟢:
+
+| Исключение | Исход | Код |
+|---|---|---|
+| `ProjectionException` | `RETRYING` | `e.code()` (`UNRESOLVED_ENDPOINT`) |
+| `IllegalArgumentException` (инварианты команд) | `QUARANTINED` | `INVALID_COMMANDS` |
+| `TransientException`, `ServiceUnavailableException`, `SessionExpiredException` | `RETRYING` | `GRAPH_UNAVAILABLE` |
+| `ClientException` с кодом `Neo.ClientError.Statement.*` / `Request.*` | `QUARANTINED` | `GRAPH_REJECTED` |
+| прочие `ClientException` (в т.ч. нарушение constraint, безопасность) | `RETRYING` | `GRAPH_CLIENT_ERROR` |
+| прочие `Neo4jException` | `RETRYING` | `GRAPH_ERROR` |
+| `IdentityStoreException` (кандидаты / конфликты) | `RETRYING` | `IDENTITY_CANDIDATE_FAILED` / `SOURCE_CONFLICT_FAILED` |
+| любая ошибка триггера reconciliation | `RETRYING` | `RECONCILIATION_TRIGGER_FAILED` |
+| нормализация | `QUARANTINED` | код из `Normalizer` |
+
+Прочие `RuntimeException` (NPE normalizer'а, ошибки журнала, `IllegalStateException` перехода) **пробрасываются** вызывающему: событие остаётся в уже достигнутом статусе, повтор безопасен (Javadoc `:72-75`) 🟢. Причины всех веток — без значений из источника (`getSimpleName()` или код Neo4j).
+
+**`GraphProjector.project`** (`GP/GraphProjector.java:106-111, 302-359`): `session.executeWrite(tx -> write(tx, request))` внутри `try-with-resources`; драйвер — один bean (ловушки 7, 8). Шаги `write`: (1) `MERGE (r:SourceRecord {source,sourceType,sourceId}) SET r._lock = true REMOVE r._lock` — блокировка записи до чтения версии (`:305-310`); (2) `VersionDecision` → `NOOP_SAME_VERSION`/`IGNORED_OLD_VERSION` без записи (`:312-324`); (3) `PendingRelations.deleteOf` — отложенные связи записи заменяются целиком (`:328`); (4) команды: `UpsertNode` (+ `healPending`, `healAliases`), `DeferRelation`, `TombstoneSourceRecord`, `UpsertRelation`, `CloseAssertion` (`:329-349`); (5) `closeReplacedRelations` (не для tombstone), `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun` (`:350-357`) 🟢.
+
+### Q4.2 Алгоритмы и встроенные правила
+
+1. **Версия, а не `eventId`, решает идемпотентность проекции.** `VersionDecision` сравнивает `SourceVersion` как `BigInteger` (`99 < 184`) (`GP/VersionDecision.java:20-38`, `contracts/event-schemas/.../SourceVersion.java:10-21`): нет записи → `APPLY`; ниже → `OLD`; **равна → `SAME`**; выше → `APPLY`. Для tombstone равная версия применяется, если запись ещё активна (`:29-38`). `EventProcessor.decideBeforeWrite` переводит `SAME` в `DUPLICATE`, `OLD` — в `IGNORED_OLD_VERSION` ещё до нормализации, а проектор повторяет проверку в транзакции после блокировки (`EventProcessor.java:303-322`, `GraphProjector.java:312-324`). **Следствие для сомнения «`poll:` и `snap:` с одной версией, но разными `eventId`»:** второе событие получит `DUPLICATE` (в журнале этот статус **персистируется** — `EventProcessor.finish` → `transition(→DUPLICATE)`, в отличие от `PostgresEventJournal.append`, Q1.2 п.2), граф не меняется. Сомнение **снято**: проекция идемпотентна по версии 🟢. Остаточный риск 🟡: содержимое при равной версии не сравнивается (`contentHash` не участвует в решении) — если источник изменил объект без роста `ver`, изменение будет отброшено.
+2. **Повтор из `RETRYING`.** `decideBeforeWrite` работает только из `RECEIVED`; для `RETRYING` действует `ignoreIfOlderOnRetry` — отсекает только `OLD`, равную версию пропускает дальше («запись идемпотентна, проектор вернёт `NOOP`») (`:329-344`) 🟢. 🟡 Порядок в `upsert`: `recordCandidates` (`:232`) и в `delete`: `candidates.forget` (`:271`) выполняются **до** `ignoreIfOlderOnRetry` (`:237`, `:275`): устаревшее `RETRYING`-событие успевает заменить признаки в `identity_feature` (V4) более старой версией; защита от этого стоит только перед записью конфликтов.
+3. **Авторитетность.** Свойство узла пишется, только если `AuthorityMatrix.isAuthoritative(label, property, source)`; иначе имя уходит в `skippedProperties` (`Label.property`); связь — если источник авторитетен для типа, иначе в `skippedRelations` (`GraphProjector.java:417-432, 552-562`) 🟢. `null` не попадает в `props` (`NodeProperties.of`, `GP/NodeProperties.java:25-39`) — ловушка 5 соблюдена 🟢. Утверждение `ASSERTS` несёт `authority = MASTER|SUPPLEMENTARY` и `confidence = 1.0` (`:441, 461-462`).
+4. **Узел и метки.** `MERGE (n:<root> {gid})` по **корневой** метке (подтипы `ComputeInstance` меняются без дубля при разных constraint'ах), подтип добавляется `SET n:<Label>`, прочие подтипы корня снимаются `REMOVE` (`:442-457, 729-745`) 🟢. `firstSeenAt` = минимум, `lastSeenAt` = максимум по `eventTime`; `isCurrent=true` и снятие `deletedAt` — только для мастера (`:458-460`) 🟢.
+5. **`MERGE` только по ключам под constraint** (ловушка 4): `SourceRecord(source,sourceType,sourceId)`, `<Label>.gid`, `SourceSystem.code`, `SyncRun.runId`, `PendingRelation.key`; связи `OWNS_RECORD`, `ASSERTS`, `PROCESSED`, `DEFERS` и доменные `MERGE`-ятся только между уже найденными узлами (`:451-461, 585-589`; `PendingRelations.java:74-77`) 🟢. Identity-свойства темпоральной связи (`RelationType.identityProperties()`, сейчас `commit` у `DEPLOYED_FROM`) входят в шаблон `MERGE` ребра — смена даёт **новое** ребро (`:577-589, 649-660`).
+6. **Cypher без конкатенации значений** (ловушка 1): значения только `$params`; в текст подставляются метки из `NodeLabel`, типы связей из `RelationType`, имена identity-свойств из enum (`:445-447, 578-589, 637, 659`) 🟢. Границ переменной длины пути нет (ловушка 2 неприменима).
+7. **Темпоральные связи.** Связь «открывается» (`opening`), если нет `validFrom` или она закрыта: `validFrom` = из источника, иначе `eventTime`; открытая сохраняет `validFrom`; `validTo = $validTo` (обычно `null`) (`:566-575, 588`) 🟢. `closeReplacedRelations` для каждого типа, который версия утверждает (`UpsertRelation`) или откладывает (`DeferRelation`), закрывает открытые связи **этой же записи** (три поля `assertedBy*`), отсутствующие в наборе `(from.gid, to.gid, identity props)`: `validTo = max(validFrom, eventTime)`. Типы без утверждений в версии не трогаются; tombstone замещения не делает (`:611-647`) 🟢.
+8. **Tombstone** (`:507-550`): запись `active=false`, `deletedAt`; закрываются все открытые темпоральные связи, утверждённые записью (через узел `ASSERTS` и отдельно — по `assertedBy*` для записей «только связь», по циклу по `RelationType.values()` без индекса); каноничный узел получает `isCurrent=false`, `deletedAt = coalesce(...)`, **только если нет другого активного `MASTER`-утверждения**. Физического удаления нет 🟢. Tombstone неизвестной записи создаёт «пустую» неактивную запись с версией и тем самым отсекает более ранние upsert'ы (`OLD`) 🟡.
+9. **Отложенные связи** (`PendingRelations`). `DeferRelation` → узел `PendingRelation` (`key` = SHA-256 от длинно-префиксованных полей утверждающей записи, типа и обоих концов), свойства связи — JSON-строкой (`PropertyJson`: Neo4j не хранит map; JSON-библиотеку не подключают) (`PendingRelations.java:53-80, 174-197`). `healPending` после `UpsertNode` достраивает связи, где запись — конец и другой конец уже имеет активную запись с узлом нужной метки (`endpointGids`); `candidates` требует `r.active` и `r.sourceVersion = p.referrerVersion`, то есть отложенная связь устаревшей версии не достраивается (`:86-107`). `healAliases` подменяет конец-alias (`LookupKeys`) реальным ключом по правилам `ALIAS_RULES`: SCM `REPOSITORY.url` и EAM `IT_SYSTEM.eamCode` (`GraphProjector.java:92-95, 382-415`) 🟢. Допущение о конкурентности (однопоточный диспетчер + `AdminLock`) зафиксировано в Javadoc (`:62-67`) 🟡 — нарушается при втором экземпляре сервиса.
+10. **Маркеры конфликтов.** `writeConflictMarkers` ставит `ASSERTS.conflicts` (список имён свойств) на рёбра записей из набора и снимает у остальных рёбер `gid`; значения не пишутся (`:471-491`) 🟢. `ConflictMarkers.none()` — «не трогать» (`GP/ConflictMarkers.java:24-63`).
+11. **Конфликты и сверки в PostgreSQL до транзакции Neo4j**: `assertProperties` (текстовые значения непустых свойств), `assertSystemRelation` (`Deployment.eamSystemId` против системы EAM сервиса, `lookup.eamSystemOfService`), `assertSystemPlatform` (`ITSystem.platformId` против `Solution.platformId`, ADR 0031), `recheckServiceDeployments` и `recheckSolutionSystems` после записи сервиса/решения (`EventProcessor.java:394-561`). Граф они не меняют. 🟡 `assertProperties` заменяет утверждения записи **целиком по непустым свойствам** (`conflicts.assertProperties` делает delete+insert, `PostgresSourceConflicts.java:81-103`): свойство, пропущенное в частичной записи, исчезает из PG-утверждений, хотя в графе остаётся прежнее значение (п.3) — конфликт по нему «рассасывается» без изменения графа.
+12. **`gid` выдаётся до транзакции.** `resolveGids` вызывает `identity.resolve(key)` для самой записи и `identity.find(endpoint)` для чужих концов; чужой конец без `gid` — `ProjectionException(UNRESOLVED_ENDPOINT)` → `RETRYING`, `gid` для чужих не создаётся (`:569-601`) 🟢. Внутри `executeWrite` обращений к PostgreSQL/S3 нет (ловушка 7) 🟢.
+13. **Checkpoint.** `finish` вызывает `journal.saveCheckpoint("projector", source, eventId)` после перехода в конечный статус, то есть после коммита Neo4j; `RETRYING` и `QUARANTINED` его не сдвигают (`:612-617`; `retry`/`quarantine` `:619-627`) 🟢. 🟡 Курсор — `eventId` (не монотонная величина). В ingestion нет читателя checkpoint `projector` (`loadCheckpoint` вызывается только в `Poller` для собственных checkpoint'ов адаптеров, `adapters/adapter-core/.../Poller.java:93,181`); поведение диспетчера от него не зависит (идёт по статусам журнала, Q5). Читает его только `access/admin-console` (`ConsoleReadRepository.java:55`, R.2d) — для отображения. Поведение описано в `docs/02-data-model.md:275-286`.
+14. **Reconciler (missing set).** Запускается только из `snapshotComplete` (ловушка 9) (`GP/Reconciler.java:88-144`): `snapshotContents(source, syncRunId)`; если событий в журнале меньше `objectCount` маркера — `IllegalStateException` (маркер → `RETRYING`); `touched = objectsReceivedSince(source, firstReceivedAt)` — объекты с любым событием после начала прогона не удаляются; для каждой активной записи источника вне прогона и вне `touched`: tombstone-событие `architecture.asset.deleted.v1` с `eventId = reconcile:<syncRunId>:<sourceType>/<sourceId>` фиксируется в журнале и S3 **до** записи в граф, затем `retract` конфликтов и `project(Tombstone)` с **применённой версией записи**, затем строка журнала доводится до `PROJECTED`/`IGNORED_OLD_VERSION` (`:130-136, 156-194`) 🟢. Утверждение «tombstone с применённой версией не затирает свежее» держится на `VersionDecision.forTombstone` 🟢.
+15. **Схема Neo4j** (`GP/schema/Neo4jSchema.java:41-75`): `IF NOT EXISTS` для UNIQUE `gid` по каждой канонической метке (имя вида `it_system_gid`), UNIQUE `SourceRecord(source,sourceType,sourceId)` (**composite uniqueness — доступно в Community**), `SourceSystem.code`, `SyncRun.runId`, `PendingRelation.key`, `Environment.code`; индекс `ITSystem.eamCode`; полнотекстовый `asset_text` по `ITSystem|Service` `name, description`. Каждый statement — отдельный `executeWrite`; ошибки не глушатся. Платные NODE KEY и existence constraints не используются 🟢. Что `IF NOT EXISTS` не пересоздаёт изменившееся определение — оговорено в Javadoc (`:25-26`).
+16. **Миграция темпоральности.** `TemporalRelationMigration.migrate(now)` один раз при старте сервиса проставляет `validFrom = coalesce(min(firstSeenAt), now)` связям `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` без `validFrom` (ADR 0028); идемпотентна (`GP/TemporalRelationMigration.java:22-66`, вызов — `ingestion/ingestion-service/.../IngestionServiceConfiguration.java:72`) 🟢.
+
+### Q4.3 Структуры данных
+
+Записи и интерфейсы модуля (`ProjectionRequest`, `ProjectionResult`, `ProcessingResult`, `ConflictMarkers`, `GraphProjection.ActiveRecord/AppliedRecord`, `EamLookup.*`, `Reconciler.Report`) и то, что проектор пишет в Neo4j, — `data-dictionary.md` §Q.4.
+
+### Q4.4 Константы
+
+`CONSUMER="projector"` (`EventProcessor.java:84`); коды `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `GRAPH_UNAVAILABLE`, `GRAPH_REJECTED`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `INVALID_COMMANDS`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNSUPPORTED_EVENT_TYPE`, `RECONCILIATION_TRIGGER_FAILED`, `UNRESOLVED_ENDPOINT`; `TYPE_ASSET_DELETED`, `TYPE_SNAPSHOT_COMPLETE`, `SCHEMA_ASSET_DELETED` (`:86-94`); `Reconciler.EVENT_ID_PREFIX="reconcile:"` (`Reconciler.java:61`); `SYSTEM_PROPERTY="eamSystemId"`, `PLATFORM_PROPERTY="platformId"` — имена `RELATION`-конфликтов 🟢.
+
+### Q4.5 Сомнения и расхождения
+
+- 🟡 **Литералы `TYPE_ASSET_DELETED`, `TYPE_SNAPSHOT_COMPLETE`, `SCHEMA_ASSET_DELETED` (R.2a п.3, R.2b P1.6)** — подтверждено: в проекции объявлены пакетно-приватные строки (`EventProcessor.java:92-94`), в адаптерах — публичные константы (`adapters/adapter-core/.../EventMapper.java:29,32,41,42`), в диспетчере — ещё одна копия (`ingestion/ingestion-service/.../StoredEventReader.java:34`, Q5). `contracts/event-schemas` содержит только `TYPE_ASSET_UPSERTED`. Общий источник и тест на совпадение отсутствуют; зависимость `ingestion → adapters` запрещена `CLAUDE.md`, поэтому единственный корректный источник — `contracts/event-schemas` 🟡/🔴 (см. Q6).
+- 🟡 Дублирование `sourceCode(urn)` — третья копия таблицы `urn:corp:{eam|scm|cmdb|deploymap}` (`EventProcessor.java:634-645`; Q2.5).
+- 🔴/🟡 **`snapshot-complete` без `objectCount` отключает проверку полноты.** `objectCount()` возвращает `0`, если поле отсутствует или не число (`EventProcessor.java:629-631`), а `Reconciler` отвергает прогон только при `eventCount < objectCount` (`Reconciler.java:106`): маркер без счётчика проходит с любой неполной выборкой, и все активные записи источника вне прогона получат tombstone. Адаптеры всегда кладут `objectCount` (`adapters/adapter-core/.../EventMapper.java:94`), но проверка схемы маркера (`dataschema`) в проекции отсутствует (в отличие от `deleted`) 🟡.
+- 🟡 Устаревшее `RETRYING`-событие пишет кандидатов до проверки версии (п.2).
+- 🟡 PG-утверждения свойств расходятся с графом при частичной записи (п.11).
+- 🟡 Checkpoint `projector` в ingestion только пишется; читает его лишь консоль (п.13).
+- 🟡 `Reconciler.journalTombstone` ведёт строку по `ordinal()` перечисления: для строки в `QUARANTINED` (ординал 5) шаги пропускаются, `finishTombstone` затем пытается `QUARANTINED → PROJECTED` и получает `IllegalStateException` (`Reconciler.java:175-180, 190-193`; `ProcessingStatus.java:38`). Достижимо только при ручном карантине строки `reconcile:…` 🟡.
+- 🟡 Raw tombstone `Reconciler.rawDelete` собран вручную как JSON и «совпадает с `InboxWriter.rawJson` для `DELETE`» только по комментарию (`Reconciler.java:196-201`); `sourceVersion` вставляется без кавычек — безопасно, пока `SourceVersion` проверяет `[0-9]{1,40}` 🟢.
+- 🟡 `activeRecords` читает весь источник в память (комментарий `GraphProjector.java:146-147`); tombstone по типам связей — запросы без индекса (`:632`) — допущено для PoC.
+- 🟡 `datetime == null → Instant.EPOCH` (R.2b) — влияние на проекцию (событие несёт `time = EPOCH`, а `eventTime` проекции = `event.time()`, `EventProcessor.java:358`): (а) `firstSeenAt` узла становится `1970-01-01` и уже не поднимается (минимум, `GraphProjector.java:458`); (б) темпоральная связь без `validFrom` из источника открывается с `validFrom = 1970-01-01` (`:574`); (в) при замещении в версии с `EPOCH` старая связь закрывается `validTo = max(validFrom, EPOCH) = validFrom`, то есть **нулевой длины** (`:643`). Версии и порядок событий не страдают (решает `SourceVersion`) 🟡. Подтверждено в Q6.
+- 🟢 Модуль `access/*` не использует `graph-projector` и не получает writer-доступ — зависимости по `pom.xml` (`ingestion/graph-projector/pom.xml:18-39`: canonical-model, event-schemas, normalizer, identity-resolution, neo4j-java-driver).
+
+---
+
+## Q5. `ingestion/ingestion-service`
+
+Сокращение: `IS` = `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice`.
+
+**Назначение.** Единственное запускаемое Spring Boot-приложение группы: собирает компоненты ingestion (журнал, raw storage, identity, projector), крутит диспетчер журнала (`RECEIVED/RETRYING → EventProcessor`), даёт админский REST (`/admin/replay`, `/admin/rebuild`, `/admin/reconcile/{source}`, `/admin/crosswalks`), пишет аудит и метрики. Во внешний ingress не публикуется (`IS/IngestionServiceApplication.java:7`) 🟢.
+Состав: 27 Java-файлов main, ≈1600 строк, + `application.yml` + миграции `V3__admin_audit.sql`, `V6__console_readonly_role.sql`. Тесты: 48 `@Test` в 7 классах (`JournalDispatcherTest` 9, `AdminControllerTest` 11, `IngestionMetricsTest` 11, `StoredEventReaderContractTest` 7, `AuthorizedPartyValidatorTest` 4, `AdapterControlClientTest` 3, `AdminOperationsTest` 3). `adapter-core` подключён со `scope=test` ради контрактного теста `StoredEventReader` против `EventMapper` адаптеров (`ingestion/ingestion-service/pom.xml:71-76`) — на схему зависимостей не влияет 🟢. Приложение целиком (`@SpringBootTest` + Testcontainers) в модуле не поднимается — это IT в `platform/integration-tests` (R.2e) 🟡.
+
+### Q5.1 Поток управления
+
+**Сборка** (`IS/IngestionServiceConfiguration.java`, `@Configuration`, явные `@Bean`, без component scan для доменных классов): `eventJournal` применяет миграции `JournalMigrations.apply` (`:45-49`; Flyway Boot не подключён, `:36-39`); `identityMapping`, `identityCandidates`, `sourceConflicts` зависят от него, чтобы миграции были применены (`:51-65`); `neo4jDriver` создаёт единственный `Driver` (writer-учётные данные), применяет `Neo4jSchema.apply` и `TemporalRelationMigration.migrate` (`:67-74`); `rawPayloadStore` создаёт клиент S3 и `ensureBucket()` (`:76-82`); `EventProcessor` получает `Normalizer.standard(projector::isActive, projector)` (то есть `ReferenceResolver` — это чтение Neo4j `isActive`, а `DeploymentLookup` — сам `GraphProjector`), `Reconciler` как `ReconciliationTrigger`, `metrics::recordWarnings` как `NormalizationWarnings` (`:100-112`); `JournalDispatcher` под `archrag.dispatcher.enabled` (`:121-135`) 🟢. Все бины с ресурсами закрываются (`destroyMethod = "close"`), сессии Neo4j открываются в `try-with-resources` на операцию (ловушка 8) 🟢.
+
+**Диспетчер** (`IS/JournalDispatcher.java:94-163`, запуск — `IS/DispatcherRunner.java:31-52`): один поток `journal-dispatcher` (`scheduleWithFixedDelay`, пауза `poll-interval`, по умолчанию 1 с). Проход: `retryNotAfter = now − retryDelay` → цикл страниц: `AdminLock.tryAcquire()` (занят — проход закончен) → `reader.pending(after, retryNotAfter, batchSize)` → для каждого события: пропуск, если объект `(source,sourceType,sourceId)` уже в `blocked` → `process` → `metrics.recordEvent` → при итоге `null` или `RETRYING` объект добавляется в `blocked` → keyset по последнему элементу страницы до пустой страницы. `process`: нет `payloadRef` → `toDlq` с `NO_RAW_PAYLOAD` (для маркера — `MARKER_NO_RAW`); `rawStore.get(ref)` (ошибки хранилища идут наружу, событие остаётся прежним); `StoredEventReader.toEvent` (`IllegalArgumentException` → DLQ `INVALID_RAW_PAYLOAD`); `EventProcessor.process` (`:139-163`) 🟢.
+
+**Админский REST** (`IS/AdminController.java`): все операции идут через `AdminOperations.run`: `AdminLock.acquire()` (занят → `AdminBusyException` → HTTP 409) → запись `STARTED` в `admin_audit` (ошибка записи — операция не начинается) → выполнение → итог `SUCCEEDED/FAILED` (при ошибке — только класс исключения, `Throwable` пробрасывается) (`IS/AdminOperations.java:38-61`) 🟢.
+
+| Эндпоинт | Поведение | Где |
+|---|---|---|
+| `POST /admin/replay` `{source, receivedFrom?, receivedTo?, replayId?}` | проверка `source` по `[A-Za-z0-9:._-]{1,200}`, `from < to`, `replayId` — UUID; `ReplayService.replay` | `IS/AdminController.java:61-82` |
+| `POST /admin/rebuild?confirm=true` | без `confirm=true` — 400; `RebuildService.rebuild` | `:84-92` |
+| `POST /admin/reconcile/{source}` | `{urn:corp:<код> \| <код>}` → `AdapterControlClient.snapshot`; неизвестный — 404, адаптер недоступен/иной статус — 502; ответ адаптера (202/409) отдаётся как есть | `:101-115` |
+| `POST /admin/crosswalks` `[{left,right,reason}]` (1..1000) | `CrosswalkService.load` под замком; аудит по элементам | `:117-123` |
+
+**Replay** (`IS/ReplayService.java:63-100`): читает журнал страницами по 200 с `excludeReplays=true`; для каждой строки (кроме `snapshot-complete` → `SKIPPED_SNAPSHOT_MARKER` и строк без raw → `SKIPPED_NO_RAW`) восстанавливает событие из raw, создаёт **новую** строку журнала `eventId = replay:<replayId>:<исходный eventId>` с теми же `payloadRef`, `syncRunId`, `correlationId` и прогоняет через `EventProcessor`. Исходные строки не меняются. Повтор с тем же `replayId` идемпотентен (`append` → `DUPLICATE`) 🟢.
+**Rebuild** (`IS/RebuildService.java:33-39`): `MATCH (n) CALL { WITH n DETACH DELETE n } IN TRANSACTIONS OF 10000 ROWS` через `session.run` (неявная транзакция — иначе `CALL IN TRANSACTIONS` не работает) и `replay(null,null,null,newReplayId)`. Constraints/индексы, `identity_mapping`, crosswalk и checkpoint'ы адаптеров не затрагиваются → `gid` прежние 🟢.
+**Crosswalk** (`IS/CrosswalkService.java:35-64`): для каждого элемента аудит `STARTED`; `approve`; исходы `APPLIED` (+`gid`), `CONFLICT` (`CrosswalkConflictException`), `INVALID` (`IllegalArgumentException`/`NullPointerException`, в т.ч. неизвестный `source` в `SourceSystemCode.valueOf`); остальные `RuntimeException` — аудит `FAILED` и проброс. `approvedBy` — `sub` токена, `approvedAt` — серверное время (в запросе не принимаются) 🟢.
+
+### Q5.2 Алгоритмы и встроенные правила
+
+1. **Монопольность записи.** Один PostgreSQL advisory lock на сессию (`pg_try_advisory_lock(0x41524348_41444D31)`) защищает и диспетчер (на каждую страницу), и админские операции; соединение удерживается до `Lease.close()` (`IS/AdminLock.java:19-86`). Это единственный механизм, делающий допущение «один писатель» из Javadoc `GraphProjector` (`GraphProjector.java:65-67`) исполнимым между экземплярами; внутри процесса диспетчер — один поток 🟢. Во время replay/rebuild диспетчер «спит» (проход заканчивается при занятом замке), поэтому его `RETRYING`-повторы не конкурируют с `replay:*`-строками 🟢.
+2. **Порядок и блокировка объекта.** Порядок журнала `(received_at, source, event_id)`; после `RETRYING` или исключения более поздние события **того же объекта** в этом проходе пропускаются, чтобы не обгонять упавшее (`JournalDispatcher.java:113-121`) 🟢. Новый проход начинается с `after = null`, поэтому событие с более ранним `received_at`, ушедшее в `RETRYING`, подхватится в следующем проходе 🟢.
+3. **Повторы без лимита.** `attempts` растёт только на `RETRYING` и нигде не сравнивается с порогом (единственные упоминания — `PostgresEventJournal.java:340,387`, `ConsoleReadRepository.java:313`); событие с вечной транзиентной причиной (например, `RECONCILIATION_TRIGGER_FAILED`) остаётся `RETRYING` и берётся заново каждые `retry-delay` (30 с) без эскалации в `QUARANTINED` 🟡. Для неожиданного исключения (`process` вернул `null`) статус и `updated_at` не меняются: `RECEIVED`-событие берётся **каждый проход** (по умолчанию раз в секунду) и пишет `LOG.error` (класс исключения); эскалации в DLQ нет 🟡.
+4. **Raw payload.** Восстановление события из строки журнала и raw (`IS/StoredEventReader.java:44-86`): метаданные берутся из строки `inbox_event`, `payload`/`operation`/`completeness`/`updatedAt` — из raw JSON; `null`-поля payload отбрасываются, целые читаются как `Long`, `_completeness` кладётся в payload, у `DELETE` payload пуст; `updatedAt` обязателен и разбирается как `Instant`. Для маркера — отдельный формат `{syncRunId, objectCount, updatedAt}`, `objectCount` — целое ≥ 0, иначе `IllegalArgumentException` → DLQ `INVALID_RAW_PAYLOAD` (`:88-106`) 🟢. Raw недоверенный: сообщения без содержимого 🟢. Формат повторяет `EventMapper.toEvent` адаптеров; соответствие держит контрактный тест (`StoredEventReaderContractTest`) 🟢.
+5. **Безопасность админки** (`IS/SecurityConfiguration.java:36-46`, `IS/AuthorizedPartyValidator.java`): stateless, CSRF выключен; `/admin/**` требует `SCOPE_architecture.admin`, всё остальное `denyAll()` (в т.ч. `/actuator`; в `application.yml` экспонируется только `health`, но фильтр его закрывает); JWT проверяется на issuer, подпись, срок, `aud` = `ARCHRAG_ADMIN_RESOURCE_URI` и `azp ∈ archrag.admin.allowed-clients` (по умолчанию `archrag-demo`; пустой список запрещён, `AdminProperties.java:15-19`). Консольный клиент в allow-list не входит: токен консоли с тем же scope отклоняется 401 🟢. Это закрывает ловушку 13 для единственной точки входа сервиса; отдельных tools здесь нет.
+6. **Секреты.** Все значения — из env (`application.yml`, без умолчаний для PG/Neo4j/S3/OIDC); `Neo4jProperties.toString` и `S3Properties.toString` не печатают пароль/ключи (`IS/Neo4jProperties.java:9-12`, `IS/S3Properties.java:9-12`) 🟢 (ловушка 12). В аудит попадают параметры запроса и счётчики, не payload; `reason` crosswalk усекается до 200 символов, `error` — до 200 (`AdminAudit.java:22,66-68`, `CrosswalkService.java:70-78`) 🟢.
+7. **Ошибки админки.** `BadRequestException` → 400, `AdminBusyException` → 409, `AdapterUnavailableException` → 502 (сообщения без значений запроса и адреса адаптера) (`AdminController.java:125-138`); прочие исключения — стандартный 500 Spring, отдельного обработчика нет 🟡.
+8. **Метрики** (`IS/IngestionMetrics.java`): счётчик `archrag.ingestion.events{source,status}` (все пары предрегистрируются нулём), gauges `archrag.ingestion.sync.lag` (возраст старейшего ожидающего события источника по `received_at`; ожидающие = `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, RETRYING`) и `archrag.ingestion.dlq.open` (`dlq_entry WHERE replayed_at IS NULL`), обновляются `@Scheduled` раз в 15 с; счётчик `archrag.normalizer.unmapped.values{source,property}` — только для кода `UNMAPPED_CRITICALITY`. Теги ограничены перечислениями (кардинальность) (`:39-167`) 🟢. 🔴 `dlq.open` не уменьшается никогда, пока `replayed_at` не заполняется (Q1.5).
+9. **Конфигурация диспетчера** (`DispatcherProperties`, record + `@DefaultValue`): `enabled=true`, `pollInterval=1s` (> 0), `batchSize=100` (1..1000), `retryDelay=30s` (≥ 0), `shutdownTimeout=30s` (`IS/DispatcherProperties.java:24-34`) 🟢. Остановка: `dispatcher.stop()` ставит флаг, `executor.shutdown()` и ждёт `shutdownTimeout`, потом `shutdownNow()` (`IS/DispatcherRunner.java:54-71`) 🟢.
+10. **Миграции схемы.** `V3__admin_audit.sql` (таблица `admin_audit`: `operation`, `actor`, `request jsonb`, `replay_id`, `status`, `result jsonb`, `error`, `started_at`, `finished_at`; индексы по `started_at` и `replay_id`); `V6__console_readonly_role.sql` (идемпотентно создаёт кластерную роль `archrag_console_ro LOGIN` и выдаёт `SELECT` на `inbox_event, consumer_checkpoint, dlq_entry, identity_candidate, source_conflict, admin_audit`; пароль не задаётся; нужна привилегия `CREATEROLE`) 🟢. Доступ read-only консоли обеспечивается на уровне БД, а не кодом консоли 🟢.
+
+### Q5.3 Структуры данных
+
+`admin_audit`, `ReplayRequest`/`ReplayResult`/`CrosswalkItem`/`CrosswalkResult`, настройки (`DispatcherProperties`, `AdminProperties`, `AdaptersProperties`, `Neo4jProperties`, `S3Properties`) — `data-dictionary.md` §Q.5.
+
+### Q5.4 Константы
+
+`MARKER_NO_RAW`, `NO_RAW_PAYLOAD`, `INVALID_RAW_PAYLOAD` (`JournalDispatcher.java:47-49`); `SKIPPED_SNAPSHOT_MARKER`, `SKIPPED_NO_RAW`, `PAGE_SIZE=200` (`ReplayService.java:35-38`); `MAX_CROSSWALK_ITEMS=1000` (`AdminController.java:31`); `ADMIN_SCOPE="architecture.admin"` (`SecurityConfiguration.java:28`); `AdapterControlClient.TIMEOUT=10 мин` (`:20`); `WIPE` (`RebuildService.java:18`); ключ замка `0x41524348_41444D31` (`AdminLock.java:19`); литералы `TYPE_SNAPSHOT_COMPLETE` (`StoredEventReader.java:34`, `ReplayService.java:37`) 🟢.
+
+### Q5.5 Сомнения и расхождения
+
+- 🔴 `dlq_entry.replayed_at` не заполняется ни replay'ем, ни чем-либо ещё (`ReplayService` создаёт новые строки `replay:*` и не трогает DLQ, `ReplayService.java:78-100`): метрика `dlq.open` и фильтр консоли «открытые» всегда включают всё когда-либо отправленное в DLQ. Уточнить у архитектора, считается ли DLQ историей или очередью.
+- 🟡 Нет лимита повторов и эскалации «ядовитых» событий (п.3).
+- 🟡 Литерал `TYPE_SNAPSHOT_COMPLETE` продублирован в `StoredEventReader.java:34` и `ReplayService.java:37` (плюс `EventProcessor.java:93`, `EventMapper.java:32`); литералы `deleted` в сервисе не используются: тип берётся из строки журнала.
+- 🟡 `DispatcherRunner.stop()` вызывает `dispatcher.stop()`, который выставляет `stopped = true` и никогда не сбрасывает (`JournalDispatcher.java:63,89-91`): повторный `start()` того же бина (перезапуск lifecycle без пересоздания контекста) не обработает ни одного события. В Boot-приложении не воспроизводится, пока контекст не перезапускают.
+- 🟡 Rebuild удаляет **все** узлы базы Neo4j, а не только проекцию ingestion (`MATCH (n)`): при общей БД с чужими данными они будут стёрты. Защита — флаг `confirm=true`, аудит и scope (`RebuildService.java:18`, `AdminController.java:84-92`). Прерванный rebuild оставляет граф неполным (Javadoc `RebuildService.java:9-12`).
+- 🟡 `POST /admin/reconcile/{source}` вызывает `/control/snapshot` адаптера без аутентификации (R.2b: эндпоинт открыт во внутренней сети); синхронный вызов с таймаутом 10 минут держит админский замок на всё время snapshot (`AdapterControlClient.java:19-20,56-72`, `AdminOperations.java:45`) — диспетчер в это время не работает 🟡.
+- 🟡 Конфликт `CONFLICT` crosswalk не обновляет `identity_candidate.status` (Q3.5); успешный crosswalk меняет `gid` только для будущих событий — «узлы графа под новый `gid` переписывает следующий replay или rebuild» (Javadoc `CrosswalkService.java:17-20`) 🟡.
+- 🟡 V6 требует `CREATEROLE` у пользователя приложения; без него миграция падает и сервис не стартует (комментарий в `V6__console_readonly_role.sql:3`).
+- 🟡 Все `AuthorityMatrix.defaults()` создаются дважды (для `SourceConflicts` и `GraphProjector`) — одинаковые, но не общий экземпляр (`IngestionServiceConfiguration.java:62-65,84-87`).
+
+---
+
+## Q6. Сомнения R.2a / R.2b, отнесённые к `ingestion/`, — результат разбора
+
+### Q6.1 п.1 — ручное сопоставление кодов источников — **подтверждено, 🟡**
+
+Таблица «код источника ↔ `SourceSystemCode`/URN» существует в четырёх независимых копиях:
+1. адаптер: `urn:corp:<код>` из `SourceSystem` (`adapters/adapter-core/.../EventMapper.java:47-49`);
+2. `Normalizer.sourceCode` — `switch` `eam|scm|cmdb|deploymap` (`ingestion/normalizer/.../Normalizer.java:92-103`);
+3. `EventProcessor.sourceCode` — тот же `switch` (`ingestion/graph-projector/.../EventProcessor.java:633-646`); его же использует `Reconciler` (`Reconciler.java:101`);
+4. `IngestionMetrics.sourceTag` / `AdapterControlClient.code` — срез префикса `urn:corp:` и проверка по `SourceSystem.values()` (`IngestionMetrics.java:149-154`, `AdapterControlClient.java:33-35`).
+Все копии сейчас согласованы; `asset`-адаптер публикует источник `cmdb` (имя адаптера ≠ код источника), поэтому в каждой копии `cmdb`, а не `asset`. Теста, который перебирает все `SourceSystemCode` и проверяет согласованность копий, нет. Добавление пятого источника потребует правки не менее трёх мест; пропуск в `Normalizer`/`EventProcessor` проявится как `QUARANTINED / UNKNOWN_SOURCE` только в рантайме.
+
+### Q6.2 п.3 — литералы `TYPE_ASSET_DELETED`, `snapshot-complete.v1` и удаление/snapshot — **подтверждено, 🟡/🔴**
+
+- Определения: `EventProcessor.java:92-94` (пакетно-приватные), `StoredEventReader.java:34`, `ReplayService.java:37` (только `snapshot-complete`), адаптеры — `EventMapper.java:29,32,41,42` (публичные). `contracts/event-schemas` содержит только `TYPE_ASSET_UPSERTED` (`CanonicalEvent`). Запрет `ingestion → adapters` в `CLAUDE.md` исключает ссылку на константы адаптера; единственный допустимый общий дом — `contracts/event-schemas`. Теста на совпадение копий между адаптерами и проекцией нет, кроме контрактного `StoredEventReaderContractTest`, который сверяет формат raw, а не строки типов 🟡.
+- **Как обрабатывается удаление.** Тип `architecture.asset.deleted.v1` → `EventProcessor.delete`: требует `dataschema == urn:corp:schema:asset-deleted:1`, версия сравнивается по `VersionDecision.forTombstone`, граф: `active=false`, закрытие темпоральных связей, архивирование узла без других активных мастеров, **без физического удаления** (`EventProcessor.java:254-287`, `GraphProjector.java:507-550`). Источники удалений: (а) событие `DELETE` от адаптера (webhook), (б) `Reconciler` по missing set (синтетическое `reconcile:…`, фиксируется в журнале до записи в граф — `Reconciler.java:156-182`) 🟢.
+- **Как обрабатывается завершение snapshot.** Маркер `snapshot-complete:<syncRunId>` — не проецируется; `EventProcessor.snapshotComplete` проводит его по статусам и вызывает `Reconciler`; сбой → `RETRYING / RECONCILIATION_TRIGGER_FAILED` (`EventProcessor.java:289-300`). Маркер без raw → DLQ `MARKER_NO_RAW` (восстановление — `POST /admin/reconcile/{source}`) (`JournalDispatcher.java:144-145`). Replay маркеры **пропускает** (`SKIPPED_SNAPSHOT_MARKER`), поэтому удаления при replay/rebuild воспроизводятся только через сохранённые события `reconcile:…` 🟢. Ловушка 9 соблюдена: удалений до маркера нет 🟢.
+- 🔴 `dataschema` маркера не проверяется (в отличие от `deleted`); проверка полноты прогона отключается, если у маркера нет числа `objectCount` (Q4.5).
+
+### Q6.3 События `poll:` и `snap:` с одной версией, но разными `eventId` — **снято (идемпотентно по версии), 🟢 с оговоркой 🟡**
+
+Дедупликация по `source + eventId` (`uq_inbox_event`) пропустит оба события в журнал как разные. Далее `EventProcessor.decideBeforeWrite` сравнивает `SourceVersion` с применённой в графе: равная версия → `DUPLICATE` (до нормализации), ниже → `IGNORED_OLD_VERSION`; в транзакции Neo4j проверка повторяется под блокировкой записи и даёт `NOOP_SAME_VERSION` (`EventProcessor.java:303-322`, `GraphProjector.java:305-324`). Проекция идемпотентна по версии объекта, а не по `eventId`. Оговорка: содержимое при равной версии не сравнивается — `contentHash` в решении не участвует, поэтому изменение без роста `ver` отбрасывается (Q4.2 п.1). Что именно EAM считает `ver`, — вопрос к `docs/06-eam-integration.md`/R.3.
+
+### Q6.4 Вложенные `null` в `attrs` EAM — **снято (не падает, не затирает), 🟢; побочный 🟡**
+
+`Payload.optionalObject` копирует вложенную карту, допуская `null`-значения; `optional`/`optionalIdRef` читают `null` как «не передано» (`Payload.java:30-61, 113-122`). Для ArchObject это значит: `name: null` → `MISSING_REQUIRED_FIELD`; необязательные поля `null` → `null` в record → не пишутся в граф (`NodeProperties.of`); ссылки `platform_id`/`product_id` = `null` → связь не строится и существующая **не закрывается** (`EamMapper.java:208-214`; закрытие делает только `closeReplacedRelations` для типов, которые версия утверждает, `GraphProjector.java:611-647`). Побочный эффект: нет способа «явно удалить» значение — это соответствует ловушке 5 (нет явной семантики удаления). Ещё: `attrs: null` у `IT_SYSTEM` уходит в плоскую ветку и даёт вводящую в заблуждение причину `required field is missing: name` (Q2.5).
+
+### Q6.5 `datetime == null → Instant.EPOCH` — **влияние на проекцию: 🟡**
+
+Адаптер подставляет `EPOCH`, если у ArchObject нет `datetime` (`adapters/eam-adapter/.../EamApiConnector.java:181`). Дальше значение становится `event.time()` и `SourceRecord.fetchedAt`, а проекция использует `event.time()` как `eventTime` (`EventProcessor.java:358`). Последствия (подробно — Q4.5): `firstSeenAt = 1970-01-01`, `validFrom` связей без собственного `validFrom` = `1970-01-01`, замещение связей при `eventTime = EPOCH` закрывает старые связи интервалом нулевой длины. **Версии не затрагиваются**: порядок решает `SourceVersion`, а не время. Решение «что делать с отсутствующим `datetime`» — за архитектором (вариант: брать время приёма из журнала `received_at`).
+
+### Q6.6 Новые вопросы, найденные в `ingestion/`
+
+| № | Метка | Суть | Где |
+|---|---|---|---|
+| Н1 | 🔴 | `dlq_entry.replayed_at` нигде не заполняется (колонка и фильтр `replayed` описаны в `docs/02-data-model.md:313` и `docs/03-interfaces.md:413`, семантика «когда ставится» не описана) → метрика `dlq.open` и «открытые» DLQ в консоли не отражают состояние | Q1.5, Q5.5 |
+| Н2 | 🔴 | `identity_candidate.status` не меняется ни crosswalk'ом, ни чем-либо ещё → подтверждённые кандидаты остаются `OPEN`; `docs/02-data-model.md:360` признаёт «ручных решений нет» (E3, UNLOCKER-174/175), то есть это известный пробел, но не отражено в Javadoc | Q3.5 |
+| Н3 | 🔴 | Документ называет выход из `QUARANTINED` «решением оператора» (`docs/02-data-model.md:241,270`), но ни админский REST, ни другой код не вызывает `QUARANTINED → RETRYING`; также нигде не вызывается `PROJECTED → SUPERSEDED` (`ProcessingStatus.java:38-39`; grep по `.transition(` — только `EventProcessor` и `Reconciler`). Практический выход — replay новой строкой | Q5 |
+| Н12 | 🔴 | `docs/02-data-model.md:309` утверждает «Таблиц `identity_candidate` и `conflict` нет… candidate matching не реализован», тогда как код содержит V4/V5/V7, `PostgresIdentityCandidates`, `PostgresSourceConflicts`, а в `docs/02-data-model.md:360` те же таблицы названы существующими. Документ противоречит сам себе и коду; правка docs — вне этапа | Q3 |
+| Н4 | 🔴 | `snapshot-complete` без `objectCount` отключает проверку полноты и разрешает удаление всего missing set | Q4.5 |
+| Н5 | 🟡 | Нет лимита повторов `RETRYING` и эскалации «ядовитых» событий | Q5.2 п.3 |
+| Н6 | 🟡 | Устаревшее `RETRYING`-событие обновляет `identity_feature` до проверки версии | Q4.2 п.2 |
+| Н7 | 🟡 | Checkpoint `projector` записывается ingestion'ом, но читается только `access/admin-console` (для отображения); на поведение обработки не влияет | Q4.2 п.13 |
+| Н8 | 🟡 | Дублирование типов событий/таблицы кодов источников; нет теста согласованности | Q6.1, Q6.2 |
+| Н9 | 🟡 | Тело дубля `(source, eventId)` и содержимое при равной версии не сравниваются | Q1.2 п.1, Q4.2 п.1 |
+| Н10 | 🟡 | Rebuild стирает все узлы Neo4j (`MATCH (n)`) | Q5.5 |
+| Н11 | 🟡 | Реализации Postgres/Neo4j в модулях не покрыты тестами самих модулей (только IT платформы) — проверить в R.2e | Q1, Q3, Q4 |
+
+---
+
+## Q7. Итоги по модулям R.2c
+
+| Модуль | Java-файлов main / строк | Тестов | Ключевые алгоритмы | Основные риски (см. §) |
+|---|---|---|---|---|
+| `event-journal` | 5 (+1 SQL) / 550 | 2 в 1 классе | идемпотентный append, переходы под `FOR UPDATE`, `pending`, DLQ, S3 по hash | Q1.5: `replayed_at`, затирание ошибок, `DUPLICATE` не персистируется в `append` |
+| `normalizer` | 15 / ≈1200 | 71 в 5 классах | `Payload` («не передано»), `CommandSink`, отложенные ссылки, привязка Deployment | Q2.5: копии таблицы кодов, два словаря критичности, `attrs: null` |
+| `identity-resolution` | 19 / ≈1300 | 20 в 4 классах | gid в PG, crosswalk без слияния, признаки/кандидаты, конфликты по authority | Q3.5: `status` кандидата, `retract` мастера, потеря признака при > 50 |
+| `graph-projector` | 21 / ≈2700 | 86 в 7 классах | версия-решатель, MERGE по ключам, замещение темпоральных связей, tombstone, pending/alias, Reconciler | Q4.5: `objectCount`, EPOCH, порядок candidates/stale, checkpoint write-only |
+| `ingestion-service` | 27 / ≈1600 | 48 в 7 классах | диспетчер, `AdminLock`, replay/rebuild, crosswalk, аудит, метрики, безопасность | Q5.5: DLQ, повторы без лимита, rebuild стирает всё |
+
+Машины состояний ingestion: `ProcessingStatus` (`flowcharts/ingestion-service.md`, «Жизненный цикл `inbox_event`»), `source_conflict` (`flowcharts/identity-resolution.md`), версия записи (`flowcharts/graph-projector.md`). `UnresolvedReference` → `DeferRelation` → `PendingRelation` → достроенная связь (Q2.2 п.6, Q4.2 п.9). Tombstone — Q4.2 п.8. Описание модели и ADR не дублируется: `docs/02-data-model.md`, `docs/adr/`.

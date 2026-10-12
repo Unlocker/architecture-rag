@@ -1,6 +1,6 @@
 # Data Dictionary → Словарь данных
 
-> Archaeologist, этапы R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`); R.2b (UNLOCKER-264): раздел P (`adapters/*`). Разделы остальных модулей добавят R.2c–R.2e.
+> Archaeologist, этапы R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`); R.2b (UNLOCKER-264): раздел P (`adapters/*`); R.2c (UNLOCKER-265): раздел Q (`ingestion/*`, в конце файла). Разделы остальных модулей добавят R.2d–R.2e.
 > Столбец «Обяз.»: **да** — `null`/пустое отвергается конструктором; **нет** — допускается `null`, пустая строка отвергается (`Invariants.optionalText`, `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java:30-35`); **—** — проверки нет.
 > Пути сокращены: `CM/` = `contracts/canonical-model/.../canonicalmodel/`, `ES/` = `contracts/event-schemas/.../eventschemas/`, `SPI/` = `contracts/source-spi/.../sourcespi/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
 > Семантику узлов и связей смотри в `docs/02-data-model.md` §2; здесь только то, что утверждает код.
@@ -352,3 +352,275 @@
 Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элемент массива — `{sourceId, sourceVersion, payload}`; `deploymap/README.md:3-4`).
 
 **EAM API** (`docs/eam-api.yaml`, `docs/06-eam-integration.md`; формат разбирает `platform/source-stubs/.../EamApiFormat.java`) 🟡 — реальный контракт не проверен (ADR 0010); допущения 1–9 в `docs/06-eam-integration.md:87-131`.
+
+---
+
+# Q. ingestion (R.2c, UNLOCKER-265)
+
+> Archaeologist, этап R.2c. Пути сокращены: `EJ/` = `ingestion/event-journal/src/main/`, `NZ/` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
+> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-13`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы — R.3 (Data Master); здесь — таблицы, через которые проходит логика модулей.
+
+## Q.1 event-journal: таблицы PostgreSQL (`EJ/resources/db/migration/V1__event_journal.sql`) 🟢
+
+### Q.1.1 `inbox_event` (`V1__event_journal.sql:2-22`)
+
+| Колонка | Тип | NULL | Назначение / правило |
+|---|---|---|---|
+| `source` | text | нет | URN источника (`urn:corp:eam` …), часть ключа идемпотентности |
+| `event_id` | text | нет | `id` CloudEvent; префиксы `poll:`, `snap:<syncRunId>:`, `replay:` (см. data-dictionary §P.4) |
+| `type` | text | нет | `architecture.asset.upserted.v1` и т.п. |
+| `subject` | text | да | `CanonicalEvent.subject` |
+| `source_type`, `source_id` | text | нет | ключ объекта в источнике |
+| `source_version` | text | нет | версия объекта **как строка** (сравнение — `VersionDecision`, Q4) |
+| `correlation_id`, `sync_run_id` | text | да | трассировка и прогон snapshot |
+| `schema_version` | text | нет | значение `CanonicalEvent.dataschema` (колонка названа иначе, `PostgresEventJournal.java:73`) 🟢 |
+| `status` | text | нет | `ProcessingStatus.name()`; CHECK-ограничения нет — допустимость значений держит код 🟡 |
+| `attempts` | integer | нет, 0 | +1 на каждый переход в `RETRYING` |
+| `error_code`, `error_reason` | text | да | перезаписываются каждым переходом; `error_reason` ≤ 500 символов |
+| `payload_key`, `payload_hash` | text | да | ссылка на raw в S3: `raw/<source>/<sha256>` и hash |
+| `received_at`, `updated_at` | timestamptz | нет | UTC; `received_at` — основа курсора диспетчера |
+
+Ограничения и индексы: `uq_inbox_event UNIQUE (source,event_id)`; `ix_inbox_event_status (status, received_at)`; `ix_inbox_event_object (source, source_type, source_id)` (`V1__event_journal.sql:21, 24-25`). Индекса под `pending` с условием `updated_at` нет 🟡.
+
+### Q.1.2 `consumer_checkpoint` (`V1__event_journal.sql:27-33`)
+
+`consumer` + `source` (PK), `cursor` text NOT NULL (формат свободный: курсор poll-а, `run:<id>`, `done:<id>`, `eventId` последнего спроецированного события), `updated_at`. Потребители: `poller:*`/`snapshot:*` адаптеров (`adapters/adapter-core/.../Poller.java:93,136,170-186`), проектор (`ingestion/graph-projector/.../EventProcessor.java:615`) 🟢.
+
+### Q.1.3 `dlq_entry` (`V1__event_journal.sql:35-45`)
+
+| Колонка | Тип | NULL | Примечание |
+|---|---|---|---|
+| `id` | bigserial | нет | PK |
+| `source`, `event_id` | text | нет | FK → `inbox_event(source,event_id)` |
+| `reason` | text | нет | ≤ 500 символов; если причины нет — подставляется `error_code` |
+| `error_code` | text | нет | обязателен (`toDlq` бросает `IllegalArgumentException` при пустом) |
+| `payload_key` | text | да | копия ссылки на raw |
+| `created_at` | timestamptz | нет | |
+| `replayed_at` | timestamptz | да | 🔴 **в коде не заполняется** (code-analysis §Q1.5) |
+
+Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`V1__event_journal.sql:47-48`).
+
+### Q.1.4 Raw payload в S3 🟢
+
+Ключ `raw/<source>/<sha256 hex>` (`EJ/java/.../S3RawPayloadStore.java:74`); `source` по `[A-Za-z0-9:._-]{1,200}` и не только из точек (`:33, :70`). Метаданные объекта не задаются; целостность — сравнением SHA-256 при `get` (`:85`).
+
+## Q.2 normalizer: вход, выход и форматы payload
+
+### Q.2.1 Выходные типы 🟢
+
+| Тип | Поля | Правила |
+|---|---|---|
+| `NormalizationResult.Normalized` (`NZ/NormalizationResult.java:19-27`) | `commands: List<GraphCommand>`, `unresolved: List<UnresolvedReference>`, `warnings: List<String>` | списки копируются `List.copyOf`; `commands` начинается с `UpsertNode` записи события (кроме случаев, когда маппер добавляет только связь — не встречается в коде) |
+| `NormalizationResult.Quarantined` (`:34`) | `errorCode`, `reason` | коды: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` |
+| `UnresolvedReference` (`NZ/UnresolvedReference.java:19-28`) | `from: SourceKey`, `field: String`, `relationType`, `target: SourceKey`, `relation: UpsertRelation` | все поля обязательны; `field` — имя поля источника без значения; `target` — отсутствующий конец |
+| `CanonicalMapper.Input` (`NZ/CanonicalMapper.java:36`) | `record: SourceRecord`, `payload: Map<String,Object>`, `time: Instant` | `payload` — недоверенные данные |
+
+`SourceRecord` для события: `key=(source,sourceType,sourceId)`, `sourceVersion=data.sourceVersion`, `contentHash=raw.contentHash()`, `fetchedAt=event.time()`, `active=true` (`NZ/Normalizer.java:68-75`). Флаг `active=false` normalizer не выставляет никогда; удаление — отдельный тип события (Q4/Q5) 🟢.
+
+### Q.2.2 Форматы payload по источникам 🟢
+
+| Источник / `sourceType` | Поля payload (обяз. — **жирным**) | Команды |
+|---|---|---|
+| EAM `PLATFORM` (ArchObject) | `attrs.`**`name`**, `type`, `version`, `lifecycle`, `description` | `UpsertNode(Platform)` (`EamMapper.java:139-148`) |
+| EAM `SOLUTION` | `attrs.`**`name`**, `lifecycle`, `description`, `platform_id` (целое) | `UpsertNode(Solution)` + `USES_PLATFORM` → `EAM/PLATFORM/<platform_id>` (`:149-159`) |
+| EAM `IT_SYSTEM` (ArchObject, есть `attrs`) | `attrs.`**`name`**, `status`, `criticality` (HIGH/MEDIUM/LOW), `description`, `eam_id`, `platform_id`, `product_id`, `ownerTeam`, `ownerSince` | `UpsertNode(ITSystem)`, `USES_SOLUTION` → `EAM/SOLUTION/<product_id>`, `OWNED_BY` → `EAM/TEAM/<ownerTeam>` (`:160-195`) |
+| EAM `IT_SYSTEM` (плоский) | **`name`**, `status`, `criticality` (enum `Criticality`), `description`, `ownerTeam`, `ownerSince`, `dependsOn` | `UpsertNode(ITSystem)` без `eamCode`; `OWNED_BY`; `dependsOn` → warning (`:77-98`) |
+| EAM `TEAM` | **`name`**, `type` | `UpsertNode(Team)` (`:71`) |
+| EAM `SERVICE_DEPENDENCY` | **`from`**, **`to`** (коды сервисов SCM), `kind`, `protocol`, `criticality`, `validFrom` | `DEPENDS_ON` Service→Service через `link` (`:100-115`) |
+| SCM `REPOSITORY` | **`url`** (нормализуется `GitUrls`), `defaultBranch`, `archived` (boolean) | `UpsertNode(Repository)` (`ScmMapper.java:51-58`) |
+| SCM `SERVICE` | **`name`**, `serviceType`, `language`, `status`, `systemCode`, `repositoryId`, `validFrom` | `UpsertNode(Service)`, `DECOMPOSED_INTO` (система → сервис), `IMPLEMENTED_IN` (сервис → репозиторий) (`:59-94`) |
+| CMDB `COMPUTE_INSTANCE` | **`hostname`**, **`kind`** (`ComputeKind`, регистр не важен), `ip`, `os`, `state`, `hypervisorRef`, `serialNumber` | `UpsertNode(ComputeInstance)`; `environment` игнорируется (`CmdbMapper.java:31-48`) |
+| DEPLOYMAP `ENVIRONMENT` | **`name`**, `class` (иначе из `sourceId`) | `UpsertNode(Environment(code=sourceId, name, class))` (`DeployMapMapper.java:84-91`) |
+| DEPLOYMAP `DEPLOYMENT` | **`name`**, `chartVersion`, `status`, `service`, `environment`, `hosts[]`, `validFrom`, `format`, `chartMeta.annotations.*` (poc-1) | `UpsertNode(Deployment)`, `HAS_DEPLOYMENT`, `DEPLOYED_FROM{commit}`, `IN_ENVIRONMENT`, `RUNS_ON` на каждый хост (`:92-133`) |
+
+Нормативный формат источников — `docs/06-eam-integration.md` и заглушки `platform/source-stubs` (R.2e); таблица описывает то, что **читает** маппер.
+
+### Q.2.3 Warnings и их коды 🟢
+
+| Код | Условие | Где |
+|---|---|---|
+| `DEPENDS_ON_NOT_SUPPORTED` | плоский `IT_SYSTEM` с непустым `dependsOn` | `EamMapper.java:96-98` |
+| `UNMAPPED_CRITICALITY` | ArchObject `IT_SYSTEM` с `criticality` вне HIGH/MEDIUM/LOW | `:164-168` |
+| `DEPLOYMENT_SERVICE_UNRESOLVED` | poc-1: сервис не определился | `DeployMapMapper.java:222-224` |
+
+### Q.2.4 Порты
+
+`ReferenceResolver.exists(SourceKey)` (`NZ/ReferenceResolver.java:10-13`); `DeploymentLookup` — `repositoryByUrl`, `itSystemByEamCode`, `servicesImplementedIn`, `eamSystemOfService`, `chartDeploymentsOfService` (последние два нужны `EventProcessor`, не мапперам) (`NZ/DeploymentLookup.java:16-70`). Реализует порты `GraphProjector` (Q4) 🟢.
+
+## Q.3 identity-resolution: таблицы PostgreSQL и записи
+
+Миграции: `V2__identity_mapping.sql`, `V4__identity_candidate.sql`, `V5__source_conflict.sql`, `V7__source_conflict_kind.sql` в `ingestion/identity-resolution/src/main/resources/db/migration/` (`V3` и `V6` — в `ingestion-service`, §Q.5). 🟢
+
+### Q.3.1 `identity_mapping` (V2:3-10)
+
+PK `(source, source_type, source_id)`; `gid uuid NOT NULL`; `created_at timestamptz NOT NULL`; индекс `ix_identity_mapping_gid (gid)`. `source` хранит `SourceSystemCode.name()` (`EAM|SCM|CMDB|DEPLOYMAP`), не URN (`PostgresIdentityMapping.java:157`) 🟢.
+
+### Q.3.2 `approved_crosswalk` (V2:15-26)
+
+PK по шести колонкам `(left_source, left_type, left_id, right_source, right_type, right_id)`; `approved_by`, `reason` (оба NOT NULL), `approved_at timestamptz`. Порядок пары задаёт приложение (`SourceKeys.compare`), CHECK нет. Запись `Crosswalk(left, right, approvedBy, reason, approvedAt)`: ключи различны, `approvedBy`/`reason` непустые (`IR/Crosswalk.java:14-25`) 🟢.
+
+### Q.3.3 `identity_feature` (V4:5-14, индекс :16)
+
+PK `(source, source_type, source_id, feature)` — **одно значение на вид признака на ключ**; `value` (нормализованное), `label_family` (имя `NodeLabel`), `updated_at`; индекс `ix_identity_feature_lookup (feature, label_family, value)`. При upsert записи признаки заменяются целиком (delete + insert) 🟢. `Feature(kind, value)`: `kind ∈ {HOSTNAME, REPOSITORY_URL, NAME, OWNER}`, значение непустое (`IR/Feature.java:6-13`).
+
+### Q.3.4 `identity_candidate` (V4:21-35, индекс :37)
+
+| Колонка | Тип | Примечание |
+|---|---|---|
+| `left_*`, `right_*` | text ×6 | PK; пара в нормализованном порядке |
+| `label_family` | text | |
+| `matched` | jsonb NOT NULL | массив `{feature, value}` в порядке признаков |
+| `score` | numeric(3,2) NOT NULL | 0.00–1.00 |
+| `status` | text NOT NULL DEFAULT `'OPEN'` | 🔴 других значений код не выставляет |
+| `first_seen_at`, `updated_at` | timestamptz | `first_seen_at` не меняется при повторе |
+
+Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-22`) 🟡.
+
+### Q.3.5 `property_assertion` (V5:6-17, индекс :19)
+
+PK `(source, source_type, source_id, property)`; `gid`, `label`, `value` (текст: enum → `name`, `Instant` → UTC ISO, по комментарию миграции), `authoritative boolean`, `asserted_at`; индекс `(gid, property)`. Заменяется целиком при upsert записи, удаляется tombstone'ом 🟢.
+
+### Q.3.6 `source_conflict` (V5:23-39, V7:4)
+
+PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`, `master_value`, `master_source/type/id`, `status` (`OPEN`/`RESOLVED`, по умолчанию `OPEN`), `opened_at`, `updated_at`, `resolved_at` (nullable), `kind text NOT NULL DEFAULT 'PROPERTY'` (`PROPERTY|RELATION`). Строка не удаляется: `RESOLVED` — история; повторное расхождение снова открывает её (`opened_at` сохраняется) 🟢. Запись `SourceConflict` (`IR/SourceConflict.java:24-35`): все поля, кроме `resolvedAt`, обязательны; `toString()` без значений.
+
+### Q.3.7 Веса признаков (`IR/FeatureKind.java:15-18`) 🟢
+
+| Вид | Вес | Сильный | Нормализация (`FeatureNormalizer`) |
+|---|---|---|---|
+| `HOSTNAME` | 0.6 | да | trim, lower-case, без завершающих `.` |
+| `REPOSITORY_URL` | 0.8 | да | `host/path` lower-case без схемы/`user@`/`.git`/`/` |
+| `NAME` | 0.4 | да | NFKC, lower-case, серии не-букв/цифр → пробел |
+| `OWNER` | 0.2 | нет | `gid` команды-владельца (строка UUID) |
+
+`score = min(1.00, Σ весов различных совпавших видов)`.
+
+## Q.4 graph-projector: что пишется в Neo4j
+
+> Каноническая модель узлов и связей — `docs/02-data-model.md`, §A.1–A.3 этого словаря; полная схема Neo4j — R.3. Здесь — свойства служебных узлов и рёбер, которые создаёт проектор (`GP/` = `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/`). 🟢
+
+### Q.4.1 Узел `SourceRecord` (`GP/GraphProjector.java:447-464, 493-505, 507-518`)
+
+| Свойство | Тип в Neo4j | Когда пишется | Примечание |
+|---|---|---|---|
+| `source`, `sourceType`, `sourceId` | string | при `MERGE` (ключ, UNIQUE) | `source` = `SourceSystemCode.name()` |
+| `sourceVersion` | string | upsert, relation-only, tombstone | цифры; сравнивается как число |
+| `contentHash` | string | только `UpsertNode` | SHA-256 raw payload |
+| `fetchedAt` | datetime | только `UpsertNode` | `event.time()` |
+| `active` | boolean | `true` при upsert/relation-only, `false` при tombstone | |
+| `deletedAt` | datetime | tombstone ставит; upsert снимает | |
+| `_lock` | — | ставится и тут же снимается (`:307`) | приём блокировки; в данных не остаётся |
+
+Запись без версии (`sourceVersion IS NULL`) — «заготовка» от `MERGE`; `applied()` и `activeRecords()` её игнорируют (`:120, 154`).
+
+### Q.4.2 Служебные узлы и рёбра
+
+| Элемент | Ключ | Свойства | Создаётся |
+|---|---|---|---|
+| `SourceSystem` | `code` (UNIQUE) | — | upsert, relation-only, tombstone |
+| `(:SourceSystem)-[:OWNS_RECORD]->(:SourceRecord)` | — | — | то же |
+| `(:SourceRecord)-[:ASSERTS]->(:<Canonical>)` | — | `confidence=1.0`, `authority ∈ {MASTER, SUPPLEMENTARY}`, `conflicts: list<string>` (имена свойств; снимается при отсутствии конфликта) | `UpsertNode`; `conflicts` — `writeConflictMarkers` |
+| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум) | если у события есть `syncRunId` (`:687-703`) |
+| `(:SyncRun)-[:PROCESSED]->(:SourceRecord)` | — | — | то же |
+| `PendingRelation` | `key` (UNIQUE, SHA-256) | `type`, `fromLabel`, `toLabel`, `from{Source,Type,Id}`, `to{Source,Type,Id}`, `props` (JSON-строка), `validFrom?`, `validTo?`, `referrerVersion`, `eventTime` | `DeferRelation` (`GP/PendingRelations.java:53-80`) |
+| `(:SourceRecord)-[:DEFERS]->(:PendingRelation)` | — | — | то же |
+
+Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы, `:694`); `SyncRun.status` после создания не меняется 🟡 — кто его завершает, из кода ingestion не видно (проверить в R.3).
+
+### Q.4.3 Канонический узел
+
+`MERGE (n:<root> {gid})` (`gid` — строка UUID); `n += $props` только авторитетные непустые свойства компонентов record'а (`NodeProperties.of`: `Instant` → `datetime` UTC, enum → имя, список → список преобразованных значений); служебные: `isCurrent` (true при создании; для мастера — всегда true при upsert), `deletedAt` (tombstone без другого активного мастера), `firstSeenAt` (минимум по `eventTime`), `lastSeenAt` (максимум) (`GraphProjector.java:442-465, 543-549`) 🟢.
+
+### Q.4.4 Свойства темпоральной связи
+
+`rel += $props` (только переданные свойства связи); `assertedBySource`, `assertedByType`, `assertedById` — запись, утверждающая связь; `validFrom`, `validTo` — для `RelationType.temporal()` (`:564-596`). Закрытие: `validTo = max(validFrom, <момент>)` — интервал не бывает отрицательным (`:525, 538, 643, 682`) 🟢.
+
+### Q.4.5 Результаты и порты (Java)
+
+| Тип | Поля | Инварианты |
+|---|---|---|
+| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation`/`CloseAssertion` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
+| `ProjectionResult` (`GP/ProjectionResult.java:13-14`) | `outcome ∈ {APPLIED, NOOP_SAME_VERSION, IGNORED_OLD_VERSION}`, `skippedProperties`, `skippedRelations` | списки неизменяемы |
+| `ProcessingResult` (`GP/ProcessingResult.java:13`) | `status`, `errorCode?`, `projection?` | `status` обязателен |
+| `ConflictMarkers` (`GP/ConflictMarkers.java:22`) | `gid?`, `byRecord: Map<SourceKey, List<String>>` | непустые списки; маркеры без `gid` недопустимы; `none()` = «не менять» |
+| `Reconciler.Report` (`GP/Reconciler.java:86`) | `tombstoned`, `ignoredOldVersion`, `keptRecentlyTouched`, `keptInSnapshot` | — |
+
+Порты, которые реализует `GraphProjector`: `GraphProjection` (`project`, `applied`, `isActive`, `activeRecords`), `DeploymentLookup` (Q.2.4), `EamLookup` (`solutionPlatform`, `systemsOfSolution`); внешние порты `ReconciliationTrigger` и `NormalizationWarnings` реализуют `Reconciler` и слой метрик (Q5).
+
+### Q.4.6 Схема Neo4j, которую применяет `Neo4jSchema` (`GP/schema/Neo4jSchema.java:41-60`)
+
+| Объект | Определение |
+|---|---|
+| `<label>_gid` для каждой канонической метки | `UNIQUE n.gid` (имя из `CamelCase` → `snake_case` + `_gid`) |
+| `source_record_key` | `UNIQUE (SourceRecord.source, .sourceType, .sourceId)` |
+| `source_system_code` | `UNIQUE SourceSystem.code` |
+| `sync_run_id` | `UNIQUE SyncRun.runId` |
+| `pending_relation_key` | `UNIQUE PendingRelation.key` |
+| `environment_code` | `UNIQUE Environment.code` |
+| `it_system_eam_code` | индекс `ITSystem.eamCode` |
+| `asset_text` | FULLTEXT `ITSystem\|Service` по `name`, `description` |
+
+## Q.5 ingestion-service: таблицы, DTO админского REST, конфигурация
+
+> `IS/` = `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/`. 🟢
+
+### Q.5.1 `admin_audit` (`ingestion/ingestion-service/src/main/resources/db/migration/V3__admin_audit.sql`)
+
+| Колонка | Тип | NULL | Назначение |
+|---|---|---|---|
+| `id` | bigserial | нет | PK |
+| `operation` | text | нет | `REPLAY`, `REBUILD`, `RECONCILE`, `CROSSWALK` |
+| `actor` | text | нет | `sub` токена |
+| `request` | jsonb | нет | параметры запроса без payload; у crosswalk — ключи и усечённая `reason` (≤ 200) |
+| `replay_id` | text | да | UUID replay/rebuild |
+| `status` | text | нет | `STARTED` → `SUCCEEDED` / `FAILED` |
+| `result` | jsonb | да | счётчики (`total`, `statuses`) / `adapterStatus` / `status`+`gid` |
+| `error` | text | да | класс исключения, ≤ 200 символов |
+| `started_at`, `finished_at` | timestamptz | нет / да | |
+
+Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`).
+
+### Q.5.2 Роль БД `archrag_console_ro` (`V6__console_readonly_role.sql`)
+
+`CREATE ROLE … LOGIN` (идемпотентно, пароль не задаётся), `GRANT USAGE ON SCHEMA public`, `GRANT SELECT` на `inbox_event, consumer_checkpoint, dlq_entry, identity_candidate, source_conflict, admin_audit`. Raw payload в PostgreSQL не хранится. Любое новое чтение консоли требует нового GRANT 🟡.
+
+### Q.5.3 Админский REST (`IS/AdminController.java`)
+
+| Запрос | Тело / параметры | Ответ | Ошибки |
+|---|---|---|---|
+| `POST /admin/replay` | `ReplayRequest{source*, receivedFrom?, receivedTo?, replayId?}`; `[from, to)` по `received_at` | `ReplayResult{replayId, total, statuses: Map<String,Long>}` | 400 (`source`, интервал, `replayId`), 409 (замок) |
+| `POST /admin/rebuild` | `confirm=true` | `ReplayResult` | 400 без `confirm`, 409 |
+| `POST /admin/reconcile/{source}` | путь: `urn:corp:<код>` или `<код>` | тело и статус адаптера (202 / 409) | 400, 404 (источник не настроен), 409 (замок), 502 |
+| `POST /admin/crosswalks` | `[CrosswalkItem{left, right, reason}]`, 1..1000; `KeyDto{source, sourceType, sourceId}` | `[CrosswalkResult{index, status, gid?}]`; `status ∈ APPLIED, CONFLICT, INVALID` | 400 (размер списка), 409 |
+
+Статусы в `ReplayResult.statuses`: имена `ProcessingStatus` и два служебных — `SKIPPED_SNAPSHOT_MARKER`, `SKIPPED_NO_RAW`. Аутентификация: JWT со scope `architecture.admin`, `aud` = `ARCHRAG_ADMIN_RESOURCE_URI`, `azp ∈ archrag.admin.allowed-clients`. Остальные пути — `denyAll`.
+
+### Q.5.4 Свойства (`application.yml`; env-переменные без значения по умолчанию обязательны)
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `server.port` | `ARCHRAG_ADMIN_PORT` | 8081 | — |
+| `spring.datasource.{url,username,password}` | `ARCHRAG_PG_URL/USER/PASSWORD` | — (обяз.) | Boot |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | — (обяз.) | Boot |
+| `…jwt.audiences` | `ARCHRAG_ADMIN_RESOURCE_URI` | — (обяз.) | Boot |
+| `archrag.admin.allowed-clients` | `ARCHRAG_ADMIN_ALLOWED_CLIENTS` | `archrag-demo` | `AdminProperties` (непустой список) |
+| `archrag.neo4j.{uri,username,password}` | `ARCHRAG_NEO4J_URI/USER/PASSWORD` | — (обяз.) | `Neo4jProperties` (`toString` без пароля) |
+| `archrag.s3.{endpoint,access-key,secret-key,bucket}` | `ARCHRAG_S3_*` | — (обяз.) | `S3Properties` (`toString` без ключей) |
+| `archrag.adapters.<eam\|scm\|cmdb\|deploymap>.control-url` | `ARCHRAG_<КОД>_CONTROL_URL` | пусто → источник не настроен (404) | `AdaptersProperties` |
+| `archrag.dispatcher.enabled` | `ARCHRAG_DISPATCHER_ENABLED` | true | `DispatcherProperties` |
+| `archrag.dispatcher.poll-interval` | `…_POLL_INTERVAL` | 1s (> 0) | то же |
+| `archrag.dispatcher.batch-size` | `…_BATCH_SIZE` | 100 (1..1000) | то же |
+| `archrag.dispatcher.retry-delay` | `…_RETRY_DELAY` | 30s (≥ 0) | то же |
+| `archrag.dispatcher.shutdown-timeout` | `…_SHUTDOWN_TIMEOUT` | 30s | то же |
+| `archrag.metrics.refresh-interval` | — | 15s | `@Scheduled` в `IngestionMetrics` |
+| `management.otlp.metrics.export.enabled` | — | false | Boot |
+| `management.endpoints.web.exposure.include` | — | `health` | Boot (путь закрыт `denyAll`) |
+
+### Q.5.5 Коды ошибок журнала, которые выставляет ingestion (сводка) 🟢
+
+| Код | Откуда | Статус | Тип |
+|---|---|---|---|
+| `NO_RAW_PAYLOAD`, `MARKER_NO_RAW`, `INVALID_RAW_PAYLOAD` | `JournalDispatcher` | `QUARANTINED` (DLQ) | входные данные |
+| `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` | `Normalizer`/`EventProcessor` | `QUARANTINED` | входные данные |
+| `INVALID_COMMANDS`, `GRAPH_REJECTED` | `EventProcessor.write` | `QUARANTINED` | отказ графа по запросу |
+| `UNRESOLVED_ENDPOINT`, `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `GRAPH_UNAVAILABLE`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RECONCILIATION_TRIGGER_FAILED` | `EventProcessor` | `RETRYING` | инфраструктура / гонка |
