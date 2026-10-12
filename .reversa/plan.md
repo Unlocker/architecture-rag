@@ -51,7 +51,7 @@
 - [x] ✅ **Archaeologist** — `access/graph-query-core`: шаблоны запросов, лимиты, executor
 - [x] ✅ **Archaeologist** — `access/mcp-server`: MCP tools, безопасность, аудит
 - [x] ✅ **Archaeologist** — `access/admin-console`: read-only консоль: REST и безопасность
-- [ ] **Archaeologist** — `access/admin-ui`: SPA React/TypeScript
+- [x] ✅ **Archaeologist** — `access/admin-ui`: SPA React/TypeScript
 
 ### R.2e platform (UNLOCKER-267)
 

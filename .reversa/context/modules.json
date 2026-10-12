@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:12:00Z",
+  "generated_at": "2026-10-12T21:15:58Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -3768,6 +3768,258 @@
         "постраничный вывод count + LIMIT/OFFSET",
         "SPA fallback resolver",
         "расчёт отставания по последнему PROJECTED"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "access/admin-ui",
+      "path": "access/admin-ui",
+      "purpose": "SPA админ-консоли (React 18 + TypeScript + Webpack), собирается Maven-модулем через frontend-maven-plugin; hash-роутинг graph/sync, OIDC Authorization Code + PKCE с токеном в памяти, только GET-вызовы /api/**",
+      "primary_files": [
+        "access/admin-ui/package.json",
+        "access/admin-ui/pom.xml",
+        "access/admin-ui/webpack.config.js",
+        "access/admin-ui/src/index.tsx",
+        "access/admin-ui/src/App.tsx",
+        "access/admin-ui/src/useHashRoute.ts",
+        "access/admin-ui/src/auth/authService.ts",
+        "access/admin-ui/src/api/apiClient.ts",
+        "access/admin-ui/src/api/ApiContext.tsx",
+        "access/admin-ui/src/api/endpoints.ts",
+        "access/admin-ui/src/api/types.ts",
+        "access/admin-ui/src/api/constants.ts",
+        "access/admin-ui/src/hooks/useAsync.ts",
+        "access/admin-ui/src/components/GraphCanvas.tsx",
+        "access/admin-ui/src/pages/GraphPage.tsx",
+        "access/admin-ui/src/pages/SyncPage.tsx",
+        "access/admin-ui/src/pages/graph/AssetCard.tsx",
+        "access/admin-ui/src/pages/graph/NeighborhoodView.tsx",
+        "access/admin-ui/src/pages/sync/SourcesTab.tsx"
+      ],
+      "functions": [
+        {
+          "name": "App",
+          "file": "access/admin-ui/src/App.tsx",
+          "params": [
+            "auth: AuthService"
+          ],
+          "returns": "JSX",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "createOidcAuthService",
+          "file": "access/admin-ui/src/auth/authService.ts",
+          "params": [
+            "config: ConsoleConfig"
+          ],
+          "returns": "AuthService",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "loadConsoleConfig",
+          "file": "access/admin-ui/src/auth/authService.ts",
+          "params": [
+            "fetchFn"
+          ],
+          "returns": "Promise<ConsoleConfig>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "createApiClient",
+          "file": "access/admin-ui/src/api/apiClient.ts",
+          "params": [
+            "options: ApiClientOptions"
+          ],
+          "returns": "ApiClient",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "endpoints",
+          "file": "access/admin-ui/src/api/endpoints.ts",
+          "params": [
+            "api: ApiClient"
+          ],
+          "returns": "Endpoints",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "useAsync",
+          "file": "access/admin-ui/src/hooks/useAsync.ts",
+          "params": [
+            "load",
+            "deps",
+            "refreshMs?"
+          ],
+          "returns": "{state, reload}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "health",
+          "file": "access/admin-ui/src/pages/sync/SourcesTab.tsx",
+          "params": [
+            "s: SourceStatus"
+          ],
+          "returns": "ok|warn|bad",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "isStale",
+          "file": "access/admin-ui/src/pages/graph/AssetCard.tsx",
+          "params": [
+            "card: NodeCard",
+            "now"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "NodeCard",
+          "fields": [
+            {
+              "name": "gid",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "properties",
+              "type": "Record<string, unknown>",
+              "required": true
+            },
+            {
+              "name": "isCurrent",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "sources",
+              "type": "SourceRecordInfo[]",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceStatus",
+          "fields": [
+            {
+              "name": "source",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "eventsByStatus",
+              "type": "Record<string, number>",
+              "required": true
+            },
+            {
+              "name": "lagSeconds",
+              "type": "number|null",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Page",
+          "fields": [
+            {
+              "name": "items",
+              "type": "T[]",
+              "required": true
+            },
+            {
+              "name": "page",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "size",
+              "type": "number",
+              "required": true
+            },
+            {
+              "name": "total",
+              "type": "number",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ConsoleConfig",
+          "fields": [
+            {
+              "name": "issuer",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "clientId",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "scope",
+              "type": "string",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Токены хранятся только в InMemoryWebStorage; code/state убираются из адреса при любом исходе callback",
+          "location": "access/admin-ui/src/auth/authService.ts:39-75",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "401 запускает повторный вход один раз на параллельные ошибки; 403 заменяет раздел экраном «Нет прав»",
+          "location": "access/admin-ui/src/api/ApiContext.tsx:12-37",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Светофор источника: bad при QUARANTINED/RETRYING, FAILED/failed>0 или lag>3600 с; warn при отсутствии данных или lag>900 с",
+          "location": "access/admin-ui/src/pages/sync/SourcesTab.tsx:11-18",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Актив устарел, если текущий и lastSeenAt старше 7 суток (константа UI)",
+          "location": "access/admin-ui/src/pages/graph/AssetCard.tsx:9-13",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Значения свойств и тексты источников выводятся как текст React; URL репозитория без ссылки; подписи графа на canvas",
+          "location": "access/admin-ui/src/pages/graph/AssetCard.tsx:15-28",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Бандл без inline-скриптов и стилей (CSS в файл) ради CSP консоли",
+          "location": "access/admin-ui/webpack.config.js:22-30",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Только GET-вызовы API; ApiClient.post объявлен, но не используется",
+          "location": "access/admin-ui/src/api/endpoints.ts:47-72",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "react 18.3.1",
+        "react-dom 18.3.1",
+        "oidc-client-ts 3.1.0",
+        "cytoscape 3.30.4",
+        "webpack 5",
+        "typescript 5.7",
+        "jest 29",
+        "frontend-maven-plugin"
+      ],
+      "algorithms": [
+        "OIDC Authorization Code + PKCE с токеном в памяти",
+        "useAsync: загрузка с отменой устаревшего ответа и тихим автообновлением",
+        "светофор здоровья источника по статусам, прогону и отставанию"
       ],
       "complexity": "medium"
     }

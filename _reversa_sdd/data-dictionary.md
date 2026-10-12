@@ -736,7 +736,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 
 ### X.2.2 Аудит-запись `archrag.audit.mcp` (`MCP/audit/ToolCallAuditor.java:108-119`) 🟢
 
-Структурированный лог INFO, сообщение `mcp tool call`; ключи: `principal` (`sub=… client=…` или `anonymous`), `tool` (очищен, ≤ 64), `arguments` (нормализованная map, `ToolArguments`), `templates` (список ID шаблонов), `durationMs`, `rows`, `truncated`, `decision` (`ALLOWED, DENIED_SCOPE, DENIED_UNKNOWN_TOOL, TIMEOUT, ERROR` — `MCP/audit/ToolDecision.java:4-15`), `errorClass` (имя класса исключения или `null`). Метрики: `archrag.mcp.tool.call` (теги `tool`, `decision`; гистограмма включена, `application.yml:71-72`), `archrag.mcp.tool.rows` (тег `tool`).
+Структурированный лог INFO, сообщение `mcp tool call`; ключи: `principal` (`sub=… client=…` или `anonymous`), `tool` (очищен, ≤ 64), `arguments` (нормализованная map, `ToolArguments`), `templates` (список ID шаблонов), `durationMs`, `rows`, `truncated`, `decision` (`ALLOWED, DENIED_SCOPE, DENIED_UNKNOWN_TOOL, TIMEOUT, ERROR` — `MCP/audit/ToolDecision.java:4-15`), `errorClass` (имя класса исключения или `null`). Метрики: `archrag.mcp.tool.call` (теги `tool`, `decision`; гистограмма включена, `access/mcp-server/src/main/resources/application.yml:71-72`), `archrag.mcp.tool.rows` (тег `tool`).
 
 ### X.2.3 Свойства mcp-server 🟢
 
@@ -807,3 +807,44 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
 | `management.health.db.enabled` | — | `false` | Spring Boot |
 | `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
+
+---
+
+## X.4 admin-ui: типы ответов, константы, состояние
+
+`UI/` = `access/admin-ui/src/`. Поля — зеркало Java-records `admin-console` (§X.3); `T | null` означает «может прийти `null`». 🟢
+
+### X.4.1 Типы API (`UI/api/types.ts`)
+
+| Интерфейс | Поля (строки `types.ts`) | Java-источник |
+|---|---|---|
+| `Count`, `Stats` (`:3-12`) | `name, count`; `nodes[], relations[], lastUpdatedAt\|null` | `GraphResponses.Count/Stats` |
+| `AssetHit`, `SearchResponse` (`:14-27`) | `gid, type, name, score, matchType, sources[], lastSeenAt\|null`; `items[], truncated` | `GraphResponses.AssetHit/SearchResponse` |
+| `SourceRecordInfo` (`:30-42`) | `source, sourceType, sourceId, sourceVersion\|null, fetchedAt\|null, contentHash\|null, active\|null, deletedAt\|null, authority (string\|number)\|null, confidence\|null, conflicts[]\|null` | запись `explain_provenance` |
+| `NodeCard` (`:44-53`) | `gid, type, properties: Record<string, unknown>, firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources: SourceRecordInfo[]` | `GraphResponses.NodeCard` |
+| `GraphNode`, `GraphEdge`, `Neighborhood` (`:55-74`) | `gid, type, name, isCurrent, distance`; `type, source, target`; `center, nodes, edges, truncated` | `GraphResponses` |
+| `Page<T>` (`:76-81`) | `items, page, size, total` | `pg.Page` |
+| `Checkpoint`, `SyncRunInfo`, `SourceStatus` (`:83-106`) | как §X.3.2 | `Rows` |
+| `SyncEvent` (`:109-127`) | 17 полей `Event`; `receivedAt`, `updatedAt` — обязательные строки | `Rows.Event` |
+| `DlqEntry`, `EventDetail` (`:129-145`) | как §X.3.2 | `Rows` |
+| `Conflict` (`:147-164`) | как `Rows.Conflict`; `kind?: 'PROPERTY' \| 'RELATION'` (в UI необязательное: «поля нет у старых ответов») | `Rows.Conflict` |
+| `MatchedFeature`, `Candidate` (`:166-184`) | `feature, value`; `matched: MatchedFeature[]\|null` | `Rows.Candidate` |
+| `Audit` (`:186-199`) | как `Rows.Audit`; `request`, `result` — `unknown` | `Rows.Audit` |
+
+Расхождения между сторонами: `authority` в UI допускает число (`string \| number`), сервер отдаёт строку `MASTER`/`SUPPLEMENTARY` 🟡; `Conflict.kind` в UI необязателен, в БД (`V7__source_conflict_kind.sql`) и Java-record — всегда задан 🟡; `AssetHit.lastSeenAt` в UI допускает `null`, в Java — `String` без проверок 🟢.
+
+### X.4.2 Константы и состояние
+
+| Имя | Значение | Где |
+|---|---|---|
+| `ASSET_TYPES` | `ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance` | `UI/api/constants.ts:5-13` |
+| `RELATION_TYPES` | 9 типов (`DECOMPOSED_INTO … DEPLOYED_FROM`, `HOSTED_ON`) | `:15-25` |
+| `SOURCES` | `eam, scm, cmdb, deploymap` | `:27` |
+| `EVENT_STATUSES` | 10 статусов `ProcessingStatus` | `:29-40` |
+| `STALE_AFTER_MS` | 7 суток | `:56` |
+| `SOURCES_REFRESH_MS` | 30 000 | `:59` |
+| `LAG_WARN_SECONDS`, `LAG_BAD_SECONDS` | 900, 3600 | `:62-63` |
+| `Route` | `'graph' \| 'sync'` | `UI/useHashRoute.ts:3` |
+| `AsyncState<T>` | `loading \| error{message} \| ready{data}` | `UI/hooks/useAsync.ts:4-7` |
+| `AuthState` | `pending \| ready \| failed` | `UI/App.tsx:9` |
+| `ConsoleConfig` | `issuer, clientId, scope` | `UI/auth/authService.ts:4-8` |
