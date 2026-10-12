@@ -26,9 +26,9 @@
 
 ### R.2a contracts (UNLOCKER-263)
 
-- [ ] **Archaeologist** — `contracts/canonical-model`: узлы, связи, `GraphCommand`, `AuthorityMatrix`, инварианты
-- [ ] **Archaeologist** — `contracts/event-schemas`: `CanonicalEvent`, `EventJournal`, `Checkpoint`, `ProcessingStatus`
-- [ ] **Archaeologist** — `contracts/source-spi`: `SourceConnector`, `SourceChange`, вебхуки
+- [x] ✅ **Archaeologist** — `contracts/canonical-model`: узлы, связи, `GraphCommand`, `AuthorityMatrix`, инварианты
+- [x] ✅ **Archaeologist** — `contracts/event-schemas`: `CanonicalEvent`, `EventJournal`, `Checkpoint`, `ProcessingStatus`
+- [x] ✅ **Archaeologist** — `contracts/source-spi`: `SourceConnector`, `SourceChange`, вебхуки
 
 ### R.2b adapters (UNLOCKER-264)
 

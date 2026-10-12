@@ -1,0 +1,1035 @@
+{
+  "generated_at": "2026-10-12T18:07:10Z",
+  "modules": [
+    {
+      "name": "contracts/canonical-model",
+      "path": "contracts/canonical-model",
+      "purpose": "Каноническая модель графа: узлы, связи, команды проекции, authority matrix, provenance",
+      "primary_files": [
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/NodeData.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/NodeLabel.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/GraphCommand.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/UpsertRelation.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/SourceKey.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/GitUrls.java",
+        "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java"
+      ],
+      "functions": [
+        {
+          "name": "Invariants.requireText",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java",
+          "params": [
+            "String value",
+            "String name"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Invariants.copyProperties",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java",
+          "params": [
+            "Map<String,Object> properties"
+          ],
+          "returns": "Map<String,Object>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "NodeLabel.isA",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/NodeLabel.java",
+          "params": [
+            "NodeLabel other"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "RelationType.allows",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java",
+          "params": [
+            "NodeLabel from",
+            "NodeLabel to"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AuthorityMatrix.isAuthoritative",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java",
+          "params": [
+            "NodeLabel|RelationType",
+            "[String property]",
+            "SourceSystemCode source"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GitUrls.normalize",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/GitUrls.java",
+          "params": [
+            "String raw"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "LookupKeys.repositoryUrl",
+          "file": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/LookupKeys.java",
+          "params": [
+            "String normalizedUrl"
+          ],
+          "returns": "SourceKey",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "NodeData (sealed, 11)",
+          "fields": [
+            {
+              "name": "label()",
+              "type": "NodeLabel",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Deployment",
+          "fields": [
+            {
+              "name": "deploymentKey",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "name",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "version",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "status",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceCommit",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "repositoryUrl",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "eamSystemId",
+              "type": "Long",
+              "required": false
+            },
+            {
+              "name": "observedAt",
+              "type": "Instant",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ITSystem",
+          "fields": [
+            {
+              "name": "name",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "status",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "criticality",
+              "type": "Criticality",
+              "required": false
+            },
+            {
+              "name": "description",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "eamCode",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "criticalityRaw",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "platformId",
+              "type": "Long",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ComputeInstance",
+          "fields": [
+            {
+              "name": "hostname",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "kind",
+              "type": "ComputeKind",
+              "required": true
+            },
+            {
+              "name": "ip",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "os",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "state",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "hypervisorRef",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "serialNumber",
+              "type": "String",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceKey",
+          "fields": [
+            {
+              "name": "source",
+              "type": "SourceSystemCode",
+              "required": true
+            },
+            {
+              "name": "sourceType",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "String",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceRecord",
+          "fields": [
+            {
+              "name": "key",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "contentHash",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "fetchedAt",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "active",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "UpsertRelation",
+          "fields": [
+            {
+              "name": "type",
+              "type": "RelationType",
+              "required": true
+            },
+            {
+              "name": "from",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "fromLabel",
+              "type": "NodeLabel",
+              "required": true
+            },
+            {
+              "name": "to",
+              "type": "SourceKey",
+              "required": true
+            },
+            {
+              "name": "toLabel",
+              "type": "NodeLabel",
+              "required": true
+            },
+            {
+              "name": "properties",
+              "type": "Map<String,Object>",
+              "required": true
+            },
+            {
+              "name": "validity",
+              "type": "Validity",
+              "required": false
+            },
+            {
+              "name": "assertedBy",
+              "type": "SourceKey",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GraphCommand (sealed, 5)",
+          "fields": [
+            {
+              "name": "UpsertNode|UpsertRelation|CloseAssertion|TombstoneSourceRecord|DeferRelation",
+              "type": "variants",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Связь допустима, только если метки концов — подтипы разрешённых (RelationType.allows)",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:74",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "validity разрешена только для temporal-типов; identity-свойства обязательны в properties",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/UpsertRelation.java:35-41",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "CloseAssertion только для temporal-типов",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/CloseAssertion.java:18-20",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Authority fail-closed: неизвестный источник/тип → пустое множество; MANUAL не авторитетен",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:63-75",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Lifecycle: firstSeenAt<=lastSeenAt, isCurrent == (deletedAt==null)",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/Lifecycle.java:17-20",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Deployment.sourceCommit — 40 hex lower-case; repositoryUrl нормализован; eamSystemId>0",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/Deployment.java:27-35",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "ComputeInstance: hypervisorRef только VM, serialNumber только PHYSICAL_SERVER",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/ComputeInstance.java:26-31",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Расхождение/сомнение: CloseAssertion и TombstoneSourceRecord не проверяют порядок времени и snapshot-complete в конструкторе",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/CloseAssertion.java:12-21",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [],
+      "algorithms": [
+        {
+          "name": "RelationType.allows",
+          "description": "anyMatch(from.isA) && anyMatch(to.isA) по цепочке supertype",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:73-75"
+        },
+        {
+          "name": "GitUrls.normalize",
+          "description": "scp/ssh/git → https, нижний регистр схемы и хоста, срез .git и '/', порт только для http(s)",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/node/GitUrls.java:30-91"
+        },
+        {
+          "name": "AuthorityMatrix property lookup",
+          "description": "правило свойства, иначе правило метки; суперметка не опрашивается",
+          "location": "contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:68-70"
+        }
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "contracts/event-schemas",
+      "path": "contracts/event-schemas",
+      "purpose": "Контракт канонического события, журнала (inbox), статусов обработки, checkpoint и хранилища raw payload",
+      "primary_files": [
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/CanonicalEvent.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalReader.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalQuery.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/RawPayloadStore.java",
+        "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/CanonicalEventPublisher.java"
+      ],
+      "functions": [
+        {
+          "name": "EventJournal.append",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+          "params": [
+            "CanonicalEvent event",
+            "RawPayloadRef payloadRef",
+            "String syncRunId"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventJournal.transition",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+          "params": [
+            "String source",
+            "String eventId",
+            "ProcessingStatus status",
+            "String errorCode",
+            "String errorReason"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventJournal.toDlq",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+          "params": [
+            "String source",
+            "String eventId",
+            "String errorCode",
+            "String reason"
+          ],
+          "returns": "JournalEntry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventJournal.saveCheckpoint",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+          "params": [
+            "String consumer",
+            "String source",
+            "String cursor"
+          ],
+          "returns": "Checkpoint",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EventJournal.snapshotContents",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java",
+          "params": [
+            "String source",
+            "String syncRunId"
+          ],
+          "returns": "SnapshotContents",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "JournalReader.read",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalReader.java",
+          "params": [
+            "JournalQuery query"
+          ],
+          "returns": "List<StoredEvent>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "JournalReader.pending",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalReader.java",
+          "params": [
+            "JournalKey after",
+            "Instant retryNotAfter",
+            "int limit"
+          ],
+          "returns": "List<StoredEvent>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ProcessingStatus.canTransitionTo",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java",
+          "params": [
+            "ProcessingStatus next"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceVersion.compareTo",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java",
+          "params": [
+            "SourceVersion other"
+          ],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "RawPayloadStore.put",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/RawPayloadStore.java",
+          "params": [
+            "String source",
+            "byte[] content"
+          ],
+          "returns": "RawPayloadRef",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "CanonicalEventPublisher.publish",
+          "file": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/CanonicalEventPublisher.java",
+          "params": [
+            "CanonicalEvent event",
+            "RawPayloadRef payloadRef",
+            "String syncRunId"
+          ],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "CanonicalEvent",
+          "fields": [
+            {
+              "name": "id",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "source",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "subject",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "time",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "dataschema",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "correlationid",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "data",
+              "type": "AssetEventData",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetEventData",
+          "fields": [
+            {
+              "name": "sourceType",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "SourceVersion",
+              "required": true
+            },
+            {
+              "name": "payload",
+              "type": "Map<String,Object>",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "JournalEntry",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "eventId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "correlationId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "syncRunId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceType",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceVersion",
+              "type": "SourceVersion",
+              "required": false
+            },
+            {
+              "name": "schemaVersion",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "status",
+              "type": "ProcessingStatus",
+              "required": false
+            },
+            {
+              "name": "errorCode",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "errorReason",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "attempts",
+              "type": "int",
+              "required": false
+            },
+            {
+              "name": "payloadRef",
+              "type": "RawPayloadRef",
+              "required": false
+            },
+            {
+              "name": "receivedAt",
+              "type": "Instant",
+              "required": false
+            },
+            {
+              "name": "updatedAt",
+              "type": "Instant",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "Checkpoint",
+          "fields": [
+            {
+              "name": "consumer",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "source",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "cursor",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "updatedAt",
+              "type": "Instant",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "JournalQuery",
+          "fields": [
+            {
+              "name": "source",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "receivedFrom",
+              "type": "Instant",
+              "required": false
+            },
+            {
+              "name": "receivedTo",
+              "type": "Instant",
+              "required": false
+            },
+            {
+              "name": "excludeReplays",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "after",
+              "type": "JournalKey",
+              "required": false
+            },
+            {
+              "name": "limit",
+              "type": "int",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SnapshotContents",
+          "fields": [
+            {
+              "name": "objects",
+              "type": "Set<ObjectRef>",
+              "required": true
+            },
+            {
+              "name": "eventCount",
+              "type": "long",
+              "required": false
+            },
+            {
+              "name": "firstReceivedAt",
+              "type": "Instant",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Дедупликация по (source, eventId); повторный append не меняет строку",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java:10-18",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Переходы статусов ограничены canTransitionTo; из QUARANTINED только в RETRYING",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java:30-41",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "sourceVersion — неотрицательное десятичное число до 40 цифр, сравнение числовое",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java:13-21",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "limit страницы журнала 1..1000; from < to",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalQuery.java:28-33",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Checkpoint сдвигается только после коммита проекции; монотонность не проверяется журналом",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/EventJournal.java:46-49",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "null в payload сохраняется как «поле не передано»",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/AssetEventData.java:22-23",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Расхождение: типы deleted/snapshot-complete не объявлены в контракте; нет валидации JournalEntry/Checkpoint/ObjectRef",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/CanonicalEvent.java:31",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [],
+      "algorithms": [
+        {
+          "name": "ProcessingStatus automaton",
+          "description": "10 состояний; терминальны SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java:26-42"
+        },
+        {
+          "name": "Keyset pagination",
+          "description": "порядок (receivedAt, source, eventId), курсор JournalKey",
+          "location": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/JournalQuery.java:18-39"
+        }
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "contracts/source-spi",
+      "path": "contracts/source-spi",
+      "purpose": "SPI мастер-систем: чтение изменений, DTO, проверка HMAC-подписи webhook",
+      "primary_files": [
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceChange.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/ChangePage.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookEvent.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceUnavailableException.java",
+        "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceSystem.java"
+      ],
+      "functions": [
+        {
+          "name": "SourceConnector.fetchChanges",
+          "file": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java",
+          "params": [
+            "String cursor",
+            "int limit"
+          ],
+          "returns": "ChangePage",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SourceConnector.fetchById",
+          "file": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java",
+          "params": [
+            "String sourceType",
+            "String sourceId"
+          ],
+          "returns": "Optional<SourceChange>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "WebhookSignature.sign",
+          "file": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java",
+          "params": [
+            "String secret",
+            "long timestampSeconds",
+            "String body"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "WebhookSignature.verify",
+          "file": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java",
+          "params": [
+            "String secret",
+            "String timestampHeader",
+            "String signatureHeader",
+            "String body",
+            "Instant now",
+            "Duration window"
+          ],
+          "returns": "WebhookSignature.Result",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "SourceChange",
+          "fields": [
+            {
+              "name": "sourceType",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "sourceVersion",
+              "type": "long",
+              "required": false
+            },
+            {
+              "name": "operation",
+              "type": "ChangeOperation",
+              "required": true
+            },
+            {
+              "name": "completeness",
+              "type": "Completeness",
+              "required": true
+            },
+            {
+              "name": "updatedAt",
+              "type": "Instant",
+              "required": true
+            },
+            {
+              "name": "payload",
+              "type": "Map<String,Object>",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ChangePage",
+          "fields": [
+            {
+              "name": "changes",
+              "type": "List<SourceChange>",
+              "required": true
+            },
+            {
+              "name": "nextCursor",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "hasMore",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "snapshotComplete",
+              "type": "boolean",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "WebhookEvent",
+          "fields": [
+            {
+              "name": "eventId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "source",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceType",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceId",
+              "type": "String",
+              "required": false
+            },
+            {
+              "name": "sourceVersion",
+              "type": "long",
+              "required": false
+            },
+            {
+              "name": "operation",
+              "type": "ChangeOperation",
+              "required": false
+            },
+            {
+              "name": "occurredAt",
+              "type": "Instant",
+              "required": false
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "snapshotComplete допустим только на последней странице (hasMore=false)",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/ChangePage.java:22-24",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Подпись: HMAC-SHA256(secret, ts+'.'+body), сравнение за постоянное время, затем replay window",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:80-85",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Недоступность источника — исключение, пустой ответ означает «изменений нет» и не ведёт к удалению",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java:8-10",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Секрет не попадает в исключения/сообщения",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:88-95",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Расхождение: инварианты SourceChange (DELETE ⇒ пустой payload, монотонность версии) заявлены только в Javadoc, конструктор проверяет лишь null",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceChange.java:12-14,33-38",
+          "confidence": "inferred"
+        },
+        {
+          "description": "Расхождение: sourceVersion long против SourceVersion (до 40 цифр) в event-schemas",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceChange.java:27",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [],
+      "algorithms": [
+        {
+          "name": "WebhookSignature.verify",
+          "description": "MALFORMED → BAD_SIGNATURE → OUT_OF_WINDOW → VALID",
+          "location": "contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:58-86"
+        }
+      ],
+      "complexity": "low"
+    }
+  ]
+}
