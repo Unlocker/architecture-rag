@@ -330,9 +330,9 @@ Feature flags и параметры окружения в модуле отсу�
 | имя consumer'а checkpoint | `<code>-poller`, `<code>-snapshot` | `AC/Poller.java:79-86` |
 | enum модели | `EAM, SCM, CMDB, DEPLOYMAP, MANUAL` | `contracts/canonical-model/.../SourceSystemCode.java:5` |
 | URN → `SourceSystemCode` (normalizer) | `switch` по `eam`/`scm`/`cmdb`/`deploymap`, иначе `null` | `ingestion/normalizer/.../Normalizer.java:93-101` |
-| URN → `SourceSystemCode` (projector) | второй независимый `switch` | `ingestion/graph-projector/.../EventProcessor.java:633-648` |
+| URN → `SourceSystemCode` (projector) | второй независимый `switch` | `ingestion/graph-projector/.../EventProcessor.java:633-646` |
 | список кодов админки | `List.of("eam","scm","cmdb","deploymap")` | `access/admin-console/.../pg/SyncSources.java:19` |
-| код из URN (ingestion) | `startsWith("urn:corp:")` → подстрока | `ingestion/ingestion-service/.../AdapterControlClient.java:32-34` |
+| код из URN (ingestion) | `startsWith("urn:corp:")` → подстрока | `ingestion/ingestion-service/.../AdapterControlClient.java:33-35` |
 
 Выводы:
 1. Для четырёх источников преобразование сходится: `DEPLOY_MAP` → `"deploymap"` → `urn:corp:deploymap` → `DEPLOYMAP` 🟢. Расхождение имён `DEPLOY_MAP`/`DEPLOYMAP` не приводит к ошибке, пока соответствие идёт через строковый код, а не через `Enum.valueOf`/`name()`.
