@@ -403,3 +403,46 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 ### Q.1.4 Raw payload в S3 🟢
 
 Ключ `raw/<source>/<sha256 hex>` (`EJ/java/.../S3RawPayloadStore.java:74`); `source` по `[A-Za-z0-9:._-]{1,200}` и не только из точек (`:33, :70`). Метаданные объекта не задаются; целостность — сравнением SHA-256 при `get` (`:85`).
+
+## Q.2 normalizer: вход, выход и форматы payload
+
+### Q.2.1 Выходные типы 🟢
+
+| Тип | Поля | Правила |
+|---|---|---|
+| `NormalizationResult.Normalized` (`NZ/NormalizationResult.java:19-27`) | `commands: List<GraphCommand>`, `unresolved: List<UnresolvedReference>`, `warnings: List<String>` | списки копируются `List.copyOf`; `commands` начинается с `UpsertNode` записи события (кроме случаев, когда маппер добавляет только связь — не встречается в коде) |
+| `NormalizationResult.Quarantined` (`:34`) | `errorCode`, `reason` | коды: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` |
+| `UnresolvedReference` (`NZ/UnresolvedReference.java:19-28`) | `from: SourceKey`, `field: String`, `relationType`, `target: SourceKey`, `relation: UpsertRelation` | все поля обязательны; `field` — имя поля источника без значения; `target` — отсутствующий конец |
+| `CanonicalMapper.Input` (`NZ/CanonicalMapper.java:36`) | `record: SourceRecord`, `payload: Map<String,Object>`, `time: Instant` | `payload` — недоверенные данные |
+
+`SourceRecord` для события: `key=(source,sourceType,sourceId)`, `sourceVersion=data.sourceVersion`, `contentHash=raw.contentHash()`, `fetchedAt=event.time()`, `active=true` (`NZ/Normalizer.java:68-75`). Флаг `active=false` normalizer не выставляет никогда; удаление — отдельный тип события (Q4/Q5) 🟢.
+
+### Q.2.2 Форматы payload по источникам 🟢
+
+| Источник / `sourceType` | Поля payload (обяз. — **жирным**) | Команды |
+|---|---|---|
+| EAM `PLATFORM` (ArchObject) | `attrs.`**`name`**, `type`, `version`, `lifecycle`, `description` | `UpsertNode(Platform)` (`EamMapper.java:139-148`) |
+| EAM `SOLUTION` | `attrs.`**`name`**, `lifecycle`, `description`, `platform_id` (целое) | `UpsertNode(Solution)` + `USES_PLATFORM` → `EAM/PLATFORM/<platform_id>` (`:149-159`) |
+| EAM `IT_SYSTEM` (ArchObject, есть `attrs`) | `attrs.`**`name`**, `status`, `criticality` (HIGH/MEDIUM/LOW), `description`, `eam_id`, `platform_id`, `product_id`, `ownerTeam`, `ownerSince` | `UpsertNode(ITSystem)`, `USES_SOLUTION` → `EAM/SOLUTION/<product_id>`, `OWNED_BY` → `EAM/TEAM/<ownerTeam>` (`:160-195`) |
+| EAM `IT_SYSTEM` (плоский) | **`name`**, `status`, `criticality` (enum `Criticality`), `description`, `ownerTeam`, `ownerSince`, `dependsOn` | `UpsertNode(ITSystem)` без `eamCode`; `OWNED_BY`; `dependsOn` → warning (`:77-98`) |
+| EAM `TEAM` | **`name`**, `type` | `UpsertNode(Team)` (`:71`) |
+| EAM `SERVICE_DEPENDENCY` | **`from`**, **`to`** (коды сервисов SCM), `kind`, `protocol`, `criticality`, `validFrom` | `DEPENDS_ON` Service→Service через `link` (`:100-115`) |
+| SCM `REPOSITORY` | **`url`** (нормализуется `GitUrls`), `defaultBranch`, `archived` (boolean) | `UpsertNode(Repository)` (`ScmMapper.java:51-58`) |
+| SCM `SERVICE` | **`name`**, `serviceType`, `language`, `status`, `systemCode`, `repositoryId`, `validFrom` | `UpsertNode(Service)`, `DECOMPOSED_INTO` (система → сервис), `IMPLEMENTED_IN` (сервис → репозиторий) (`:59-94`) |
+| CMDB `COMPUTE_INSTANCE` | **`hostname`**, **`kind`** (`ComputeKind`, регистр не важен), `ip`, `os`, `state`, `hypervisorRef`, `serialNumber` | `UpsertNode(ComputeInstance)`; `environment` игнорируется (`CmdbMapper.java:31-48`) |
+| DEPLOYMAP `ENVIRONMENT` | **`name`**, `class` (иначе из `sourceId`) | `UpsertNode(Environment(code=sourceId, name, class))` (`DeployMapMapper.java:84-91`) |
+| DEPLOYMAP `DEPLOYMENT` | **`name`**, `chartVersion`, `status`, `service`, `environment`, `hosts[]`, `validFrom`, `format`, `chartMeta.annotations.*` (poc-1) | `UpsertNode(Deployment)`, `HAS_DEPLOYMENT`, `DEPLOYED_FROM{commit}`, `IN_ENVIRONMENT`, `RUNS_ON` на каждый хост (`:92-133`) |
+
+Нормативный формат источников — `docs/06-eam-integration.md` и заглушки `platform/source-stubs` (R.2e); таблица описывает то, что **читает** маппер.
+
+### Q.2.3 Warnings и их коды 🟢
+
+| Код | Условие | Где |
+|---|---|---|
+| `DEPENDS_ON_NOT_SUPPORTED` | плоский `IT_SYSTEM` с непустым `dependsOn` | `EamMapper.java:96-98` |
+| `UNMAPPED_CRITICALITY` | ArchObject `IT_SYSTEM` с `criticality` вне HIGH/MEDIUM/LOW | `:164-168` |
+| `DEPLOYMENT_SERVICE_UNRESOLVED` | poc-1: сервис не определился | `DeployMapMapper.java:222-224` |
+
+### Q.2.4 Порты
+
+`ReferenceResolver.exists(SourceKey)` (`NZ/ReferenceResolver.java:10-13`); `DeploymentLookup` — `repositoryByUrl`, `itSystemByEamCode`, `servicesImplementedIn`, `eamSystemOfService`, `chartDeploymentsOfService` (последние два нужны `EventProcessor`, не мапперам) (`NZ/DeploymentLookup.java:16-70`). Реализует порты `GraphProjector` (Q4) 🟢.
