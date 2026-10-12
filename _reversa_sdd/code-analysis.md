@@ -506,3 +506,60 @@ Feature flags и параметры окружения в модуле отсу�
 - 🟡 `attrs: null` у IT_SYSTEM → вводящая в заблуждение причина (п.3).
 - 🟡 TODO в коде: функции нормализации Git URL в `ScmMapper` (`GitUrls.normalize`) и `FeatureNormalizer.repositoryUrl` (identity-resolution) различаются (`ScmMapper.java:103-104`).
 - 🟢 `platform/source-stubs` подключён со `scope=test` (`ingestion/normalizer/pom.xml:30-34`): зависимость только для фикстур, на схему модулей не влияет.
+
+---
+
+## Q3. `ingestion/identity-resolution`
+
+Сокращение: `IR` = `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution`.
+
+**Назначение.** Три ступени идентичности, всё в PostgreSQL (JDBC): (1) детерминированный `(source, sourceType, sourceId) → gid` и approved crosswalk; (2) признаки и кандидаты на совпадение; (3) утверждения свойств и конфликты источников по `AuthorityMatrix` (`IR/package-info.java:1-18`) 🟢.
+Состав: 20 файлов main — интерфейсы `IdentityMapping`, `IdentityCandidates`, `SourceConflicts`; реализации `PostgresIdentityMapping`, `PostgresIdentityCandidates`, `PostgresSourceConflicts`; чистые `FeatureExtractor`, `FeatureNormalizer`, `FeatureKind`, `LabelFamily`, `SourceKeys`; записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict`; исключения `CrosswalkConflictException`, `IdentityStoreException`; маркер и `package-info`; миграции `V2`, `V4`, `V5`, `V7`. Тесты: 20 `@Test` в 4 классах (`FeatureExtractorTest` 8, `FeatureNormalizerTest` 7, `CrosswalkTest` 4, smoke 1); **реализации Postgres в модуле не тестируются** (их покрывают IT в других модулях, R.2e) 🟡.
+
+### Q3.1 Поток управления
+
+Вызывающая сторона — `EventProcessor` (Q4): `IdentityMapping.resolve` для всех ключей события → `FeatureExtractor.extract` → `IdentityCandidates.record` → `SourceConflicts.assertProperties` / `assertRelation` / `retract`; `CrosswalkService` (Q5) вызывает `approve`.
+
+| Операция | Что делает | Где |
+|---|---|---|
+| `IdentityMapping.find` / `resolve` | чтение / `INSERT … ON CONFLICT DO NOTHING` + чтение; параллельные вызовы сходятся к одному `gid` | `IR/PostgresIdentityMapping.java:36-60, 124-132` 🟢 |
+| `keysOf(gid)` | все ключи `gid`, порядок по `source, source_type, source_id` | `:62-78` 🟢 |
+| `approve(Crosswalk)` | нормализует порядок пары, даёт обоим ключам общий `gid`, пишет `approved_crosswalk` (идемпотентно) | `:80-101, 103-118, 134-145` 🟢 |
+| `IdentityCandidates.record` | под advisory-lock'ами заменяет признаки ключа, ищет совпадения, upsert кандидатов | `IR/PostgresIdentityCandidates.java:78-102` 🟢 |
+| `forget` / `candidatesOf` | удаляет признаки ключа (кандидаты остаются) / читает кандидатов пары | `:104-120, 122-152` 🟢 |
+| `SourceConflicts.assertProperties` | заменяет утверждения записи, пересчитывает конфликты `gid` | `IR/PostgresSourceConflicts.java:81-103` 🟢 |
+| `assertRelation` | конфликт вида `RELATION` (ссылка расходится с ключом из другого источника) | `:105-119` 🟢 |
+| `retract` | tombstone: удаляет утверждения, закрывает `RELATION`-конфликты записи, пересчитывает | `:121-131` 🟢 |
+
+Все операции — одна транзакция; `SQLException` → `IdentityStoreException` с cause; конфликт crosswalk → `CrosswalkConflictException` (не обёрнут) (`PostgresIdentityMapping.java:94-100`, `PostgresSourceConflicts.java:146-160`) 🟢. Пустых `catch` нет.
+
+### Q3.2 Алгоритмы и встроенные правила
+
+1. **`gid` назначается один раз и навсегда.** Хранится в `identity_mapping` (PK ключ → `gid`), а не выводится из графа, поэтому rebuild Neo4j даёт те же `gid` (`V2__identity_mapping.sql:1-2`, `IR/IdentityMapping.java:8-14`) 🟢. `UUID.randomUUID()` — недетерминированный генератор: «детерминированность» означает стабильность после первого назначения, не вычисление из ключа 🟡 (при потере таблицы `gid` не восстановить).
+2. **Crosswalk без слияния.** `approve` берёт `gid` у любого из ключей (или создаёт новый) и присваивает второму; если оба уже имеют **разные** `gid` — `CrosswalkConflictException`, состояние не меняется (транзакция откатывается) (`PostgresIdentityMapping.java:103-122`; `IR/CrosswalkConflictException.java:3-6`). Повтор идемпотентен (`ON CONFLICT DO NOTHING`, `:137`) 🟢. Рассогласование, возникшее из-за гонки с параллельным `resolve` между чтением и вставкой, также ведёт к конфликту (`:113-116`). Обратной операции (разделить/удалить crosswalk) в модуле нет 🟡.
+3. **Порядок пары.** `SourceKeys.compare` — по `source().name()`, затем `sourceType`, `sourceId` (лексикографически); комментарий в `V2` прямо оговаривает, что CHECK `left < right` не ставится, чтобы не зависеть от коллации БД (`IR/SourceKeys.java:10-16`, `V2__identity_mapping.sql:14`) 🟢.
+4. **Признаки (`FeatureExtractor.extract`).** По типу узла события: `ComputeInstance` → `HOSTNAME`; `Repository` → `REPOSITORY_URL`; `ITSystem`, `Service`, `Team` → `NAME`; для `ITSystem`/`Service` дополнительно `OWNER` = `gid` конца связи `OWNED_BY`, если он уже разрешён в `gids`. Остальные метки признаков не дают; запись только со связью (нет `UpsertNode`) — пустой набор (`IR/FeatureExtractor.java:43-69`) 🟢. Сомнение: `OWNED_BY` строит только EAM (`EamMapper`), `Service` приходит из SCM, где `OWNED_BY` нет, поэтому `OWNER` практически достижим только для `ITSystem` 🟡.
+5. **Нормализация значений** (точное равенство, нечёткости нет): hostname — trim, lower-case, без завершающих точек, FQDN целиком; URL репозитория — `host/path` в lower-case без схемы, `user@`, `.git`, `/` (scp-форма поддержана); имя — NFKC, lower-case, серии не-букв/цифр → один пробел (`IR/FeatureNormalizer.java:22-62`) 🟢. Пустой результат → признака нет. Это **вторая** реализация нормализации URL наряду с `GitUrls.normalize` (TODO в `normalizer/ScmMapper.java:103-104`): `GitUrls` сохраняет регистр пути, `FeatureNormalizer` приводит весь путь к lower-case 🟡.
+6. **Оценка совпадения.** `FeatureKind`: `HOSTNAME 0.6`, `REPOSITORY_URL 0.8`, `NAME 0.4` — сильные; `OWNER 0.2` — только усиливает. `score = min(1.00, сумма весов различных видов)`, шкала 2, `HALF_UP` (`IR/FeatureKind.java:15-47`). Веса в коде, не в конфигурации 🟢.
+7. **Поиск кандидатов (`record`).** Сортировка признаков → advisory-lock на `key|<ключ>` и на `<семейство>|<вид>|<значение>` для **сильных** признаков (детерминированный порядок исключает взаимную блокировку) → `DELETE`+`INSERT` признаков ключа (`identity_feature`) → для каждого сильного признака `FIND_OTHERS`: другие ключи того же `feature`+`label_family`+`value`, **не делящие `gid`** с данным (`NOT EXISTS … identity_mapping`), `ORDER BY`, `LIMIT 51` → слабые признаки добавляются к найденным парам, если у партнёра такой же `OWNER` → `upsertCandidate` с нормализованным порядком пары (`PostgresIdentityCandidates.java:78-102, 154-188, 190-239`) 🟢.
+8. **Предохранитель MAX_MATCHES = 50.** Если у одного признака больше 50 совпадений, по нему кандидаты не создаются (WARN с количеством без значения), а `matched` у уже существующих пар при следующем upsert перезаписывается без него — «допущение PoC» в Javadoc класса (`:33, :212-216`) 🟢/🟡: пара может «потерять» совпавший признак и score.
+9. **Идемпотентность кандидата.** `ON CONFLICT … DO UPDATE SET matched, score, updated_at`; `first_seen_at` и `status` не трогаются (`:54-61`); `status` по умолчанию `OPEN` 🟢. **Семейство меток**: подтипы `ComputeInstance` объединены (`IR/LabelFamily.java:10-12`), остальные метки сравниваются только сами с собой — кросс-метковых кандидатов нет 🟢.
+10. **Утверждения свойств и конфликты (`assertProperties`).** Под advisory-lock'ом `conflict|<gid>`: `DELETE` утверждений записи → `INSERT` по каждому свойству с флагом `authoritative = matrix.isAuthoritative(label, property, source)` → `recompute(gid)` (`PostgresSourceConflicts.java:81-103`). Расходящаяся пара: неавторитетное утверждение `d` и **один** авторитетный `m` (если мастеров несколько — первый по `source, source_type, source_id`), `d.value <> m.value` (точное сравнение строк) (`:41-47`) → upsert `OPEN` (повторное открытие обнуляет `resolved_at`, сохраняет `opened_at`; `updated_at` меняется, только если изменилась пара значений или статус) (`:48-58`) → пары, ранее `OPEN` (`kind='PROPERTY'`), но больше не расходящиеся, → `RESOLVED` (`:59-63, 226-269`) 🟢.
+11. **Конфликт связи (`assertRelation`).** Нет второй стороны или значения равны → закрыть открытые `RELATION`-строки этой записи и свойства; иначе upsert `OPEN` вида `RELATION` (`:105-119, 176-208`) 🟢. `retract` закрывает `RELATION`-конфликты, где запись — `dissent`, но **не** те, где она — мастер (`:121-131`, `RESOLVE_RELATION` фильтрует `dissent_*`, `:64-66`) 🟡.
+12. **Что пишется в граф.** Ничего: модуль работает только с PostgreSQL; canonical-значение выбирает проектор (`SourceConflicts` Javadoc, `IR/SourceConflicts.java:13-17`) 🟢. `SourceConflict.toString()` не содержит значений источника (ловушка 11) (`IR/SourceConflict.java:77-81`) 🟢.
+
+### Q3.3 Структуры данных
+
+Таблицы `identity_mapping`, `approved_crosswalk` (V2), `identity_feature`, `identity_candidate` (V4), `property_assertion`, `source_conflict` (V5, + колонка `kind` в V7) — `data-dictionary.md` §Q.3. Записи `Crosswalk`, `Feature`, `IdentityCandidate`, `SourceConflict` — там же.
+
+### Q3.4 Константы
+
+`MAX_MATCHES=50` (`PostgresIdentityCandidates.java:33`); веса `FeatureKind` (`FeatureKind.java:15-18`); `hashtextextended(?, 0)` для advisory-lock'ов — ключи блокировок строковые: `key|…`, `<семейство>|<вид>|<значение>`, `conflict|<gid>` (хэш 64 бит, коллизия лишь лишняя сериализация) 🟡.
+
+### Q3.5 Сомнения и расхождения
+
+- 🔴 **`identity_candidate.status` никогда не меняется.** В коде нет ни одного `UPDATE identity_candidate SET status`; `approve` (crosswalk) не помечает кандидата подтверждённым, `CrosswalkService` вызывает только `identity.approve(...)` (`ingestion/ingestion-service/.../CrosswalkService.java:49`). `package-info` обещает «подтверждение остаётся за approved crosswalk» (`IR/package-info.java:11-12`), но связь «кандидат ↔ crosswalk» через `status` не реализована; консоль фильтрует по `status` (по умолчанию `OPEN`) (`access/admin-console/.../IdentityController.java:40`) — подтверждённые кандидаты останутся `OPEN` навсегда, пока их не отфильтрует общий `gid` в `FIND_OTHERS` (то есть они исчезнут из новых совпадений, но останутся в таблице).
+- 🟡 Кандидаты ищутся только внутри одного семейства меток и только по равенству нормализованных значений (п.7, п.9). Условие `NOT f.source/type/id = self` не исключает пары внутри одного источника: два `ITSystem` EAM с одним именем тоже станут кандидатами. Есть ли в данных PoC реальные кросс-источниковые совпадения, из кода не видно — вопрос для Detective/R.3.
+- 🟡 `UUID.randomUUID()` для `gid` (п.1); нет обратной операции для crosswalk (п.2); `OWNER` почти недостижим для `Service` (п.4); потеря признака при превышении `MAX_MATCHES` (п.8); `retract` не закрывает конфликты, где запись — мастер (п.11).
+- 🟡 Тесты Postgres-реализаций вне модуля; в модуле только чистые функции.
+- 🟡 Две реализации нормализации URL (п.5).

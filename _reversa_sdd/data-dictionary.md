@@ -446,3 +446,51 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 ### Q.2.4 Порты
 
 `ReferenceResolver.exists(SourceKey)` (`NZ/ReferenceResolver.java:10-13`); `DeploymentLookup` — `repositoryByUrl`, `itSystemByEamCode`, `servicesImplementedIn`, `eamSystemOfService`, `chartDeploymentsOfService` (последние два нужны `EventProcessor`, не мапперам) (`NZ/DeploymentLookup.java:16-70`). Реализует порты `GraphProjector` (Q4) 🟢.
+
+## Q.3 identity-resolution: таблицы PostgreSQL и записи
+
+Миграции: `V2__identity_mapping.sql`, `V4__identity_candidate.sql`, `V5__source_conflict.sql`, `V7__source_conflict_kind.sql` в `ingestion/identity-resolution/src/main/resources/db/migration/` (`V3` и `V6` — в `ingestion-service`, §Q.5). 🟢
+
+### Q.3.1 `identity_mapping` (V2:3-10)
+
+PK `(source, source_type, source_id)`; `gid uuid NOT NULL`; `created_at timestamptz NOT NULL`; индекс `ix_identity_mapping_gid (gid)`. `source` хранит `SourceSystemCode.name()` (`EAM|SCM|CMDB|DEPLOYMAP`), не URN (`PostgresIdentityMapping.java:157`) 🟢.
+
+### Q.3.2 `approved_crosswalk` (V2:15-26)
+
+PK по шести колонкам `(left_source, left_type, left_id, right_source, right_type, right_id)`; `approved_by`, `reason` (оба NOT NULL), `approved_at timestamptz`. Порядок пары задаёт приложение (`SourceKeys.compare`), CHECK нет. Запись `Crosswalk(left, right, approvedBy, reason, approvedAt)`: ключи различны, `approvedBy`/`reason` непустые (`IR/Crosswalk.java:14-25`) 🟢.
+
+### Q.3.3 `identity_feature` (V4:4-13)
+
+PK `(source, source_type, source_id, feature)` — **одно значение на вид признака на ключ**; `value` (нормализованное), `label_family` (имя `NodeLabel`), `updated_at`; индекс `ix_identity_feature_lookup (feature, label_family, value)`. При upsert записи признаки заменяются целиком (delete + insert) 🟢. `Feature(kind, value)`: `kind ∈ {HOSTNAME, REPOSITORY_URL, NAME, OWNER}`, значение непустое (`IR/Feature.java:6-13`).
+
+### Q.3.4 `identity_candidate` (V4:18-31)
+
+| Колонка | Тип | Примечание |
+|---|---|---|
+| `left_*`, `right_*` | text ×6 | PK; пара в нормализованном порядке |
+| `label_family` | text | |
+| `matched` | jsonb NOT NULL | массив `{feature, value}` в порядке признаков |
+| `score` | numeric(3,2) NOT NULL | 0.00–1.00 |
+| `status` | text NOT NULL DEFAULT `'OPEN'` | 🔴 других значений код не выставляет |
+| `first_seen_at`, `updated_at` | timestamptz | `first_seen_at` не меняется при повторе |
+
+Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-23`) 🟡.
+
+### Q.3.5 `property_assertion` (V5:6-17)
+
+PK `(source, source_type, source_id, property)`; `gid`, `label`, `value` (текст: enum → `name`, `Instant` → UTC ISO, по комментарию миграции), `authoritative boolean`, `asserted_at`; индекс `(gid, property)`. Заменяется целиком при upsert записи, удаляется tombstone'ом 🟢.
+
+### Q.3.6 `source_conflict` (V5:21-38, V7:4)
+
+PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`, `master_value`, `master_source/type/id`, `status` (`OPEN`/`RESOLVED`, по умолчанию `OPEN`), `opened_at`, `updated_at`, `resolved_at` (nullable), `kind text NOT NULL DEFAULT 'PROPERTY'` (`PROPERTY|RELATION`). Строка не удаляется: `RESOLVED` — история; повторное расхождение снова открывает её (`opened_at` сохраняется) 🟢. Запись `SourceConflict` (`IR/SourceConflict.java:24-35`): все поля, кроме `resolvedAt`, обязательны; `toString()` без значений.
+
+### Q.3.7 Веса признаков (`IR/FeatureKind.java:15-18`) 🟢
+
+| Вид | Вес | Сильный | Нормализация (`FeatureNormalizer`) |
+|---|---|---|---|
+| `HOSTNAME` | 0.6 | да | trim, lower-case, без завершающих `.` |
+| `REPOSITORY_URL` | 0.8 | да | `host/path` lower-case без схемы/`user@`/`.git`/`/` |
+| `NAME` | 0.4 | да | NFKC, lower-case, серии не-букв/цифр → пробел |
+| `OWNER` | 0.2 | нет | `gid` команды-владельца (строка UUID) |
+
+`score = min(1.00, Σ весов различных совпавших видов)`.
