@@ -107,29 +107,18 @@ final class Payload {
   }
 
   /**
-   * Поле-ссылка на объекты EAM: список целых {@code id}, одиночное целое либо {@code null}/отсутствие (допущение 3
-   * {@code docs/06-eam-integration.md}). Пустые элементы пропускаются; нецелое значение — {@code INVALID_PAYLOAD}.
+   * Одиночное поле-ссылка на объект EAM: целый {@code id} либо {@code null}/отсутствие (решение 3
+   * {@code docs/06-eam-integration.md}). Список и нецелое значение — {@code INVALID_PAYLOAD}: списочная форма не читается.
    */
-  List<String> optionalIdRefs(String field) {
+  Optional<String> optionalIdRef(String field) {
     Object v = values.get(field);
     if (v == null) {
-      return List.of();
+      return Optional.empty();
     }
-    List<?> elements = v instanceof List<?> list ? list : List.of(v);
-    List<String> result = new ArrayList<>();
-    for (Object element : elements) {
-      if (element == null) {
-        continue;
-      }
-      if (!(element instanceof Long || element instanceof Integer)) {
-        throw invalidType(field);
-      }
-      String id = element.toString();
-      if (!result.contains(id)) {
-        result.add(id);
-      }
+    if (!(v instanceof Long || v instanceof Integer)) {
+      throw invalidType(field);
     }
-    return result;
+    return Optional.of(v.toString());
   }
 
   private static NormalizationException invalidType(String field) {

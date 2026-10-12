@@ -8,9 +8,7 @@
       "status": "ACTIVE",
       "lifecycle": "PRODUCTION",
       "description": "",
-      "platform": [
-        3101
-      ]
+      "platform_id": 3101
     }
   },
   {
@@ -22,10 +20,7 @@
       "status": "ACTIVE",
       "lifecycle": "PRODUCTION",
       "description": "",
-      "platform": [
-        3101,
-        3102
-      ]
+      "platform_id": 3102
     }
   }
 ]

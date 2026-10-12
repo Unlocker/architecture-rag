@@ -209,7 +209,7 @@ def upsert_system(name):
     """ИТ-система Payments Core в eam-api (все attrs, иначе пропали бы eam_id и связи); возвращает ver."""
     out = control("eam-api-stub", {"type": "itsystems", "id": SEED_SYSTEM_ID, "attrs": {
         "name": name, "eam_id": SEED_SOURCE_ID, "status": "ACTIVE", "criticality": "HIGH",
-        "description": "Payments processing system", "solution": [7201], "ownerTeam": TEAM_ID}})
+        "description": "Payments processing system", "product_id": 7201, "platform_id": 3101, "ownerTeam": TEAM_ID}})
     return int(re.search(r'"ver":(\d+)', out).group(1))
 
 

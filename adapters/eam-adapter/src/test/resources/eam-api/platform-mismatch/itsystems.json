@@ -1,0 +1,16 @@
+[
+  {
+    "id": 5104,
+    "ver": 1,
+    "datetime": "2026-10-01T09:00:00Z",
+    "attrs": {
+      "name": "Cards Hub",
+      "eam_id": "EAM-4004",
+      "status": "ACTIVE",
+      "criticality": "HIGH",
+      "description": "",
+      "product_id": 7201,
+      "platform_id": 3102
+    }
+  }
+]

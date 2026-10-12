@@ -12,7 +12,7 @@ fp() { "$(dirname "$0")/graph-fingerprint.sh"; }
 # Печатает ver, присвоенную заглушкой eam-api (состояние заглушки живёт между прогонами сценария). Все attrs
 # передаются целиком, иначе у изменённой системы пропали бы eam_id и ссылки.
 upsert() { # <id> <name> <eam_id>
-  printf '{"type":"itsystems","id":%s,"attrs":{"name":"%s","eam_id":"%s","status":"ACTIVE","criticality":"HIGH","solution":[7201],"ownerTeam":"TEAM-PAY"}}' "$1" "$2" "$3" |
+  printf '{"type":"itsystems","id":%s,"attrs":{"name":"%s","eam_id":"%s","status":"ACTIVE","criticality":"HIGH","product_id":7201,"platform_id":3101,"ownerTeam":"TEAM-PAY"}}' "$1" "$2" "$3" |
     dc exec -T eam-api-stub curl -sf -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' --data-binary @- |
     sed -n 's/.*"ver":\([0-9]*\).*/\1/p'
 }

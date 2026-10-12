@@ -71,17 +71,17 @@ class EamArchObjectMapperTest {
   }
 
   @Test
-  void solutionMapsToSolutionAndUsesPlatformForEveryReference() {
-    known.add(key("PLATFORM", "3101"));
+  void solutionMapsToSolutionAndUsesPlatformByPlatformId() {
     known.add(key("PLATFORM", "3102"));
     var n = ok("SOLUTION", 7202, archObject(7202, "name", "Ledger Engine", "lifecycle", "PRODUCTION",
-        "description", "Double-entry ledger solution", "platform", List.of(3101L, 3102L)));
+        "description", "Double-entry ledger solution", "platform_id", 3102L));
     assertThat(((UpsertNode) n.commands().get(0)).data())
         .isEqualTo(new Solution("Ledger Engine", "PRODUCTION", "Double-entry ledger solution"));
-    assertThat(relations(n)).extracting(UpsertRelation::type, UpsertRelation::from, UpsertRelation::to)
-        .containsExactlyInAnyOrder(
-            org.assertj.core.api.Assertions.tuple(RelationType.USES_PLATFORM, key("SOLUTION", "7202"), key("PLATFORM", "3101")),
-            org.assertj.core.api.Assertions.tuple(RelationType.USES_PLATFORM, key("SOLUTION", "7202"), key("PLATFORM", "3102")));
+    assertThat(relations(n)).singleElement().satisfies(r -> {
+      assertThat(r.type()).isEqualTo(RelationType.USES_PLATFORM);
+      assertThat(r.from()).isEqualTo(key("SOLUTION", "7202"));
+      assertThat(r.to()).isEqualTo(key("PLATFORM", "3102"));
+    });
     assertThat(n.unresolved()).isEmpty();
   }
 
@@ -89,11 +89,12 @@ class EamArchObjectMapperTest {
   void itSystemMapsToItSystemWithEamCodeAndUsesSolution() {
     known.add(key("SOLUTION", "7201"));
     var n = ok("IT_SYSTEM", 5101, archObject(5101, "name", "Payments Core", "eam_id", "EAM-1042", "status", "ACTIVE",
-        "criticality", "HIGH", "description", "Payments processing system", "solution", List.of(7201L)));
+        "criticality", "HIGH", "description", "Payments processing system", "product_id", 7201L, "platform_id", 3101L));
     var node = (UpsertNode) n.commands().get(0);
     assertThat(node.record().key()).isEqualTo(key("IT_SYSTEM", "5101"));
     assertThat(node.data()).isEqualTo(new ITSystem("Payments Core", "ACTIVE", Criticality.HIGH,
         "Payments processing system", "EAM-1042", null));
+    // platform_id системы не даёт связи: прямой «система → платформа» нет (docs/06, решение 3)
     assertThat(relations(n)).singleElement().satisfies(r -> {
       assertThat(r.type()).isEqualTo(RelationType.USES_SOLUTION);
       assertThat(r.from()).isEqualTo(key("IT_SYSTEM", "5101"));
@@ -103,31 +104,39 @@ class EamArchObjectMapperTest {
 
   @Test
   void referenceToNotYetLoadedObjectIsUnresolvedNotAPhantomNode() {
-    var n = ok("IT_SYSTEM", 5101, archObject(5101, "name", "A", "solution", List.of(7299L)));
+    var n = ok("IT_SYSTEM", 5101, archObject(5101, "name", "A", "product_id", 7299L));
     assertThat(n.commands()).hasSize(1);
     assertThat(n.unresolved()).singleElement().satisfies(u -> {
-      assertThat(u.field()).isEqualTo("solution");
+      assertThat(u.field()).isEqualTo("product_id");
       assertThat(u.relationType()).isEqualTo(RelationType.USES_SOLUTION);
       assertThat(u.target()).isEqualTo(key("SOLUTION", "7299"));
     });
   }
 
   @Test
-  void referenceFormsListSingleNumberAndNullAreAccepted() {
+  void singleReferenceFormsNumberAndNullAreAccepted() {
     known.add(key("SOLUTION", "7201"));
-    assertThat(relations(ok("IT_SYSTEM", 1, archObject(1, "name", "A", "solution", 7201L)))).hasSize(1);
-    assertThat(relations(ok("IT_SYSTEM", 2, archObject(2, "name", "A", "solution", List.of(7201L))))).hasSize(1);
-    assertThat(relations(ok("IT_SYSTEM", 3, archObject(3, "name", "A", "solution", null)))).isEmpty();
-    assertThat(relations(ok("IT_SYSTEM", 4, archObject(4, "name", "A", "solution", List.of())))).isEmpty();
-    assertThat(relations(ok("IT_SYSTEM", 5, archObject(5, "name", "A")))).isEmpty();
+    assertThat(relations(ok("IT_SYSTEM", 1, archObject(1, "name", "A", "product_id", 7201L)))).hasSize(1);
+    assertThat(relations(ok("IT_SYSTEM", 2, archObject(2, "name", "A", "product_id", null)))).isEmpty();
+    assertThat(relations(ok("IT_SYSTEM", 3, archObject(3, "name", "A")))).isEmpty();
+  }
+
+  @Test
+  void legacyListFieldsAreNotReadAndListValueIsQuarantined() {
+    known.add(key("SOLUTION", "7201"));
+    known.add(key("PLATFORM", "3101"));
+    assertThat(relations(ok("IT_SYSTEM", 1, archObject(1, "name", "A", "solution", List.of(7201L))))).isEmpty();
+    assertThat(relations(ok("SOLUTION", 2, archObject(2, "name", "S", "platform", List.of(3101L))))).isEmpty();
+    assertThat(run("IT_SYSTEM", 3, archObject(3, "name", "A", "product_id", List.of(7201L))))
+        .isInstanceOfSatisfying(NormalizationResult.Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD"));
   }
 
   @Test
   void changedReferenceYieldsOnlyTheNewRelationSoTheOldOneIsNotAsserted() {
     known.add(key("PLATFORM", "3101"));
     known.add(key("PLATFORM", "3103"));
-    var before = ok("SOLUTION", 7201, archObject(7201, "name", "S", "platform", List.of(3101L)));
-    var after = ok("SOLUTION", 7201, archObject(7201, "name", "S", "platform", List.of(3103L)));
+    var before = ok("SOLUTION", 7201, archObject(7201, "name", "S", "platform_id", 3101L));
+    var after = ok("SOLUTION", 7201, archObject(7201, "name", "S", "platform_id", 3103L));
     assertThat(relations(before)).extracting(UpsertRelation::to).containsExactly(key("PLATFORM", "3101"));
     assertThat(relations(after)).extracting(UpsertRelation::to).containsExactly(key("PLATFORM", "3103"));
   }
@@ -170,7 +179,7 @@ class EamArchObjectMapperTest {
 
   @Test
   void nonIntegerReferenceIsQuarantinedWithoutValue() {
-    var r = run("IT_SYSTEM", 1, archObject(1, "name", "A", "solution", List.of("SECRET-VALUE")));
+    var r = run("IT_SYSTEM", 1, archObject(1, "name", "A", "product_id", "SECRET-VALUE"));
     assertThat(r).isInstanceOfSatisfying(NormalizationResult.Quarantined.class, q -> {
       assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD");
       assertThat(q.reason()).doesNotContain("SECRET-VALUE");

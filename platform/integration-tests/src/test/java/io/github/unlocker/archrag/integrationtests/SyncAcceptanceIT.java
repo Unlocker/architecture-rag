@@ -237,7 +237,7 @@ class SyncAcceptanceIT {
     assertThat(count("MATCH (:ITSystem {name: 'Payments Core'})-[:USES_SOLUTION]->(:Solution {name: 'Card Processing'})"
         + "-[:USES_PLATFORM]->(p:Platform {name: 'Kubernetes Platform'}) RETURN count(p) AS c")).isEqualTo(1);
     assertThat(count("MATCH (:ITSystem {name: 'Ledger'})-[:USES_SOLUTION]->(:Solution {name: 'Ledger Engine'})"
-        + "-[:USES_PLATFORM]->(p:Platform) RETURN count(DISTINCT p) AS c")).isEqualTo(2);
+        + "-[:USES_PLATFORM]->(p:Platform {name: 'PostgreSQL Platform'}) RETURN count(p) AS c")).isEqualTo(1);
     assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM'}) WHERE r.active = true "
         + "AND r.sourceId IN ['5101', '5102'] RETURN count(r) AS c")).isEqualTo(2);
     assertThat(count("MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM'}) WHERE r.sourceId STARTS WITH 'EAM-' "

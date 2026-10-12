@@ -121,7 +121,7 @@ class EamApiProjectionIT {
 
   private static ProcessingResult paymentsCore(long ver, Instant time) {
     return eam("IT_SYSTEM", 5101, ver, time, "name", "Payments Core", "eam_id", "EAM-1042", "status", "ACTIVE",
-        "criticality", "HIGH", "solution", List.of(7201L));
+        "criticality", "HIGH", "product_id", 7201L, "platform_id", 3101L);
   }
 
   private static ProcessingResult paymentsService(long ver, Instant time, String systemCode) {
@@ -159,7 +159,7 @@ class EamApiProjectionIT {
     // Системы раньше решения и платформы: обе связи откладываются и достраиваются с приходом целей.
     assertThat(paymentsCore(1, T1).status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(eam("SOLUTION", 7201, 1, T1, "name", "Card Processing", "lifecycle", "PRODUCTION",
-        "platform", List.of(3101L)).status()).isEqualTo(ProcessingStatus.PROJECTED);
+        "platform_id", 3101L).status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(pending("USES_PLATFORM")).isEqualTo(1);
     assertThat(pending("USES_SOLUTION")).isZero();
     assertThat(eam("PLATFORM", 3101, 1, T1, "name", "Kubernetes Platform", "lifecycle", "PRODUCTION").status())
@@ -220,8 +220,8 @@ class EamApiProjectionIT {
   void changedReferenceClosesOldRelationAndOpensNewOne() {
     eam("PLATFORM", 3102, 1, T1, "name", "PostgreSQL Platform");
     eam("PLATFORM", 3103, 1, T1, "name", "Kafka Platform");
-    eam("SOLUTION", 7201, 1, T1, "name", "Card Processing", "platform", List.of(3102L));
-    eam("SOLUTION", 7201, 2, T2, "name", "Card Processing", "platform", List.of(3103L));
+    eam("SOLUTION", 7201, 1, T1, "name", "Card Processing", "platform_id", 3102L);
+    eam("SOLUTION", 7201, 2, T2, "name", "Card Processing", "platform_id", 3103L);
 
     assertThat(query("MATCH (:Solution)-[rel:USES_PLATFORM]->(p:Platform) "
         + "RETURN p.name AS platform, rel.validTo IS NULL AS open ORDER BY platform"))
