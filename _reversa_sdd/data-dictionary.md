@@ -352,3 +352,54 @@
 Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элемент массива — `{sourceId, sourceVersion, payload}`; `deploymap/README.md:3-4`).
 
 **EAM API** (`docs/eam-api.yaml`, `docs/06-eam-integration.md`; формат разбирает `platform/source-stubs/.../EamApiFormat.java`) 🟡 — реальный контракт не проверен (ADR 0010); допущения 1–9 в `docs/06-eam-integration.md:87-131`.
+
+---
+
+# Q. ingestion (R.2c, UNLOCKER-265)
+
+> Archaeologist, этап R.2c. Пути сокращены: `EJ/` = `ingestion/event-journal/src/main/`, `NZ/` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
+> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-13`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы — R.3 (Data Master); здесь — таблицы, через которые проходит логика модулей.
+
+## Q.1 event-journal: таблицы PostgreSQL (`EJ/resources/db/migration/V1__event_journal.sql`) 🟢
+
+### Q.1.1 `inbox_event` (`V1__event_journal.sql:2-20`)
+
+| Колонка | Тип | NULL | Назначение / правило |
+|---|---|---|---|
+| `source` | text | нет | URN источника (`urn:corp:eam` …), часть ключа идемпотентности |
+| `event_id` | text | нет | `id` CloudEvent; префиксы `poll:`, `snap:<syncRunId>:`, `replay:` (см. data-dictionary §P.4) |
+| `type` | text | нет | `architecture.asset.upserted.v1` и т.п. |
+| `subject` | text | да | `CanonicalEvent.subject` |
+| `source_type`, `source_id` | text | нет | ключ объекта в источнике |
+| `source_version` | text | нет | версия объекта **как строка** (сравнение — `VersionDecision`, Q4) |
+| `correlation_id`, `sync_run_id` | text | да | трассировка и прогон snapshot |
+| `schema_version` | text | нет | значение `CanonicalEvent.dataschema` (колонка названа иначе, `PostgresEventJournal.java:73`) 🟢 |
+| `status` | text | нет | `ProcessingStatus.name()`; CHECK-ограничения нет — допустимость значений держит код 🟡 |
+| `attempts` | integer | нет, 0 | +1 на каждый переход в `RETRYING` |
+| `error_code`, `error_reason` | text | да | перезаписываются каждым переходом; `error_reason` ≤ 500 символов |
+| `payload_key`, `payload_hash` | text | да | ссылка на raw в S3: `raw/<source>/<sha256>` и hash |
+| `received_at`, `updated_at` | timestamptz | нет | UTC; `received_at` — основа курсора диспетчера |
+
+Ограничения и индексы: `uq_inbox_event UNIQUE (source,event_id)`; `ix_inbox_event_status (status, received_at)`; `ix_inbox_event_object (source, source_type, source_id)` (`:19, :22-23`). Индекса под `pending` с условием `updated_at` нет 🟡; фильтр `event_id NOT LIKE 'replay:%'` и `starts_with(event_id, …)` индексом по `(source, event_id)` (btree по `uq_inbox_event`) поддерживается только для `starts_with` с `text_pattern_ops`/C-collation — зависит от коллации БД 🟡.
+
+### Q.1.2 `consumer_checkpoint` (`:25-30`)
+
+`consumer` + `source` (PK), `cursor` text NOT NULL (формат свободный: курсор poll-а, `run:<id>`, `done:<id>`, `eventId` последнего спроецированного события), `updated_at`. Потребители: `poller:*`/`snapshot:*` адаптеров (`adapters/adapter-core/.../Poller.java:93,136,170-186`), проектор (`ingestion/graph-projector/.../EventProcessor.java:615`) 🟢.
+
+### Q.1.3 `dlq_entry` (`:32-42`)
+
+| Колонка | Тип | NULL | Примечание |
+|---|---|---|---|
+| `id` | bigserial | нет | PK |
+| `source`, `event_id` | text | нет | FK → `inbox_event(source,event_id)` |
+| `reason` | text | нет | ≤ 500 символов; если причины нет — подставляется `error_code` |
+| `error_code` | text | нет | обязателен (`toDlq` бросает `IllegalArgumentException` при пустом) |
+| `payload_key` | text | да | копия ссылки на raw |
+| `created_at` | timestamptz | нет | |
+| `replayed_at` | timestamptz | да | 🔴 **в коде не заполняется** (code-analysis §Q1.5) |
+
+Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`:41`).
+
+### Q.1.4 Raw payload в S3 🟢
+
+Ключ `raw/<source>/<sha256 hex>` (`EJ/java/.../S3RawPayloadStore.java:74`); `source` по `[A-Za-z0-9:._-]{1,200}` и не только из точек (`:33, :70`). Метаданные объекта не задаются; целостность — сравнением SHA-256 при `get` (`:85`).
