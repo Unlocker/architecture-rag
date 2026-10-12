@@ -768,3 +768,90 @@ Feature flags и параметры окружения в модуле отсу�
 | `ingestion-service` | 27 / ≈1600 | 48 в 7 классах | диспетчер, `AdminLock`, replay/rebuild, crosswalk, аудит, метрики, безопасность | Q5.5: DLQ, повторы без лимита, rebuild стирает всё |
 
 Машины состояний ingestion: `ProcessingStatus` (`flowcharts/ingestion-service.md`, «Жизненный цикл `inbox_event`»), `source_conflict` (`flowcharts/identity-resolution.md`), версия записи (`flowcharts/graph-projector.md`). `UnresolvedReference` → `DeferRelation` → `PendingRelation` → достроенная связь (Q2.2 п.6, Q4.2 п.9). Tombstone — Q4.2 п.8. Описание модели и ADR не дублируется: `docs/02-data-model.md`, `docs/adr/`.
+
+---
+
+# R.2d — `access/*` (UNLOCKER-266)
+
+> Archaeologist, этап R.2d. Разделы X1–X4 — по одному на модуль группы `access/`; X5 — разбор сомнений R.2a–R.2c, относящихся к `access/`; X6 — итоги.
+> Метки: 🟢 подтверждено в коде · 🟡 выведено · 🔴 пробел/расхождение. Ссылки `файл:строка` — от корня репозитория. Skill `reversa-archaeologist` v1.1.0 (установленный runtime-экземпляр).
+> Не разбирается: `platform/*` (R.2e), полная схема Neo4j и Flyway (R.3), сторонние библиотеки `admin-ui`.
+
+## X1. `access/graph-query-core`
+
+Сокращения: `GQC` = `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore`, `GQT` = `GQC/templates`.
+
+**Назначение.** Единственный путь чтения графа для `mcp-server` и `admin-console`: реестр именованных Cypher-шаблонов, бюджет запроса и исполнитель `GraphQueryExecutor`, который принимает **ID шаблона**, а не текст Cypher (`GQC/GraphQueryExecutor.java:23-31,60-64`) 🟢. Зависит только от `canonical-model`, Neo4j Java Driver и Jackson 3 (подсчёт байт строки) (`access/graph-query-core/pom.xml:14-26`); `ingestion/*` и `adapters/*` не подключены, writer-учётных данных у модуля нет — они приходят из вызывающего приложения как готовый `Driver` 🟢. Состав: 14 Java-файлов main (+2 `package-info`), ≈1270 строк; тестов 47 `@Test` в 8 классах (`BudgetedCollectorTest` 6, `QueryTemplateRegistryTest` 13, `ResultBudgetTest` 3, `FulltextQueryTest` 3, `AssetTemplatesTest` 3, `ConsoleTemplatesTest` 4, `DependencyTemplatesTest` 9, `RuntimeTemplatesTest` 6). **`GraphQueryExecutor` в самом модуле не тестируется** — только IT `platform/integration-tests/.../GraphQueryCoreIT.java` (R.2e) 🟡.
+
+### X1.1 Поток управления
+
+`GraphQueryExecutor.execute(templateId, params, budget)` (`GQC/GraphQueryExecutor.java:60-97`) 🟢:
+1. `registry.find(id)`, иначе `IllegalArgumentException("Unknown template")` (`:61-64`).
+2. `checkParameters`: набор ключей `params` должен **в точности** совпасть с `template.parameters()`; лишний или недостающий ключ → `IllegalArgumentException` (`:133-146`). Параметр `limit` вызывающему недоступен: он зарезервирован (`QueryTemplate.java:53-56`) и добавляется исполнителем (`:72`).
+3. Бюджет: запрошенный (или потолки целиком, если `null`) режется `clampTo(limits)` до потолков конфигурации (`:67`, `ResultBudget.java:30-38`).
+4. `template.render(effective.maxDepth(), limits.maxDepth())` — подстановка `{maxDepth}`, единственная конкатенация в текст (`:68`, `QueryTemplate.java:133-138`).
+5. `maxRows = kind.maxRows(effective)`: `NODES` → `maxNodes`, `PATHS` → `maxPaths` (`ResultKind.java:11-13`); в Cypher уходит `LIMIT maxRows + 1` (`:72`), чтобы отличить «ровно maxRows» от «обрезано».
+6. `verifyReadOnly`: при первом исполнении шаблона выполняется `EXPLAIN <cypher>` в read-сессии, `queryType() == READ_ONLY` → вердикт `true` кэшируется в `ConcurrentHashMap` по ID шаблона; `false` кэшируется тоже и закрывает шаблон до перезапуска (`:99-124`). Ошибка планирования вердикта не создаёт и не кэшируется (`:120-123`).
+7. `driver.session(READ_SESSION_CONFIG)` (try-with-resources) → `session.executeRead(tx -> collector.collect(new RowIterator(tx.run(cypher, queryParams))), TransactionConfig.withTimeout(effective.timeout()))` (`:78-87`). Тело транзакции повторяемо: внутри только чтение Neo4j и накопление в локальных списках (`:79-80`); `BudgetedCollector` без состояния между вызовами `collect` 🟢.
+8. `Neo4jException` с кодом, содержащим `TransactionTimedOut`, превращается в `QueryTimeoutException(templateId)`; остальные пробрасываются как есть (`:94-96,126-131`).
+
+`BudgetedCollector.collect` (`GQC/BudgetedCollector.java:41-58`): читает из итератора не более `maxRows + 1` элементов; `(maxRows+1)`-я строка → `truncated=true` без добавления; после добавления каждой строки накопленные байты (`JsonMapper.writeValueAsBytes(row).length`, `:60-66`) сверяются с `maxBytes`, строка, которая **не влезла**, отбрасывается и ставит `truncated=true` (`:52-54`). Если уже первая строка больше `maxBytes`, результат пуст и `truncated=true` 🟡 (вызывающий видит «пусто, обрезано»).
+
+`RowIterator.next` + `check` (`GQC/GraphQueryExecutor.java:162-188`): значения читаются `asObject()`; `Node`, `Relationship`, `Path` — в том числе внутри `Map` и `List` — дают `IllegalStateException("… in result is forbidden: return projections")`. Шаблоны обязаны возвращать проекции (`n {.gid, …}`, скаляры, map) 🟢. Исключение не `Neo4jException`, поэтому драйвер его не повторяет и `translate` не вызывается.
+
+### X1.2 Алгоритмы и встроенные правила
+
+1. **Статическая валидация шаблона** в конструкторе `QueryTemplate` (`GQC/QueryTemplate.java:42-105`) 🟢:
+   - текст оканчивается `LIMIT $limit` (`ENDS_WITH_LIMIT`, `:32-33,74-76`);
+   - множество `$param` в тексте (минус `limit`) равно объявленному `parameters` (`:77-86`);
+   - из `{…}`-плейсхолдеров допустим только `{maxDepth}`, не более одного (`:61-73`);
+   - каждый variable-length путь `[..*..]` обязан иметь верхнюю границу — число или `{maxDepth}`; `*`, `*1..` отвергаются (`VAR_LENGTH`/`BOUNDED`, `:38-40,87-99`);
+   - `{maxDepth}` допустим **только** как верхняя граница такого пути: число использований `{maxDepth}` как границы должно равняться числу плейсхолдеров (`:100-104`). Это реализует ловушки 1–2 из `CLAUDE.md`.
+2. **Реестр** `QueryTemplateRegistry.of` проверяет потолок: литеральная глубина любого шаблона не выше `limits.maxDepth` и ID уникальны (`GQC/QueryTemplateRegistry.java:32-45`) 🟢. Реестр иммутабелен (`Map.copyOf`, `:25-27`).
+3. **Бюджет**: `ResultBudget` отвергает неположительные значения и нулевой/отрицательный `timeout` (`GQC/ResultBudget.java:20-27`); `QueryLimits` создаёт `ResultBudget` в компактном конструкторе, чтобы потолки подчинялись тем же инвариантам (`QueryLimits.java:17-20`). `clampTo` берёт минимум по каждому полю, таймаут — меньший из двух (`ResultBudget.java:30-38`) 🟢. `maxPaths` — потолок строк для шаблонов `PATHS`; Javadoc называет его «резервируемым для шаблонов обхода» (`ResultBudget.java:11`), фактически он применяется (`ResultKind.maxRows`) 🟢.
+4. **Read-only защита в три слоя** 🟢: (а) статика шаблонов + allowlist меток/типов связей; (б) `EXPLAIN → READ_ONLY` один раз на шаблон; (в) `AccessMode.READ` и `executeRead` (`GQC/GraphQueryExecutor.java:35-36,82`). Слой (в) **проверен как серверный отказ**: `GraphQueryCoreIT.readSessionConfigRejectsWritesAtDatabaseLevel` ждёт `Neo.ClientError.Statement.AccessMode` на `CREATE` в read-транзакции под пользователем без ролей (`platform/integration-tests/.../GraphQueryCoreIT.java:111-120`); `writingTemplatesFailExplainCheckOnFirstExecuteAndStayClosed` доказывает слой (б) (`:78-100`).
+5. **Allowlist меток и типов связей** подставляется в текст из констант классов, не из ввода: `AssetTemplates.SEARCHABLE_TYPES` (7 меток, `GQT/AssetTemplates.java:16-17`), `RELATION_TYPES` (8 типов, `:102-103`), `DependencyTemplates.TRACE_LABELS` (11 меток, `GQT/DependencyTemplates.java:22-25`), `TRACE_RELATION_TYPES` (7, `:18-19`), `IMPACT_RELATION_TYPES` (5, `:98-99`), `ConsoleTemplates.STATS_LABELS` (= `TRACE_LABELS` + `SourceRecord`, `:19-25`), `STATS_RELATION_TYPES` (= `RELATION_TYPES` + `HOSTED_ON`, `ASSERTS`, `:28-35`), `NEIGHBORHOOD_RELATION_TYPES` (= `RELATION_TYPES` + `HOSTED_ON`, `:38`). Значения, приходящие от вызывающего (`relationTypes`, `relTypes`, `types`), передаются параметрами и сверяются вызывающим по этим спискам (Javadoc `DependencyTemplates.java:11-13`); сам `graph-query-core` членство **не проверяет** 🟡 (проверка в `TraceDependenciesTool`, X2, и `GraphController`, X3).
+6. **Свежесть и темпоральность в запросах.** Открытая связь = `validTo IS NULL`; текущий узел = `isCurrent = true` — фильтры внутри шаблонов (`DependencyTemplates.java:29-33`, `RuntimeTemplates.java:33-41`, `ConsoleTemplates.java:115-116,145`). Исключения: `get_asset` и `explain_provenance` отдают закрытые узлы (`GQT/AssetTemplates.java:107-110,175-178`).
+7. **`FulltextQuery.escape`** (`GQT/FulltextQuery.java:25-40`): нижний регистр (`Locale.ROOT`), экранирование 19 спецсимволов Lucene обратным слешем, `null`, если после очистки нет ни одной буквы/цифры. Приведение к нижнему регистру отключает операторы `AND/OR/NOT` 🟢. Результат идёт параметром `$text` в `db.index.fulltext.queryNodes('asset_text', t)` (`AssetTemplates.java:52`) — имя индекса `asset_text` создаётся в `ingestion/graph-projector` (R.3) 🟡.
+
+### X1.3 Реестр шаблонов (14 шаблонов)
+
+Список не дублирует Cypher; указаны параметры, возврат и особенности. Полная схема меток/свойств графа — R.3.
+
+| ID шаблона | Параметры | `ResultKind` | Строка результата | Где |
+|---|---|---|---|---|
+| `search_assets` | `query`, `text`, `types`, `environment` | NODES | `gid, type, name, score, matchType (EXACT\|FULLTEXT), sources[], lastSeenAt`; только `isCurrent`; точные совпадения по `gid`, `SourceRecord.sourceId`, `ITSystem.eamCode` со score 1000, затем fulltext | `AssetTemplates.java:37-96` |
+| `get_asset` | `gid` | NODES | `gid, type, properties (properties(n)), firstSeenAt, lastSeenAt, deletedAt, isCurrent, sources[]` (с неактивными записями) | `:112-141` |
+| `asset_relations` | `gid` | NODES | действующие связи 1 уровня в обе стороны: `relationType, direction, gid, type, name, isCurrent, validFrom` | `:150-168` |
+| `explain_provenance` | `gid` | NODES | `gid, type, isCurrent, deletedAt, records[]` (`contentHash`, `authority`, `confidence`, `conflicts`) без значений свойств | `:180-210` |
+| `trace_downstream` / `trace_upstream` | `gid`, `relationTypes` | PATHS | путь: `nodes[]` (c `conflicts`), `relations[]` (c `assertedBy*`, `sourceFetchedAt`, `sourceActive`); `[*1..{maxDepth}]` по/против стрелок | `DependencyTemplates.java:82-95` |
+| `trace_impact` | `gid`, `relationTypes`, `environment` | PATHS | как `trace_upstream`, но путь заканчивается на `Service`/`ITSystem`; фильтр окружения по каждому `Deployment` пути | `:112-123` |
+| `runtime_footprint` | `systemGid`, `environment` | NODES | строка на (service, deployment, compute): `system, service, deployment, compute, host` | `RuntimeTemplates.java:29-90` |
+| `graph_stats_nodes` / `graph_stats_relations` | — | NODES | `label,count` / `type,count` (UNION по `MATCH (n:L) count`) | `ConsoleTemplates.java:47-82` |
+| `graph_last_update` | — | NODES | `lastUpdatedAt = max(SourceRecord.fetchedAt)` | `:88-97` |
+| `console_neighborhood_nodes` / `console_neighborhood_edges` | `gid`,`relTypes` / `gids`,`relTypes` | NODES | узлы с `distance` и связи `type, source, target` | `:105-152` |
+| `console_latest_sync_runs` | `adapters` | NODES | последний `SyncRun` на адаптер: `runId, startedAt, endedAt, status, fetched, applied, failed` | `:159-179` |
+
+Всего объявлено 14 `QueryTemplate`: 4 в `AssetTemplates`, 3 в `DependencyTemplates`, 1 в `RuntimeTemplates`, 6 в `ConsoleTemplates` (`ConsoleTemplates.ALL`, `:182-189`). Реестр собирают приложения (X2: `GraphReaderConfiguration`, X3: `GraphReaderConfiguration`); `ConsoleTemplates.ALL` не включает шаблоны `AssetTemplates` — консоль регистрирует их отдельно (Javadoc `:13`, `:181`).
+
+### X1.4 Структуры данных
+
+Нет JSON-схемы: результат — `QueryResult(templateId, rows, truncated, rowCount, elapsed)` (`GQC/QueryResult.java:19-27`), `rows` — `List<Map<String,Object>>` из простых Java-структур; `rows` копируется (`List.copyOf`). `QueryTemplate`, `QueryLimits`, `ResultBudget`, `QueryResult`, `BudgetedCollector.Collected` — records; подробности — `data-dictionary.md` §X.1.
+
+### X1.5 Константы и конфигурация
+
+`TIMEOUT_CODE = "TransactionTimedOut"` (`GQC/GraphQueryExecutor.java:38`); `LIMIT_PARAMETER = "limit"`, `MAX_DEPTH_PLACEHOLDER = "{maxDepth}"` (`QueryTemplate.java:25,28`); `EXACT_SCORE = 1000.0` (`AssetTemplates.java:20`). Свойств Spring в модуле нет: `QueryLimits` создаёт вызывающее приложение (значения по умолчанию — X2.4, X3.4).
+
+### X1.6 Сомнения и расхождения
+
+- 🟡 **`GraphQueryExecutor` без unit-теста в модуле.** Вся логика исполнителя (clamp → render → EXPLAIN-кэш → обход строк → перевод таймаута) проверяется только IT в `platform/integration-tests` (`GraphQueryCoreIT.java:78-230`); `mvn -pl access/graph-query-core verify` их не запускает. Проверить в R.2e.
+- 🟡 **Расхождение ADR 0005 и кода по `EXPLAIN`.** ADR 0005 в таблице вариантов **отклоняет** «Разбор Cypher на лету (`EXPLAIN`)» (`docs/adr/0005-readonly-mcp-by-application.md:22`), а код и `docs/03-interfaces.md:42,655` используют `EXPLAIN` как дополнительный слой. Противоречия по сути нет (в ADR отклонён `EXPLAIN` как *замена* статических шаблонов, а не как проверка поверх них), но ADR слой не описывает. Документ вне этапа — не правится.
+- 🟡 **Обход фильтрует типы связей после раскрытия.** `[*1..{maxDepth}]` в `trace_*` и `console_neighborhood_nodes` не ограничен типами связей в самом паттерне; `type(r) IN $relationTypes` стоит в `WHERE all(...)` (`DependencyTemplates.java:31`, `ConsoleTemplates.java:113-115`). Перечисление путей по всем типам связей ограничивают только `LIMIT` и таймаут транзакции; стоимость на плотном графе не измерена в этом модуле (замеры — `docs/04-poc-measurements.md`).
+- 🟡 **Порядок путей не определён.** `trace_*` без `ORDER BY` (сортировка в Java, Javadoc `DependencyTemplates.java:35-38,79-80`): при усечении по `LIMIT` состав путей может меняться между вызовами. Усечение сообщается флагом `truncated` на уровне `QueryResult`.
+- 🟡 **Усечение по `LIMIT` ≠ усечение по `maxDepth`.** `truncated` выставляется только бюджетом строк/байт; обрезка глубиной (`maxDepth` меньше реальной цепочки) в результате не отражается. Вывод из `GQC/BudgetedCollector.java:41-58` и `QueryTemplate.java:133-138`.
+- 🟡 **Состав `LABELS` в `trace_*` включает `Environment`, `Team`.** Начать обход можно с любой из 11 меток (`DependencyTemplates.java:22-27,85`); допустимость старта проверяют tools (X2).
+- 🟡 **Дублирование `cypherList`.** Одноимённый приватный метод в `AssetTemplates.java:215`, `DependencyTemplates.java:128`, `ConsoleTemplates.java:200` (три копии).
+- 🟡 **Вердикт `EXPLAIN` по умолчанию передаёт `null` во все параметры** (`GQC/GraphQueryExecutor.java:112-114`). Для шаблонов с `UNWIND $gids`/`IN $gids` планировщик строит план на `null`; на корректность read-only это не влияет.
+- 🟢 Ловушка 2 (`*1..$depth` / `*` без верхней границы) закрыта на двух уровнях: валидация шаблона (`QueryTemplate.java:87-104`) и проверка `render` (`:133-136`); тесты — `QueryTemplateRegistryTest` (13 тестов).
+- 🟢 Ловушка 3 (MCP только читает): в модуле единственное обращение к драйверу — `executeRead` (`GQC/GraphQueryExecutor.java:82,118`); `executeWrite`/`session.run` отсутствуют (grep по `access/graph-query-core/src/main`).
+

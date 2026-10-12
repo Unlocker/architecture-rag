@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:00:00Z",
+  "generated_at": "2026-10-12T21:05:48Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -2936,6 +2936,224 @@
         "pg advisory lock как монопольный замок"
       ],
       "complexity": "high"
+    },
+    {
+      "name": "access/graph-query-core",
+      "path": "access/graph-query-core",
+      "purpose": "Реестр именованных Cypher-шаблонов и исполнитель GraphQueryExecutor: только executeRead, бюджет запроса (глубина, строки, пути, таймаут, байты), EXPLAIN=READ_ONLY перед первым исполнением, запрет узлов/связей/путей в результате",
+      "primary_files": [
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/ResultBudget.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryLimits.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryResult.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/AssetTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/DependencyTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/RuntimeTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/ConsoleTemplates.java",
+        "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/FulltextQuery.java"
+      ],
+      "functions": [
+        {
+          "name": "GraphQueryExecutor.execute",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java",
+          "params": [
+            "String templateId",
+            "Map params",
+            "ResultBudget budget"
+          ],
+          "returns": "QueryResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryTemplate.render",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java",
+          "params": [
+            "int depth",
+            "int ceiling"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryTemplateRegistry.of",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java",
+          "params": [
+            "Collection templates",
+            "QueryLimits limits"
+          ],
+          "returns": "QueryTemplateRegistry",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ResultBudget.clampTo",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/ResultBudget.java",
+          "params": [
+            "QueryLimits limits"
+          ],
+          "returns": "ResultBudget",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "BudgetedCollector.collect",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java",
+          "params": [
+            "Iterator source"
+          ],
+          "returns": "Collected",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FulltextQuery.escape",
+          "file": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/FulltextQuery.java",
+          "params": [
+            "String input"
+          ],
+          "returns": "String",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "QueryTemplate",
+          "fields": [
+            {
+              "name": "id",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "cypher",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "parameters",
+              "type": "Set<String>",
+              "required": true
+            },
+            {
+              "name": "kind",
+              "type": "ResultKind",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ResultBudget",
+          "fields": [
+            {
+              "name": "maxDepth",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "maxNodes",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "maxPaths",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "timeout",
+              "type": "Duration",
+              "required": true
+            },
+            {
+              "name": "maxResponseBytes",
+              "type": "long",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryResult",
+          "fields": [
+            {
+              "name": "templateId",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "rows",
+              "type": "List<Map<String,Object>>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            },
+            {
+              "name": "rowCount",
+              "type": "int",
+              "required": true
+            },
+            {
+              "name": "elapsed",
+              "type": "Duration",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Шаблон обязан оканчиваться LIMIT $limit, объявленные параметры = используемые, единственный плейсхолдер {maxDepth} только как верхняя граница variable-length пути, любой variable-length путь ограничен сверху",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java:60-105",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Реестр: уникальные ID; литеральная глубина шаблона не выше потолка maxDepth",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java:32-45",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Исполнитель принимает ID шаблона, набор параметров должен совпасть с объявленным; limit задаёт только исполнитель (maxRows+1)",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:60-76,133-146",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Перед первым исполнением EXPLAIN обязан дать READ_ONLY; вердикт кэшируется по ID, провал закрывает шаблон до перезапуска",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:99-124",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Узлы, связи и пути в результате запрещены (в т.ч. внутри Map/List), шаблоны возвращают проекции",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:172-188",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Усечение: читается не больше maxRows+1 строк, строка сверх лимита или байтового порога отбрасывается, truncated=true",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/BudgetedCollector.java:41-58",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Таймаут транзакции (TransactionTimedOut) -> QueryTimeoutException без частичного результата",
+          "location": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:94-96,126-131",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "contracts/canonical-model",
+        "neo4j-java-driver",
+        "jackson-databind (tools.jackson)"
+      ],
+      "algorithms": [
+        "статическая валидация Cypher-шаблона регулярными выражениями",
+        "clamp бюджета к потолкам конфигурации",
+        "ленивый сбор строк с лимитом строк и байт",
+        "кэш вердикта EXPLAIN по ID шаблона"
+      ],
+      "complexity": "medium"
     }
   ]
 }

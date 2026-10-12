@@ -624,3 +624,73 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` | `Normalizer`/`EventProcessor` | `QUARANTINED` | входные данные |
 | `INVALID_COMMANDS`, `GRAPH_REJECTED` | `EventProcessor.write` | `QUARANTINED` | отказ графа по запросу |
 | `UNRESOLVED_ENDPOINT`, `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `GRAPH_UNAVAILABLE`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RECONCILIATION_TRIGGER_FAILED` | `EventProcessor` | `RETRYING` | инфраструктура / гонка |
+
+---
+
+# R.2d — `access/*` (UNLOCKER-266)
+
+> Разделы X.1–X.4 — по одному на модуль `access/`. Столбцы «Обяз.» как выше. Сокращения путей: `GQC/` = `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/`, `MCP/` = `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/`, `AC/` = `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/`, `UI/` = `access/admin-ui/src/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
+> Словарь узлов и связей Neo4j (метки, свойства) — R.3; здесь только поля, которые читают шаблоны и отдают ответы.
+
+## X.1 graph-query-core: внутренние типы и результат шаблонов
+
+### X.1.1 Records модуля 🟢
+
+| Тип | Поле | Тип | Обяз. | Правило |
+|---|---|---|---|---|
+| `QueryTemplate` (`GQC/QueryTemplate.java:21-22`) | `id` | String | да | не пусто |
+| | `cypher` | String | да | не пусто; оканчивается `LIMIT $limit` (`:74-76`) |
+| | `parameters` | Set<String> | да | `Set.copyOf`; без `limit`; равно множеству `$param` в тексте (`:52-56,77-86`) |
+| | `kind` | ResultKind | да | `NODES` / `PATHS` (`GQC/ResultKind.java:6-9`) |
+| `ResultBudget` (`GQC/ResultBudget.java:17-18`) | `maxDepth`, `maxNodes`, `maxPaths`, `maxResponseBytes` | int / int / int / long | да | ≥ 1 (`:21-23`) |
+| | `timeout` | Duration | да | > 0 (`:24-26`) |
+| `QueryLimits` (`GQC/QueryLimits.java:14-15`) | те же 5 полей | | да | проверяются через `new ResultBudget(...)` (`:17-20`) |
+| `QueryResult` (`GQC/QueryResult.java:19-25`) | `templateId`, `rows`, `truncated`, `rowCount`, `elapsed` | String, List<Map>, boolean, int, Duration | да | `rows` копируется; `rowCount` — размер возвращённого списка (в `execute` задаётся `rows().size()`, `GraphQueryExecutor.java:92`) |
+| `BudgetedCollector.Collected` (`GQC/BudgetedCollector.java:25`) | `rows`, `truncated` | | да | — |
+
+Исключения: `QueryTimeoutException(templateId, cause)` (`GQC/QueryTimeoutException.java`).
+
+### X.1.2 Строки результата по шаблонам 🟢
+
+Все значения — скаляры, списки и map; времена отдаются **строкой** `toString(datetime)` (ISO-8601, UTC), `null` если свойства нет.
+
+| Шаблон | Поле | Тип в Java | Источник в графе / примечание |
+|---|---|---|---|
+| `search_assets` | `gid` | String | `n.gid` |
+| | `type` | String | первая метка из `SEARCHABLE_TYPES` (`AssetTemplates.java:16-17`) |
+| | `name` | String | `coalesce(name, hostname, url, code)` |
+| | `score` | double | `1000.0` для EXACT, иначе fulltext score |
+| | `matchType` | String | `EXACT` \| `FULLTEXT` |
+| | `sources` | List<String> | `SourceRecord.source` активных записей |
+| | `lastSeenAt` | String | |
+| `get_asset` | `gid`, `type`, `isCurrent` | String, String, Boolean | |
+| | `properties` | Map | `properties(n)` — **все** свойства узла (кроме значений-узлов) 🟡 |
+| | `firstSeenAt`, `lastSeenAt`, `deletedAt` | String | |
+| | `sources[]` | Map | `source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority` (с неактивными, активные первыми) |
+| `asset_relations` | `relationType`, `direction (OUT\|IN)`, `gid`, `type`, `name`, `isCurrent`, `validFrom` | | сосед |
+| `explain_provenance` | `gid`, `type`, `isCurrent`, `deletedAt`, `records[]` | | запись: `source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, active, deletedAt, authority, confidence, conflicts` |
+| `trace_downstream`, `trace_upstream`, `trace_impact` | `nodes[]` | Map | `gid, label, name, lastSeenAt, conflicts[{source, sourceType, sourceId, properties}]` |
+| | `relations[]` | Map | `type, from, to, validFrom, assertedBySource, assertedByType, assertedById, sourceFetchedAt, sourceActive` |
+| `runtime_footprint` | `system`, `service`, `deployment`, `compute`, `host` | Map \| null | `deployment`: `gid, name, version, status, environment, sourceCommit, repositoryUrl, lastSeenAt, sources, hasDeployment{…}, source{repository{gid,name,url}, deployedFrom{source,sourceType,sourceId,validFrom,commit}}`; `compute`: `gid, type, hostname, state, lastSeenAt, sources, runsOn{…}`; `host`: `gid, hostname, state, lastSeenAt, sources, hostedOn{…}` |
+| `graph_stats_nodes` | `label`, `count` | String, long | |
+| `graph_stats_relations` | `type`, `count` | String, long | |
+| `graph_last_update` | `lastUpdatedAt` | String \| null | `max(SourceRecord.fetchedAt)` |
+| `console_neighborhood_nodes` | `gid, type, name, isCurrent, distance` | | `distance` = `min(length(p))`, сам узел — 0 |
+| `console_neighborhood_edges` | `type, source, target` | | gid концов |
+| `console_latest_sync_runs` | `adapter, runId, startedAt, endedAt, status, fetched, applied, failed` | | свойства `SyncRun`; ненаписанные — `null` |
+
+Источники: `GQT` = `GQC/templates/` (`AssetTemplates.java:37-210`, `DependencyTemplates.java:40-69`, `RuntimeTemplates.java:29-90`, `ConsoleTemplates.java:47-179`).
+
+### X.1.3 Allowlist'ы (константы) 🟢
+
+| Константа | Значения | Где |
+|---|---|---|
+| `AssetTemplates.SEARCHABLE_TYPES` | `ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance` | `AssetTemplates.java:16-17` |
+| `AssetTemplates.RELATION_TYPES` | `DECOMPOSED_INTO, IMPLEMENTED_IN, HAS_DEPLOYMENT, IN_ENVIRONMENT, RUNS_ON, DEPENDS_ON, OWNED_BY, DEPLOYED_FROM` | `:102-103` |
+| `DependencyTemplates.TRACE_LABELS` | SEARCHABLE_TYPES + `VirtualMachine, PhysicalServer, Namespace, KubernetesCluster` | `DependencyTemplates.java:22-25` |
+| `DependencyTemplates.TRACE_RELATION_TYPES` | `DEPENDS_ON, DECOMPOSED_INTO, HAS_DEPLOYMENT, RUNS_ON, HOSTED_ON, OWNED_BY, DEPLOYED_FROM` | `:18-19` |
+| `DependencyTemplates.IMPACT_RELATION_TYPES` | `RUNS_ON, HOSTED_ON, HAS_DEPLOYMENT, DECOMPOSED_INTO, DEPENDS_ON` | `:98-99` |
+| `DependencyTemplates.IMPACT_TARGET_LABELS` | `Service, ITSystem` | `:102` |
+| `ConsoleTemplates.STATS_LABELS` | TRACE_LABELS + `SourceRecord` | `ConsoleTemplates.java:19-25` |
+| `ConsoleTemplates.STATS_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON, ASSERTS` | `:28-35` |
+| `ConsoleTemplates.NEIGHBORHOOD_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON` | `:38` |
