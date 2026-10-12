@@ -85,6 +85,28 @@
         "_reversa_sdd/flowcharts/integration-tests.md",
         "_reversa_sdd/flowcharts/docker.md"
       ]
+    },
+    "data_master": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "tables_documented": 10,
+      "neo4j_constraints": 18,
+      "neo4j_indexes": 2,
+      "migrations": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "files": [
+        "_reversa_sdd/database/erd.md",
+        "_reversa_sdd/database/data-dictionary.md",
+        "_reversa_sdd/database/relationships.md",
+        "_reversa_sdd/database/business-rules.md",
+        "_reversa_sdd/database/procedures.md"
+      ]
     }
   },
   "engines": [

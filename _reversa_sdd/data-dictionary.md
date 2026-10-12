@@ -358,7 +358,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 # Q. ingestion (R.2c, UNLOCKER-265)
 
 > Archaeologist, этап R.2c. Пути сокращены: `EJ/` = `ingestion/event-journal/src/main/`, `NZ/` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
-> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-13`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы — R.3 (Data Master); здесь — таблицы, через которые проходит логика модулей.
+> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-13`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы (Neo4j, PostgreSQL, роли, S3) и ERD — R.3: [`_reversa_sdd/database/data-dictionary.md`](database/data-dictionary.md), [`_reversa_sdd/database/erd.md`](database/erd.md); здесь — таблицы, через которые проходит логика модулей.
 
 ## Q.1 event-journal: таблицы PostgreSQL (`EJ/resources/db/migration/V1__event_journal.sql`) 🟢
 
