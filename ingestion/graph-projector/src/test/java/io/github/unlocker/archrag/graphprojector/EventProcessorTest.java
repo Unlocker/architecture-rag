@@ -29,6 +29,7 @@ import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.identityresolution.SourceConflict;
 import io.github.unlocker.archrag.identityresolution.SourceConflicts;
 
+import io.github.unlocker.archrag.normalizer.DeploymentLookup;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -232,6 +233,8 @@ class EventProcessorTest {
 
   private static final class FakeConflicts implements SourceConflicts {
     final List<String> asserted = new ArrayList<>();
+    final List<String> relations = new ArrayList<>();
+    boolean failRelation;
     final List<SourceKey> retracted = new ArrayList<>();
     final List<Boolean> graphUntouchedAtCall = new ArrayList<>();
     List<SourceConflict> open = List.of();
@@ -255,6 +258,10 @@ class EventProcessorTest {
     @Override
     public List<SourceConflict> assertRelation(
         SourceKey dissent, UUID gid, String property, String dissentValue, Optional<SourceKey> master, String masterValue) {
+      if (failRelation) {
+        throw new IdentityStoreException("down", null);
+      }
+      relations.add(dissent.sourceId() + "/" + property + "/" + dissentValue + "/" + master.map(SourceKey::sourceId).orElse("-"));
       return open;
     }
 
@@ -644,5 +651,142 @@ class EventProcessorTest {
     public List<ActiveRecord> activeRecords(SourceSystemCode source) {
       return List.of();
     }
+  }
+
+  // ---- система EAM из chart (H.5) -----------------------------------------------------------
+
+  private static final SourceKey SERVICE = new SourceKey(SourceSystemCode.SCM, "SERVICE", "svc-1");
+  private static final SourceKey SYSTEM = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "5101");
+  private static final SourceKey DEPLOYMENT = new SourceKey(SourceSystemCode.DEPLOYMAP, "DEPLOYMENT", "dep-1");
+
+  private EventProcessor withLookup(DeploymentLookup lookup) {
+    identity.map.put(SERVICE, UUID.randomUUID());
+    identity.map.put(
+        io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys.repositoryUrl(
+            io.github.unlocker.archrag.canonicalmodel.node.GitUrls.normalize("git@git.example.org:pay/payments-api.git")),
+        UUID.randomUUID());
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> true), identity, projection, (source, run, eventId, count) -> {}, candidates,
+        conflicts, lookup);
+  }
+
+  private static DeploymentLookup lookup(List<DeploymentLookup.ChartDeployment> deployments) {
+    return new DeploymentLookup() {
+      @Override
+      public Optional<SourceKey> repositoryByUrl(String normalizedUrl) {
+        return Optional.empty();
+      }
+
+      @Override
+      public List<SourceKey> servicesImplementedIn(SourceKey repository) {
+        return List.of();
+      }
+
+      @Override
+      public Optional<SourceKey> eamSystemOfService(SourceKey service) {
+        return service.equals(SERVICE) ? Optional.of(SYSTEM) : Optional.empty();
+      }
+
+      @Override
+      public List<ChartDeployment> chartDeploymentsOfService(SourceKey service) {
+        return deployments;
+      }
+    };
+  }
+
+  private static CanonicalEvent deploymentEvent(String id, String version, Map<String, Object> payload) {
+    return new CanonicalEvent(
+        id, "urn:corp:deploymap", CanonicalEvent.TYPE_ASSET_UPSERTED, "DEPLOYMENT/dep-1", T,
+        "urn:corp:schema:asset-upserted:1", null, new AssetEventData("DEPLOYMENT", "dep-1", new SourceVersion(version), payload));
+  }
+
+  private static CanonicalEvent serviceEvent(String id, String version) {
+    return new CanonicalEvent(
+        id, "urn:corp:scm", CanonicalEvent.TYPE_ASSET_UPSERTED, "SERVICE/svc-1", T, "urn:corp:schema:asset-upserted:1", null,
+        new AssetEventData("SERVICE", "svc-1", new SourceVersion(version), Map.of("name", "svc-1")));
+  }
+
+  private static Map<String, Object> chartPayload(String systemId) {
+    Map<String, Object> p = new java.util.LinkedHashMap<>();
+    p.put("format", "deploymap-poc-1");
+    p.put("name", "payments-api");
+    p.put("service", "svc-1");
+    p.put(
+        "chartMeta",
+        Map.of(
+            "name", "payments-api", "version", "1.4.2",
+            "annotations",
+            Map.of(
+                "archrag.io/eam-system-id", systemId,
+                "archrag.io/git-repo-url", "git@git.example.org:pay/payments-api.git",
+                "archrag.io/git-commit", "9fceb02d0ae598e95dc970b74767f19372d61af8")));
+    return p;
+  }
+
+  @Test
+  void deploymentWithChartSystemIsComparedWithSystemOfItsService() {
+    var result = run(withLookup(lookup(List.of())), deploymentEvent("d1", "1", chartPayload("5102")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("dep-1/eamSystemId/5102/5101");
+  }
+
+  @Test
+  void deploymentWithoutChartSystemClosesStaleRelationConflict() {
+    // Формат без chart-аннотаций: eamSystemId == null, проверки нет, но открытый конфликт закрывается (пустой master).
+    var result = run(withLookup(lookup(List.of())), deploymentEvent("d1", "1", Map.of("name", "payments-api", "service", "svc-1")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("dep-1/eamSystemId//-");
+  }
+
+  @Test
+  void serviceEventRechecksItsDeploymentsAfterGraphWrite() {
+    identity.map.put(DEPLOYMENT, UUID.randomUUID());
+
+    var result = run(withLookup(lookup(List.of(new DeploymentLookup.ChartDeployment(DEPLOYMENT, 5102)))), serviceEvent("s1", "1"));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(projection.requests).hasSize(1);
+    assertThat(conflicts.relations).containsExactly("dep-1/eamSystemId/5102/5101");
+  }
+
+  @Test
+  void recheckStoreFailureRetriesAndRetryRechecks() {
+    identity.map.put(DEPLOYMENT, UUID.randomUUID());
+    var processor = withLookup(lookup(List.of(new DeploymentLookup.ChartDeployment(DEPLOYMENT, 5102))));
+    var event = serviceEvent("s1", "1");
+    conflicts.failRelation = true;
+
+    var failed = run(processor, event);
+
+    assertThat(failed.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(failed.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
+    conflicts.failRelation = false;
+    // Граф уже записан этой же версией: повтор не отсекается как устаревший и перепроверяет развёртывания.
+    projection.applied = Optional.of(new AppliedRecord(new SourceVersion("1"), true));
+
+    var retried = processor.process(event, RAW);
+
+    assertThat(retried.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(conflicts.relations).containsExactly("dep-1/eamSystemId/5102/5101");
+  }
+
+  @Test
+  void serviceOfDeploymentIsScmServiceFromHasDeployment() {
+    // Сервис берётся из HAS_DEPLOYMENT только если это SCM SERVICE (GraphProjector ищет систему по SCM sourceId).
+    var processor = withLookup(lookup(List.of()));
+    var payload = chartPayload("5102");
+
+    run(processor, deploymentEvent("d1", "1", payload));
+    var commands = projection.requests.get(0).commands();
+
+    assertThat(commands).anyMatch(c -> c instanceof io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation r
+        && r.type() == RelationType.HAS_DEPLOYMENT && r.from().equals(SERVICE));
+  }
+
+  private ProcessingResult run(EventProcessor processor, CanonicalEvent event) {
+    journal.append(event, RAW, "run-1");
+    return processor.process(event, RAW);
   }
 }

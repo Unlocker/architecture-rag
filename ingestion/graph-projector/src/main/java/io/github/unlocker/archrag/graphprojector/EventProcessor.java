@@ -388,7 +388,13 @@ public final class EventProcessor {
         if (deployment.eamSystemId() != null) {
           master =
               commands.stream()
-                  .filter(c -> c instanceof UpsertRelation r && r.type() == RelationType.HAS_DEPLOYMENT && r.to().equals(key))
+                  .filter(
+                      c ->
+                          c instanceof UpsertRelation r
+                              && r.type() == RelationType.HAS_DEPLOYMENT
+                              && r.to().equals(key)
+                              && r.from().source() == SourceSystemCode.SCM
+                              && "SERVICE".equals(r.from().sourceType()))
                   .map(c -> ((UpsertRelation) c).from())
                   .findFirst()
                   .flatMap(lookup::eamSystemOfService);
