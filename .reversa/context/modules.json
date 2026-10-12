@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-12T21:05:48Z",
+  "generated_at": "2026-10-12T21:09:06Z",
   "modules": [
     {
       "name": "contracts/canonical-model",
@@ -3154,6 +3154,305 @@
         "кэш вердикта EXPLAIN по ID шаблона"
       ],
       "complexity": "medium"
+    },
+    {
+      "name": "access/mcp-server",
+      "path": "access/mcp-server",
+      "purpose": "MCP-сервер (Streamable HTTP, STATELESS, POST /mcp): 6 read-only tools поверх graph-query-core, OAuth2 resource server с проверкой scope на tools/call, аудит и метрики каждого вызова",
+      "primary_files": [
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/McpServerApplication.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphQueries.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphReaderConfiguration.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphReaderProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/StalenessProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityProperties.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditAspect.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallContext.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolArguments.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/PingTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/ExplainProvenanceTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java",
+        "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java",
+        "access/mcp-server/src/main/resources/application.yml"
+      ],
+      "functions": [
+        {
+          "name": "ToolScopeFilter.doFilterInternal",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java",
+          "params": [
+            "HttpServletRequest",
+            "HttpServletResponse",
+            "FilterChain"
+          ],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ToolCallAuditAspect.audit",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditAspect.java",
+          "params": [
+            "ProceedingJoinPoint",
+            "McpTool"
+          ],
+          "returns": "Object",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SearchAssetsTool.searchAssets",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java",
+          "params": [
+            "String query",
+            "List types",
+            "String environment",
+            "Integer limit"
+          ],
+          "returns": "SearchAssetsResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GetAssetTool.getAsset",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java",
+          "params": [
+            "String gid",
+            "Boolean includeRelations"
+          ],
+          "returns": "GetAssetResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ExplainProvenanceTool.explainProvenance",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/ExplainProvenanceTool.java",
+          "params": [
+            "String gid",
+            "String property"
+          ],
+          "returns": "ExplainProvenanceResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "TraceDependenciesTool.traceDependencies",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java",
+          "params": [
+            "String gid",
+            "String direction",
+            "Integer maxDepth",
+            "List relationTypes",
+            "String mode",
+            "String environment"
+          ],
+          "returns": "TraceDependenciesResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FindRuntimeFootprintTool.findRuntimeFootprint",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java",
+          "params": [
+            "String systemGid",
+            "String environment"
+          ],
+          "returns": "FindRuntimeFootprintResult",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ToolArguments.normalize",
+          "file": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolArguments.java",
+          "params": [
+            "Map arguments"
+          ],
+          "returns": "Map",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "SearchAssetsResult",
+          "fields": [
+            {
+              "name": "items",
+              "type": "List<AssetHit>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "GetAssetResult",
+          "fields": [
+            {
+              "name": "gid",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "type",
+              "type": "String",
+              "required": true
+            },
+            {
+              "name": "properties",
+              "type": "Map<String,Object>",
+              "required": true
+            },
+            {
+              "name": "sources",
+              "type": "List<SourceRef>",
+              "required": true
+            },
+            {
+              "name": "relations",
+              "type": "List<RelationRef>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "ExplainProvenanceResult",
+          "fields": [
+            {
+              "name": "authorities",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "conflictState",
+              "type": "OPEN|NONE",
+              "required": true
+            },
+            {
+              "name": "records",
+              "type": "List<RecordRef>",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "TraceDependenciesResult",
+          "fields": [
+            {
+              "name": "nodes",
+              "type": "List<NodeRef>",
+              "required": true
+            },
+            {
+              "name": "relations",
+              "type": "List<RelationRef>",
+              "required": true
+            },
+            {
+              "name": "paths",
+              "type": "List<TracePath>",
+              "required": true
+            },
+            {
+              "name": "affected",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FindRuntimeFootprintResult",
+          "fields": [
+            {
+              "name": "services",
+              "type": "List<ServiceFootprint>",
+              "required": true
+            },
+            {
+              "name": "warnings",
+              "type": "List<String>",
+              "required": true
+            },
+            {
+              "name": "truncated",
+              "type": "boolean",
+              "required": true
+            }
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "tools/call без записи в tool-scopes отклоняется 403 (fail-closed); нет scope у токена -> 403 insufficient_scope; прочие методы MCP требуют только валидный токен",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:82-96",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Тело POST /mcp: не больше max-request-bytes (1 МБ), только JSON-объект (batch отвергается), поддерживаемая кодировка",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:60-81",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "JWT: issuer и audience (= resource-uri); PRM по RFC 9728 публичен",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java:37-62",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "В граф tools ходят только через GraphQueries; ID шаблона, число строк и truncated попадают в аудит",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/graph/GraphQueries.java:27-31",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Аудит: одна запись и одно наблюдение на каждый tools/call, включая отказы; аргументы усечены и замаскированы по ключам; токен не читается",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java:99-144",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "trace_dependencies: maxDepth 1..лимит, типы связей из allowlist режима, environment только для impact, пути сортируются в Java, stale по stale-after",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java:101-239",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Ошибки валидации не содержат значений ввода",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/GetAssetTool.java:94-101",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "find_runtime_footprint не нормализует systemGid (в отличие от остальных tools)",
+          "location": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:62-70",
+          "confidence": "inferred"
+        }
+      ],
+      "dependencies": [
+        "access/graph-query-core",
+        "contracts/canonical-model",
+        "spring-ai-starter-mcp-server-webmvc",
+        "spring-security-oauth2-resource-server",
+        "micrometer",
+        "aspectj",
+        "neo4j-java-driver"
+      ],
+      "algorithms": [
+        "проверка scope tools/call до диспетчеризации MCP по телу запроса",
+        "аспект аудита с ThreadLocal-контекстом",
+        "нормализация аргументов tool для аудита (усечение, маскирование)",
+        "сборка дедуплицированного графа путей и оценка stale"
+      ],
+      "complexity": "high"
     }
   ]
 }

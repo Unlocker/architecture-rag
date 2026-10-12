@@ -694,3 +694,62 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `ConsoleTemplates.STATS_LABELS` | TRACE_LABELS + `SourceRecord` | `ConsoleTemplates.java:19-25` |
 | `ConsoleTemplates.STATS_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON, ASSERTS` | `:28-35` |
 | `ConsoleTemplates.NEIGHBORHOOD_RELATION_TYPES` | RELATION_TYPES + `HOSTED_ON` | `:38` |
+
+---
+
+## X.2 mcp-server: ответы tools, аудит, свойства
+
+Ответ каждого tool — record из `MCP/tools/`; Spring AI отдаёт его JSON в `result.content[0].text`. Ошибка валидации — `isError=true` без значений ввода (`docs/03-interfaces.md` §8 п.10 описывает дублирование текста). Все времена — строки ISO-8601 UTC. Поля не имеют аннотаций обязательности: «Обяз.» ниже — «заполняется всегда» по коду сборки.
+
+### X.2.1 Ответы 🟢
+
+| Тип | Поле | Тип | Обяз. | Примечание |
+|---|---|---|---|---|
+| `SearchAssetsResult` (`MCP/tools/SearchAssetsResult.java:11`) | `items` | List<AssetHit> | да | точные совпадения первыми |
+| | `truncated` | boolean | да | |
+| `AssetHit` (`:24-31`) | `gid, type, name, matchType, lastSeenAt` | String | да (`name`, `lastSeenAt` могут быть `null`) | |
+| | `score` | double | да | 1000 для `EXACT` |
+| | `sources` | List<String> | да | `source` активных записей |
+| `GetAssetResult` (`MCP/tools/GetAssetResult.java:21-31`) | `gid, type, firstSeenAt, lastSeenAt` | String | да | |
+| | `properties` | Map<String,Object> | да | без `gid, isCurrent, firstSeenAt, lastSeenAt, deletedAt` (`GetAssetTool.java:25-26`) |
+| | `deletedAt` | String | нет | |
+| | `isCurrent` | boolean | да | `false` у закрытого узла |
+| | `sources` | List<SourceRef> | да | `source, sourceType, sourceId, sourceVersion, fetchedAt, active, authority` (`:39-46`) |
+| | `relations` | List<RelationRef> | да | пусто при `includeRelations=false`; `relationType, direction, gid, type, name, isCurrent, validFrom` (`:57-64`) |
+| | `truncated` | boolean | да | только про связи |
+| `ExplainProvenanceResult` (`MCP/tools/ExplainProvenanceResult.java:19-27`) | `gid, type` | String | да | |
+| | `property` | String | нет | прошло регулярное выражение |
+| | `isCurrent`, `deletedAt` | boolean, String | да, нет | |
+| | `authorities` | List<String> | да | имена `SourceSystemCode`, отсортированы |
+| | `conflictState` | String | да | `OPEN` \| `NONE` |
+| | `records` | List<RecordRef> | да | `source, sourceType, sourceId, sourceVersion, fetchedAt, contentHash, confidence (Double), authority, authoritative, active, deletedAt, conflictProperties` (`:39-51`) |
+| `TraceDependenciesResult` (`MCP/tools/TraceDependenciesResult.java:25-35`) | `startGid, mode, direction, staleAfter` | String | да | `staleAfter` — ISO-8601 Duration (`PT168H`) |
+| | `environment` | String | нет | только `impact` |
+| | `nodes` | List<NodeRef> | да | `gid, label, name, lastSeenAt, stale, conflicts[{source, sourceType, sourceId, properties[]}]` (`:47,57`) |
+| | `relations` | List<RelationRef> | да | `type, from, to, validFrom, assertedBySource/Type/Id, sourceFetchedAt, sourceActive, stale` (`:73-83`) |
+| | `paths` | List<TracePath> | да | `nodes[]` (gid), `relations[]` (`RelationKey{type, from, to}`) (`:91-94`) |
+| | `affected` | List<String> | да | пусто при `trace` |
+| | `truncated` | boolean | да | |
+| `FindRuntimeFootprintResult` (`MCP/tools/FindRuntimeFootprintResult.java:24-34`) | `systemGid, systemName, systemLastSeenAt, systemStale, systemSources, environment, services, staleAfter, warnings, truncated` | | см. код | `warnings` — «stale: <Type> <gid> lastSeenAt=<…>» |
+| `ServiceFootprint` → `DeploymentFootprint` → `ComputeFootprint` → `HostFootprint` (`:37-92`) | | | | `DeploymentFootprint` несёт `sourceCommit, repositoryUrl, repository{gid,name,url}, deployedFrom{source,sourceType,sourceId,validFrom,commit}, hasDeployment{EdgeProvenance}`; `ComputeFootprint.type` ∈ `VirtualMachine, PhysicalServer, ComputeInstance` |
+| `EdgeProvenance`, `FactSource` (`:95-98`) | `source, sourceType, sourceId, validFrom` / `…, authority` | | | `validFrom` — только у темпоральных связей |
+
+### X.2.2 Аудит-запись `archrag.audit.mcp` (`MCP/audit/ToolCallAuditor.java:108-119`) 🟢
+
+Структурированный лог INFO, сообщение `mcp tool call`; ключи: `principal` (`sub=… client=…` или `anonymous`), `tool` (очищен, ≤ 64), `arguments` (нормализованная map, `ToolArguments`), `templates` (список ID шаблонов), `durationMs`, `rows`, `truncated`, `decision` (`ALLOWED, DENIED_SCOPE, DENIED_UNKNOWN_TOOL, TIMEOUT, ERROR` — `MCP/audit/ToolDecision.java:4-15`), `errorClass` (имя класса исключения или `null`). Метрики: `archrag.mcp.tool.call` (теги `tool`, `decision`; гистограмма включена, `application.yml:71-72`), `archrag.mcp.tool.rows` (тег `tool`).
+
+### X.2.3 Свойства mcp-server 🟢
+
+| Свойство | Env | Умолчание | Класс |
+|---|---|---|---|
+| `spring.ai.mcp.server.{name,version,protocol,streamable-http.mcp-endpoint}` | — | `arch-rag`, `0.1.0`, `STATELESS`, `/mcp` | Spring AI |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | обязательно | Spring Boot |
+| `spring.security.oauth2.resourceserver.jwt.audiences` | = `archrag.mcp.security.resource-uri` | | |
+| `archrag.mcp.security.resource-uri` | `ARCHRAG_MCP_RESOURCE_URI` | обязательно | `McpSecurityProperties` (`MCP/security/McpSecurityProperties.java:16-17`) |
+| `archrag.mcp.security.max-request-bytes` | — | `1MB` | |
+| `archrag.mcp.security.tool-scopes.<tool>` | — | 6 записей `architecture.read` | |
+| `archrag.neo4j.reader.{uri,username,password}` | `ARCHRAG_NEO4J_READER_URI/USERNAME/PASSWORD` | обязательно | `GraphReaderProperties` (`MCP/graph/GraphReaderProperties.java:14-15`) |
+| `archrag.query.stale-after` | — | `P7D` | `StalenessProperties` (`MCP/graph/StalenessProperties.java:12-13`) |
+| `archrag.query.limits.{max-depth,max-nodes,max-paths,timeout,max-response-bytes}` | — | `6, 500, 50, 5s, 512KB` | `GraphReaderProperties.Limits` |
+| `management.endpoints.web.exposure.include` | — | `health` (+ probes) | |
+| `management.otlp.metrics.export.{enabled,step}` | `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED`, `…_URL` | `false`, `10s` | Micrometer |
