@@ -35,3 +35,4 @@ platform/docker/measurements/
 .agents/
 .claude/skills/reversa/
 .claude/skills/reversa-*
+.reversa/config.user.toml
