@@ -234,3 +234,11 @@ webhook порог p95 ≤ 30 с, по polling — интервал + 5 с), thr
   его после старта контекста, то есть после миграций и схемы Neo4j).
 - otel-collector без healthcheck: в образе нет shell и wget. Готовность проверяет healthcheck Prometheus (цель collector в состоянии up).
 - Адаптер каждого источника запускается ровно в одном экземпляре; `/control/snapshot` адаптера proxy не публикует.
+
+## Сценарий: смена commit развёртывания
+
+```bash
+scripts/deployment-commit-check.sh   # приёмка фичи UNLOCKER-248 (ADR 0029); нужны Docker и python3 на хосте
+```
+
+Скрипт ждёт пустой очереди журнала, читает `find_runtime_footprint` по `Payments Core` (токен и CA — как в разделе «Токен и проверка») и берёт у `dep-payments-api-prod` `sourceCommit` и `deployedFrom`. Затем через `POST /control/upsert` заглушки `stub-deploymap` отправляет ту же запись формата `deploymap-poc-1` с другим commit, ждёт события в inbox (webhook или polling) и пустой очереди. Повторное чтение MCP должно дать новый commit, а в Neo4j у развёртывания должно остаться ровно одно открытое ребро `DEPLOYED_FROM` (новый commit) и одно закрытое (`validTo` задан) со старым. При повторном запуске commit переключается обратно. Код выхода не 0 при любом расхождении.
