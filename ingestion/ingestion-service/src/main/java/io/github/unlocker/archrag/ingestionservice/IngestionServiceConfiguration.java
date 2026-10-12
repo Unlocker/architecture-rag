@@ -107,7 +107,7 @@ public class IngestionServiceConfiguration {
       SourceConflicts conflicts) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector);
+        projector, projector);
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */

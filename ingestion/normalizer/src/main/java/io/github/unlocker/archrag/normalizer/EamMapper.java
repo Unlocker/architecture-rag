@@ -153,7 +153,8 @@ public final class EamMapper implements CanonicalMapper {
                 new Solution(
                     attrs.required("name"),
                     attrs.optional("lifecycle").orElse(null),
-                    attrs.optional("description").orElse(null))));
+                    attrs.optional("description").orElse(null),
+                    attrs.optionalIdRef("platform_id").map(Long::valueOf).orElse(null))));
         reference(attrs, "platform_id", RelationType.USES_PLATFORM, key, NodeLabel.SOLUTION, PLATFORM, NodeLabel.PLATFORM, sink);
       }
       default -> {
@@ -174,8 +175,9 @@ public final class EamMapper implements CanonicalMapper {
                     criticality,
                     attrs.optional("description").orElse(null),
                     attrs.optional("eam_id").orElse(null),
-                    unmapped)));
-        // itsystems.platform_id не читается: прямой связи «система → платформа» нет, платформа системы — через решение (docs/06).
+                    unmapped,
+                    attrs.optionalIdRef("platform_id").map(Long::valueOf).orElse(null))));
+        // itsystems.platform_id хранится свойством узла для сверки с платформой решения (ADR 0031); прямой связи «система → платформа» нет.
         reference(attrs, "product_id", RelationType.USES_SOLUTION, key, NodeLabel.IT_SYSTEM, SOLUTION, NodeLabel.SOLUTION, sink);
         attrs
             .optional("ownerTeam")

@@ -78,7 +78,7 @@ import org.neo4j.driver.TransactionContext;
  * <p>Дополнительные метки подтипов, свойства связей и метки в тексте Cypher берутся только из enum
  * {@link NodeLabel}/{@link RelationType}, а не из данных источника.
  */
-public final class GraphProjector implements GraphProjection, DeploymentLookup {
+public final class GraphProjector implements GraphProjection, DeploymentLookup, EamLookup {
 
   private static final System.Logger LOG = System.getLogger(GraphProjector.class.getName());
   private static final String REPOSITORY = "REPOSITORY";
@@ -232,6 +232,46 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup {
       }
       return systems.stream().findFirst();
     }
+  }
+
+  /** Платформа узла активной записи EAM {@code SOLUTION}. */
+  @Override
+  public Optional<SolutionPlatform> solutionPlatform(SourceKey solution) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'EAM', sourceType: 'SOLUTION', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(n:Solution) RETURN n.platformId AS platformId LIMIT 1",
+                      Map.of("id", solution.sourceId()))
+                  .stream()
+                  .findFirst()
+                  .map(row -> new SolutionPlatform(solution, platformId(row))));
+    }
+  }
+
+  /** Активные записи EAM {@code IT_SYSTEM} с открытой {@code USES_SOLUTION} на узел решения. */
+  @Override
+  public List<SystemPlatform> systemsOfSolution(SourceKey solution) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'EAM', sourceType: 'SOLUTION', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(:Solution)<-[rel:USES_SOLUTION]-(sys:ITSystem)"
+                          + "<-[:ASSERTS]-(s:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true}) "
+                          + "WHERE rel.validTo IS NULL "
+                          + "RETURN DISTINCT s.sourceId AS sourceId, sys.platformId AS platformId ORDER BY sourceId",
+                      Map.of("id", solution.sourceId()))
+                  .list(
+                      row ->
+                          new SystemPlatform(
+                              new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString()), platformId(row))));
+    }
+  }
+
+  private static Long platformId(Record row) {
+    return row.get("platformId").isNull() ? null : row.get("platformId").asLong();
   }
 
   /** Развёртывания DEPLOYMAP сервиса, у которых в chart задан {@code eamSystemId}. */

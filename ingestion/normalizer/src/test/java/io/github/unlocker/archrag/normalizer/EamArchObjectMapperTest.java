@@ -76,7 +76,7 @@ class EamArchObjectMapperTest {
     var n = ok("SOLUTION", 7202, archObject(7202, "name", "Ledger Engine", "lifecycle", "PRODUCTION",
         "description", "Double-entry ledger solution", "platform_id", 3102L));
     assertThat(((UpsertNode) n.commands().get(0)).data())
-        .isEqualTo(new Solution("Ledger Engine", "PRODUCTION", "Double-entry ledger solution"));
+        .isEqualTo(new Solution("Ledger Engine", "PRODUCTION", "Double-entry ledger solution", 3102L));
     assertThat(relations(n)).singleElement().satisfies(r -> {
       assertThat(r.type()).isEqualTo(RelationType.USES_PLATFORM);
       assertThat(r.from()).isEqualTo(key("SOLUTION", "7202"));
@@ -93,13 +93,34 @@ class EamArchObjectMapperTest {
     var node = (UpsertNode) n.commands().get(0);
     assertThat(node.record().key()).isEqualTo(key("IT_SYSTEM", "5101"));
     assertThat(node.data()).isEqualTo(new ITSystem("Payments Core", "ACTIVE", Criticality.HIGH,
-        "Payments processing system", "EAM-1042", null));
-    // platform_id системы не даёт связи: прямой «система → платформа» нет (docs/06, решение 3)
+        "Payments processing system", "EAM-1042", null, 3101L));
+    // platform_id системы хранится свойством узла и не даёт связи: прямой «система → платформа» нет (docs/06, решение 3)
     assertThat(relations(n)).singleElement().satisfies(r -> {
       assertThat(r.type()).isEqualTo(RelationType.USES_SOLUTION);
       assertThat(r.from()).isEqualTo(key("IT_SYSTEM", "5101"));
       assertThat(r.to()).isEqualTo(key("SOLUTION", "7201"));
     });
+  }
+
+  @Test
+  void platformIdOfSystemAndSolutionIsReadAndMissingIsNull() {
+    var mismatchSolution = (UpsertNode) ok("SOLUTION", 7201, archObject(7201, "name", "Card Processing", "platform_id", 3101L)).commands().get(0);
+    var mismatchSystem = (UpsertNode) ok("IT_SYSTEM", 5104, archObject(5104, "name", "Cards Hub", "product_id", 7201L, "platform_id", 3102L)).commands().get(0);
+    assertThat(((Solution) mismatchSolution.data()).platformId()).isEqualTo(3101L);
+    assertThat(((ITSystem) mismatchSystem.data()).platformId()).isEqualTo(3102L);
+    assertThat(((ITSystem) ((UpsertNode) ok("IT_SYSTEM", 1, archObject(1, "name", "A")).commands().get(0)).data()).platformId()).isNull();
+    assertThat(((Solution) ((UpsertNode) ok("SOLUTION", 2, archObject(2, "name", "A")).commands().get(0)).data()).platformId()).isNull();
+  }
+
+  @Test
+  void nonIntegerPlatformIdIsQuarantinedWithoutValue() {
+    assertThat(run("IT_SYSTEM", 1, archObject(1, "name", "A", "platform_id", "secret-3102")))
+        .isInstanceOfSatisfying(NormalizationResult.Quarantined.class, q -> {
+          assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD");
+          assertThat(q.reason()).doesNotContain("secret-3102");
+        });
+    assertThat(run("SOLUTION", 2, archObject(2, "name", "A", "platform_id", "x")))
+        .isInstanceOfSatisfying(NormalizationResult.Quarantined.class, q -> assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD"));
   }
 
   @Test
