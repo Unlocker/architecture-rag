@@ -1,6 +1,6 @@
 # Data Dictionary → Словарь данных
 
-> Archaeologist, этапы R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`); R.2b (UNLOCKER-264): раздел P (`adapters/*`). Разделы остальных модулей добавят R.2c–R.2e.
+> Archaeologist, этапы R.2a (UNLOCKER-263): разделы A (`canonical-model`), E (`event-schemas`), S (`source-spi`); R.2b (UNLOCKER-264): раздел P (`adapters/*`); R.2c (UNLOCKER-265): раздел Q (`ingestion/*`, в конце файла). Разделы остальных модулей добавят R.2d–R.2e.
 > Столбец «Обяз.»: **да** — `null`/пустое отвергается конструктором; **нет** — допускается `null`, пустая строка отвергается (`Invariants.optionalText`, `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java:30-35`); **—** — проверки нет.
 > Пути сокращены: `CM/` = `contracts/canonical-model/.../canonicalmodel/`, `ES/` = `contracts/event-schemas/.../eventschemas/`, `SPI/` = `contracts/source-spi/.../sourcespi/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
 > Семантику узлов и связей смотри в `docs/02-data-model.md` §2; здесь только то, что утверждает код.
@@ -362,7 +362,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 
 ## Q.1 event-journal: таблицы PostgreSQL (`EJ/resources/db/migration/V1__event_journal.sql`) 🟢
 
-### Q.1.1 `inbox_event` (`V1__event_journal.sql:2-20`)
+### Q.1.1 `inbox_event` (`V1__event_journal.sql:2-22`)
 
 | Колонка | Тип | NULL | Назначение / правило |
 |---|---|---|---|
@@ -380,13 +380,13 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 | `payload_key`, `payload_hash` | text | да | ссылка на raw в S3: `raw/<source>/<sha256>` и hash |
 | `received_at`, `updated_at` | timestamptz | нет | UTC; `received_at` — основа курсора диспетчера |
 
-Ограничения и индексы: `uq_inbox_event UNIQUE (source,event_id)`; `ix_inbox_event_status (status, received_at)`; `ix_inbox_event_object (source, source_type, source_id)` (`:19, :22-23`). Индекса под `pending` с условием `updated_at` нет 🟡; фильтр `event_id NOT LIKE 'replay:%'` и `starts_with(event_id, …)` индексом по `(source, event_id)` (btree по `uq_inbox_event`) поддерживается только для `starts_with` с `text_pattern_ops`/C-collation — зависит от коллации БД 🟡.
+Ограничения и индексы: `uq_inbox_event UNIQUE (source,event_id)`; `ix_inbox_event_status (status, received_at)`; `ix_inbox_event_object (source, source_type, source_id)` (`V1__event_journal.sql:21, 24-25`). Индекса под `pending` с условием `updated_at` нет 🟡.
 
-### Q.1.2 `consumer_checkpoint` (`:25-30`)
+### Q.1.2 `consumer_checkpoint` (`V1__event_journal.sql:27-33`)
 
 `consumer` + `source` (PK), `cursor` text NOT NULL (формат свободный: курсор poll-а, `run:<id>`, `done:<id>`, `eventId` последнего спроецированного события), `updated_at`. Потребители: `poller:*`/`snapshot:*` адаптеров (`adapters/adapter-core/.../Poller.java:93,136,170-186`), проектор (`ingestion/graph-projector/.../EventProcessor.java:615`) 🟢.
 
-### Q.1.3 `dlq_entry` (`:32-42`)
+### Q.1.3 `dlq_entry` (`V1__event_journal.sql:35-45`)
 
 | Колонка | Тип | NULL | Примечание |
 |---|---|---|---|
@@ -398,7 +398,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 | `created_at` | timestamptz | нет | |
 | `replayed_at` | timestamptz | да | 🔴 **в коде не заполняется** (code-analysis §Q1.5) |
 
-Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`:41`).
+Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`V1__event_journal.sql:47-48`).
 
 ### Q.1.4 Raw payload в S3 🟢
 
@@ -459,11 +459,11 @@ PK `(source, source_type, source_id)`; `gid uuid NOT NULL`; `created_at timestam
 
 PK по шести колонкам `(left_source, left_type, left_id, right_source, right_type, right_id)`; `approved_by`, `reason` (оба NOT NULL), `approved_at timestamptz`. Порядок пары задаёт приложение (`SourceKeys.compare`), CHECK нет. Запись `Crosswalk(left, right, approvedBy, reason, approvedAt)`: ключи различны, `approvedBy`/`reason` непустые (`IR/Crosswalk.java:14-25`) 🟢.
 
-### Q.3.3 `identity_feature` (V4:4-13)
+### Q.3.3 `identity_feature` (V4:5-14, индекс :16)
 
 PK `(source, source_type, source_id, feature)` — **одно значение на вид признака на ключ**; `value` (нормализованное), `label_family` (имя `NodeLabel`), `updated_at`; индекс `ix_identity_feature_lookup (feature, label_family, value)`. При upsert записи признаки заменяются целиком (delete + insert) 🟢. `Feature(kind, value)`: `kind ∈ {HOSTNAME, REPOSITORY_URL, NAME, OWNER}`, значение непустое (`IR/Feature.java:6-13`).
 
-### Q.3.4 `identity_candidate` (V4:18-31)
+### Q.3.4 `identity_candidate` (V4:21-35, индекс :37)
 
 | Колонка | Тип | Примечание |
 |---|---|---|
@@ -476,11 +476,11 @@ PK `(source, source_type, source_id, feature)` — **одно значение �
 
 Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-22`) 🟡.
 
-### Q.3.5 `property_assertion` (V5:6-17)
+### Q.3.5 `property_assertion` (V5:6-17, индекс :19)
 
 PK `(source, source_type, source_id, property)`; `gid`, `label`, `value` (текст: enum → `name`, `Instant` → UTC ISO, по комментарию миграции), `authoritative boolean`, `asserted_at`; индекс `(gid, property)`. Заменяется целиком при upsert записи, удаляется tombstone'ом 🟢.
 
-### Q.3.6 `source_conflict` (V5:21-38, V7:4)
+### Q.3.6 `source_conflict` (V5:23-39, V7:4)
 
 PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`, `master_value`, `master_source/type/id`, `status` (`OPEN`/`RESOLVED`, по умолчанию `OPEN`), `opened_at`, `updated_at`, `resolved_at` (nullable), `kind text NOT NULL DEFAULT 'PROPERTY'` (`PROPERTY|RELATION`). Строка не удаляется: `RESOLVED` — история; повторное расхождение снова открывает её (`opened_at` сохраняется) 🟢. Запись `SourceConflict` (`IR/SourceConflict.java:24-35`): все поля, кроме `resolvedAt`, обязательны; `toString()` без значений.
 

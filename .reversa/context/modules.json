@@ -1843,7 +1843,7 @@
         },
         {
           "description": "Одна открытая запись DLQ на событие (частичный уникальный индекс); причина усекается до 500 символов",
-          "location": "ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:41",
+          "location": "ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:47-48",
           "confidence": "confirmed"
         },
         {
