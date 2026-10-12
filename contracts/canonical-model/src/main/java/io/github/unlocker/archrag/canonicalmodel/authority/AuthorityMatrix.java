@@ -92,7 +92,8 @@ public final class AuthorityMatrix {
 
         // Explicit property rules named in the vision; they restate the node rule today and pin it against drift.
         var properties = new EnumMap<NodeLabel, Map<String, Set<SourceSystemCode>>>(NodeLabel.class);
-        properties.put(IT_SYSTEM, Map.of("criticality", Set.of(EAM), "eamCode", Set.of(EAM)));
+        properties.put(IT_SYSTEM, Map.of("criticality", Set.of(EAM), "eamCode", Set.of(EAM), "platformId", Set.of(EAM)));
+        properties.put(SOLUTION, Map.of("platformId", Set.of(EAM)));
         properties.put(SERVICE, Map.of("language", Set.of(SCM)));
         properties.put(REPOSITORY, Map.of("url", Set.of(SCM)));
         properties.put(COMPUTE_INSTANCE, Map.of("state", Set.of(CMDB)));

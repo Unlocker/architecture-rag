@@ -7,8 +7,8 @@ import static io.github.unlocker.archrag.canonicalmodel.Invariants.requireText;
  * Accounting IT system. Required: {@code name}. Optional: {@code status} (source vocabulary), {@code criticality},
  * {@code description}, {@code eamCode} (the EAM system code {@code eam_id}, e.g. {@code EAM-1042}, by which SCM refers
  * to the system) and {@code criticalityRaw} (the source value of a criticality the dictionary does not know; set
- * instead of {@code criticality}) and {@code platformId} (the EAM {@code itsystems.platform_id}; must equal the platform
- * of the system's solution, see ADR 0031; positive).
+ * instead of {@code criticality}) and {@code platformId} (the EAM {@code itsystems.platform_id}, positive; must
+ * equal the platform of the system's solution, see ADR 0031).
  */
 public record ITSystem(String name, String status, Criticality criticality, String description, String eamCode,
                        String criticalityRaw, Long platformId) implements NodeData {

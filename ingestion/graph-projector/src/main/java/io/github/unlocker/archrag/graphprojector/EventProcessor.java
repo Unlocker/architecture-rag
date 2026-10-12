@@ -221,7 +221,9 @@ public final class EventProcessor {
     }
     ConflictMarkers markers;
     try {
-      markers = assertSystemPlatform(key, commands, gids, assertSystemRelation(key, commands, gids, assertProperties(key, commands, gids)));
+      markers = assertProperties(key, commands, gids);
+      markers = assertSystemRelation(key, commands, gids, markers);
+      markers = assertSystemPlatform(key, commands, gids, markers);
     } catch (IdentityStoreException e) {
       // Замена утверждений идемпотентна: повтор безопасен. Значения свойств в причину не попадают.
       return retry(event, CONFLICT_FAILED, "source conflict store failed");
@@ -480,7 +482,8 @@ public final class EventProcessor {
         UUID gid = gids.get(key);
         Optional<EamLookup.SolutionPlatform> solution =
             solutionOf(key, commands).flatMap(eamLookup::solutionPlatform).filter(s -> s.platformId() != null);
-        Optional<SourceKey> master = system.platformId() == null ? Optional.empty() : solution.map(EamLookup.SolutionPlatform::solution);
+        Optional<SourceKey> master =
+            system.platformId() == null ? Optional.empty() : solution.map(EamLookup.SolutionPlatform::solution);
         String systemValue = system.platformId() == null ? "" : String.valueOf(system.platformId());
         String masterValue = master.isPresent() ? String.valueOf(solution.get().platformId()) : "";
         return ConflictMarkers.of(gid, conflicts.assertRelation(key, gid, PLATFORM_PROPERTY, systemValue, master, masterValue));
