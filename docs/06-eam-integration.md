@@ -1,13 +1,13 @@
     # Интеграция данных EAM
 
-Как данные корпоративной архитектуры (EAM) попадают в граф: какие объекты забираем, как читаем API, как сопоставляем с каноническими узлами [00-vision.md](00-vision.md). Источник контракта — [`eam-api.yaml`](eam-api.yaml) (лежит в репозитории) (OpenAPI 3.0.3, «EAM Tool API», версия 0.4). В PoC EAM представлен заглушками (`StubSources.eam` и `EamApiStub`), доступа к реальному EAM нет; решения владельца от 2026-10-10 — в разделе [«Решения»](#решения) ([production gap 3.5](05-production-gap-list.md)).
+Как данные корпоративной архитектуры (EAM) попадают в граф: какие объекты забираем, как читаем API, как сопоставляем с каноническими узлами [00-vision.md](00-vision.md). Источник контракта — [`eam-api.yaml`](eam-api.yaml) (лежит в репозитории) (OpenAPI 3.0.3, «EAM Tool API», версия 0.4). В PoC EAM представлен заглушками, реальный контракт не проверен ([production gap 3.5](05-production-gap-list.md)): `EamApiStub` в формате реального API, из которой `adapter-eam` читает `PLATFORM`, `SOLUTION`, `IT_SYSTEM`, и старая `StubSources.eam`, откуда пока приходят `TEAM` и `SERVICE_DEPENDENCY` (см. [Заглушки и fixtures](#заглушки-и-fixtures)); решения владельца от 2026-10-10 и 2026-10-11 — в разделе [«Решения»](#решения).
 
 ## Что нужно из EAM
 
 | Сущность EAM | Endpoint | Канонический узел | Статус в коде |
 |---|---|---|---|
-| ИТ-платформа (IT Platform) | `/api/platforms/` | `Platform` | в vision есть, в `canonical-model` пока нет |
-| ИТ-решение (IT Solution) | `/api/itproducts/` (подтверждено владельцем 2026-10-10; см. [решения](#решения)) | `Solution` | в vision есть, в `canonical-model` пока нет |
+| ИТ-платформа (IT Platform) | `/api/platforms/` | `Platform` | есть (`Platform`, мастер — EAM) |
+| ИТ-решение (IT Solution) | `/api/itproducts/` (подтверждено владельцем 2026-10-10; см. [решения](#решения)) | `Solution` | есть (`Solution`, мастер — EAM) |
 | ИТ-система (IT System) | `/api/itsystems/` | `ITSystem` | есть (`ITSystem`, мастер — EAM) |
 
 Связи между ними, как в vision:
@@ -17,7 +17,7 @@
 (Solution)-[:USES_PLATFORM]->(Platform)
 ```
 
-Из этого следует транзитивная цепочка `ITSystem → Solution → Platform`: «на каких платформах работает система» и «какие системы заденет изменение платформы» — два обхода в 2 перехода. `USES_SOLUTION` и `USES_PLATFORM` нужно добавить в `RelationType` и authority matrix (мастер — EAM); `Solution` и `Platform` — в `NodeLabel`/`NodeData`, с ключом уникальности `gid` как у остальных узлов.
+Из этого следует транзитивная цепочка `ITSystem → Solution → Platform`: «на каких платформах работает система» и «какие системы заденет изменение платформы» — два обхода в 2 перехода. `USES_SOLUTION` и `USES_PLATFORM` есть в `RelationType` и authority matrix (мастер — EAM); `Solution` и `Platform` — в `NodeLabel`/`NodeData`, с ключом уникальности `gid` как у остальных узлов. В `trace`/`impact` новые связи пока не входят: это отдельное решение.
 
 ## Устройство EAM API
 
@@ -56,9 +56,9 @@ EAM — **метамодельная** система: все типы объе�
 
 В спеке нет webhook-ов и нет фильтра по времени изменения, поэтому:
 
-1. **Основной путь — polling.** Адаптер опрашивает три endpoint-а по `sort=-mtime` и идёт страницами, пока не встретит объект с уже известным `(id, ver)`.
+1. **Основной путь — polling.** Адаптер опрашивает три endpoint-а по `sort=-mtime` и идёт страницами, пока не встретит объект с `datetime` не позже сохранённого водяного знака (максимум `datetime`, увиденный прошлым проходом). Перекрытие страниц гасит идемпотентность события `poll:<type>/<id>/v<ver>`.
 2. **Snapshot для reconcile.** Периодически (и при replay/rebuild через админский эндпоинт ingestion-сервиса) читается полный список каждого типа. Это же единственный способ обнаружить **удаление/архивацию**: в спеке нет tombstone-событий, объект просто пропадает из основного списка (или меняет состояние — проверить). Пропавший `id` → `TombstoneSourceRecord`.
-3. **Событие и идемпотентность.** Один объект EAM — одна запись в journal: `source = EAM`, `sourceType ∈ {PLATFORM, SOLUTION, IT_SYSTEM}`, `sourceId = id` (без префикса, решение владельца 2026-10-04), `sourceVersion = ver`, `contentHash` — sha256 от канонизированного `attrs`. Повторное получение той же `ver` с тем же hash — no-op. `datetime` из `ArchObject` использовать как время изменения источника, а не как время получения.
+3. **Событие и идемпотентность.** Один объект EAM — одна запись в journal: `source = EAM`, `sourceType ∈ {PLATFORM, SOLUTION, IT_SYSTEM}`, `sourceId = id` (без префикса, решение владельца 2026-10-04), `sourceVersion = ver`, `contentHash` — sha256 от канонизированного `attrs`. Повторное получение той же `ver` с тем же hash — no-op. **Известное расхождение:** сейчас `contentHash` считается от сырого JSON (как у остальных адаптеров), не от канонизированного `attrs`; идемпотентность держится на `ver`. `datetime` из `ArchObject` использовать как время изменения источника, а не как время получения.
 4. Сырой ответ сохраняется в raw-хранилище (S3) до нормализации, как у остальных адаптеров.
 
 Webhook-путь заглушки на реальный EAM не переносится, пока EAM не умеет их отправлять. Предел свежести — интервал polling; как показали замеры ([04-poc-measurements.md](04-poc-measurements.md)), p95 «источник → граф» упирается в этот интервал.
@@ -74,15 +74,15 @@ Webhook-путь заглушки на реальный EAM не перенос�
 | объект ИТ-системы | `UpsertNode(ITSystem{name, status, criticality, description})` |
 | поле-ссылка `product_id` ИТ-системы → решение | `UpsertRelation(USES_SOLUTION)` |
 | поле-ссылка `platform_id` решения (`itproducts`) → платформа | `UpsertRelation(USES_PLATFORM)` |
-| поле-ссылка `platform_id` ИТ-системы | связь не строится; только проверка инварианта: расхождение с `platform_id` решения → `Conflict`, запись помечается для разбора |
+| поле-ссылка `platform_id` ИТ-системы | связь не строится; свойство узла `platformId` и проверка инварианта: расхождение с `platform_id` решения → `Conflict`, запись помечается для разбора |
 
 Правила:
 
-- **Ссылка = id объекта EAM.** Целевой узел ищется по crosswalk `(EAM, sourceType, id)`. Если цель ещё не загружена (порядок чтения разный), команда откладывается `DeferRelation` и разрешается при появлении цели — порядок опроса типов не должен влиять на результат.
+- **Ссылка = id объекта EAM.** Целевой узел ищется по ключу записи `(EAM, sourceType, id)` (запись активна). Ссылка принимается как список целых `id`, одиночное целое или `null`. Если цель ещё не загружена (порядок чтения разный), команда откладывается `DeferRelation` и разрешается при появлении цели — порядок опроса типов не должен влиять на результат.
 - **Исчезновение ссылки в `attrs` = закрытие связи**, не удаление узлов: `CloseAssertion` для соответствующего утверждения источника.
-- **Критичность и статус** — свободные значения EAM; значения словаря сопоставляются с `Criticality` (`ITSystem`) через явную таблицу, неизвестные значения не отбрасываются, а сохраняются в `status` и помечаются для разбора.
+- **Критичность и статус** — свободные значения EAM; значения словаря сопоставляются с `Criticality` (`ITSystem`) через явную таблицу, неизвестное значение `criticality` не отбрасывается: `ITSystem.criticality` не ставится, сырое значение сохраняется в `ITSystem.criticalityRaw` для разбора, нормализатор пишет WARN и добавляет код `UNMAPPED_CRITICALITY` в предупреждения результата (счётчика `archrag_normalizer_unmapped_values_total` пока нет: у нормализатора нет канала метрик). `status` и `lifecycle` — свободные строки без таблицы, хранятся как пришли.
 - **Authority.** Для `ITSystem`, `Solution`, `Platform` и связей между ними мастер — EAM; `ITSystem.criticality` обновляет только EAM. Остальные источники (SCM и др.) могут ссылаться на систему по EAM-ключу, но не меняют эти узлы.
-- **Identity.** Ключ — `(EAM, sourceType, id)`. Имя (`name`) не ключ: совпадение имён разных сущностей и переименования обычны. Совпадения с другими источниками (например, `systemCode` в SCM) — через crosswalk и candidate matching.
+- **Identity.** Ключ — `(EAM, sourceType, id)`. Имя (`name`) не ключ: совпадение имён разных сущностей и переименования обычны. Совпадения с другими источниками (например, `systemCode` в SCM) — через alias-ключ по `ITSystem.eamCode` (см. «Сопоставление ключей»); crosswalk и candidate matching остаются для подтверждённых человеком соответствий двух разных записей (ADR 0019).
 
 ## Решения
 
@@ -90,7 +90,7 @@ Webhook-путь заглушки на реальный EAM не перенос�
 
 1. **Где «ИТ-решение»: тип `itproducts`** (подтверждено владельцем 2026-10-10). Кандидаты `itproducts`, `msys`, `okita`, `aknsd`. В заглушке тип задан константой `EamApiSeed.SOLUTION_TYPE`, в нормализаторе его тоже держать константой.
 2. **Поля `attrs`** (подтверждено 2026-10-10). Общие: `name` (строка), `status` (словарь, `ACTIVE`/…), `description`. Платформа и решение: `lifecycle` (словарь, `PRODUCTION`/…). ИТ-система: `criticality` (словарь, `HIGH`/`MEDIUM`/`LOW`), системное поле `eam_id` (`EAM-1042`; приходит в `attrs`, а в `options?kind=system` описано). Поля-ссылки (одиночные целочисленные `id`): у ИТ-системы `product_id` (→ `itproducts`) и `platform_id` (→ `platforms`), у решения `platform_id` (→ `platforms`). Словари значений не выгружены: неизвестное значение сохраняется как есть и помечается для разбора (правило из раздела «Нормализация»).
-3. **Ссылки: строгая иерархия «платформа → решение → система»** (решения владельца 2026-10-10 и 2026-10-11). Карточка ИТ-системы всегда содержит одиночные ссылки (целочисленные `id`) на решение (`product_id` → `itproducts`) и на платформу (`platform_id` → `platforms`); у решения есть своя одиночная `platform_id` (→ `platforms`). Все три поля — одно значение, не список (`multiple: false`): `product_id: 7201`, `platform_id: 3101`. Платформа системы всегда совпадает с платформой её решения. Обратных списков на решении и платформе нет, связи восстанавливаются по полям-ссылкам. Граф строится так: `USES_SOLUTION` — по `itsystems.product_id`, `USES_PLATFORM` — по `itproducts.platform_id`. `itsystems.platform_id` избыточно: прямой связи «система → платформа» нет, платформа системы получается обходом через решение в 2 перехода. Поле служит проверкой инварианта: при расхождении с `platform_id` решения создаётся `Conflict`, запись помечается для разбора, граф при этом строится по решению. Fixture сценария — `platform-mismatch/`; тест нормализатора появится вместе с переделкой `EamAdapter`.
+3. **Ссылки: строгая иерархия «платформа → решение → система»** (решения владельца 2026-10-10 и 2026-10-11). Карточка ИТ-системы всегда содержит одиночные ссылки (целочисленные `id`) на решение (`product_id` → `itproducts`) и на платформу (`platform_id` → `platforms`); у решения есть своя одиночная `platform_id` (→ `platforms`). Все три поля — одно значение, не список (`multiple: false`): `product_id: 7201`, `platform_id: 3101`. Платформа системы всегда совпадает с платформой её решения. Обратных списков на решении и платформе нет, связи восстанавливаются по полям-ссылкам. Граф строится так: `USES_SOLUTION` — по `itsystems.product_id`, `USES_PLATFORM` — по `itproducts.platform_id`. `itsystems.platform_id` избыточно: прямой связи «система → платформа» нет, платформа системы получается обходом через решение в 2 перехода. Поле служит проверкой инварианта: при расхождении с `platform_id` решения создаётся `Conflict`, запись помечается для разбора, граф при этом строится по решению. Fixture сценария — `platform-mismatch/`; `platform_id` хранится свойством узла (`ITSystem.platformId`, `Solution.platformId`), конфликт — `source_conflict` вида `RELATION`, см. [ADR 0031](adr/0031-it-system-platform-invariant.md); тесты — `EamArchObjectMapperTest`, `EventProcessorTest`, `PlatformInvariantIT`.
 4. **Исчезновение объекта — логическое удаление** (подтверждено 2026-10-10). «Архивировать» в EAM означает существующий tombstone: `TombstoneSourceRecord`, у узла `isCurrent=false` и `deletedAt`, связи закрываются через `validTo`; физического удаления нет (ADR 0020). Архивный объект не возвращается из `GET /api/<type>/`, `GET /{id}/` отвечает 404 (так ведёт себя заглушка); пропажа `id` из полного snapshot даёт tombstone ([Схема синхронизации](#схема-синхронизации)).
 5. **Версионирование** (подтверждено 2026-10-10): `ver` растёт при **каждом** изменении `attrs`, повторное чтение без изменений даёт ту же `ver` (no-op, идемпотентность по `(id, ver)` и `contentHash`). Выборка по версии `GET /{id}/` не используется: параметр в спеке не объявлен. Страховка — `contentHash` от канонизированного `attrs`.
 6. **Лимиты** (подтверждено 2026-10-10): `page_size` по умолчанию 50, максимум 500 (заглушка зажимает до 500); адаптер ограничивается 10 запросами в секунду и повтором по `Retry-After` при 429. Порядок при `sort=-mtime` во время записи нестабилен: пропуски при сдвиге страниц компенсирует периодический полный snapshot. Допустимые ключи сортировки — `id`, `ctime`, `mtime` (заглушка на прочие отвечает 400). Конец выборки — страница короче `page_size` (в том числе пустая; страница за концом — `[]`, не 404).
@@ -111,16 +111,31 @@ SCM Service.systemCode  ("EAM-1042")
   → ArchObject.id (5101) = sourceId ITSystem
 ```
 
-Адаптер строит индекс `eam_id → id` по списку `itsystems` и отдаёт его в crosswalk; данные SCM менять не нужно. Seed заглушки: `Payments Core` — `id 5101`, `eam_id EAM-1042`, `product_id 7201`, `platform_id 3101`; `Ledger` — `id 5102`, `eam_id EAM-2001`, `product_id 7202`, `platform_id 3102`.
+Отдельного индекса и crosswalk нет: запись одна, а `Crosswalk` — подтверждённое человеком соответствие двух разных записей (ADR 0019). Вместо него действует alias-механизм, общий с `Repository.url`:
+
+- `EamMapper` кладёт `attrs.eam_id` в свойство `ITSystem.eamCode` (индекс `it_system_eam_code`, мастер — EAM);
+- `ScmMapper` для `systemCode` спрашивает граф (`DeploymentLookup.itSystemByEamCode`): известную систему связывает `DECOMPOSED_INTO` с реальным ключом `(EAM, IT_SYSTEM, "5101")`, неизвестную откладывает (`DeferRelation`) на alias-ключ `(EAM, IT_SYSTEM_CODE, "EAM-1042")`; на литеральный ключ `(EAM, IT_SYSTEM, "EAM-1042")` SCM не ссылается никогда;
+- `GraphProjector` по таблице alias-правил достраивает отложенную связь, когда приходит `ITSystem` с этим `eamCode` (в любом порядке прихода SCM и EAM);
+- точный поиск `search_assets` находит систему и по `eamCode` (`EAM-1042`).
+
+Если у двух активных `ITSystem` один `eamCode` (реальный EAM это допускает), связь SCM уходит на наименьший числовой `id`; неоднозначность не логируется.
+
+Данные SCM менять не нужно. Seed заглушки: `Payments Core` — `id 5101`, `eam_id EAM-1042`, `product_id 7201`, `platform_id 3101`; `Ledger` — `id 5102`, `eam_id EAM-2001`, `product_id 7202`, `platform_id 3102`.
 
 ## Заглушки и fixtures
 
-- **Старая заглушка** `StubSources.eam` (`/changes`, `/objects/…`, строковые id `EAM-1042`) не меняется: демо F1–F4 и текущий `eam-adapter` работают через неё. Расширять её типами `PLATFORM`/`SOLUTION` не нужно.
-- **Новая заглушка** `EamApiStub` (`platform/source-stubs`, в compose — `eam-api-stub`) отдаёт формат реального API: `GET /api/<type>/` с `page`/`page_size`/`sort`/`fields`, `GET /api/<type>/{id}/`, `GET /api/types/…`, проверка `Authorization: Token …`, только чтение. Seed `EamApiSeed`: срез `Payments Core → Card Processing → Kubernetes Platform` и `Ledger → Ledger Engine → PostgreSQL Platform`; у решений и систем одиночные ссылки: `Card Processing` → `platform_id` Kubernetes Platform, `Ledger Engine` → PostgreSQL Platform; `Payments Core` — `product_id` Card Processing, `platform_id` Kubernetes Platform; `Ledger` — `product_id` Ledger Engine, `platform_id` PostgreSQL Platform (платформа системы совпадает с платформой её решения). Адаптер к ней подключит задача переделки `EamAdapter`.
-- **Fixtures** — `adapters/eam-adapter/src/test/resources/eam-api`, тесты `EamApiFixturesContractTest`. Каждая fixture собрана по спеке и ответам владельца, допущения перечислены в `eam-api/README.md`.
+- **Старая заглушка** `StubSources.eam` (`/changes`, `/objects/…`, строковые id `EAM-1042`) не меняется. Из неё `adapter-eam` читает только `TEAM` и `SERVICE_DEPENDENCY` (в `eam-api` таких данных нет, перенос в SCM вне границ задачи); её `IT_SYSTEM` отбрасывается. Это долг PoC: legacy-половину убирает задача про подключение реального EAM. Один адаптер вместо двух: `Reconciler` tombstone-ит все активные записи источника `EAM`, которых нет в snapshot-прогоне, поэтому два адаптера под одним источником сносили бы записи друг друга (`CompositeEamConnector`: один прогон — сначала `eam-api`, затем legacy, маркер `snapshot-complete` только после обеих половин). `ARCHRAG_EAM_MODE=legacy|eam-api` (по умолчанию в коде `legacy`, в compose `eam-api`) выбирает режим; `legacy` — откат на старый путь.
+- **Новая заглушка** `EamApiStub` (`platform/source-stubs`, в compose — `eam-api-stub`) отдаёт формат реального API: `GET /api/<type>/` с `page`/`page_size`/`sort`/`fields`, `GET /api/<type>/{id}/`, `GET /api/types/…`, проверка `Authorization: Token …`, только чтение. Seed `EamApiSeed`: срез `Payments Core → Card Processing → Kubernetes Platform` и `Ledger → Ledger Engine → Kubernetes Platform, PostgreSQL Platform`. Её читает `adapter-eam` (`EamApiConnector`: `Authorization: Token`, `page_size` ≤ 500, не больше 10 запросов в секунду, 429 с `Retry-After` — одно ожидание и повтор). Управление объектами — `POST /control/upsert` и `/control/archive` на отдельном порту (только на стенде). Для `OWNED_BY` в `attrs` ИТ-системы добавлено поле-ссылка `ownerTeam` (строковый код команды, допущение 9).
+- **Fixtures** — `adapters/eam-adapter/src/test/resources/eam-api`, тесты `EamApiFixturesContractTest`. Каждая fixture собрана по спеке, допущения перечислены в `eam-api/README.md`.
+
+9. **`ownerTeam` у ИТ-системы** (не подтверждено, только для заглушки). `Team` и `OWNED_BY` пока приходят из старой заглушки, поэтому `attrs` ИТ-системы в `EamApiSeed` и fixtures содержит `ownerTeam` со строковым кодом команды (`TEAM-PAY`), а `EamMapper` строит по нему `OWNED_BY` с прежним ключом `Team`. В реальном EAM владелец, вероятно, ссылка на `divisions`: вместе с остальными допущениями перепроверить, когда появится доступ.
 
 ## Тестирование
 
-- Контрактный тест адаптера по записанным ответам (`ArchObject` страниц трёх типов + метаданные типов); ожидаемые `GraphCommand` сравнивать по значению. Fixtures и тест формата уже есть (`EamApiFixturesContractTest`); тест нормализатора появится вместе с `EamAdapter`.
+- Контрактный тест адаптера по записанным ответам (`ArchObject` страниц трёх типов + метаданные типов); ожидаемые `GraphCommand` сравнивать по значению. Fixtures и тест формата уже есть (`EamApiFixturesContractTest`); тесты нормализатора — `EamArchObjectMapperTest`, коннектора — `EamApiConnectorTest`, `CompositeEamConnectorTest`.
 - Сценарии (по одному набору fixtures и тесту): пагинация (последняя страница пустая и неполная), повтор той же `ver` (no-op), смена ссылки (закрытие старой связи и открытие новой), ссылка на ещё не загруженный объект (`DeferRelation`), пропажа объекта из списка (tombstone), одинаковое `name` у разных `id`.
-- Вертикальный срез `ITSystem → Solution → Platform` проверяется приёмочным тестом вместе с остальным графом после переделки адаптера; seed новой заглушки для этого уже согласован с данными демо.
+- Вертикальный срез `ITSystem → Solution → Platform` проверяется `SyncAcceptanceIT` и `EamApiProjectionIT` (в том числе порядок прихода SCM и EAM, смена ссылки, `DeferRelation`, одинаковое `name` у разных `id`); переход с ключей `EAM-…` на `id` — `EamKeyMigrationIT` (старый журнал, новый snapshot, reconcile, rebuild).
+
+## Переход живого стенда
+
+Порядок и проверка — в `platform/docker/README.md` («`adapter-eam`: eam-api и старая заглушка»). Коротко: деплой → первый цикл нового адаптера (checkpoint старого формата не разбирается, чтение начинается заново без маркера и удалений) → reconcile (`POST /admin/reconcile/eam`) tombstone-ит `IT_SYSTEM EAM-…` → `POST /admin/rebuild`. Пока старый и новый узел живы одновременно, `identity_candidate` может содержать пару «старый ключ — преемник» (одинаковое имя); её нужно отклонить, других кандидатов переход не создаёт.

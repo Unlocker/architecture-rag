@@ -176,7 +176,7 @@ public class ConsoleReadRepository {
     return page(
         "source_conflict",
         "gid, property, dissent_source, dissent_type, dissent_id, dissent_value, master_source, master_type,"
-            + " master_id, master_value, status, opened_at, updated_at, resolved_at",
+            + " master_id, master_value, status, opened_at, updated_at, resolved_at, kind",
         where,
         "updated_at DESC, gid, property, dissent_source, dissent_type, dissent_id",
         page,
@@ -195,7 +195,8 @@ public class ConsoleReadRepository {
                 rs.getString("status"),
                 instant(rs, "opened_at"),
                 instant(rs, "updated_at"),
-                instant(rs, "resolved_at")));
+                instant(rs, "resolved_at"),
+                rs.getString("kind")));
   }
 
   /** Страница {@code identity_candidate}. */

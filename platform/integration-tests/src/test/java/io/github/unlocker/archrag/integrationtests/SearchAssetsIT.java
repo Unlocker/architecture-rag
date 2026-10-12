@@ -101,7 +101,7 @@ class SearchAssetsIT {
     var prod = fixtures.node(UUID.fromString(GID_PROD), "env", "prod",
         new Environment("prod", "Production", EnvironmentClass.PROD), t1);
     var dep = fixtures.node(UUID.fromString(GID_DEP), "deployment", "billing-prod",
-        new Deployment("billing-prod", "billing-prod", null, null, null), t1);
+        new Deployment("billing-prod", "billing-prod", null, null, null, null, null, null), t1);
     var vm = fixtures.node(UUID.fromString(GID_VM), "host", "vm-prod-01",
         new ComputeInstance("vm-prod-01", ComputeKind.VIRTUAL_MACHINE, null, null, null, null, null), t1);
     var vmOld = fixtures.node(UUID.fromString(GID_VM_OLD), "host", "vm-prod-old",

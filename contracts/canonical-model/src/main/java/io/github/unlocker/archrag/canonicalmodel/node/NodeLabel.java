@@ -12,6 +12,8 @@ import java.util.Set;
  */
 public enum NodeLabel {
     IT_SYSTEM("ITSystem"),
+    SOLUTION("Solution"),
+    PLATFORM("Platform"),
     SERVICE("Service"),
     REPOSITORY("Repository"),
     TEAM("Team"),

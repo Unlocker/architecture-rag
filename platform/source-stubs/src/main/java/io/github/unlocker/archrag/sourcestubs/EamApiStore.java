@@ -44,6 +44,19 @@ public final class EamApiStore {
     }
   }
 
+  /** {@code id} первого объекта типа, у которого {@code attrs[attr]} равен значению (для сверки {@code eam_id} с {@code id}). */
+  public synchronized Optional<Long> findIdByAttr(String type, String attr, Object value) {
+    return byType.getOrDefault(type, new TreeMap<>()).values().stream()
+        .filter(e -> value.equals(e.attrs().get(attr)))
+        .map(Entry::id)
+        .findFirst();
+  }
+
+  /** {@code ver} объекта или пусто, если его нет (не создан либо архивирован). */
+  public synchronized Optional<Long> version(String type, long id) {
+    return find(type, id).map(Entry::ver);
+  }
+
   synchronized boolean hasType(String type) {
     return byType.containsKey(type);
   }

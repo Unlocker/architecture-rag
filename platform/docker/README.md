@@ -29,7 +29,7 @@ docker compose up -d --wait --wait-timeout 300
 | `mcp-server` | MCP на `/mcp`, масштабируется `--scale` |
 | `adapter-{eam,scm,cmdb,deploymap}` | по одному экземпляру на источник (`replicas: 1`), образ `demo-launcher` |
 | `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` |
-| `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); адаптер к ней пока не подключён |
+| `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); её читает `adapter-eam` (`PLATFORM`, `SOLUTION`, `IT_SYSTEM` с ключом `id`) |
 | `reverse-proxy` | nginx, только TLS: `/mcp`, `/webhooks/<eam|scm|cmdb|deploymap>`, токен-endpoint Keycloak |
 | `certs` | одноразовый: демо-CA и серверные сертификаты в volume `certs` (идемпотентно) |
 | `neo4j-init` | одноразовый: пользователь Neo4j `archrag_reader` для `mcp-server` и `admin-console` |
@@ -46,7 +46,30 @@ docker compose exec eam-api-stub sh -c 'curl -s -H "Authorization: Token $(cat /
 ```
 
 Без заголовка ответ 401. Типы: `platforms`, `itproducts` (ИТ-решение, допущение), `itsystems`; метаданные: `/api/types/`, `/api/types/{id}/options/?kind=fields|system`.
-`eam_id` ИТ-систем (`EAM-1042`, `EAM-2001`) совпадает с `systemCode` в SCM.
+`eam_id` ИТ-систем (`EAM-1042`, `EAM-2001`) совпадает с `systemCode` в SCM; ключ записи — целочисленный `id` (`5101`, `5102`).
+
+Объекты меняются через управляющий вход (порт 8091 внутри контейнера, наружу не публикуется; `/api/**` остаётся только для чтения):
+
+```bash
+docker compose exec eam-api-stub curl -s -X POST http://127.0.0.1:8091/control/upsert -H 'Content-Type: application/json' \
+  -d '{"type":"itsystems","id":5101,"attrs":{"name":"Payments Core","eam_id":"EAM-1042","product_id":7201,"platform_id":3101,"ownerTeam":"TEAM-PAY"}}'
+docker compose exec eam-api-stub curl -s -X POST http://127.0.0.1:8091/control/archive -H 'Content-Type: application/json' -d '{"type":"platforms","id":3102}'
+```
+
+`upsert` заменяет `attrs` целиком (пропущенные поля, в том числе ссылки, считаются удалёнными) и повышает `ver`.
+
+## `adapter-eam`: eam-api и старая заглушка
+
+`adapter-eam` — один источник `EAM` из двух половин: `eam-api-stub` отдаёт `PLATFORM`, `SOLUTION`, `IT_SYSTEM`; `TEAM` и
+`SERVICE_DEPENDENCY` пока приходят из старой `stub-eam` (в `eam-api` таких данных нет; долг PoC, уходит с подключением реального
+EAM). `IT_SYSTEM` старой заглушки отбрасывается. `ARCHRAG_EAM_MODE=legacy` в `.env` возвращает старый путь (откат): записи с
+ключами `5101`… уйдут в tombstone следующим reconcile.
+
+**Переход живого стенда** (`ITSystem` меняет ключ `EAM-1042` → `5101`): `docker compose up -d --build adapter-eam`, дождаться первого
+полного snapshot (reconcile переведёт старые `IT_SYSTEM EAM-…` в tombstone: их нет в прогоне), затем `POST /admin/rebuild`
+ingestion-сервиса. Rebuild переигрывает журнал, в том числе tombstone старых ключей, и SCM-записи получают связь на `ITSystem 5101`
+через `eamCode`. Reconcile запускается `POST /admin/reconcile/eam` (иначе ждать интервала reconcile). Пара кандидатов «старый ключ — преемник» в `identity_candidate` ожидаема (одинаковое имя), её отклоняют. Без rebuild связи SCM на старые узлы живут до новой версии записи SCM. Crosswalk `EAM-1042 ↔ 5101` не создаётся:
+со старым узлом он слил бы gid с архивируемым.
 
 ## Токен и проверка
 
@@ -211,3 +234,11 @@ webhook порог p95 ≤ 30 с, по polling — интервал + 5 с), thr
   его после старта контекста, то есть после миграций и схемы Neo4j).
 - otel-collector без healthcheck: в образе нет shell и wget. Готовность проверяет healthcheck Prometheus (цель collector в состоянии up).
 - Адаптер каждого источника запускается ровно в одном экземпляре; `/control/snapshot` адаптера proxy не публикует.
+
+## Сценарий: смена commit развёртывания
+
+```bash
+scripts/deployment-commit-check.sh   # приёмка фичи UNLOCKER-248 (ADR 0029); нужны Docker и python3 на хосте
+```
+
+Скрипт ждёт пустой очереди журнала, читает `find_runtime_footprint` по `Payments Core` (токен и CA — как в разделе «Токен и проверка») и берёт у `dep-payments-api-prod` `sourceCommit` и `deployedFrom`. Затем через `POST /control/upsert` заглушки `stub-deploymap` отправляет ту же запись формата `deploymap-poc-1` с другим commit, ждёт события в inbox (webhook или polling) и пустой очереди. Повторное чтение MCP должно дать новый commit, а в Neo4j у развёртывания должно остаться ровно одно открытое ребро `DEPLOYED_FROM` (новый commit) и одно закрытое (`validTo` задан) со старым. При повторном запуске commit переключается обратно. Код выхода не 0 при любом расхождении.

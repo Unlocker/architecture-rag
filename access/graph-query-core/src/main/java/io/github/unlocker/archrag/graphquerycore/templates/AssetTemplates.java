@@ -24,7 +24,8 @@ public final class AssetTemplates {
   private static final String ENV = "(:Environment {code: $environment})";
 
   /**
-   * Поиск активов: точное совпадение по {@code gid} или {@code sourceId}, затем FULLTEXT {@code asset_text}.
+   * Поиск активов: точное совпадение по {@code gid}, {@code sourceId} или {@code ITSystem.eamCode} (код EAM, по которому
+   * на систему ссылается SCM), затем FULLTEXT {@code asset_text}.
    *
    * <p>Параметры: {@code query} (trim-нутый ввод), {@code text} (Lucene-экранированный ввод или
    * {@code null}), {@code types} и {@code environment} (оба могут быть {@code null}). Возвращает
@@ -42,6 +43,9 @@ public final class AssetTemplates {
             RETURN n, %s AS score, 'EXACT' AS matchType
             UNION
             MATCH (:SourceRecord {sourceId: $query, active: true})-[:ASSERTS]->(n)
+            RETURN n, %s AS score, 'EXACT' AS matchType
+            UNION
+            MATCH (n:ITSystem) WHERE n.eamCode = $query
             RETURN n, %s AS score, 'EXACT' AS matchType
             UNION
             WITH $text AS t WHERE t IS NOT NULL
@@ -81,6 +85,7 @@ public final class AssetTemplates {
                   LABELS,
                   EXACT_SCORE,
                   EXACT_SCORE,
+                  EXACT_SCORE,
                   cypherList(SEARCHABLE_TYPES),
                   ENV,
                   ENV,
@@ -95,7 +100,7 @@ public final class AssetTemplates {
    * {@code OWNS_RECORD}, {@code PROCESSED}, {@code PART_OF}, {@code HOSTED_ON}) не входят.
    */
   public static final List<String> RELATION_TYPES =
-      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY");
+      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY", "DEPLOYED_FROM");
 
   /**
    * Карточка актива по {@code gid}. Метки только из {@link #SEARCHABLE_TYPES}: служебные узлы не читаются.

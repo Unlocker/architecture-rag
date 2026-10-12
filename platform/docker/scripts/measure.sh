@@ -133,7 +133,11 @@ def fmt(x, unit="ms"):
 
 
 # --- фикстуры ------------------------------------------------------------------------------------------------
+# Код EAM ИТ-системы Payments Core (ITSystem.eamCode); ключ записи в источнике — целочисленный id 5101 (eam-api).
 SEED_SOURCE_ID = "EAM-1042"
+SEED_SYSTEM_ID = 5101
+# Путь webhook: eam-api вебхуков не отправляет (реальный EAM тоже), поэтому его меряем на Team из старой заглушки.
+TEAM_ID = "TEAM-PAY"
 _, body = rpc("tools/list")
 tools = [t["name"] for t in body["result"]["tools"]]
 log(f"tools: {tools}")
@@ -145,6 +149,10 @@ for _ in range(3):  # первый вызов после холодного ст
 if err or not found.get("items"):
     sys.exit(f"seed {SEED_SOURCE_ID} is not found in the graph: {err}")
 GID = found["items"][0]["gid"]
+ms, err, team = call("search_assets", {"query": TEAM_ID})
+if err or not team.get("items"):
+    sys.exit(f"seed {TEAM_ID} is not found in the graph: {err}")
+TEAM_GID = team["items"][0]["gid"]
 FIXTURES = {
     "ping": {},
     "search_assets": {"query": SEED_SOURCE_ID},
@@ -184,14 +192,25 @@ raw["tools"] = tool_rows
 log(f"B: source -> graph latency, N={N}, paths={E2E_PATHS}, poll jitter up to {JITTER:.0f}s")
 
 
+def control(stub, body):
+    return dc("exec", "-T", stub, "curl", "-sf", "-X", "POST", "http://127.0.0.1:8091/control/upsert",
+              "-H", "Content-Type: application/json", "--data-binary", "@-", stdin=json.dumps(body))
+
+
 def upsert(src_type, sid, name, notify, stub="stub-eam"):
-    body = json.dumps({"type": src_type, "id": sid, "notify": notify,
-                       "payload": {"name": name, "ownerTeam": "TEAM-PAY"}})
-    out = dc("exec", "-T", stub, "curl", "-sf", "-X", "POST", "http://127.0.0.1:8091/control/upsert",
-             "-H", "Content-Type: application/json", "--data-binary", "@-", stdin=body)
+    """Объект старой заглушки (TEAM, SERVICE_DEPENDENCY): возвращает (sourceVersion, статус webhook | None)."""
+    out = control(stub, {"type": src_type, "id": sid, "notify": notify, "payload": {"name": name}})
     version = int(re.search(r'"sourceVersion":(\d+)', out).group(1))
     wh = re.search(r'"webhookStatus":(\d+)', out)
     return version, int(wh.group(1)) if wh else None
+
+
+def upsert_system(name):
+    """ИТ-система Payments Core в eam-api (все attrs, иначе пропали бы eam_id и связи); возвращает ver."""
+    out = control("eam-api-stub", {"type": "itsystems", "id": SEED_SYSTEM_ID, "attrs": {
+        "name": name, "eam_id": SEED_SOURCE_ID, "status": "ACTIVE", "criticality": "HIGH",
+        "description": "Payments processing system", "product_id": 7201, "platform_id": 3101, "ownerTeam": TEAM_ID}})
+    return int(re.search(r'"ver":(\d+)', out).group(1))
 
 
 e2e_by_path, e2e_stats = {}, {}
@@ -202,13 +221,17 @@ for path in E2E_PATHS:
         if not notify:
             time.sleep(random.uniform(0, JITTER))  # равномерная выборка фазы polling; webhook идёт без задержки
         name = f"measure-{path}-{uuid.uuid4().hex[:8]}"
-        version, wh = upsert("IT_SYSTEM", SEED_SOURCE_ID, name, notify)
-        if notify and not (wh and 200 <= wh < 300):
-            fail(f"webhook was not accepted by the adapter (webhookStatus={wh}) for {name}")
+        if notify:
+            version, wh = upsert("TEAM", TEAM_ID, name, True)
+            target_gid = TEAM_GID
+            if not (wh and 200 <= wh < 300):
+                fail(f"webhook was not accepted by the adapter (webhookStatus={wh}) for {name}")
+        else:
+            version, target_gid = upsert_system(name), GID
         t0 = time.perf_counter()
         deadline = t0 + 300
         while True:
-            ms_, err, asset = call("get_asset", {"gid": GID, "includeRelations": False})
+            ms_, err, asset = call("get_asset", {"gid": target_gid, "includeRelations": False})
             if err is None and asset and asset["properties"].get("name") == name:
                 break
             if time.perf_counter() > deadline:
@@ -233,9 +256,10 @@ run_id = uuid.uuid4().hex[:8]
 prefix = f"EAM-LOAD-{run_id}"
 lines = "".join(f"{prefix}-{i:05d}\n" for i in range(M))
 # Burst идёт без webhook (notify=false): сценарий сопоставим с замером #59, дубли webhook + polling не искажают throughput.
+# События TEAM: ИТ-системы приходят из eam-api, а у него нет пути вставки пачкой с ключами вне seed; ингест тот же.
 script = ('while read -r id; do curl -sf -o /dev/null -X POST http://127.0.0.1:8091/control/upsert '
-          '-H "Content-Type: application/json" -d "{\\"type\\":\\"IT_SYSTEM\\",\\"id\\":\\"$id\\",\\"notify\\":false,'
-          '\\"payload\\":{\\"name\\":\\"load $id\\",\\"ownerTeam\\":\\"TEAM-PAY\\"}}" || exit 1; done')
+          '-H "Content-Type: application/json" -d "{\\"type\\":\\"TEAM\\",\\"id\\":\\"$id\\",\\"notify\\":false,'
+          '\\"payload\\":{\\"name\\":\\"load $id\\"}}" || exit 1; done')
 t_burst0 = time.time()
 dc("exec", "-T", "stub-eam", "sh", "-c", script, stdin=lines)
 t_burst_sent = time.time()

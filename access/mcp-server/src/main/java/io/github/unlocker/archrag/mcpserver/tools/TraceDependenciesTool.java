@@ -90,7 +90,8 @@ public class TraceDependenciesTool {
       description =
           "Трассировка зависимостей актива по gid. mode=trace (по умолчанию): upstream идёт против направления связей,"
               + " downstream по направлению; связи из allowlist (DEPENDS_ON, DECOMPOSED_INTO, HAS_DEPLOYMENT, RUNS_ON,"
-              + " HOSTED_ON, OWNED_BY). mode=impact: только вверх (против стрелок) по RUNS_ON, HOSTED_ON, HAS_DEPLOYMENT,"
+              + " HOSTED_ON, OWNED_BY,"
+              + " DEPLOYED_FROM). mode=impact: только вверх (против стрелок) по RUNS_ON, HOSTED_ON, HAS_DEPLOYMENT,"
               + " DECOMPOSED_INTO, DEPENDS_ON до затронутых Service/ITSystem (affected); необязательный environment"
               + " (Environment.code) требует, чтобы каждый Deployment на пути был в этом окружении, путь без Deployment"
               + " фильтр проходит. Только действующие связи и текущие узлы. Шаг пути объясним: связь несёт источник"

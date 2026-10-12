@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 
@@ -46,23 +47,27 @@ public final class PostgresSourceConflicts implements SourceConflicts {
           + " WHERE d.gid = ? AND NOT d.authoritative AND d.value <> m.value";
   private static final String UPSERT_CONFLICT =
       "INSERT INTO source_conflict (gid, property, dissent_source, dissent_type, dissent_id, dissent_value,"
-          + " master_value, master_source, master_type, master_id, status, opened_at, updated_at)"
-          + " VALUES (?,?,?,?,?,?,?,?,?,?,'OPEN',?,?)"
+          + " master_value, master_source, master_type, master_id, status, opened_at, updated_at, kind)"
+          + " VALUES (?,?,?,?,?,?,?,?,?,?,'OPEN',?,?,?)"
           + " ON CONFLICT (gid, property, dissent_source, dissent_type, dissent_id) DO UPDATE SET"
           + " dissent_value = EXCLUDED.dissent_value, master_value = EXCLUDED.master_value,"
           + " master_source = EXCLUDED.master_source, master_type = EXCLUDED.master_type,"
-          + " master_id = EXCLUDED.master_id, status = 'OPEN', resolved_at = NULL,"
+          + " master_id = EXCLUDED.master_id, kind = EXCLUDED.kind, status = 'OPEN', resolved_at = NULL,"
           + " updated_at = CASE WHEN source_conflict.status = 'OPEN' AND source_conflict.dissent_value = EXCLUDED.dissent_value"
           + " AND source_conflict.master_value = EXCLUDED.master_value THEN source_conflict.updated_at"
           + " ELSE EXCLUDED.updated_at END";
   private static final String OPEN_KEYS =
-      "SELECT property, dissent_source, dissent_type, dissent_id FROM source_conflict WHERE gid = ? AND status = 'OPEN'";
+      "SELECT property, dissent_source, dissent_type, dissent_id FROM source_conflict WHERE gid = ? AND status = 'OPEN' AND kind = 'PROPERTY'";
   private static final String RESOLVE =
       "UPDATE source_conflict SET status = 'RESOLVED', resolved_at = ?, updated_at = ?"
           + " WHERE gid = ? AND property = ? AND dissent_source = ? AND dissent_type = ? AND dissent_id = ?";
+  private static final String RESOLVE_RELATION =
+      "UPDATE source_conflict SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE gid = ? AND kind = 'RELATION'"
+          + " AND status = 'OPEN' AND dissent_source = ? AND dissent_type = ? AND dissent_id = ?";
+  private static final String RESOLVE_RELATION_PROPERTY = RESOLVE_RELATION + " AND property = ?";
   private static final String SELECT_OPEN =
       "SELECT gid, property, dissent_source, dissent_type, dissent_id, dissent_value, master_source, master_type,"
-          + " master_id, master_value, status, opened_at, updated_at, resolved_at FROM source_conflict"
+          + " master_id, master_value, status, opened_at, updated_at, resolved_at, kind FROM source_conflict"
           + " WHERE gid = ? AND status = 'OPEN' ORDER BY property, dissent_source, dissent_type, dissent_id";
 
   private final DataSource dataSource;
@@ -98,12 +103,29 @@ public final class PostgresSourceConflicts implements SourceConflicts {
   }
 
   @Override
+  public List<SourceConflict> assertRelation(
+      SourceKey dissent, UUID gid, String property, String dissentValue, Optional<SourceKey> master, String masterValue) {
+    return inTransaction(
+        "assertRelation failed",
+        c -> {
+          lock(c, gid);
+          if (master.isEmpty() || dissentValue.equals(masterValue)) {
+            resolveRelation(c, gid, dissent, property);
+          } else {
+            upsertRelation(c, gid, property, dissent, dissentValue, master.get(), masterValue);
+          }
+          return selectOpen(c, gid);
+        });
+  }
+
+  @Override
   public List<SourceConflict> retract(SourceKey key, UUID gid) {
     return inTransaction(
         "retract failed",
         c -> {
           lock(c, gid);
           deleteAssertions(c, key);
+          resolveRelation(c, gid, key, null);
           return recompute(c, gid);
         });
   }
@@ -151,6 +173,40 @@ public final class PostgresSourceConflicts implements SourceConflicts {
     }
   }
 
+  private static void upsertRelation(
+      Connection c, UUID gid, String property, SourceKey dissent, String dissentValue, SourceKey master, String masterValue)
+      throws SQLException {
+    Timestamp now = Timestamp.from(Instant.now());
+    try (PreparedStatement ps = c.prepareStatement(UPSERT_CONFLICT)) {
+      int i = 1;
+      ps.setObject(i++, gid);
+      ps.setString(i++, property);
+      i = bindKey(ps, i, dissent);
+      ps.setString(i++, dissentValue);
+      ps.setString(i++, masterValue);
+      i = bindKey(ps, i, master);
+      ps.setTimestamp(i++, now);
+      ps.setTimestamp(i++, now);
+      ps.setString(i, SourceConflict.Kind.RELATION.name());
+      ps.executeUpdate();
+    }
+  }
+
+  /** Закрывает открытые {@code RELATION}-строки записи {@code dissent}; {@code property == null} — все свойства. */
+  private static void resolveRelation(Connection c, UUID gid, SourceKey dissent, String property) throws SQLException {
+    Timestamp now = Timestamp.from(Instant.now());
+    try (PreparedStatement ps = c.prepareStatement(property == null ? RESOLVE_RELATION : RESOLVE_RELATION_PROPERTY)) {
+      ps.setTimestamp(1, now);
+      ps.setTimestamp(2, now);
+      ps.setObject(3, gid);
+      int i = bindKey(ps, 4, dissent);
+      if (property != null) {
+        ps.setString(i, property);
+      }
+      ps.executeUpdate();
+    }
+  }
+
   /** Открывает расходящиеся пары, закрывает перестав расходиться; возвращает открытые конфликты {@code gid}. */
   private static List<SourceConflict> recompute(Connection c, UUID gid) throws SQLException {
     Timestamp now = Timestamp.from(Instant.now());
@@ -182,7 +238,8 @@ public final class PostgresSourceConflicts implements SourceConflicts {
         ps.setString(i++, row.get(7));
         ps.setString(i++, row.get(8));
         ps.setTimestamp(i++, now);
-        ps.setTimestamp(i, now);
+        ps.setTimestamp(i++, now);
+        ps.setString(i, SourceConflict.Kind.PROPERTY.name());
         ps.executeUpdate();
       }
       stillOpen.add(List.of(row.get(0), row.get(1), row.get(2), row.get(3)));
@@ -231,7 +288,8 @@ public final class PostgresSourceConflicts implements SourceConflicts {
                   SourceConflict.Status.valueOf(rs.getString(11)),
                   rs.getTimestamp(12).toInstant(),
                   rs.getTimestamp(13).toInstant(),
-                  resolved == null ? null : resolved.toInstant()));
+                  resolved == null ? null : resolved.toInstant(),
+                  SourceConflict.Kind.valueOf(rs.getString(15))));
         }
         return result;
       }

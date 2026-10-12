@@ -49,10 +49,11 @@ class Neo4jSchemaIT {
     List<String> constraints = names("SHOW CONSTRAINTS YIELD name RETURN name");
     List<String> indexes = names("SHOW INDEXES YIELD name RETURN name");
     List<String> expectedConstraints = new ArrayList<>(List.of(
-        "it_system_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid"));
+        "it_system_gid", "solution_gid", "platform_gid", "service_gid", "repository_gid", "team_gid", "environment_gid", "deployment_gid", "compute_instance_gid", "virtual_machine_gid", "physical_server_gid", "namespace_gid", "kubernetes_cluster_gid"));
     expectedConstraints.addAll(List.of("source_record_key", "source_system_code", "sync_run_id", "pending_relation_key", "environment_code"));
     assertThat(constraints).containsExactlyInAnyOrderElementsOf(expectedConstraints);
     assertThat(indexes.stream().filter("asset_text"::equals)).hasSize(1);
+    assertThat(indexes.stream().filter("it_system_eam_code"::equals)).hasSize(1);
     assertThat(indexes).doesNotHaveDuplicates();
   }
 

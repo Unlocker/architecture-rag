@@ -6,8 +6,12 @@ import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
+import io.github.unlocker.archrag.canonicalmodel.node.Deployment;
+import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
+import io.github.unlocker.archrag.canonicalmodel.node.Solution;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
@@ -20,6 +24,7 @@ import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
 import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.identityresolution.SourceConflicts;
+import io.github.unlocker.archrag.normalizer.DeploymentLookup;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.normalizer.UnresolvedReference;
@@ -80,9 +85,15 @@ public final class EventProcessor {
 
   static final String CANDIDATE_FAILED = "IDENTITY_CANDIDATE_FAILED";
   static final String CONFLICT_FAILED = "SOURCE_CONFLICT_FAILED";
+  /** Свойство, несущее ссылку развёртывания на систему EAM; имя {@code RELATION}-конфликта. */
+  static final String SYSTEM_PROPERTY = "eamSystemId";
+  /** Свойство узла, несущее платформу ИТ-системы и решения; имя {@code RELATION}-конфликта (ADR 0031). */
+  static final String PLATFORM_PROPERTY = "platformId";
   static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
   static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
+  private static final String IT_SYSTEM_TYPE = "IT_SYSTEM";
+  private static final String SOLUTION_TYPE = "SOLUTION";
   private static final String SOURCE_PREFIX = "urn:corp:";
 
   private static final Set<ProcessingStatus> FINISHED =
@@ -100,7 +111,10 @@ public final class EventProcessor {
   private final ReconciliationTrigger reconciliation;
   private final IdentityCandidates candidates;
   private final SourceConflicts conflicts;
+  private final DeploymentLookup lookup;
+  private final EamLookup eamLookup;
 
+  /** Без чтения графа для проверки системы EAM из chart: такие конфликты не открываются. */
   public EventProcessor(
       EventJournal journal,
       Normalizer normalizer,
@@ -109,6 +123,33 @@ public final class EventProcessor {
       ReconciliationTrigger reconciliation,
       IdentityCandidates candidates,
       SourceConflicts conflicts) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, DeploymentLookup.NONE);
+  }
+
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, EamLookup.NONE);
+  }
+
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup) {
+    this.lookup = Objects.requireNonNull(lookup, "lookup");
+    this.eamLookup = Objects.requireNonNull(eamLookup, "eamLookup");
     this.journal = Objects.requireNonNull(journal, "journal");
     this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
     this.identity = Objects.requireNonNull(identity, "identity");
@@ -181,6 +222,8 @@ public final class EventProcessor {
     ConflictMarkers markers;
     try {
       markers = assertProperties(key, commands, gids);
+      markers = assertSystemRelation(key, commands, gids, markers);
+      markers = assertSystemPlatform(key, commands, gids, markers);
     } catch (IdentityStoreException e) {
       // Замена утверждений идемпотентна: повтор безопасен. Значения свойств в причину не попадают.
       return retry(event, CONFLICT_FAILED, "source conflict store failed");
@@ -309,6 +352,15 @@ public final class EventProcessor {
     } catch (Neo4jException e) {
       return retry(event, "GRAPH_ERROR", e.getClass().getSimpleName());
     }
+    if (result.outcome() != ProjectionOutcome.IGNORED_OLD_VERSION) {
+      try {
+        recheckServiceDeployments(key, commands);
+        recheckSolutionSystems(key, commands);
+      } catch (IdentityStoreException e) {
+        // Граф уже записан, проверка идемпотентна: повтор события безопасен (проектор вернёт NOOP).
+        return retry(event, CONFLICT_FAILED, "source conflict store failed");
+      }
+    }
     ProcessingStatus status =
         result.outcome() == ProjectionOutcome.IGNORED_OLD_VERSION
             ? ProcessingStatus.IGNORED_OLD_VERSION
@@ -339,6 +391,154 @@ public final class EventProcessor {
       }
     }
     return ConflictMarkers.none();
+  }
+
+  /**
+   * Сверяет {@code Deployment.eamSystemId} из chart с системой EAM сервиса развёртывания (из {@code HAS_DEPLOYMENT}
+   * этого же события и графа); вне транзакции Neo4j. Граф не меняется: расхождение только фиксируется. Без
+   * {@code eamSystemId} (или без известной системы сервиса) открытые конфликты записи закрываются.
+   *
+   * @param markers результат {@code assertProperties}; заменяется полным набором конфликтов {@code gid}
+   */
+  private ConflictMarkers assertSystemRelation(
+      SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids, ConflictMarkers markers) {
+    if (key.source() != SourceSystemCode.DEPLOYMAP) {
+      return markers;
+    }
+    for (GraphCommand command : commands) {
+      if (command instanceof UpsertNode upsert && upsert.data() instanceof Deployment deployment) {
+        UUID gid = gids.get(key);
+        Optional<SourceKey> master = Optional.empty();
+        if (deployment.eamSystemId() != null) {
+          master =
+              commands.stream()
+                  .filter(
+                      c ->
+                          c instanceof UpsertRelation r
+                              && r.type() == RelationType.HAS_DEPLOYMENT
+                              && r.to().equals(key)
+                              && r.from().source() == SourceSystemCode.SCM
+                              && "SERVICE".equals(r.from().sourceType()))
+                  .map(c -> ((UpsertRelation) c).from())
+                  .findFirst()
+                  .flatMap(lookup::eamSystemOfService);
+        }
+        String chartValue = deployment.eamSystemId() == null ? "" : String.valueOf(deployment.eamSystemId());
+        return ConflictMarkers.of(
+            gid,
+            conflicts.assertRelation(
+                key, gid, SYSTEM_PROPERTY, chartValue, master, master.map(SourceKey::sourceId).orElse("")));
+      }
+    }
+    return markers;
+  }
+
+  /**
+   * После записи SCM-сервиса перепроверяет его развёртывания с {@code eamSystemId}: система сервиса могла
+   * появиться или смениться, и порядок прихода SCM и DeployMap на результат не влияет. Маркеры {@code ASSERTS}
+   * развёртываний здесь не пишутся (запрос проектора относится к {@code gid} одной записи): они обновятся при
+   * следующем событии развёртывания, а сам конфликт виден в хранилище сразу.
+   */
+  private void recheckServiceDeployments(SourceKey key, List<GraphCommand> commands) {
+    boolean isService = key.source() == SourceSystemCode.SCM && "SERVICE".equals(key.sourceType());
+    if (!isService || commands.stream().anyMatch(TombstoneSourceRecord.class::isInstance)) {
+      return;
+    }
+    List<DeploymentLookup.ChartDeployment> deployments = lookup.chartDeploymentsOfService(key);
+    if (deployments.isEmpty()) {
+      return;
+    }
+    Optional<SourceKey> master = lookup.eamSystemOfService(key);
+    for (DeploymentLookup.ChartDeployment deployment : deployments) {
+      identity
+          .find(deployment.key())
+          .ifPresent(
+              gid ->
+                  conflicts.assertRelation(
+                      deployment.key(),
+                      gid,
+                      SYSTEM_PROPERTY,
+                      String.valueOf(deployment.eamSystemId()),
+                      master,
+                      master.map(SourceKey::sourceId).orElse("")));
+    }
+  }
+
+  /**
+   * Сверяет {@code ITSystem.platformId} события EAM с {@code platformId} её решения (ключ решения — из
+   * {@code USES_SOLUTION} этого же события, в том числе отложенной); вне транзакции Neo4j. Граф не меняется:
+   * расхождение только фиксируется. Без {@code platformId} системы, без известного решения или без его
+   * {@code platformId} открытые конфликты записи закрываются.
+   *
+   * @param markers предыдущий результат; заменяется полным набором конфликтов {@code gid}
+   */
+  private ConflictMarkers assertSystemPlatform(
+      SourceKey key, List<GraphCommand> commands, Map<SourceKey, UUID> gids, ConflictMarkers markers) {
+    if (key.source() != SourceSystemCode.EAM || !IT_SYSTEM_TYPE.equals(key.sourceType())) {
+      return markers;
+    }
+    for (GraphCommand command : commands) {
+      if (command instanceof UpsertNode upsert && upsert.data() instanceof ITSystem system) {
+        UUID gid = gids.get(key);
+        Optional<EamLookup.SolutionPlatform> solution =
+            solutionOf(key, commands).flatMap(eamLookup::solutionPlatform).filter(s -> s.platformId() != null);
+        Optional<SourceKey> master =
+            system.platformId() == null ? Optional.empty() : solution.map(EamLookup.SolutionPlatform::solution);
+        String systemValue = system.platformId() == null ? "" : String.valueOf(system.platformId());
+        String masterValue = master.isPresent() ? String.valueOf(solution.get().platformId()) : "";
+        return ConflictMarkers.of(gid, conflicts.assertRelation(key, gid, PLATFORM_PROPERTY, systemValue, master, masterValue));
+      }
+    }
+    return markers;
+  }
+
+  /** Ключ решения системы из {@code USES_SOLUTION} команд события: готовой или отложенной связи. */
+  private static Optional<SourceKey> solutionOf(SourceKey system, List<GraphCommand> commands) {
+    return commands.stream()
+        .map(
+            c ->
+                switch (c) {
+                  case UpsertRelation r -> r;
+                  case DeferRelation d -> d.relation();
+                  default -> null;
+                })
+        .filter(r -> r != null && r.type() == RelationType.USES_SOLUTION && r.from().equals(system))
+        .map(UpsertRelation::to)
+        .findFirst();
+  }
+
+  /**
+   * После записи решения EAM перепроверяет {@code platformId} его систем: решение могло прийти позже системы или
+   * сменить платформу, порядок прихода на результат не влияет. Маркеры {@code ASSERTS} систем здесь не пишутся
+   * (ограничение 1 ADR 0030): они обновятся при следующем событии системы, а сам конфликт виден в хранилище сразу.
+   */
+  private void recheckSolutionSystems(SourceKey key, List<GraphCommand> commands) {
+    boolean isSolution = key.source() == SourceSystemCode.EAM && SOLUTION_TYPE.equals(key.sourceType());
+    if (!isSolution || commands.stream().anyMatch(TombstoneSourceRecord.class::isInstance)) {
+      return;
+    }
+    Long platformId =
+        commands.stream()
+            .filter(c -> c instanceof UpsertNode u && u.data() instanceof Solution)
+            .map(c -> ((Solution) ((UpsertNode) c).data()).platformId())
+            .filter(Objects::nonNull)
+            .findFirst()
+            // null из источника не затирает известное: платформа решения в графе осталась прежней.
+            .orElseGet(() -> eamLookup.solutionPlatform(key).map(EamLookup.SolutionPlatform::platformId).orElse(null));
+    for (EamLookup.SystemPlatform system : eamLookup.systemsOfSolution(key)) {
+      Optional<SourceKey> master = platformId == null || system.platformId() == null ? Optional.empty() : Optional.of(key);
+      identity
+          .find(system.system())
+          .ifPresent(
+              gid ->
+                  conflicts.assertRelation(
+                      system.system(),
+                      gid,
+                      PLATFORM_PROPERTY,
+                      system.platformId() == null ? "" : String.valueOf(system.platformId()),
+                      master,
+                      master.isPresent() ? String.valueOf(platformId) : ""));
+    }
   }
 
   /** Снимает утверждения удалённой записи; без {@code gid} (запись не приходила) маркеры не меняются. */

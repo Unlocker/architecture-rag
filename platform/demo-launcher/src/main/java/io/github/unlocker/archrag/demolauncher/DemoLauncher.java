@@ -29,7 +29,13 @@ import org.postgresql.ds.PGSimpleDataSource;
  * кодом 2 и сообщением без значений секретов.
  *
  * <p>{@code DemoLauncher eam-api-stub}: заглушка EAM в формате реального API ({@link EamApiStub}) на
- * {@code ARCHRAG_STUB_PORT}; токен из {@code ARCHRAG_EAM_API_TOKEN}. Работает рядом со старой заглушкой {@code stub EAM}.
+ * {@code ARCHRAG_STUB_PORT}; токен из {@code ARCHRAG_EAM_API_TOKEN}; управляющий {@code POST /control/upsert|archive}
+ * ({@link EamApiControl}) на порту {@value #STUB_CONTROL_PORT}. Работает рядом со старой заглушкой {@code stub EAM}
+ * ({@code TEAM}, {@code SERVICE_DEPENDENCY}).
+ *
+ * <p>{@code DemoLauncher adapter EAM}: при {@code ARCHRAG_EAM_MODE=eam-api} читает {@code eam-api} по
+ * {@code ARCHRAG_EAM_API_URL} с токеном {@code ARCHRAG_EAM_API_TOKEN}, а {@code TEAM} и {@code SERVICE_DEPENDENCY}
+ * по-прежнему из старой заглушки {@code ARCHRAG_SOURCE_URL}; по умолчанию ({@code legacy}) работает только старая.
  *
  * <p>Заглушка: источник на {@code ARCHRAG_STUB_PORT} и управляющий {@code POST /control/upsert} на порту
  * {@value #STUB_CONTROL_PORT} (только в режиме stub). Если задан {@code ARCHRAG_WEBHOOK_TARGET} (и
@@ -89,10 +95,13 @@ public final class DemoLauncher {
   }
 
   private static void runEamApiStub(LauncherConfig.EamApiStub config) throws InterruptedException {
-    try (var server = new EamApiStub(EamApiSeed.seeded(Clock.systemUTC()), config.token(),
-        new InetSocketAddress(config.port()))) {
-      LOG.log(System.Logger.Level.INFO, "EAM API stub listens on " + server.port());
+    var store = EamApiSeed.seeded(Clock.systemUTC());
+    try (var server = new EamApiStub(store, config.token(), new InetSocketAddress(config.port()));
+        var control = new EamApiControl(store, new InetSocketAddress(STUB_CONTROL_PORT))) {
+      LOG.log(System.Logger.Level.INFO, "EAM API stub listens on " + server.port() + ", control on " + control.port());
       awaitShutdown();
+    } catch (IOException e) {
+      throw new IllegalStateException("cannot start EAM API stub control", e);
     }
   }
 
@@ -108,7 +117,7 @@ public final class DemoLauncher {
     try (var store = S3RawPayloadStore.create(config.s3Endpoint(), config.s3AccessKey(), config.s3SecretKey(),
         config.s3Bucket())) {
       store.ensureBucket();
-      try (SourceAdapter adapter = create(adapterConfig, journal, store)) {
+      try (SourceAdapter adapter = create(adapterConfig, config.eamApi(), journal, store)) {
         var started = new AtomicBoolean();
         HttpServer health = healthServer(config.healthPort(), started);
         try {
@@ -125,9 +134,10 @@ public final class DemoLauncher {
     }
   }
 
-  private static SourceAdapter create(AdapterConfig config, PostgresEventJournal journal, S3RawPayloadStore store) {
+  private static SourceAdapter create(
+      AdapterConfig config, EamAdapter.EamApi eamApi, PostgresEventJournal journal, S3RawPayloadStore store) {
     return switch (config.system()) {
-      case EAM -> EamAdapter.create(config, journal, store);
+      case EAM -> eamApi == null ? EamAdapter.create(config, journal, store) : EamAdapter.create(config, eamApi, journal, store);
       case SCM -> ScmAdapter.create(config, journal, store);
       case CMDB -> AssetAdapter.create(config, journal, store);
       case DEPLOY_MAP -> DeploymapAdapter.create(config, journal, store);

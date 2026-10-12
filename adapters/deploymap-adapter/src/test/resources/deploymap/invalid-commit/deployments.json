@@ -1,0 +1,27 @@
+[
+  {
+    "sourceId": "dep-payments-api-bad-commit",
+    "sourceVersion": 1,
+    "payload": {
+      "format": "deploymap-poc-1",
+      "name": "payments-api",
+      "service": "svc-payments-api",
+      "environment": "prod",
+      "chart": "payments-api",
+      "chartVersion": "1.4.2",
+      "chartMeta": {
+        "name": "payments-api",
+        "version": "1.4.2",
+        "appVersion": "1.4.2",
+        "annotations": {
+          "archrag.io/eam-system-id": "5101",
+          "archrag.io/git-repo-url": "git@git.example.org:pay/payments-api.git",
+          "archrag.io/git-commit": "not-a-commit"
+        }
+      },
+      "hosts": [
+        "vm-pay-01"
+      ]
+    }
+  }
+]

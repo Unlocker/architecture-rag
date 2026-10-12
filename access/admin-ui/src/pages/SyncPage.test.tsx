@@ -39,7 +39,8 @@ function api(overrides: Record<string, Handler> = {}) {
     '/api/sync/events': () => page([event], { total: 120 }),
     '/api/sync/dlq': () => page([dlq]),
     '/api/identity/conflicts': () => page([
-      { gid: 'g1', property: 'owner', dissentSource: 'scm', dissentType: 'Repo', dissentId: 'R', dissentValue: 'a', masterSource: 'eam', masterType: 'System', masterId: 'S', masterValue: 'b', status: 'OPEN', openedAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:00:00Z', resolvedAt: null },
+      { gid: 'g1', property: 'owner', dissentSource: 'scm', dissentType: 'Repo', dissentId: 'R', dissentValue: 'a', masterSource: 'eam', masterType: 'System', masterId: 'S', masterValue: 'b', status: 'OPEN', openedAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:00:00Z', resolvedAt: null, kind: 'PROPERTY' },
+      { gid: 'g2', property: 'eamSystemId', dissentSource: 'deploymap', dissentType: 'Deployment', dissentId: 'D', dissentValue: '5102', masterSource: 'eam', masterType: 'IT_SYSTEM', masterId: '5101', masterValue: '5101', status: 'OPEN', openedAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:00:00Z', resolvedAt: null, kind: 'RELATION' },
     ]),
     '/api/identity/candidates': () => page([
       { leftSource: 'eam', leftType: 'System', leftId: 'L1', rightSource: 'cmdb', rightType: 'CI', rightId: 'R1', labelFamily: 'Service', matched: [{ feature: 'name', value: 'billing' }], score: 0.8, status: 'OPEN', firstSeenAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:00:00Z' },
@@ -193,6 +194,9 @@ test('identity shows conflicts and candidates', async () => {
 
   const conflicts = await screen.findByRole('table', { name: 'Конфликты источников' });
   expect(within(conflicts).getByText('owner')).toBeTruthy();
+  expect(within(conflicts).getByText('eamSystemId')).toBeTruthy();
+  expect(within(conflicts).getByText('связь')).toBeTruthy();
+  expect(within(conflicts).getByText('свойство')).toBeTruthy();
   const candidates = await screen.findByRole('table', { name: 'Кандидаты identity' });
   expect(within(candidates).getByText('name=billing')).toBeTruthy();
 });

@@ -95,6 +95,8 @@ class SyncConsoleIT {
         + "'OPEN','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z'),"
         + " ('22222222-2222-2222-2222-222222222222','owner','CMDB','ci','8','a','b','EAM','system','2',"
         + "'RESOLVED','2026-01-01T00:00:00Z','2026-01-02T00:00:00Z')");
+    // Вид конфликта (V7): по умолчанию PROPERTY, закрытая строка — связь.
+    st.execute("UPDATE source_conflict SET kind = 'RELATION' WHERE gid = '22222222-2222-2222-2222-222222222222'");
     st.execute("INSERT INTO admin_audit (operation, actor, request, status, result, started_at, finished_at) VALUES"
         + " ('replay','alice','{\"secret\":\"x\"}'::jsonb,'OK','{\"replayed\":2}'::jsonb,'2026-01-05T00:00:00Z','2026-01-05T00:00:03Z'),"
         + " ('rebuild','bob','{}'::jsonb,'FAILED',NULL,'2026-01-06T00:00:00Z',NULL),"
@@ -349,6 +351,8 @@ class SyncConsoleIT {
     JsonNode open = ok("/api/identity/conflicts?status=OPEN");
     assertThat(open.get("total").asLong()).isEqualTo(1);
     assertThat(open.get("items").get(0).get("property").asString()).isEqualTo("criticality");
+    assertThat(open.get("items").get(0).get("kind").asString()).isEqualTo("PROPERTY");
+    assertThat(ok("/api/identity/conflicts?status=RESOLVED").get("items").get(0).get("kind").asString()).isEqualTo("RELATION");
     assertThat(ok("/api/identity/conflicts?status=RESOLVED&gid=22222222-2222-2222-2222-222222222222").get("total").asLong())
         .isEqualTo(1);
 

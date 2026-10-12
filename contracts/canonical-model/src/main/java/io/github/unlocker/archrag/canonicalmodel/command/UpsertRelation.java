@@ -12,7 +12,8 @@ import java.util.Objects;
  * Creates or updates a relation between two source-keyed nodes.
  *
  * <p>Invariants: {@code type.allows(fromLabel, toLabel)}; {@code validity} only for temporal types
- * (may be {@code null} otherwise); {@code properties} are validated and copied immutably.
+ * (may be {@code null} otherwise); {@code properties} are validated and copied immutably and contain every
+ * {@link RelationType#identityProperties()} of the type (they are part of the relation identity).
  *
  * <p>Property keys (e.g. {@code kind}/{@code protocol}/{@code criticality} of {@code DEPENDS_ON}) are not
  * checked at this level: that is the normalizer's responsibility.
@@ -35,5 +36,8 @@ public record UpsertRelation(RelationType type, SourceKey from, NodeLabel fromLa
             throw new IllegalArgumentException("validity is allowed only for temporal relation " + type);
         }
         properties = Invariants.copyProperties(properties);
+        if (!properties.keySet().containsAll(type.identityProperties())) {
+            throw new IllegalArgumentException(type + " requires identity properties " + type.identityProperties());
+        }
     }
 }

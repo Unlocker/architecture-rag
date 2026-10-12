@@ -6,7 +6,6 @@ import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
-import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.ingestionservice.IngestionServiceApplication;
@@ -138,6 +137,7 @@ class F2AcceptanceIT {
   private final Map<SourceSystem, SourceAdapter> adapters = new EnumMap<>(SourceSystem.class);
   private final Map<SourceSystem, StubSource> stubs = new EnumMap<>(SourceSystem.class);
   private final List<StubSourceServer> servers = new ArrayList<>();
+  private EamApiSupport eamApi;
   private final McpTestJwt jwt = new McpTestJwt();
   private final HttpClient http = HttpClient.newHttpClient();
   private final JsonMapper json = new JsonMapper();
@@ -158,12 +158,13 @@ class F2AcceptanceIT {
     store = S3RawPayloadStore.create(URI.create("http://" + S3.getHost() + ":" + S3.getMappedPort(8333)),
         ContainersSmokeIT.S3_ACCESS_KEY, ContainersSmokeIT.S3_SECRET_KEY, BUCKET);
     store.ensureBucket();
+    eamApi = new EamApiSupport(clock);
     StubSources.seeded(clock).forEach((system, stub) -> {
       stubs.put(system, stub);
       var server = new StubSourceServer(stub);
       servers.add(server);
       adapters.put(system, switch (system) {
-        case EAM -> EamAdapter.create(EamAdapter.config(server.baseUri(), SECRET), journal, store);
+        case EAM -> eamApi.adapter(server.baseUri(), SECRET, journal, store);
         case SCM -> ScmAdapter.create(ScmAdapter.config(server.baseUri(), SECRET), journal, store);
         case CMDB -> AssetAdapter.create(AssetAdapter.config(server.baseUri(), SECRET), journal, store);
         case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
@@ -231,6 +232,9 @@ class F2AcceptanceIT {
     jwt.close();
     adapters.values().forEach(SourceAdapter::close);
     servers.forEach(StubSourceServer::close);
+    if (eamApi != null) {
+      eamApi.close();
+    }
     if (store != null) {
       store.close();
     }
@@ -349,6 +353,45 @@ class F2AcceptanceIT {
 
     assertThat(service(result, "payments-api").deployments()).isEmpty();
     assertThat(result.systemGid()).isEqualTo(systemGid);
+  }
+
+  /** H.3: commit и репозиторий развёртывания приходят через MCP-клиент; закрытая DEPLOYED_FROM не отдаётся. */
+  @Test
+  @Order(2)
+  void s2b_footprintReturnsDeploymentSourceCode() {
+    String commit = "9fceb02d0ae598e95dc970b74767f19372d61af8";
+    String oldCommit = "0123456789abcdef0123456789abcdef01234567";
+    var repo = driver.executableQuery("MATCH (r:Repository) RETURN r.gid AS gid, r.url AS url LIMIT 1")
+        .execute().records().getFirst();
+    String deploymentGid = onlyDeployment(service(footprint(systemGid, PROD), "payments-api")).gid();
+    try {
+      driver.executableQuery("""
+          MATCH (d:Deployment {gid: $d}), (r:Repository {gid: $r})
+          SET d.sourceCommit = $c, d.repositoryUrl = $url
+          CREATE (d)-[:DEPLOYED_FROM {commit: $old, validFrom: datetime('2026-01-01T00:00:00Z'),
+                                      validTo: datetime('2026-02-01T00:00:00Z')}]->(r)
+          CREATE (d)-[:DEPLOYED_FROM {commit: $c, validFrom: datetime('2026-02-01T00:00:00Z'),
+                                      assertedBySource: 'deploymap', assertedByType: 'DEPLOYMENT',
+                                      assertedById: 'it'}]->(r)
+          """)
+          .withParameters(Map.of("d", deploymentGid, "r", repo.get("gid").asString(), "c", commit,
+              "old", oldCommit, "url", repo.get("url").asString()))
+          .execute();
+
+      DeploymentFootprint deployment = onlyDeployment(service(footprint(systemGid, PROD), "payments-api"));
+
+      assertThat(deployment.sourceCommit()).isEqualTo(commit);
+      assertThat(deployment.repositoryUrl()).isEqualTo(repo.get("url").asString());
+      assertThat(deployment.repository().gid()).isEqualTo(repo.get("gid").asString());
+      assertThat(deployment.deployedFrom().commit()).isEqualTo(commit);
+    } finally {
+      driver.executableQuery("""
+          MATCH (d:Deployment {gid: $d})
+          OPTIONAL MATCH (d)-[df:DEPLOYED_FROM]->()
+          DELETE df
+          REMOVE d.sourceCommit, d.repositoryUrl
+          """).withParameters(Map.of("d", deploymentGid)).execute();
+    }
   }
 
   @Test

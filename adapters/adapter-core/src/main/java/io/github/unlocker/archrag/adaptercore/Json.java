@@ -25,7 +25,7 @@ public final class Json {
   }
 
   /** Разбирает документ в {@code Map}/{@code List}/{@code String}/{@code Long}/{@code Double}/{@code Boolean}/{@code null}. */
-  static Object parse(String text) {
+  public static Object parse(String text) {
     Json p = new Json(text);
     Object v = p.value(0);
     p.skipWs();

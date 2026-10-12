@@ -2,8 +2,8 @@
 
 Ответы EAM в формате `docs/eam-api.yaml` («EAM Tool API» v0.4): тела `GET /api/<type>/` (голый массив `ArchObject[]`) и
 метаданные типов. **Доступа к реальному EAM нет**, поэтому это не записанные ответы, а собранные по спеке данные.
-Всё, чего нет в спеке, — допущение; владелец подтвердил его 2026-10-10 и 2026-10-11: имена типов (`platforms`, `itsystems`, `itproducts` как «ИТ-решение»),
-id типов, поля `attrs` (`name`, `status`, `lifecycle`, `criticality`, `description`, `eam_id`), одиночные ссылки `itsystems.product_id`, `itsystems.platform_id` и `itproducts.platform_id` (платформа системы совпадает с платформой её решения), формат `options`. Обоснование и полный список — раздел «Решения» в
+Всё, чего нет в спеке, — допущение; владелец подтвердил 2026-10-10 и 2026-10-11 всё, кроме `ownerTeam`: имена типов (`platforms`, `itsystems`, `itproducts` как «ИТ-решение»),
+id типов, поля `attrs` (`name`, `status`, `lifecycle`, `criticality`, `description`, `eam_id`), поле `ownerTeam` ИТ-системы (строковый код команды, **не подтверждено**, допущение 9: нужно, пока `Team` приходит из старой заглушки; в реальном EAM владелец, вероятно, ссылка на `divisions`), одиночные ссылки `itsystems.product_id`, `itsystems.platform_id` и `itproducts.platform_id` (платформа системы совпадает с платформой её решения), формат `options`. Обоснование и полный список — раздел «Решения» в
 `docs/06-eam-integration.md`. Когда появится доступ к EAM, fixtures перегенерируются записью реальных ответов.
 
 | Каталог | Сценарий («Тестирование» в `06-eam-integration.md`) | Допущения |

@@ -1,0 +1,17 @@
+[
+  {
+    "sourceId": "dep-payments-api-prod",
+    "sourceVersion": 1,
+    "payload": {
+      "format": "deploymap-poc-0",
+      "name": "payments-api",
+      "service": "svc-payments-api",
+      "environment": "prod",
+      "chart": "payments-api",
+      "chartVersion": "1.4.2",
+      "hosts": [
+        "vm-pay-01"
+      ]
+    }
+  }
+]

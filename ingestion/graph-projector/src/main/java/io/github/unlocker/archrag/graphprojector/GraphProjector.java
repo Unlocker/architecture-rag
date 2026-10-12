@@ -9,11 +9,13 @@ import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeData;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.canonicalmodel.relation.Validity;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.normalizer.DeploymentLookup;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
@@ -63,11 +66,33 @@ import org.neo4j.driver.TransactionContext;
  * {@code AdminLock}, поэтому запись {@code PendingRelation} и проекция её конечной точки не идут параллельно;
  * повторной проверки после записи отложенной связи нет.
  *
+ * <p>Идентичность связи: свойства из {@link RelationType#identityProperties()} входят в шаблон {@code MERGE}
+ * ({@code DEPLOYED_FROM {commit}}), поэтому смена такого свойства даёт новое ребро, а {@code closeReplacedRelations}
+ * закрывает старое: сравнивается тройка {@code (from, to, identity props)}, а не пара концов.
+ *
+ * <p>Alias: связь, отложенная на ключ-псевдоним ({@link LookupKeys}), достраивается при проекции записи, чьё свойство
+ * даёт тот же псевдоним ({@link #ALIAS_RULES}): {@code SourceKey(SCM, REPOSITORY_URL, url)} — записью SCM
+ * {@code REPOSITORY} с тем же {@code url}, {@code SourceKey(EAM, IT_SYSTEM_CODE, code)} — записью EAM
+ * {@code IT_SYSTEM} с тем же {@code eamCode}. Конец-псевдоним подменяется реальным ключом записи.
+ *
  * <p>Дополнительные метки подтипов, свойства связей и метки в тексте Cypher берутся только из enum
  * {@link NodeLabel}/{@link RelationType}, а не из данных источника.
  */
-public final class GraphProjector implements GraphProjection {
+public final class GraphProjector implements GraphProjection, DeploymentLookup, EamLookup {
 
+  private static final System.Logger LOG = System.getLogger(GraphProjector.class.getName());
+  private static final String REPOSITORY = "REPOSITORY";
+  private static final String SERVICE = "SERVICE";
+  private static final String IT_SYSTEM = "IT_SYSTEM";
+
+  /** Правило alias: запись {@code source} с меткой {@code label} и свойством {@code property} даёт псевдоним. */
+  private record AliasRule(
+      NodeLabel label, SourceSystemCode source, String property, Function<String, SourceKey> alias) {}
+
+  private static final List<AliasRule> ALIAS_RULES =
+      List.of(
+          new AliasRule(NodeLabel.REPOSITORY, SourceSystemCode.SCM, "url", LookupKeys::repositoryUrl),
+          new AliasRule(NodeLabel.IT_SYSTEM, SourceSystemCode.EAM, "eamCode", LookupKeys::itSystemCode));
   private static final String RECORD_KEY = "{source: $source, sourceType: $sourceType, sourceId: $sourceId}";
 
   private final Driver driver;
@@ -137,6 +162,143 @@ public final class GraphProjector implements GraphProjection {
     }
   }
 
+  /** Читает активные записи SCM; {@code Repository.url} в графе уже в каноническом виде, поэтому поиск по равенству. */
+  @Override
+  public Optional<SourceKey> repositoryByUrl(String normalizedUrl) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (r:SourceRecord {source: 'SCM', sourceType: 'REPOSITORY', active: true})"
+                          + "-[:ASSERTS]->(n:Repository) WHERE n.url = $url "
+                          + "RETURN r.sourceId AS sourceId ORDER BY sourceId LIMIT 1",
+                      Map.of("url", normalizedUrl))
+                  .stream()
+                  .findFirst()
+                  .map(row -> new SourceKey(SourceSystemCode.SCM, REPOSITORY, row.get("sourceId").asString())));
+    }
+  }
+
+  /** Активная запись EAM {@code IT_SYSTEM} с заданным {@code eamCode}; при нескольких выбирается наименьший числовой {@code sourceId}. */
+  @Override
+  public Optional<SourceKey> itSystemByEamCode(String eamCode) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (r:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true})"
+                          + "-[:ASSERTS]->(n:ITSystem) WHERE n.eamCode = $code "
+                          + "RETURN r.sourceId AS sourceId ORDER BY toInteger(r.sourceId), sourceId LIMIT 1",
+                      Map.of("code", eamCode))
+                  .stream()
+                  .findFirst()
+                  .map(row -> new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString())));
+    }
+  }
+
+  /** Активные сервисы SCM с открытой {@code IMPLEMENTED_IN} на репозиторий. */
+  @Override
+  public List<SourceKey> servicesImplementedIn(SourceKey repository) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'SCM', sourceType: 'REPOSITORY', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(:Repository)<-[rel:IMPLEMENTED_IN]-(:Service)"
+                          + "<-[:ASSERTS]-(s:SourceRecord {source: 'SCM', sourceType: 'SERVICE', active: true}) "
+                          + "WHERE rel.validTo IS NULL RETURN DISTINCT s.sourceId AS sourceId ORDER BY sourceId",
+                      Map.of("id", repository.sourceId()))
+                  .list(row -> new SourceKey(SourceSystemCode.SCM, SERVICE, row.get("sourceId").asString())));
+    }
+  }
+
+  /** Единственная активная запись EAM {@code IT_SYSTEM} с открытой {@code DECOMPOSED_INTO} на сервис SCM; иначе пусто. */
+  @Override
+  public Optional<SourceKey> eamSystemOfService(SourceKey service) {
+    try (Session session = driver.session()) {
+      List<SourceKey> systems =
+          session.executeRead(
+              tx ->
+                  tx.run(
+                          "MATCH (:SourceRecord {source: 'SCM', sourceType: 'SERVICE', sourceId: $id, active: true})"
+                              + "-[:ASSERTS]->(:Service)<-[rel:DECOMPOSED_INTO]-(:ITSystem)"
+                              + "<-[:ASSERTS]-(s:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true}) "
+                              + "WHERE rel.validTo IS NULL RETURN DISTINCT s.sourceId AS sourceId ORDER BY sourceId",
+                          Map.of("id", service.sourceId()))
+                      .list(row -> new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString())));
+      if (systems.size() > 1) {
+        LOG.log(System.Logger.Level.WARNING, "service has {0} EAM systems; system conflict check skipped", systems.size());
+        return Optional.empty();
+      }
+      return systems.stream().findFirst();
+    }
+  }
+
+  /** Платформа узла активной записи EAM {@code SOLUTION}. */
+  @Override
+  public Optional<SolutionPlatform> solutionPlatform(SourceKey solution) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'EAM', sourceType: 'SOLUTION', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(n:Solution) RETURN n.platformId AS platformId LIMIT 1",
+                      Map.of("id", solution.sourceId()))
+                  .stream()
+                  .findFirst()
+                  .map(row -> new SolutionPlatform(solution, platformId(row))));
+    }
+  }
+
+  /** Активные записи EAM {@code IT_SYSTEM} с открытой {@code USES_SOLUTION} на узел решения. */
+  @Override
+  public List<SystemPlatform> systemsOfSolution(SourceKey solution) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'EAM', sourceType: 'SOLUTION', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(:Solution)<-[rel:USES_SOLUTION]-(sys:ITSystem)"
+                          + "<-[:ASSERTS]-(s:SourceRecord {source: 'EAM', sourceType: 'IT_SYSTEM', active: true}) "
+                          + "WHERE rel.validTo IS NULL "
+                          + "RETURN DISTINCT s.sourceId AS sourceId, sys.platformId AS platformId ORDER BY sourceId",
+                      Map.of("id", solution.sourceId()))
+                  .list(
+                      row ->
+                          new SystemPlatform(
+                              new SourceKey(SourceSystemCode.EAM, IT_SYSTEM, row.get("sourceId").asString()), platformId(row))));
+    }
+  }
+
+  private static Long platformId(Record row) {
+    return row.get("platformId").isNull() ? null : row.get("platformId").asLong();
+  }
+
+  /** Развёртывания DEPLOYMAP сервиса, у которых в chart задан {@code eamSystemId}. */
+  @Override
+  public List<ChartDeployment> chartDeploymentsOfService(SourceKey service) {
+    try (Session session = driver.session()) {
+      return session.executeRead(
+          tx ->
+              tx.run(
+                      "MATCH (:SourceRecord {source: 'SCM', sourceType: 'SERVICE', sourceId: $id, active: true})"
+                          + "-[:ASSERTS]->(:Service)-[rel:HAS_DEPLOYMENT]->(d:Deployment)"
+                          + "<-[:ASSERTS]-(s:SourceRecord {source: 'DEPLOYMAP', active: true}) "
+                          + "WHERE rel.validTo IS NULL AND d.eamSystemId IS NOT NULL "
+                          + "RETURN DISTINCT s.sourceType AS sourceType, s.sourceId AS sourceId, d.eamSystemId AS eamSystemId "
+                          + "ORDER BY sourceType, sourceId",
+                      Map.of("id", service.sourceId()))
+                  .list(
+                      row ->
+                          new ChartDeployment(
+                              new SourceKey(
+                                  SourceSystemCode.DEPLOYMAP,
+                                  row.get("sourceType").asString(),
+                                  row.get("sourceId").asString()),
+                              row.get("eamSystemId").asLong())));
+    }
+  }
+
   private ProjectionResult write(TransactionContext tx, ProjectionRequest request) {
     SourceKey key = request.key();
     // MERGE по ключу, закреплённому constraint, затем фиктивная запись свойства: блокировка записи до чтения версии.
@@ -169,6 +331,7 @@ public final class GraphProjector implements GraphProjection {
         case UpsertNode upsert -> {
           upsertNode(tx, request, upsert, skippedProperties);
           healPending(tx, upsert.record().key(), skippedRelations);
+          healAliases(tx, upsert, skippedRelations);
         }
         case DeferRelation defer ->
             PendingRelations.store(tx, key, request.version().value(), request.eventTime(), defer.relation());
@@ -208,6 +371,46 @@ public final class GraphProjector implements GraphProjection {
       }
       upsertRelation(tx, pending.relation(), gids.get()[0], gids.get()[1], pending.eventTime(), skipped);
       PendingRelations.delete(tx, pending.key());
+    }
+  }
+
+  /**
+   * Достраивает связи, отложенные на alias ({@link #ALIAS_RULES}): после применения записи конец-alias подменяется
+   * её реальным ключом. Значение берётся из свойств узла этой же проекции; если запись его не передала, достраивать
+   * нечего.
+   */
+  private void healAliases(TransactionContext tx, UpsertNode upsert, List<String> skipped) {
+    SourceKey record = upsert.record().key();
+    for (AliasRule rule : ALIAS_RULES) {
+      if (upsert.data().label() != rule.label() || record.source() != rule.source()) {
+        continue;
+      }
+      if (!(NodeProperties.of(upsert.data()).get(rule.property()) instanceof String text)) {
+        continue;
+      }
+      SourceKey alias = rule.alias().apply(text);
+      for (PendingRelations.Pending pending : PendingRelations.candidates(tx, alias)) {
+        UpsertRelation r = pending.relation();
+        if (!r.from().equals(alias) && !r.to().equals(alias)) {
+          continue;
+        }
+        UpsertRelation healed =
+            new UpsertRelation(
+                r.type(),
+                r.from().equals(alias) ? record : r.from(),
+                r.fromLabel(),
+                r.to().equals(alias) ? record : r.to(),
+                r.toLabel(),
+                r.properties(),
+                r.validity(),
+                r.assertedBy());
+        Optional<UUID[]> gids = PendingRelations.endpointGids(tx, healed);
+        if (gids.isEmpty()) {
+          continue;
+        }
+        upsertRelation(tx, healed, gids.get()[0], gids.get()[1], pending.eventTime(), skipped);
+        PendingRelations.delete(tx, pending.key());
+      }
     }
   }
 
@@ -374,11 +577,16 @@ public final class GraphProjector implements GraphProjection {
     String ends =
         "MATCH (a:" + root(relation.fromLabel()).label() + " {gid: $from}), (b:"
             + root(relation.toLabel()).label() + " {gid: $to}) ";
+    // Свойства идентичности связи (из enum, не из payload) входят в шаблон MERGE: другое значение — другое ребро.
+    String identity = identityPattern(type);
+    for (String name : sortedIdentity(type)) {
+      params.put("id_" + name, NodeProperties.value(relation.properties().get(name)));
+    }
     String statement =
         type.temporal()
-            ? ends + "MERGE (a)-[rel:" + type.name() + "]->(b) "
+            ? ends + "MERGE (a)-[rel:" + type.name() + identity + "]->(b) "
                 + "WITH rel, (rel.validFrom IS NULL OR rel.validTo IS NOT NULL) AS opening "
-            : ends + "MERGE (a)-[rel:" + type.name() + "]->(b) WITH rel ";
+            : ends + "MERGE (a)-[rel:" + type.name() + identity + "]->(b) WITH rel ";
     var rows =
         tx.run(
                 statement
@@ -396,18 +604,24 @@ public final class GraphProjector implements GraphProjection {
   /**
    * Замещающая семантика темпоральных связей: для каждого типа, который версия утверждает ({@code UpsertRelation})
    * или откладывает ({@code DeferRelation}, чтобы старое ребро закрылось и при ещё неизвестном новом конце),
-   * закрывает открытые связи этой записи (все три поля {@code assertedBy*}) вне набора текущих пар {@code (from, to)}.
+   * закрывает открытые связи этой записи (все три поля {@code assertedBy*}) вне набора текущих троек {@code (from, to, identity props)}.
    * Тип без утверждений в версии не затрагивается: частичная запись ничего не закрывает. Ребро, переутверждённое
    * другой записью, имеет другой {@code assertedBy*} и не закрывается. Тип связи подставляется из enum.
    */
   private void closeReplacedRelations(TransactionContext tx, ProjectionRequest request) {
     SourceKey key = request.key();
-    Map<RelationType, List<List<String>>> kept = new LinkedHashMap<>();
+    Map<RelationType, List<List<Object>>> kept = new LinkedHashMap<>();
     for (GraphCommand command : request.commands()) {
       switch (command) {
-        case UpsertRelation relation when replaces(relation, key) ->
-            kept.computeIfAbsent(relation.type(), t -> new ArrayList<>())
-                .add(List.of(request.gids().get(relation.from()).toString(), request.gids().get(relation.to()).toString()));
+        case UpsertRelation relation when replaces(relation, key) -> {
+          List<Object> tuple = new ArrayList<>();
+          tuple.add(request.gids().get(relation.from()).toString());
+          tuple.add(request.gids().get(relation.to()).toString());
+          for (String name : sortedIdentity(relation.type())) {
+            tuple.add(NodeProperties.value(relation.properties().get(name)));
+          }
+          kept.computeIfAbsent(relation.type(), t -> new ArrayList<>()).add(tuple);
+        }
         case DeferRelation defer when replaces(defer.relation(), key) ->
             kept.computeIfAbsent(defer.relation().type(), t -> new ArrayList<>());
         default -> {}
@@ -417,17 +631,32 @@ public final class GraphProjector implements GraphProjection {
     params.put("at", NodeProperties.utc(request.eventTime()));
     // Запрос по типу связи без индекса, как и при tombstone: для PoC приемлемо.
     kept.forEach(
-        (type, pairs) -> {
-          params.put("kept", pairs);
+        (type, tuples) -> {
+          params.put("kept", tuples);
+          // Тройка (from, to, identity props): имена свойств из enum RelationType, не из payload.
+          String tuple = "[a.gid, b.gid" + sortedIdentity(type).stream().map(n -> ", rel." + n).reduce("", String::concat) + "]";
           tx.run(
                   "MATCH (a)-[rel:" + type.name() + "]->(b) "
                       + "WHERE rel.validTo IS NULL AND rel.assertedBySource = $source "
                       + "AND rel.assertedByType = $sourceType AND rel.assertedById = $sourceId "
-                      + "AND NOT [a.gid, b.gid] IN $kept "
+                      + "AND NOT " + tuple + " IN $kept "
                       + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
                   params)
               .consume();
         });
+  }
+
+  /** Имена свойств идентичности связи в стабильном порядке (из enum). */
+  private static List<String> sortedIdentity(RelationType type) {
+    return type.identityProperties().stream().sorted().toList();
+  }
+
+  /** Фрагмент шаблона {@code MERGE}: {@code " {commit: $id_commit}"} или пустая строка. */
+  private static String identityPattern(RelationType type) {
+    List<String> names = sortedIdentity(type);
+    return names.isEmpty()
+        ? ""
+        : " {" + names.stream().map(n -> n + ": $id_" + n).reduce((x, y) -> x + ", " + y).orElseThrow() + "}";
   }
 
   private boolean replaces(UpsertRelation relation, SourceKey key) {

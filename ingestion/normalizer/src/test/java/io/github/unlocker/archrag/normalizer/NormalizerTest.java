@@ -18,6 +18,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
 import io.github.unlocker.archrag.canonicalmodel.node.Repository;
 import io.github.unlocker.archrag.canonicalmodel.node.Service;
 import io.github.unlocker.archrag.canonicalmodel.node.Team;
+import io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
@@ -28,9 +29,11 @@ import io.github.unlocker.archrag.sourcestubs.StubSource;
 import io.github.unlocker.archrag.sourcestubs.StubSources;
 import java.time.Clock;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +43,23 @@ class NormalizerTest {
   private static final Map<SourceSystem, StubSource> STUBS = StubSources.seeded(CLOCK);
 
   private final Set<SourceKey> known = new HashSet<>();
-  private final Normalizer normalizer = Normalizer.standard(known::contains);
+  private final Map<String, SourceKey> eamCodes = new HashMap<>();
+  private final Normalizer normalizer = Normalizer.standard(known::contains, new DeploymentLookup() {
+    @Override
+    public Optional<SourceKey> repositoryByUrl(String normalizedUrl) {
+      return Optional.empty();
+    }
+
+    @Override
+    public Optional<SourceKey> itSystemByEamCode(String eamCode) {
+      return Optional.ofNullable(eamCodes.get(eamCode));
+    }
+
+    @Override
+    public List<SourceKey> servicesImplementedIn(SourceKey repository) {
+      return List.of();
+    }
+  });
 
   private static SourceKey key(SourceSystemCode s, String type, String id) {
     return new SourceKey(s, type, id);
@@ -191,7 +210,8 @@ class NormalizerTest {
 
   @Test
   void scmServiceMapsRelationsToSystemAndRepository() {
-    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1042"));
+    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "5101"));
+    eamCodes.put("EAM-1042", key(SourceSystemCode.EAM, "IT_SYSTEM", "5101"));
     known.add(key(SourceSystemCode.SCM, "REPOSITORY", "repo-payments-api"));
     var n = stub(SourceSystem.SCM, "urn:corp:scm", "SERVICE", "svc-payments-api");
     assertThat(((UpsertNode) n.commands().get(0)).data())
@@ -201,7 +221,7 @@ class NormalizerTest {
         .containsExactlyInAnyOrder(
             org.assertj.core.api.Assertions.tuple(
                 RelationType.DECOMPOSED_INTO,
-                key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1042"),
+                key(SourceSystemCode.EAM, "IT_SYSTEM", "5101"),
                 key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api")),
             org.assertj.core.api.Assertions.tuple(
                 RelationType.IMPLEMENTED_IN,
@@ -221,9 +241,29 @@ class NormalizerTest {
     assertThat(n.unresolved()).singleElement().satisfies(u -> {
       assertThat(u.field()).isEqualTo("systemCode");
       assertThat(u.relationType()).isEqualTo(RelationType.DECOMPOSED_INTO);
-      assertThat(u.target()).isEqualTo(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-UNKNOWN"));
+      assertThat(u.target()).isEqualTo(LookupKeys.itSystemCode("EAM-UNKNOWN"));
       assertThat(u.from()).isEqualTo(key(SourceSystemCode.SCM, "SERVICE", id));
     });
+  }
+
+  @Test
+  void scmServiceBeforeEamDefersDecomposedIntoOnItSystemCodeAlias() {
+    var n = stub(SourceSystem.SCM, "urn:corp:scm", "SERVICE", "svc-payments-api");
+    assertThat(of(n, UpsertRelation.class))
+        .extracting(UpsertRelation::type)
+        .doesNotContain(RelationType.DECOMPOSED_INTO);
+    assertThat(n.unresolved())
+        .filteredOn(u -> u.relationType() == RelationType.DECOMPOSED_INTO)
+        .singleElement()
+        .satisfies(u -> assertThat(u.target()).isEqualTo(LookupKeys.itSystemCode("EAM-1042")));
+  }
+
+  @Test
+  void scmServiceNeverReferencesLiteralEamCodeAsItSystemKey() {
+    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1042"));
+    var n = stub(SourceSystem.SCM, "urn:corp:scm", "SERVICE", "svc-payments-api");
+    assertThat(of(n, UpsertRelation.class)).extracting(UpsertRelation::from)
+        .doesNotContain(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1042"));
   }
 
   // ---- CMDB
@@ -261,11 +301,14 @@ class NormalizerTest {
     known.add(key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", "vm-pay-01"));
     var n = stub(SourceSystem.DEPLOY_MAP, "urn:corp:deploymap", "DEPLOYMENT", "dep-payments-api-prod");
     assertThat(((UpsertNode) n.commands().get(0)).data())
-        .isEqualTo(new Deployment("dep-payments-api-prod", "payments-api", "1.4.2", null, T));
+        .isEqualTo(new Deployment("dep-payments-api-prod", "payments-api", "1.4.2", null,
+            "9fceb02d0ae598e95dc970b74767f19372d61af8", "https://git.example.org/pay/payments-api", 5101L, T));
     assertThat(of(n, UpsertRelation.class))
         .extracting(UpsertRelation::type)
         .containsExactlyInAnyOrder(
             RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT, RelationType.RUNS_ON);
+    // Репозиторий неизвестен (DeploymentLookup.NONE): DEPLOYED_FROM откладывается на alias по URL.
+    assertThat(n.unresolved()).extracting(UnresolvedReference::relationType).containsExactly(RelationType.DEPLOYED_FROM);
     assertThat(of(n, UpsertRelation.class))
         .filteredOn(r -> r.type() == RelationType.RUNS_ON)
         .singleElement()
@@ -286,7 +329,8 @@ class NormalizerTest {
         .containsExactlyInAnyOrder(RelationType.HAS_DEPLOYMENT, RelationType.IN_ENVIRONMENT);
     assertThat(of(dep, UpsertRelation.class)).allSatisfy(r -> assertThat(r.validity().validFrom()).isEqualTo(from));
 
-    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "EAM-1"));
+    known.add(key(SourceSystemCode.EAM, "IT_SYSTEM", "9001"));
+    eamCodes.put("EAM-1", key(SourceSystemCode.EAM, "IT_SYSTEM", "9001"));
     known.add(key(SourceSystemCode.SCM, "REPOSITORY", "repo-a"));
     var svc = normalized(normalizer.normalize(
         event("urn:corp:scm", "urn:corp:schema:asset-upserted:1", "SERVICE", "svc-a",
@@ -413,6 +457,8 @@ class NormalizerTest {
         .extracting(UnresolvedReference::field, UnresolvedReference::relationType,
             UnresolvedReference::from, UnresolvedReference::target)
         .containsExactlyInAnyOrder(
+            org.assertj.core.api.Assertions.tuple("git-repo-url", RelationType.DEPLOYED_FROM, dep,
+                io.github.unlocker.archrag.canonicalmodel.provenance.LookupKeys.repositoryUrl("https://git.example.org/pay/payments-api")),
             org.assertj.core.api.Assertions.tuple("service", RelationType.HAS_DEPLOYMENT, dep,
                 key(SourceSystemCode.SCM, "SERVICE", "svc-payments-api")),
             org.assertj.core.api.Assertions.tuple("environment", RelationType.IN_ENVIRONMENT, dep,

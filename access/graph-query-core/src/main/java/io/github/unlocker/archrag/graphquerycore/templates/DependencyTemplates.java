@@ -16,7 +16,7 @@ public final class DependencyTemplates {
 
   /** Типы связей, по которым разрешён обход: allowlist для параметра {@code relationTypes}. */
   public static final List<String> TRACE_RELATION_TYPES =
-      List.of("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY");
+      List.of("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY", "DEPLOYED_FROM");
 
   /** Метки узлов, из которых может начинаться обход и которые попадают в проекцию. */
   public static final List<String> TRACE_LABELS =

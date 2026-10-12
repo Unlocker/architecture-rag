@@ -84,7 +84,7 @@ class TraceDependenciesToolTest {
     verify(queries).execute(eq("trace_downstream"), params.capture(), budget.capture());
     assertThat(params.getValue()).containsOnlyKeys("gid", "relationTypes").containsEntry("gid", GID);
     assertThat((List<String>) params.getValue().get("relationTypes"))
-        .containsExactly("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY");
+        .containsExactly("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY", "DEPLOYED_FROM");
     assertThat(budget.getValue().maxDepth()).isEqualTo(6);
     assertThat(budget.getValue().maxPaths()).isEqualTo(50);
   }

@@ -20,6 +20,12 @@ class AuthorityMatrixTest {
     }
 
     @Test
+    void deployedFromBelongsToDeployMap() {
+        assertThat(matrix.relationAuthorities(RelationType.DEPLOYED_FROM)).containsExactly(DEPLOYMAP);
+        assertThat(matrix.isAuthoritative(RelationType.DEPLOYED_FROM, SCM)).isFalse();
+    }
+
+    @Test
     void itSystemCriticalityOnlyEam() {
         assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "criticality", EAM)).isTrue();
         for (var other : allExcept(EAM)) {
@@ -85,5 +91,22 @@ class AuthorityMatrixTest {
         assertThat(matrix.nodeAuthorities(NodeLabel.SOURCE_RECORD)).isEmpty();
         assertThat(matrix.isAuthoritative(NodeLabel.SOURCE_RECORD, EAM)).isFalse();
         assertThat(matrix.isAuthoritative(RelationType.ASSERTS, EAM)).isFalse();
+    }
+
+    @Test
+    void solutionPlatformAndTheirRelationsAreMasteredByEam() {
+        assertThat(matrix.nodeAuthorities(NodeLabel.SOLUTION)).containsExactly(EAM);
+        assertThat(matrix.nodeAuthorities(NodeLabel.PLATFORM)).containsExactly(EAM);
+        assertThat(matrix.relationAuthorities(RelationType.USES_SOLUTION)).containsExactly(EAM);
+        assertThat(matrix.relationAuthorities(RelationType.USES_PLATFORM)).containsExactly(EAM);
+        assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", SCM)).isFalse();
+        assertThat(matrix.isAuthoritative(NodeLabel.IT_SYSTEM, "eamCode", EAM)).isTrue();
+    }
+
+    @Test
+    void platformIdOfSystemAndSolutionBelongsToEamOnly() {
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.SOLUTION, "platformId")).containsExactly(EAM);
+        assertThat(matrix.propertyAuthorities(NodeLabel.IT_SYSTEM, "platformId")).doesNotContain(SCM);
     }
 }

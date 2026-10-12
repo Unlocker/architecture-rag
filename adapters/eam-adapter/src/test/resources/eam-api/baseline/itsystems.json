@@ -10,7 +10,8 @@
       "criticality": "HIGH",
       "description": "Payments processing system",
       "product_id": 7201,
-      "platform_id": 3101
+      "platform_id": 3101,
+      "ownerTeam": "TEAM-PAY"
     }
   },
   {
@@ -24,7 +25,8 @@
       "criticality": "HIGH",
       "description": "General ledger system",
       "product_id": 7202,
-      "platform_id": 3102
+      "platform_id": 3102,
+      "ownerTeam": "TEAM-PAY"
     }
   }
 ]

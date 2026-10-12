@@ -19,6 +19,11 @@ public final class RuntimeTemplates {
    * подходящих deployments возвращается строкой с {@code null} в полях deployment; цели
    * {@code RUNS_ON} ограничены меткой {@code ComputeInstance} (Namespace не попадает). Узлы отдаются
    * проекциями с {@code lastSeenAt} и активными {@code sources}, рёбра — с {@code assertedBy*}.
+   * Источник кода развёртывания ({@code sourceCommit}, {@code repositoryUrl}, {@code repository},
+   * {@code deployedFrom}) читается одним подзапросом {@code COLLECT} с {@code LIMIT 1}, а не {@code OPTIONAL MATCH}:
+   * строк не прибавляется, {@code repository} и {@code deployedFrom} всегда от одной связи (проекция {@code source});
+   * развёртывание без {@code DEPLOYED_FROM} даёт {@code null}. При нескольких открытых связях выбирается связь
+   * с наибольшим {@code validFrom}, при равенстве — с меньшим {@code gid} репозитория.
    * Фильтр окружения — одно условие {@code $environment IS NULL OR ...}, без {@code OR EXISTS}.
    */
   public static final QueryTemplate RUNTIME_FOOTPRINT =
@@ -46,12 +51,20 @@ public final class RuntimeTemplates {
                                           sourceId: r.sourceId, authority: a.authority} }} END AS service,
             CASE WHEN d IS NULL THEN null ELSE
               {gid: d.gid, name: d.name, version: d.version, status: d.status,
-               environment: e.code, lastSeenAt: toString(d.lastSeenAt),
+               environment: e.code, sourceCommit: d.sourceCommit, repositoryUrl: d.repositoryUrl,
+               lastSeenAt: toString(d.lastSeenAt),
                sources: COLLECT { MATCH (r:SourceRecord {active: true})-[a:ASSERTS]->(d)
                                   RETURN {source: r.source, sourceType: r.sourceType,
                                           sourceId: r.sourceId, authority: a.authority} },
                hasDeployment: {source: hd.assertedBySource, sourceType: hd.assertedByType,
-                               sourceId: hd.assertedById, validFrom: toString(hd.validFrom)}} END AS deployment,
+                               sourceId: hd.assertedById, validFrom: toString(hd.validFrom)},
+               source: head(COLLECT { MATCH (d)-[df:DEPLOYED_FROM]->(rp:Repository)
+                                      WHERE df.validTo IS NULL AND rp.isCurrent = true
+                                      RETURN {repository: {gid: rp.gid, name: rp.name, url: rp.url},
+                                              deployedFrom: {source: df.assertedBySource, sourceType: df.assertedByType,
+                                                             sourceId: df.assertedById, validFrom: toString(df.validFrom),
+                                                             commit: df.commit}}
+                                      ORDER BY df.validFrom DESC, rp.gid LIMIT 1 })} END AS deployment,
             CASE WHEN c IS NULL THEN null ELSE
               {gid: c.gid,
                type: CASE WHEN c:VirtualMachine THEN 'VirtualMachine'

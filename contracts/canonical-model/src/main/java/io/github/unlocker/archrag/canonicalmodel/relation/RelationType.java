@@ -10,11 +10,14 @@ import java.util.Set;
  * Label checks honour label supertypes ({@code RUNS_ON -> VirtualMachine} is allowed via {@code ComputeInstance}).
  */
 public enum RelationType {
+    USES_SOLUTION(Set.of(IT_SYSTEM), Set.of(SOLUTION), true),
+    USES_PLATFORM(Set.of(SOLUTION), Set.of(PLATFORM), true),
     DECOMPOSED_INTO(Set.of(IT_SYSTEM), Set.of(SERVICE), true),
     IMPLEMENTED_IN(Set.of(SERVICE), Set.of(REPOSITORY), true),
     HAS_DEPLOYMENT(Set.of(SERVICE), Set.of(DEPLOYMENT), true),
     IN_ENVIRONMENT(Set.of(DEPLOYMENT), Set.of(ENVIRONMENT), true),
     RUNS_ON(Set.of(DEPLOYMENT), Set.of(COMPUTE_INSTANCE, NAMESPACE), true),
+    DEPLOYED_FROM(Set.of(DEPLOYMENT), Set.of(REPOSITORY), true, Set.of("commit")),
     PART_OF(Set.of(NAMESPACE), Set.of(KUBERNETES_CLUSTER), false),
     HOSTED_ON(Set.of(VIRTUAL_MACHINE), Set.of(PHYSICAL_SERVER), false),
     DEPENDS_ON(Set.of(SERVICE), Set.of(SERVICE), true),
@@ -26,11 +29,29 @@ public enum RelationType {
     private final Set<NodeLabel> sources;
     private final Set<NodeLabel> targets;
     private final boolean temporal;
+    private final Set<String> identityProperties;
 
     RelationType(Set<NodeLabel> sources, Set<NodeLabel> targets, boolean temporal) {
+        this(sources, targets, temporal, Set.of());
+    }
+
+    RelationType(Set<NodeLabel> sources, Set<NodeLabel> targets, boolean temporal, Set<String> identityProperties) {
         this.sources = Set.copyOf(sources);
         this.targets = Set.copyOf(targets);
         this.temporal = temporal;
+        if (!identityProperties.isEmpty() && !temporal) {
+            throw new IllegalArgumentException("identity properties are supported for temporal relations only");
+        }
+        this.identityProperties = Set.copyOf(identityProperties);
+    }
+
+    /**
+     * Names of relation properties that are part of the relation identity next to {@code (from, to)}: a change of
+     * such a property closes the old relation and opens a new one instead of rewriting it. Empty for most types;
+     * only temporal types may declare any. The names come from this enum, never from a source payload.
+     */
+    public Set<String> identityProperties() {
+        return identityProperties;
     }
 
     /** True if the relation carries a validity interval and can be closed. */

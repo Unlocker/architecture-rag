@@ -40,7 +40,8 @@ class AssetTemplatesTest {
   void relationAllowlistExcludesServiceRelations() {
     assertThat(AssetTemplates.RELATION_TYPES)
         .containsExactly(
-            "DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY")
+            "DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY",
+            "DEPLOYED_FROM")
         .doesNotContain("ASSERTS", "OWNS_RECORD", "PROCESSED", "PART_OF", "HOSTED_ON");
     assertThat(AssetTemplates.ASSET_RELATIONS.cypher()).doesNotContain("ASSERTS");
   }

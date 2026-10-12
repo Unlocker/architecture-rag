@@ -22,8 +22,8 @@ class NodeTest {
         assertThatThrownBy(() -> new Environment(null, "n", EnvironmentClass.DEV)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new Environment("", "n", EnvironmentClass.DEV)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Environment("c", "n", null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Deployment(null, "n", null, null, null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Deployment("", "n", null, null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment(null, "n", null, null, null, null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Deployment("", "n", null, null, null, null, null, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> vm(null, null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new ComputeInstance("", ComputeKind.UNSPECIFIED, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -82,5 +82,49 @@ class NodeTest {
         assertThatThrownBy(() -> new Lifecycle(null, t2, null, true)).isInstanceOf(NullPointerException.class);
         assertThatCode(() -> new Lifecycle(t1, t2, null, true)).doesNotThrowAnyException();
         assertThatCode(() -> new Lifecycle(t1, t2, t2, false)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void deploymentValidatesCommitUrlAndSystemId() {
+        String commit = "9fceb02d0ae598e95dc970b74767f19372d61af8";
+        assertThatCode(() -> new Deployment("d", "n", null, null, commit, "https://git.example.org/pay/api", 5101L, null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, commit.toUpperCase(), null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, commit.substring(1), null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, "git@git.example.org:pay/api.git", null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, null, 0L, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Deployment("d", "n", null, null, null, null, -5L, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void solutionAndPlatformRequireNameAndHaveLabels() {
+        assertThatThrownBy(() -> new Solution(null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Solution("", null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Platform(null, null, null, null, null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Platform("p", "", null, null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(new Solution("s", null, null).label()).isEqualTo(NodeLabel.SOLUTION);
+        assertThat(new Platform("p", null, null, null, null).label()).isEqualTo(NodeLabel.PLATFORM);
+        assertThat(NodeLabel.canonical()).contains(NodeLabel.SOLUTION, NodeLabel.PLATFORM);
+    }
+
+    @Test
+    void itSystemEamCodeAndRawCriticalityAreOptionalButNotBlank() {
+        assertThatThrownBy(() -> new ITSystem("n", null, null, null, "", null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ITSystem("n", null, null, null, null, " ")).isInstanceOf(IllegalArgumentException.class);
+        assertThat(new ITSystem("n", null, null, null).eamCode()).isNull();
+        assertThat(new ITSystem("n", null, null, null, "EAM-1042", "WEIRD").eamCode()).isEqualTo("EAM-1042");
+    }
+
+    @Test
+    void platformIdMustBePositiveWhenSet() {
+        assertThatThrownBy(() -> new ITSystem("n", null, null, null, null, null, 0L)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Solution("n", null, null, -1L)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(new ITSystem("n", null, null, null, null, null, 3101L).platformId()).isEqualTo(3101L);
+        assertThat(new Solution("n", null, null).platformId()).isNull();
     }
 }

@@ -77,6 +77,8 @@ public final class AuthorityMatrix {
     private static AuthorityMatrix poc() {
         var nodes = new EnumMap<NodeLabel, Set<SourceSystemCode>>(NodeLabel.class);
         nodes.put(IT_SYSTEM, Set.of(EAM));
+        nodes.put(SOLUTION, Set.of(EAM));
+        nodes.put(PLATFORM, Set.of(EAM));
         nodes.put(TEAM, Set.of(EAM));
         nodes.put(SERVICE, Set.of(SCM));
         nodes.put(REPOSITORY, Set.of(SCM));
@@ -90,7 +92,8 @@ public final class AuthorityMatrix {
 
         // Explicit property rules named in the vision; they restate the node rule today and pin it against drift.
         var properties = new EnumMap<NodeLabel, Map<String, Set<SourceSystemCode>>>(NodeLabel.class);
-        properties.put(IT_SYSTEM, Map.of("criticality", Set.of(EAM)));
+        properties.put(IT_SYSTEM, Map.of("criticality", Set.of(EAM), "eamCode", Set.of(EAM), "platformId", Set.of(EAM)));
+        properties.put(SOLUTION, Map.of("platformId", Set.of(EAM)));
         properties.put(SERVICE, Map.of("language", Set.of(SCM)));
         properties.put(REPOSITORY, Map.of("url", Set.of(SCM)));
         properties.put(COMPUTE_INSTANCE, Map.of("state", Set.of(CMDB)));
@@ -98,6 +101,8 @@ public final class AuthorityMatrix {
         properties.put(PHYSICAL_SERVER, Map.of("state", Set.of(CMDB)));
 
         var relations = new EnumMap<RelationType, Set<SourceSystemCode>>(RelationType.class);
+        relations.put(RelationType.USES_SOLUTION, Set.of(EAM));
+        relations.put(RelationType.USES_PLATFORM, Set.of(EAM));
         relations.put(RelationType.DEPENDS_ON, Set.of(EAM));
         relations.put(RelationType.OWNED_BY, Set.of(EAM));
         relations.put(RelationType.DECOMPOSED_INTO, Set.of(SCM));
@@ -105,6 +110,7 @@ public final class AuthorityMatrix {
         relations.put(RelationType.HAS_DEPLOYMENT, Set.of(DEPLOYMAP));
         relations.put(RelationType.IN_ENVIRONMENT, Set.of(DEPLOYMAP));
         relations.put(RelationType.RUNS_ON, Set.of(DEPLOYMAP));
+        relations.put(RelationType.DEPLOYED_FROM, Set.of(DEPLOYMAP));
         relations.put(RelationType.PART_OF, Set.of(DEPLOYMAP));
         relations.put(RelationType.HOSTED_ON, Set.of(CMDB));
 
