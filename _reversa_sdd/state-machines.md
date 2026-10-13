@@ -122,7 +122,7 @@ stateDiagram-v2
 ```
 
 - `toDlq` в одной транзакции переводит событие в `QUARANTINED` и вставляет строку; конфликт по частичному индексу `uq_dlq_entry_open (source, event_id) WHERE replayed_at IS NULL` молча пропускается (`PostgresEventJournal.java:132-160`; `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:48`) 🟢.
-- Инвариант «не больше одной необработанной записи на событие» защищает от дубля при повторном карантине (повторный `toDlq` из `RETRYING` после `QUARANTINED` невозможен без `QUARANTINED → RETRYING`, поэтому индекс сегодня подстраховывает только гонку двух воркеров) 🟡.
+- Инвариант «не больше одной необработанной записи на событие» защищает от дубля при повторном карантине (повторный `toDlq` из `QUARANTINED` возможен: `ProcessingStatus.java:27-29` разрешает переход в себя, `PostgresEventJournal.java:139` не проверяет текущий статус, `EventJournalIT.repeatedDlqKeepsSingleRecord:187-196` вызывает `toDlq` дважды подряд; `uq_dlq_entry_open` и `ON CONFLICT` защищают от последовательного дубля, при этом `error_code`/`error_reason` в `inbox_event` перезаписываются, а `dlq_entry` хранит первые значения) 🟢 `[Ревью R.7]`.
 - 🔴 `replayed_at` читается (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:158`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`), но не пишется: `UPDATE dlq_entry` в репозитории нет. Метрика «открытых записей DLQ» поэтому никогда не уменьшается после `replay` (ответ на вопрос R.3, `_reversa_sdd/database/data-dictionary.md:187-193`: это недоделка, ADR на такой выбор нет) 🔴.
 
 ---

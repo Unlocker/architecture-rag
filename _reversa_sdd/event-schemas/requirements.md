@@ -4,7 +4,7 @@
 
 ## Зависимости модуля
 
-Модуль: Java 21, Maven, артефакт `event-schemas`; единственная проектная зависимость `canonical-model` (`contracts/event-schemas/pom.xml:15-19`) 🟢. Фактически ни один класс модуля `canonical-model` не импортирует (grep по `ES/` не находит `canonicalmodel`) 🟢; зависимость объявлена, но не используется 🟡.
+Модуль: Java 21, Maven, артефакт `event-schemas`; единственная проектная зависимость `canonical-model` (`contracts/event-schemas/pom.xml:17-22`) 🟢. Фактически ни один класс модуля `canonical-model` не импортирует (grep по `ES/` не находит `canonicalmodel`) 🟢; зависимость объявлена, но не используется 🟡.
 
 ## Обзор
 
@@ -42,7 +42,7 @@
 | RF-06 | `JournalReader` отдаёт страницы в порядке `(receivedAt, source, eventId)` keyset-ом, `pending` — необработанные строки 🟢 | Must | [`journal-keyset-read`](journal-keyset-read/requirements.md) |
 | RF-07 | `RawPayloadRef` требует непустые `key` и `contentHash` (IAE) 🟢 | Must | AC-05 |
 | RF-08 | `RawPayloadStore.put(source, bytes)` кладёт под ключом `raw/<source>/<sha256>` идемпотентно; `get` проверяет hash и при расхождении бросает исключение 🟢 (тип исключения не указан 🟡) | Must | контракт порта; тестов в модуле нет |
-| RF-09 | `CanonicalEventPublisher.publish` — at-least-once, `true` при первом приёме, `false` для дубликата 🟢 | Should | контракт порта; в проде реализаций нет (grep по `ingestion`, `adapters`: только интерфейс) 🟡 |
+| RF-09 | `CanonicalEventPublisher.publish` — at-least-once, `true` при первом приёме, `false` для дубликата 🟢 | Should | контракт порта; реализация есть — `PostgresEventJournal.java:38,100` (`implements … CanonicalEventPublisher`), но `.publish(` нигде не вызывается 🟢 `[Ревью R.7]` |
 | RF-10 | `SnapshotContents` копирует `objects` через `Set.copyOf` 🟢 (`ES/SnapshotContents.java:16-18`) | Should | DTO-инвариант; теста нет |
 | RF-11 | `JournalKey` и `StoredEvent` отвергают `null` обязательных полей (`NullPointerException`) 🟢 | Should | теста нет |
 
