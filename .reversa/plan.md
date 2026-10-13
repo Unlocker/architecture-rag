@@ -66,9 +66,9 @@
 - [x] ✅ **Detetive** — Arqueologia Git e ADRs retroativos
 - [x] ✅ **Detetive** — Regras de negócio implícitas e máquinas de estado
 - [x] ✅ **Detetive** — Matriz de permissões (RBAC/ACL) (R.4, UNLOCKER-269: `_reversa_sdd/{domain,state-machines,permissions,detective-gaps}.md`, `_reversa_sdd/adrs/`)
-- [ ] **Arquiteto** — Diagramas C4 (Contexto, Containers, Componentes)
-- [ ] **Arquiteto** — ERD completo e integrações externas
-- [ ] **Arquiteto** — Spec Impact Matrix
+- [x] ✅ **Arquiteto** — Diagramas C4 (Contexto, Containers, Componentes) (R.5, UNLOCKER-270: `_reversa_sdd/{c4-context,c4-containers,c4-components,architecture}.md`)
+- [x] ✅ **Arquiteto** — ERD completo e integrações externas (R.5, UNLOCKER-270: `_reversa_sdd/{erd-complete,integrations,tech-debt}.md`)
+- [x] ✅ **Arquiteto** — Spec Impact Matrix (R.5, UNLOCKER-270: `_reversa_sdd/traceability/spec-impact-matrix.md`)
 
 ## Fase 4: Geração 📝
 
