@@ -63,9 +63,9 @@
 ## Fase 3: Interpretação 🧠
 
 - [x] ✅ **Data Master** — `_reversa_sdd/database/`: схема Neo4j, Flyway V1–V7, роли, ключи S3, ERD (R.3, UNLOCKER-268)
-- [ ] **Detetive** — Arqueologia Git e ADRs retroativos
-- [ ] **Detetive** — Regras de negócio implícitas e máquinas de estado
-- [ ] **Detetive** — Matriz de permissões (RBAC/ACL)
+- [x] ✅ **Detetive** — Arqueologia Git e ADRs retroativos
+- [x] ✅ **Detetive** — Regras de negócio implícitas e máquinas de estado
+- [x] ✅ **Detetive** — Matriz de permissões (RBAC/ACL) (R.4, UNLOCKER-269: `_reversa_sdd/{domain,state-machines,permissions,detective-gaps}.md`, `_reversa_sdd/adrs/`)
 - [ ] **Arquiteto** — Diagramas C4 (Contexto, Containers, Componentes)
 - [ ] **Arquiteto** — ERD completo e integrações externas
 - [ ] **Arquiteto** — Spec Impact Matrix
