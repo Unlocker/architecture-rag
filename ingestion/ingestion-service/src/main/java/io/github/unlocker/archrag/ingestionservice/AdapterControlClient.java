@@ -48,18 +48,21 @@ public class AdapterControlClient {
   }
 
   /**
-   * Запускает snapshot.
+   * Запускает snapshot. Bearer-токен администратора, пришедший в {@code AdminController}, пробрасывается адаптеру: он
+   * сам проверяет подпись, срок, audience и роль.
    *
    * @throws AdapterUnavailableException если адаптер недоступен или ответил не {@code 202}/{@code 409}
    * @throws IllegalArgumentException если адрес источника не настроен
    */
-  public Response snapshot(String source) {
+  public Response snapshot(String source, String bearerToken) {
     URI uri = controlUrl(source).orElseThrow(() -> new IllegalArgumentException("unknown source"));
     try {
       HttpResponse<String> r = http.send(
-          HttpRequest.newBuilder(uri).timeout(TIMEOUT).POST(HttpRequest.BodyPublishers.noBody()).build(),
+          HttpRequest.newBuilder(uri).timeout(TIMEOUT)
+              .header("Authorization", "Bearer " + bearerToken).POST(HttpRequest.BodyPublishers.noBody()).build(),
           HttpResponse.BodyHandlers.ofString());
       if (r.statusCode() != 202 && r.statusCode() != 409) {
+        // Тело и токен не логируем и не кладём в исключение.
         throw new AdapterUnavailableException();
       }
       return new Response(r.statusCode(), r.body());

@@ -4,6 +4,27 @@
   "sslRequired": "none",
   "clientScopes": [
     {
+      "name": "roles",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "architecture.read",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
@@ -29,7 +50,8 @@
   ],
   "roles": {
     "realm": [
-      { "name": "archrag-console-admin", "description": "Администратор админ-консоли (read-only)" }
+      { "name": "archrag-console-admin", "description": "Администратор: /admin/** ingestion, /api/** консоли, /control/snapshot адаптеров" },
+      { "name": "archrag-reader", "description": "Читатель: все методы MCP-сервера" }
     ]
   },
   "users": [
@@ -43,7 +65,13 @@
       "credentials": [
         { "type": "password", "value": "${KEYCLOAK_CONSOLE_PASSWORD}", "temporary": false }
       ],
-      "realmRoles": ["archrag-console-admin"]
+      "realmRoles": ["archrag-console-admin", "archrag-reader"]
+    },
+    {
+      "username": "service-account-archrag-demo",
+      "enabled": true,
+      "serviceAccountClientId": "archrag-demo",
+      "realmRoles": ["archrag-reader", "archrag-console-admin"]
     }
   ],
   "clients": [
@@ -57,7 +85,7 @@
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "defaultClientScopes": ["architecture.read"],
+      "defaultClientScopes": ["architecture.read", "roles"],
       "optionalClientScopes": ["architecture.admin"],
       "protocolMappers": [
         {
@@ -86,7 +114,7 @@
       "attributes": { "pkce.code.challenge.method": "S256" },
       "redirectUris": ["http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}/*"],
       "webOrigins": ["http://127.0.0.1:${ARCHRAG_CONSOLE_PORT}"],
-      "defaultClientScopes": [],
+      "defaultClientScopes": ["roles"],
       "optionalClientScopes": ["architecture.admin", "architecture.read"],
       "protocolMappers": [
         {

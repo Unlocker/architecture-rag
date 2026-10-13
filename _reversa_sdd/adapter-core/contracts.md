@@ -38,7 +38,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 
 ### 1.2 `POST /control/snapshot` (`AC/WebhookServer.java:55-57, 67-94`)
 
-Создаётся только если передан `Supplier<PollResult>` (`SourceAdapter` всегда передаёт `poller::snapshotOnce`, `AC/SourceAdapter.java:63`). **Без аутентификации** 🟢. Тело запроса не читается. Синхронный вызов `Poller.snapshotOnce()`.
+Создаётся только если передан `Supplier<PollResult>` (`SourceAdapter` всегда передаёт `poller::snapshotOnce`, `AC/SourceAdapter.java:63`). **Аутентификация (UNLOCKER-290):** `Authorization: Bearer <JWT>`, проверка `ControlTokenValidator` (issuer, подпись по JWKS RS256, срок, audience, realm-роль `archrag-console-admin`): нет/недействителен — `401`, нет роли — `403`; без валидатора (не заданы `ARCHRAG_CONTROL_*`) контекст не создаётся 🟢. Тело запроса не читается. Синхронный вызов `Poller.snapshotOnce()`.
 
 | Код | Условие |
 |---|---|

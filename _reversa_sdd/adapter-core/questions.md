@@ -22,7 +22,7 @@
 | U-06 | Порядок ключей JSON-ответа `/control/snapshot` не гарантирован (`Map.of`) | `AC/WebhookServer.java:82-83` |
 | U-07 | Повторы webhook-tombstone пишут в S3 разные объекты (разный `updatedAt`) | `AC/WebhookHandler.java:99-100`, `AC/InboxWriter.java:67` |
 | U-08 | Устаревший Javadoc `@param port` у конструктора `WebhookServer` | `AC/WebhookServer.java:37-38` |
-| U-09 | `/control/snapshot` без аутентификации — документированное ограничение PoC (сеть compose) | `AC/WebhookServer.java:18-22`, `docs/03-interfaces.md:33, 560` |
+| U-09 | ~~`/control/snapshot` без аутентификации~~ — закрыт UNLOCKER-290: JWT администратора с ролью `archrag-console-admin` | `AC/WebhookServer.java:18-22`, `docs/03-interfaces.md:33, 560` |
 | U-10 | Замок внутрипроцессный; несколько экземпляров адаптера дадут параллельные snapshot'ы | `AC/Poller.java:34-35, 50` |
 | U-11 | `Reconciliation`-запуск при занятом замке молча пропускается (лог `INFO … reconcile ALREADY_RUNNING`), следующий — через `reconcileInterval` (6 ч) | `AC/SourceAdapter.java:105-106`, `AC/Poller.java:108-110` |
 | U-12 | `snapshot` по завершении безусловно перезаписывает курсор polling значением `nextCursor` последней страницы snapshot, даже если курсор был дальше (изменения между началом и концом snapshot полагаются на идемпотентность) | `AC/Poller.java:171` |

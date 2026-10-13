@@ -2,7 +2,7 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import io.github.unlocker.archrag.adaptercore.ControlTokenValidator;
 import io.github.unlocker.archrag.adaptercore.PollResult;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
@@ -36,8 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -50,16 +48,6 @@ import org.postgresql.ds.PGSimpleDataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -84,12 +72,13 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(SyncAcceptanceIT.TestJwt.class)
 class SyncAcceptanceIT {
 
   private static final String SECRET = "acceptance-webhook-secret";
   private static final String BUCKET = "acceptance-it-bucket";
-  private static final SecretKey KEY = new SecretKeySpec("0123456789abcdef0123456789abcdef".getBytes(), "HmacSHA256");
+  /** Admin-ресурс: issuer и audience токенов; адаптеры проверяют тот же токен по JWKS (RS256). */
+  private static final String ADMIN_RESOURCE = McpTestJwt.RESOURCE;
+  private static final McpTestJwt JWT = new McpTestJwt();
   /** Порог критерия 2. */
   private static final Duration SLA_P95 = Duration.ofSeconds(30);
   private static final int LATENCY_SAMPLES = 20;
@@ -108,15 +97,6 @@ class SyncAcceptanceIT {
     NEO4J.start();
     POSTGRES.start();
     S3.start();
-  }
-
-  /** Подписанные тестовым ключом токены вместо внешнего IdP. */
-  @TestConfiguration
-  static class TestJwt {
-    @Bean
-    JwtDecoder jwtDecoder() {
-      return NimbusJwtDecoder.withSecretKey(KEY).macAlgorithm(MacAlgorithm.HS256).build();
-    }
   }
 
   /** Управляющие порты адаптеров выбираются заранее: адрес нужен admin-сервису до старта самих адаптеров. */
@@ -152,9 +132,10 @@ class SyncAcceptanceIT {
     r.add("archrag.s3.access-key", () -> ContainersSmokeIT.S3_ACCESS_KEY);
     r.add("archrag.s3.secret-key", () -> ContainersSmokeIT.S3_SECRET_KEY);
     r.add("archrag.s3.bucket", () -> BUCKET);
-    // Декодер токенов тестовый (TestJwt); свойство нужно только чтобы разрешился плейсхолдер application.yml.
-    r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> "http://unused.invalid");
-    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> "http://unused.invalid");
+    // Декодер токенов собирает Spring Boot из этих свойств, как в проде: подпись, issuer и audience.
+    r.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", JWT::jwkSetUri);
+    r.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> ADMIN_RESOURCE);
+    r.add("spring.security.oauth2.resourceserver.jwt.audiences", () -> ADMIN_RESOURCE);
     r.add("archrag.adapters.eam.control-url", () -> controlUrl(SourceSystem.EAM));
     r.add("archrag.adapters.scm.control-url", () -> controlUrl(SourceSystem.SCM));
     r.add("archrag.adapters.cmdb.control-url", () -> controlUrl(SourceSystem.CMDB));
@@ -198,7 +179,8 @@ class SyncAcceptanceIT {
         case DEPLOY_MAP -> DeploymapAdapter.create(DeploymapAdapter.config(server.baseUri(), SECRET), journal, store);
       };
       adapters.put(system, adapter);
-      var webhook = adapter.startWebhook(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORTS.get(system)));
+      var webhook = adapter.startWebhook(new InetSocketAddress(InetAddress.getLoopbackAddress(), PORTS.get(system)),
+          new ControlTokenValidator(ADMIN_RESOURCE, URI.create(JWT.jwkSetUri()), ADMIN_RESOURCE, McpTestJwt.ADMIN_ROLE));
       senders.put(system, new StubWebhookSender(webhook.endpoint(), SECRET, clock));
     });
   }
@@ -504,11 +486,7 @@ class SyncAcceptanceIT {
   }
 
   private String token() {
-    var encoder = new NimbusJwtEncoder(new ImmutableSecret<>(KEY));
-    var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now())
-        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin");
-    return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()))
-        .getTokenValue();
+    return JWT.tokenFor("operator-1", ADMIN_RESOURCE, "architecture.admin");
   }
 
   private HttpResponse<String> post(String path, String token) throws Exception {

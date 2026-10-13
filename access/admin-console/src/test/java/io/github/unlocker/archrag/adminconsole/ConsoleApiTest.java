@@ -105,6 +105,22 @@ class ConsoleApiTest {
   }
 
   @Test
+  void apiWithAdminScopeButWithoutAdminRoleIsForbidden() {
+    var res = get("/api/graph/stats", TestJwt.tokenWithRoles(List.of(), "architecture.admin"));
+
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+    verify(executor, never()).execute(any(), any(), any());
+  }
+
+  @Test
+  void apiWithAdminRoleButWithoutAdminScopeIsForbidden() {
+    var res = get("/api/graph/stats", TestJwt.tokenWithRoles(List.of(TestJwt.ROLE), "architecture.read"));
+
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+    verify(executor, never()).execute(any(), any(), any());
+  }
+
+  @Test
   void apiWithForeignAudienceIsUnauthorized() {
     String foreign =
         TestJwt.token(
