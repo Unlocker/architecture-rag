@@ -1,0 +1,9 @@
+# contracts/source-spi — открытые вопросы (🔴, нужен человек/архитектор)
+
+| № | Вопрос | Evidence | Предложение |
+|---|---|---|---|
+| Q-01 | `source-spi` объявляет зависимость на `canonical-model`, но не использует ни одного её типа. Оставить (запас на будущее) или убрать? CLAUDE.md: `contracts/*` «ни от чего проектного не зависят». Предыдущие документы (`dependencies.md` `SPI --> CM`, `inventory.md:29`) считают её рабочей. | `contracts/source-spi/pom.xml:19-21`; `grep canonicalmodel contracts/source-spi/src` пуст | решение архитектора; код не правим |
+| Q-02 | Принуждать ли инварианты `SourceChange` в конструкторе (DELETE → пустой payload; `sourceVersion >= 0`; непустые `sourceType/sourceId`) или оставить проверку вызывающим (`WebhookHandler` проверяет `version >= 0` для tombstone)? | `SPI/SourceChange.java:12-14` vs `:33-42`; `WebhookHandler.java:93-99` | либо тест-«документ», что конструктор намеренно мягкий, либо проверки |
+| Q-03 | Нет модульных тестов на `ChangePage` (инвариант ловушки 9), `SourceChange`, `SourceUnavailableException`, `SourceSystem`. Закрыть в этом модуле? | `contracts/source-spi/src/test/java/.../WebhookSignatureTest.java` — единственный тест | добавить тесты в рамках E-задачи |
+| Q-04 | Устаревший эскиз порта в видении (`SourcePage`, `SourceCursor`, `SourceSnapshot fetchById(SourceObjectId)`) vs реальный `SourceConnector`. Обновить `docs/00-vision.md`? | `docs/00-vision.md:485-489` vs `SPI/SourceConnector.java:12-34`; актуально `docs/03-interfaces.md:432-450` | решение владельца |
+| Q-05 | `long sourceVersion` против `SourceVersion` до 40 цифр: достаточно ли `long` для реальных источников? | `SPI/SourceChange.java:27`; `contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java:13` | зафиксировать, что `long` — предел контракта |

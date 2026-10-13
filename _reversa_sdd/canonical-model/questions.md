@@ -1,0 +1,15 @@
+# contracts/canonical-model — Вопросы к человеку (🔴)
+
+> Источники: код, `_reversa_sdd/detective-gaps.md`, `docs/`. Исходники не правятся. `CM/` = `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/`.
+
+| № | Вопрос / расхождение | Где | Адресат |
+|---|---|---|---|
+| Q-1 🔴 | `SyncRunStatus` объявляет `RUNNING, SUCCEEDED, FAILED`, а проектор создаёт `SyncRun` только со `status = 'RUNNING'`, `endedAt` не пишется. Закрыть статус (кто и когда?) или удалить неиспользуемые значения? | `CM/provenance/SyncRunStatus.java:5`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:698`; `_reversa_sdd/detective-gaps.md` Р-5 | архитектор |
+| Q-2 🔴 | `docs/02-data-model.md:170` перечисляет явные правила свойств `ITSystem` (`criticality`, `eamCode`); код дополнительно фиксирует `platformId` (ADR 0031). Обновить `docs/02` (в таблице у `Solution` тоже нет явного правила `platformId`: `docs/02-data-model.md:171`). | `CM/authority/AuthorityMatrix.java:95-96`; `docs/02-data-model.md:170-171` | архитектор |
+| Q-3 🔴 | `CloseAssertion` потребляется (`GraphProjector.java:347`, `EventProcessor.java:577`, `ProjectionRequest.java:85`), но ни один `main`-код не создаёт его. Задел под будущий источник или мёртвый вариант `sealed`? | `CM/command/CloseAssertion.java:9`; поиск `new CloseAssertion` — только в `contracts/canonical-model` тестах | архитектор |
+| Q-4 🔴 | ADR 0008 фиксирует мастера только для `DEPENDS_ON` (EAM). Мастер `DECOMPOSED_INTO` — SCM (и остальные структурные связи) определён лишь в коде (`CM/authority/AuthorityMatrix.java:108`) и `docs/02`. Нужен ADR/правка 0008 (`_reversa_sdd/adrs/retroactive-map.md:16`). | `docs/adr/0008-authority-matrix-field-level.md:14` | архитектор |
+| Q-5 🟡 | Должен ли конструктор `ITSystem` проверять взаимоисключение `criticality`/`criticalityRaw` (Javadoc `CM/node/ITSystem.java:6-11` — «set instead of»)? | `CM/node/ITSystem.java:16-25` | архитектор |
+| Q-6 🟡 | Должен ли `UpsertRelation` требовать `validity != null` для темпоральных типов (сейчас допускает `null`; проектор подставляет время события?) | `CM/command/UpsertRelation.java:35-37`; `docs/02-data-model.md` §4 | архитектор |
+| Q-7 🟡 | Нужно ли проверять `Repository.url` на нормализованный вид, как `Deployment.repositoryUrl`? | `CM/node/Repository.java:10`, `CM/node/Deployment.java:30-32` | архитектор |
+| Q-8 🟡 | Объединить `GitUrls.normalize` и `FeatureNormalizer.repositoryUrl` (регистр пути разный) | `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/ScmMapper.java:103-104`; `ingestion/identity-resolution/.../FeatureNormalizer.java:33` | архитектор |
+| Q-9 🟡 | `AuthorityMatrix`: оставить хардкод `defaults()` или сделать конфигурируемой (сейчас три вызова `defaults()`; spec-impact-matrix §2 №12). | `CM/authority/AuthorityMatrix.java:28, 34-40` | архитектор |
