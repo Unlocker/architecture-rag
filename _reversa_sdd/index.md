@@ -2,6 +2,8 @@
 
 > Reversa Writer, R.6a + R.6b (UNLOCKER-271, UNLOCKER-272). Язык — русский, термины кода как в коде. Layout `hybrid`: папка модуля (`requirements.md`, `design.md`, `tasks.md`, `contracts.md`, `decisions.md`, `questions.md`) и вложенные папки use case (`requirements.md`, `design.md`, `tasks.md`). Ссылки на код — полные пути от корня репозитория с `:строка`. Метки уверенности: 🟢 подтверждено кодом, 🟡 выведено, 🔴 пробел.
 
+HTML-сайт по этим specs: [`_reversa_docs/index.html`](_reversa_docs/index.html) (работает офлайн через `file://`, см. `README.md` в корне репозитория).
+
 ## Единицы (21)
 
 | Модуль | Спецификация | Файлов | Use case | Открытые вопросы |

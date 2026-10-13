@@ -17,6 +17,20 @@ AI-native витрина архитектурных активов: мастер
 Открытые вопросы, ждущие решения владельца (ADR со статусом «Предложено»):
 [ADR 0024](docs/adr/0024-open-source-id-format.md), [ADR 0025](docs/adr/0025-open-deployment-env-index.md).
 
+## Spec-driven documentation
+
+Спецификации, восстановленные из кода инструментом Reversa (требования, дизайн, задачи и контракты по 21 модулю, C4, ERD, машины состояний, права, карта расхождений и отчёт о достоверности), лежат в [`_reversa_sdd/`](_reversa_sdd/index.md). Точка входа: [`_reversa_sdd/index.md`](_reversa_sdd/index.md). Specs описывают код «как есть» на момент коммита `6ec771e`; расхождения с `docs/` и ADR помечены 🔴/🟡 и разобраны в [`_reversa_sdd/gaps.md`](_reversa_sdd/gaps.md), решения владельца по ним — в [`_reversa_sdd/questions.md`](_reversa_sdd/questions.md).
+
+Тот же материал в виде самодостаточного HTML-сайта (архитектура 3D, граф модулей, метрики, глоссарий, страницы по модулям) лежит в [`_reversa_sdd/_reversa_docs/`](_reversa_sdd/_reversa_docs/index.html). Сеть и сервер не нужны, сайт открывается через `file://`:
+
+```bash
+xdg-open _reversa_sdd/_reversa_docs/index.html   # Linux
+open _reversa_sdd/_reversa_docs/index.html       # macOS
+start _reversa_sdd\_reversa_docs\index.html      # Windows
+```
+
+Если браузер блокирует локальные файлы, поднимите сервер: `python3 -m http.server 8080 --directory _reversa_sdd/_reversa_docs` и откройте `http://localhost:8080/`.
+
 ## Структура репозитория
 
 Maven multi-module, Java 21. Версии задаются в корневом [pom.xml](pom.xml).

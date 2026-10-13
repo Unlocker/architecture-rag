@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дек | Arch RAG</title>
+    <meta name="reversa-category" content="diagram">
+    <meta name="reversa-template" content="deck">
+    <meta name="reversa-source-md" content="../soul.md">
+    <meta name="reversa-producer-agent" content="reversa-docs-storyteller">
+    <meta name="reversa-generated-at" content="2026-10-13T10:20:13Z">
+    <meta name="reversa-schema-version" content="1">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body data-style="sober" data-page="deck" data-sidebar="none">
+    <header class="reversa-doc-header">
+        <a class="reversa-doc-logo" href="index.html" aria-label="На главную">
+            <span class="seal" aria-hidden="true"><svg class="seal-mini" viewBox="0 0 200 200" width="32" height="32" role="img" aria-label="Печать проекта"><circle cx="100" cy="100" r="96" fill="#f5f3ee" stroke="#1e2937" stroke-width="4"/><polygon points="121.3,14.6 136.0,56.7 180.0,63.4 156.3,101.1 178.5,139.8 134.2,144.7 117.9,186.2 86.4,154.6 43.8,167.7 48.8,123.4 12.0,98.2 49.8,74.6 46.5,30.1 88.6,44.9" fill="#7c8a99" fill-opacity="0.35" stroke="#1e2937" stroke-width="1"/><polygon points="54.7,47.9 90.4,64.7 112.5,32.1 121.6,70.5 160.8,67.5 136.5,98.5 163.4,127.3 124.0,127.6 118.2,166.6 93.4,136.0 59.3,155.7 67.8,117.2 31.1,102.9 66.4,85.5" fill="#3d4a5c" fill-opacity="0.50" stroke="#1e2937" stroke-width="1"/><polygon points="50.5,93.0 73.0,82.0 74.6,57.0 97.2,67.6 117.8,53.3 123.6,77.7 147.6,84.8 132.2,104.5 141.6,127.8 116.5,128.0 104.2,149.8 88.4,130.4 63.7,134.4 69.0,109.9" fill="#7c8a99" fill-opacity="0.65" stroke="#1e2937" stroke-width="1"/><polygon points="129.1,110.6 114.1,114.4 109.9,129.4 97.5,120.0 83.2,126.0 82.8,110.5 69.2,103.1 81.1,93.1 78.4,77.8 93.6,80.9 103.9,69.2 110.9,83.1 126.5,83.8 120.0,98.0" fill="#7c8a99" fill-opacity="0.80" stroke="#1e2937" stroke-width="1"/><circle cx="100" cy="100" r="9" fill="#1e2937"/></svg></span>
+            <span class="project-name">Arch RAG</span>
+        </a>
+        <nav class="reversa-doc-nav" aria-label="Разделы документации">
+            <a href="index.html" data-page-id="index">Обзор</a>
+            <a href="arquitetura.html" data-page-id="arquitetura">Архитектура 3D</a>
+            <a href="modulos.html" data-page-id="modulos">Модули</a>
+            <a href="metricas.html" data-page-id="metricas">Метрики</a>
+            <a href="features.html" data-page-id="features">Единицы</a>
+            <a href="glossario.html" data-page-id="glossario">Глоссарий</a>
+            <a href="deck.html" data-page-id="deck" class="is-active" aria-current="page">Дек</a>
+        </nav>
+        <div class="reversa-doc-toolbar">
+            <button type="button" class="theme-toggle" aria-label="Сменить тему">
+                <span class="theme-toggle-label">Тема</span>
+            </button>
+        </div>
+    </header>
+    <main class="reversa-doc-main" role="main">
+        <div class="reversa-doc-payload">
+            <h1 class="reversa-doc-title">Дек</h1>
+<section class="reversa-doc-deck" data-mode="presentation"><ol class="reversa-doc-deck-slides" id="deck-slides"><li><h2>Arch RAG</h2><p>Операционный граф знаний об архитектуре предприятия. Обзор для нового разработчика.</p><div class="reversa-doc-hero-seal" style="width:140px;height:140px"><svg class="seal-hero" viewBox="0 0 200 200" width="220" height="220" role="img" aria-label="Печать проекта"><circle cx="100" cy="100" r="96" fill="#f5f3ee" stroke="#1e2937" stroke-width="4"/><polygon points="121.3,14.6 136.0,56.7 180.0,63.4 156.3,101.1 178.5,139.8 134.2,144.7 117.9,186.2 86.4,154.6 43.8,167.7 48.8,123.4 12.0,98.2 49.8,74.6 46.5,30.1 88.6,44.9" fill="#7c8a99" fill-opacity="0.35" stroke="#1e2937" stroke-width="1"/><polygon points="54.7,47.9 90.4,64.7 112.5,32.1 121.6,70.5 160.8,67.5 136.5,98.5 163.4,127.3 124.0,127.6 118.2,166.6 93.4,136.0 59.3,155.7 67.8,117.2 31.1,102.9 66.4,85.5" fill="#3d4a5c" fill-opacity="0.50" stroke="#1e2937" stroke-width="1"/><polygon points="50.5,93.0 73.0,82.0 74.6,57.0 97.2,67.6 117.8,53.3 123.6,77.7 147.6,84.8 132.2,104.5 141.6,127.8 116.5,128.0 104.2,149.8 88.4,130.4 63.7,134.4 69.0,109.9" fill="#7c8a99" fill-opacity="0.65" stroke="#1e2937" stroke-width="1"/><polygon points="129.1,110.6 114.1,114.4 109.9,129.4 97.5,120.0 83.2,126.0 82.8,110.5 69.2,103.1 81.1,93.1 78.4,77.8 93.6,80.9 103.9,69.2 110.9,83.1 126.5,83.8 120.0,98.0" fill="#7c8a99" fill-opacity="0.80" stroke="#1e2937" stroke-width="1"/><circle cx="100" cy="100" r="9" fill="#1e2937"/></svg></div></li><li><h2>Назначение</h2><p>Arch RAG - операционный граф знаний об архитектуре предприятия, а не «GraphRAG из документов»: мастер-системы остаются владельцами данных, Neo4j - производная read-only витрина, адаптеры поддерживают её актуальность, а MCP-сервер даёт ИИ-агентам ограниченный набор предметных read-only операций. Потребители - ИИ-агенты (через MCP) и операторы (через read-only админ-консоль).</p><p class="md-note">Источник: soul.md, раздел 1.</p></li><li><h2>Центральные сущности</h2><ul><li><strong>ITSystem</strong>: ИТ-система предприятия (корень иерархии). Связи: USES_SOLUTION→Solution, DECOMPOSED_INTO→Service, OWNED_BY→Tea...</li><li><strong>Solution / Platform</strong>: Решение и платформа, на которой оно построено. Связи: USES_PLATFORM</li><li><strong>Service</strong>: Сервис - единица разработки и развёртывания. Связи: IMPLEMENTED_IN→Repository, HAS_DEPLOYMENT→Deployment, DEPE...</li><li><strong>Repository</strong>: Git-репозиторий исходного кода. Связи: цель IMPLEMENTED_IN, DEPLOYED_FROM {commit}</li><li><strong>Deployment</strong>: Развёртывание сервиса в окружении. Связи: IN_ENVIRONMENT→Environment, RUNS_ON→ComputeInstance/Namespace, DEPLO...</li><li><strong>Environment / ComputeInstance (VirtualMachine, PhysicalServer) / Namespace / KubernetesCluster</strong>: Окружение и инфраструктура исполнения. Связи: HOSTED_ON, PART_OF</li><li><strong>Team</strong>: Владелец систем и сервисов. Связи: цель OWNED_BY</li><li><strong>SourceSystem / SourceRecord / SyncRun</strong>: Provenance: кто и когда утверждал факт. Связи: OWNS_RECORD, ASSERTS, PROCESSED</li></ul><p><a href="glossario.html">Весь глоссарий</a></p></li><li><h2>Архитектура</h2><p>Четыре контура: сбор (adapters), журнал и идентичность (ingestion), витрина (Neo4j), доступ (MCP-сервер и админ-консоль). Первые три пишут, четвёртый только читает.</p><ul><li><strong>contracts</strong>: модулей 3, файлов кода 79, LOC 2237</li><li><strong>adapters</strong>: модулей 5, файлов кода 49, LOC 4070</li><li><strong>ingestion</strong>: модулей 5, файлов кода 112, LOC 10049</li><li><strong>access</strong>: модулей 4, файлов кода 135, LOC 10205</li><li><strong>platform</strong>: модулей 4, файлов кода 65, LOC 12271</li></ul><p><a href="arquitetura.html">Code City</a></p></li><li><h2>Модули</h2><p>21 единица, 71 внутренних зависимостей, циклов нет: да.</p><p><a href="modulos.html">Карта модулей</a> | <a href="features.html">Список единиц</a></p></li><li><h2>Метрики</h2><div class="kpis"><div class="kpi"><b>440</b><span>файлов кода</span></div><div class="kpi"><b>18600</b><span>строк основного кода</span></div><div class="kpi"><b>20232</b><span>строк тестов</span></div><div class="kpi"><b>21</b><span>Maven-модулей и единиц</span></div></div><p><a href="metricas.html">Дашборд метрик</a></p></li><li><h2>Основополагающие решения</h2><ul><li><strong>D1</strong>: Neo4j - производная read-only витрина; источник истины - мастер-системы</li><li><strong>D2</strong>: Идентичность: `gid` + `SourceRecord {source, sourceType, sourceId}`; `sourceId` - без префикса системы</li><li><strong>D3</strong>: Postgres inbox как event backbone за интерфейсами `EventJournal`/`CanonicalEventPublisher`; raw payload в S3 (SeaweedFS)</li><li><strong>D4</strong>: Authority matrix на уровне полей и связей; identity resolution без авто-слияния</li><li><strong>D5</strong>: Tombstone вместо hard delete; удаление только после `snapshot-complete`; структурные связи темпоральны</li><li><strong>D6</strong>: Агентам - предметные tools с параметризованными шаблонами; read-only обеспечивает приложение, не Neo4j Community</li><li><strong>D7</strong>: Java 21 + Spring Boot 4 + Spring AI 2 + Maven multi-module; четыре контура как модули; Docker Compose стенд</li><li><strong>D8</strong>: Мастер-системы в PoC - заглушки; `Deployment` берётся из deploy map + Helm charts</li></ul><p class="md-note">Подробности: ADR и soul.md.</p></li><li><h2>Ключевая единица: mcp-server</h2><p>MCP-сервер (Streamable HTTP, STATELESS, POST /mcp): 6 read-only tools поверх graph-query-core, OAuth2 resource server с проверкой scope на tools/call, аудит и метрики каждого вызова</p><ul><li><a href="features/mcp-server.html">сценарий</a> authorize-tool-call</li><li><a href="features/mcp-server.html">сценарий</a> explain-provenance</li><li><a href="features/mcp-server.html">сценарий</a> find-runtime-footprint</li><li><a href="features/mcp-server.html">сценарий</a> search-get-asset</li><li><a href="features/mcp-server.html">сценарий</a> trace-dependencies</li></ul></li><li><h2>Что осталось открытым</h2><p>Достоверность specs: 82%. Решения владельца по 20 вопросам получены; остальные пробелы собраны в реестрах.</p><ul><li><a href="../gaps.md">gaps.md</a></li><li><a href="../questions.md">questions.md</a></li><li><a href="../tech-debt.md">tech-debt.md</a></li></ul></li><li><h2>Дальше</h2><ul><li><a href="index.html">Главная страница сайта</a></li><li><a href="features.html">Страницы единиц</a></li><li><a href="glossario.html">Глоссарий</a></li><li><a href="../index.md">Индекс specs</a></li></ul></li></ol><nav class="reversa-doc-deck-nav" aria-label="Навигация по деку"><button type="button" data-action="prev" aria-label="Предыдущий слайд">&larr;</button><span class="reversa-doc-deck-counter">1 / 10</span><button type="button" data-action="next" aria-label="Следующий слайд">&rarr;</button><button type="button" data-action="fullscreen" aria-label="Во весь экран">F</button></nav></section>
+        </div>
+    </main>
+    <aside class="reversa-doc-sidebar" aria-label="Управление" data-page="deck"></aside>
+    <footer class="reversa-doc-footer">
+        <span class="reversa-doc-footer-text">Сгенерировано Reversa, <time datetime="2026-10-13T10:20:13Z">2026-10-13</time></span>
+        <span class="reversa-doc-footer-sep" aria-hidden="true">|</span>
+        <a href="../soul.md" class="reversa-doc-source-link">Источник в markdown</a>
+    </footer>
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/sidebar.js"></script>
+    <script src="assets/js/deck.js"></script>
+</body>
+</html>

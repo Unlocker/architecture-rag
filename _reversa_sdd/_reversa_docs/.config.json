@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-13T10:20:13Z",
+  "reversa": {
+    "version": "1.3.4"
+  },
+  "projectName": "Arch RAG",
+  "interview": {
+    "readerProfile": "novo_dev",
+    "depth": "full",
+    "visualStyle": "sober",
+    "mode": "--auto"
+  },
+  "seed": {
+    "hash": "sha256:9e6c15f4d15be0b4ee9ba8852fde4a64482ce24474bd6fcc9b847f2fcebe6484",
+    "source": "soul.md",
+    "explicitOverride": null,
+    "note": "_reversa_sdd/soul.md (в .reversa/ файла soul.md нет)"
+  },
+  "knowledgeSources": {
+    "soul": true,
+    "soulPath": "_reversa_sdd/soul.md",
+    "chronicle": false,
+    "topology": false,
+    "sddSpecs": [
+      "adapter-core",
+      "admin-console",
+      "admin-ui",
+      "asset-adapter",
+      "canonical-model",
+      "demo-launcher",
+      "deploymap-adapter",
+      "docker",
+      "eam-adapter",
+      "event-journal",
+      "event-schemas",
+      "graph-projector",
+      "graph-query-core",
+      "identity-resolution",
+      "ingestion-service",
+      "integration-tests",
+      "mcp-server",
+      "normalizer",
+      "scm-adapter",
+      "source-spi",
+      "source-stubs"
+    ],
+    "sourceCode": true
+  },
+  "outputFolder": "_reversa_sdd/_reversa_docs"
+}
