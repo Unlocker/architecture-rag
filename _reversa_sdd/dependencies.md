@@ -29,7 +29,7 @@
 |---|---|
 | `contracts/*` | нет внешних (только JDK) |
 | `adapters/*` | нет внешних; `source-stubs` в test |
-| `ingestion/event-journal` | `postgresql`, `flyway-core`, `flyway-database-postgresql`, AWS `s3` (+ `netty-nio-client`, `apache-client`, `url-connection-client`) |
+| `ingestion/event-journal` | `postgresql`, `flyway-core`, `flyway-database-postgresql`, AWS `s3` (`netty-nio-client` и `apache-client` — `<exclusions>` у `s3`, `ingestion/event-journal/pom.xml:37-46`; `url-connection-client` — зависимость) |
 | `ingestion/identity-resolution` | `postgresql` |
 | `ingestion/graph-projector` | `neo4j-java-driver` |
 | `ingestion/normalizer` | нет внешних |
@@ -80,12 +80,13 @@ flowchart LR
   SPI --> CM
   AC --> SPI & ES
   EAM & SCM & AST & DM --> AC
-  DM --> CM
+  DM -.->|test| CM
   EJ --> ES
   NRM --> CM & ES & SPI
   IDR --> CM
   GP --> CM & ES & NRM & IDR
-  IS --> EJ & NRM & IDR & GP & AC & SPI
+  IS --> EJ & NRM & IDR & GP & SPI
+  IS -.->|test| AC
   GQ --> CM
   MCP --> GQ
   ADC --> GQ

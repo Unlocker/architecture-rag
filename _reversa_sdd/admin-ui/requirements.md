@@ -76,7 +76,7 @@ flowchart LR
 
 | Тип | Требование | Evidence | Уверенность |
 |-----|------------|----------|-------------|
-| Безопасность | Токен только в памяти; в `sessionStorage` остаётся одноразовое `state`/`code_verifier` на время редиректа | `access/admin-ui/src/auth/authService.ts:10, 35-37, 48`; `docs/adr/0026-admin-console-readonly-loopback.md:21` | 🟢 токен / 🟡 `state` (хранилище библиотеки не задано в коде, Q-08) |
+| Безопасность | Токен только в памяти (`userStore` — `sessionStorage`/in-memory по коду); одноразовое `state`/`code_verifier` по умолчанию `oidc-client-ts@3.1.0` пишется в `localStorage` (`stateStore` не задан), а не в `sessionStorage`, как утверждает ADR 0026 `[Ревью R.7]` | `access/admin-ui/src/auth/authService.ts:10, 35-37, 48`; `docs/adr/0026-admin-console-readonly-loopback.md:21` | 🟢 токен / 🟢 расхождение с ADR 0026 по `state` (Q-08; проверено по исходникам `oidc-client-ts@3.1.0`) |
 | Безопасность | Публичный клиент, PKCE (`response_type: 'code'`), `redirect_uri = origin + "/"` | `access/admin-ui/src/auth/authService.ts:40, 46`; `platform/docker/keycloak/archrag-realm.json:77-90` | 🟢 |
 | Безопасность | Бандл совместим со строгой CSP (`default-src 'self'`): без inline-скриптов и стилей, CSS отдельным файлом | `access/admin-ui/webpack.config.js:26-30`; `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java:61-66`; `access/admin-console/src/test/java/io/github/unlocker/archrag/adminconsole/ConsoleApiTest.java:183` | 🟢 |
 | Безопасность | Недоверенные тексты источников не интерпретируются как HTML | `access/admin-ui/src/components/common.tsx:65-69`; `access/admin-ui/src/components/GraphCanvas.tsx:6-9` | 🟢 |

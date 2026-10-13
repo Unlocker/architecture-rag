@@ -79,9 +79,9 @@
 
 ## Fase 5: Revisão ✅
 
-- [ ] **Revisor** — Revisão cruzada de specs
-- [ ] **Revisor** — Resolução de lacunas com o usuário
-- [ ] **Revisor** — Relatório de confiança final
+- [x] ✅ **Revisor** — Revisão cruzada de specs (R.7, UNLOCKER-273: `_reversa_sdd/{gaps,confidence-report}.md`)
+- [ ] **Revisor** — Resolução de lacunas com o usuário (20 вопросов в `_reversa_sdd/questions.md`, ждут ответов владельца)
+- [x] ✅ **Revisor** — Relatório de confiança final (80%, пересчитать после ответов)
 
 ---
 

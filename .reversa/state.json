@@ -8,14 +8,14 @@
   "doc_level": "completo",
   "output_folder": "_reversa_sdd",
   "forward_folder": "_reversa_forward",
-  "phase": "geracao",
+  "phase": "revisao",
   "completed": [
     "reconhecimento",
     "escavacao",
-    "interpretacao"
+    "interpretacao",
+    "geracao"
   ],
   "pending": [
-    "geracao",
     "revisao"
   ],
   "checkpoints": {
@@ -424,6 +424,21 @@
       ],
       "units_done": "21/21",
       "part2_done": true
+    },
+    "reviewer": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "units_reviewed": 21,
+      "cross_review_engine": "none",
+      "reclassifications": 7,
+      "questions_generated": 20,
+      "questions_answered": 0,
+      "confidence_percent": 80,
+      "files": [
+        "_reversa_sdd/confidence-report.md",
+        "_reversa_sdd/gaps.md",
+        "_reversa_sdd/questions.md"
+      ],
+      "note": "pending: ответы владельца на questions.md; step-04-regression-check пропущен (нет _reversa_forward/)"
     }
   },
   "engines": [

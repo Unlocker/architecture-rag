@@ -15,4 +15,4 @@
 | Инвариант платформы ИТ-системы: `platformId` у `ITSystem`/`Solution`, мастер EAM | `CM/node/ITSystem.java:7-11`, `CM/node/Solution.java:7-9`, `CM/authority/AuthorityMatrix.java:95-96` | [0031](../../docs/adr/0031-it-system-platform-invariant.md) | 🟢 |
 | Cypher подставляет метки/типы связей только из enum | `CM/node/NodeLabel.java:44-46`, `CM/relation/RelationType.java` | CLAUDE.md, ловушка 1; [0018](../../docs/adr/0018-domain-tools-not-arbitrary-cypher.md) | 🟡 |
 | Время — `Instant` (UTC) | `CM/node/Lifecycle.java:12` | CLAUDE.md, ловушка 10 | 🟢 |
-| Контракты `contracts/*` не зависят от проектных модулей | `contracts/canonical-model/pom.xml:1-16` | CLAUDE.md, раздел «Раскладка модулей и направление зависимостей» | 🟢 |
+| `canonical-model` не зависит от проектных модулей; `event-schemas` и `source-spi` зависят от него, не используя (`contracts/event-schemas/pom.xml:18-21`, `contracts/source-spi/pom.xml:18-21`) — нарушение CLAUDE.md «contracts/* ни от чего проектного не зависят» | `contracts/canonical-model/pom.xml:1-16` | CLAUDE.md, раздел «Раскладка модулей и направление зависимостей» | 🟢 для canonical-model / 🔴 для остальных `[Ревью R.7]` |

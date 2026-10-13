@@ -49,7 +49,7 @@
 | Спецификация | Связь | Статус |
 |---|---|---|
 | `contracts/canonical-model` | прямая зависимость в `pom.xml`, не используется (§Dependências) | 🔴 |
-| `adapters/adapter-core` | реализации порта: `HttpSourceConnector` (`HttpSourceConnector.java:33`), `EamApiConnector` (`EamApiConnector.java:42`), `CompositeEamConnector` (`CompositeEamConnector.java:27`), `StubSource` (`StubSource.java:29`); потребляет весь SPI: `HttpSourceConnector`, `WebhookHandler` (verify), `Poller`, `EventMapper` (`long → SourceVersion`) — **меняется SPI ⇒ пересмотреть** | 🟢 (матрица §1) |
+| `adapters/adapter-core` | реализация порта `HttpSourceConnector` (`HttpSourceConnector.java:33`); `EamApiConnector` (`EamApiConnector.java:42`) и `CompositeEamConnector` (`CompositeEamConnector.java:27`) лежат в `adapters/eam-adapter`, `StubSource` (`StubSource.java:29`) — в `platform/source-stubs` `[Ревью R.7]`; потребляет весь SPI: `HttpSourceConnector`, `WebhookHandler` (verify), `Poller`, `EventMapper` (`long → SourceVersion`) — **меняется SPI ⇒ пересмотреть** | 🟢 (матрица §1) |
 | `adapters/eam-adapter` (`EamApiConnector`), `scm-adapter`, `asset-adapter`, `deploymap-adapter` | реализации/конфигурация на `SourceConnector`; `SourceUnavailableException` бросает `EamApiConnector` (`EamApiConnector.java:216, 234`) | 🟢 |
 | `platform/source-stubs` | `StubSource` реализует порт, `StubWebhookSender` подписывает через `WebhookSignature.sign` (`StubWebhookSender.java:47, 55, 76-78`) | 🟢 |
 | `ingestion/normalizer` | зависимость на `source-spi` в `pom.xml`; в матрице отмечено «тест» | 🟡 |
