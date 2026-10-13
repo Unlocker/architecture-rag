@@ -102,7 +102,7 @@ flowchart TD
   TK -. "scope=architecture.admin,\nazp = archrag-demo" .-> I2["ingestion /admin/** → 200\n(restore.sh: replay)"]
 ```
 
-🔴 Роль `archrag-console-admin` присвоена пользователю (`realm.json:37-46`), но нигде не проверяется: токен консоли получает любой пользователь realm (ADR 0026, `docs/05-production-gap-list.md:33`).
+🟡 Роль `archrag-console-admin` присвоена пользователю (`platform/docker/keycloak/archrag-realm.json:37-46`), но нигде не проверяется: токен консоли получает любой пользователь realm. Принято владельцем 2026-10-08 (П-9 в `../detective-gaps.md:38`, `../permissions.md` §5; ADR 0026, `docs/05-production-gap-list.md:33`).
 
 ## 3. `scripts/backup.sh`, `restore.sh`, `backup-restore-check.sh` 🟢
 

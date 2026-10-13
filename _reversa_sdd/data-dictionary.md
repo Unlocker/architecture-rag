@@ -358,7 +358,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 # Q. ingestion (R.2c, UNLOCKER-265)
 
 > Archaeologist, этап R.2c. Пути сокращены: `EJ/` = `ingestion/event-journal/src/main/`, `NZ/` = `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/`. Метки: 🟢 код · 🟡 выведено · 🔴 пробел.
-> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-13`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы (Neo4j, PostgreSQL, роли, S3) и ERD — R.3: [`_reversa_sdd/database/data-dictionary.md`](database/data-dictionary.md), [`_reversa_sdd/database/erd.md`](database/erd.md); здесь — таблицы, через которые проходит логика модулей.
+> Схема PostgreSQL собирается из миграций **трёх модулей** в одном каталоге `classpath:db/migration` (`EJ/java/.../JournalMigrations.java:11-14`): `V1` — event-journal, `V2/V4/V5/V7` — identity-resolution, `V3/V6` — ingestion-service. Полный словарь схемы (Neo4j, PostgreSQL, роли, S3) и ERD — R.3: [`_reversa_sdd/database/data-dictionary.md`](database/data-dictionary.md), [`_reversa_sdd/database/erd.md`](database/erd.md); здесь — таблицы, через которые проходит логика модулей.
 
 ## Q.1 event-journal: таблицы PostgreSQL (`EJ/resources/db/migration/V1__event_journal.sql`) 🟢
 
@@ -410,7 +410,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 
 | Тип | Поля | Правила |
 |---|---|---|
-| `NormalizationResult.Normalized` (`NZ/NormalizationResult.java:19-27`) | `commands: List<GraphCommand>`, `unresolved: List<UnresolvedReference>`, `warnings: List<String>` | списки копируются `List.copyOf`; `commands` начинается с `UpsertNode` записи события (кроме случаев, когда маппер добавляет только связь — не встречается в коде) |
+| `NormalizationResult.Normalized` (`NZ/NormalizationResult.java:19-27`) | `commands: List<GraphCommand>`, `unresolved: List<UnresolvedReference>`, `warnings: List<String>` | списки копируются `List.copyOf`; по Javadoc (`NZ/NormalizationResult.java:12`) `commands` начинается с `UpsertNode` записи события, но для EAM `SERVICE_DEPENDENCY` маппер выдаёт только `DEPENDS_ON` без `UpsertNode`, а при двух неизвестных концах `commands` пуст (`NZ/EamMapper.java:100-115`) 🔴 расхождение Javadoc и кода, см. `normalizer/questions.md` Q-01 |
 | `NormalizationResult.Quarantined` (`:34`) | `errorCode`, `reason` | коды: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `UNKNOWN_SCHEMA_VERSION`, `UNKNOWN_SOURCE_TYPE`, `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD` |
 | `UnresolvedReference` (`NZ/UnresolvedReference.java:19-28`) | `from: SourceKey`, `field: String`, `relationType`, `target: SourceKey`, `relation: UpsertRelation` | все поля обязательны; `field` — имя поля источника без значения; `target` — отсутствующий конец |
 | `CanonicalMapper.Input` (`NZ/CanonicalMapper.java:36`) | `record: SourceRecord`, `payload: Map<String,Object>`, `time: Instant` | `payload` — недоверенные данные |
@@ -862,7 +862,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | Тип | Поля | Файл |
 |---|---|---|
 | `StubSource.Entry` (record, private) | `seq: long` (с 1, `= размер журнала + 1`), `change: SourceChange`, `notified: boolean` (= не были подавлены webhook в момент записи) | `SS/StubSource.java:31,188` |
-| `SourceChange` (из `source-spi`) | `sourceType, sourceId, sourceVersion: long, operation: ChangeOperation, completeness: Completeness, updatedAt: Instant, payload: Map<String,Object>` (копия `LinkedHashMap`, `null` → `{}`; `null`-значения полей сохраняются) | `contracts/source-spi/.../SourceChange.java:24-44` |
+| `SourceChange` (из `source-spi`) | `sourceType, sourceId, sourceVersion: long, operation: ChangeOperation, completeness: Completeness, updatedAt: Instant, payload: Map<String,Object>` (копия `LinkedHashMap`, `null` → `{}`; `null`-значения полей сохраняются) | `contracts/source-spi/.../SourceChange.java:24-43` |
 | `ChangePage` | `changes, nextCursor, hasMore, snapshotComplete`; инвариант: `snapshotComplete && hasMore` запрещено | `contracts/source-spi/.../ChangePage.java:17-23` |
 | `WebhookEvent` (создаётся в `toEvent`) | `eventId = "<code>-evt-<seq>"`, `source = code`, `sourceType, sourceId, sourceVersion, operation, occurredAt = updatedAt`; `code` — `SourceSystem.code()`: `eam`, `scm`, `cmdb`, `deploymap` | `SS/StubSource.java:192-202`; `contracts/source-spi/.../SourceSystem.java:5-9` |
 | `EamApiStore.Entry` (record, package-private) | `id: long, ver: long, ctime: Instant, mtime: Instant, attrs: Map<String,Object>` | `SS/EamApiStore.java:96` |

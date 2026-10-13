@@ -44,7 +44,7 @@
 
 ## Dependências
 
-Образы collector/Prometheus/Grafana; метрики `archrag.ingestion.*` ([`../../ingestion-service/design.md`](../../ingestion-service/design.md)) и `archrag.mcp.tool.call` (`mcp-server`); MCP (`ping`, `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies`, `explain_provenance`) — [`../../flowcharts/mcp-server.md`](../../flowcharts/mcp-server.md); заглушки `stub-eam`, `stub-deploymap`, `eam-api-stub` ([`../../flowcharts/demo-launcher.md`](../../flowcharts/demo-launcher.md), [`../../flowcharts/source-stubs.md`](../../flowcharts/source-stubs.md)); матрица влияния №16 (формат deploy map) — `../traceability/spec-impact-matrix.md:49`.
+Образы collector/Prometheus/Grafana; метрики `archrag.ingestion.*` ([`../../ingestion-service/design.md`](../../ingestion-service/design.md)) и `archrag.mcp.tool.call` (`mcp-server`); MCP (`ping`, `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies`, `explain_provenance`) — [`../../flowcharts/mcp-server.md`](../../flowcharts/mcp-server.md); заглушки `stub-eam`, `stub-deploymap`, `eam-api-stub` ([`../../flowcharts/demo-launcher.md`](../../flowcharts/demo-launcher.md), [`../../flowcharts/source-stubs.md`](../../flowcharts/source-stubs.md)); матрица влияния №16 (формат deploy map) — `../../traceability/spec-impact-matrix.md:49`.
 
 ## Decisões de Design Identificadas
 

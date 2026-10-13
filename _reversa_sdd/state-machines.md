@@ -136,7 +136,7 @@ stateDiagram-v2
     OPEN --> [*]: 🔴 переходов в другое состояние в коде нет
 ```
 
-- Создание: `INSERT ... ON CONFLICT (...) DO UPDATE SET matched, score, updated_at`; `status` и `first_seen_at` при повторе не трогаются (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:54-62`) 🟢.
+- Создание: `INSERT ... ON CONFLICT (...) DO UPDATE SET matched, score, updated_at`; `status` и `first_seen_at` при повторе не трогаются (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:54-61`) 🟢.
 - Поле `IdentityCandidate.status` — просто `String` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:14-22`), перечисления значений нет 🟢.
 - Кандидат не исчезает, когда признаки перестали совпадать: `forget` удаляет `identity_feature` записи, но не `identity_candidate` (`PostgresIdentityCandidates.java:105-120`) 🟡.
 - Кандидат не приводит к объединению: единственный путь к общему `gid` — approved crosswalk, который оператор загружает вручную (`CrosswalkService.java:35-64`), причём обратной связи «crosswalk подтвердил кандидата» нет, статус остаётся `OPEN` 🔴.
@@ -155,8 +155,8 @@ stateDiagram-v2
 ```
 
 - Значения: `OPEN`, `RESOLVED`; вид — `PROPERTY` или `RELATION` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/SourceConflict.java:38-47`) 🟢.
-- Открытие/повторное открытие: `INSERT ... ON CONFLICT ... DO UPDATE SET status='OPEN', resolved_at=NULL`, `opened_at` сохраняется (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:50-57`) 🟢.
-- Закрытие: `UPDATE ... SET status='RESOLVED'` (`PostgresSourceConflicts.java:61-66`) в случаях: значения сравнялись; запись сняла утверждение (`retract`); у `RELATION` пуст `master`; запись пришла без свойства/связи (`SourceConflicts.java:30-54`) 🟢.
+- Открытие/повторное открытие: `INSERT ... ON CONFLICT ... DO UPDATE SET status='OPEN', resolved_at=NULL`, `opened_at` сохраняется (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:48-58`) 🟢.
+- Закрытие: `UPDATE ... SET status='RESOLVED'` (`PostgresSourceConflicts.java:61-67`) в случаях: значения сравнялись; запись сняла утверждение (`retract`); у `RELATION` пуст `master`; запись пришла без свойства/связи (`SourceConflicts.java:30-54`) 🟢.
 - Строка никогда не удаляется (ADR 0020 по духу; прямой нормы про `source_conflict` в ADR нет) 🟢.
 - Условие конфликта: у свойства есть утверждение авторитетной записи и утверждение неавторитетной с другим значением (точное сравнение строк) (`PostgresSourceConflicts.java:44-47`; Javadoc `SourceConflicts.java:10-18`) 🟢. Значение узла от конфликта не зависит: пишет только авторитетный источник (`GraphProjector.java:422-432`).
 - Вручную конфликт не закрывается: ни в консоли (только `GET`), ни в admin REST операции «resolve» нет; `MANUAL` в `AuthorityMatrix` никогда не авторитетен, ручное решение отложено «на E3» (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:14-22`). Видение предусматривает ручное решение как отдельное утверждение (`docs/00-vision.md:399`), `docs/02-data-model.md:360` прямо пишет «ручных решений нет»: это документированная отложенная работа 🟡, не расхождение.
