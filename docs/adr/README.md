@@ -49,6 +49,7 @@
 | [0029](0029-helm-chart-system-repo-commit.md) | Helm chart несёт систему, репозиторий и commit; развёртывание привязывается к репозиторию, `DEPLOYED_FROM {commit}` темпоральна (уточняет 0009) | Принято | 2026-10-10 | владелец 2026-10-10; UNLOCKER-248; UNLOCKER-249; UNLOCKER-250; UNLOCKER-251 |
 | [0030](0030-deployment-system-conflict.md) | Конфликт связи: система EAM из chart против системы сервиса (`source_conflict.kind`) | Принято | 2026-10-12 | решение 3 фичи UNLOCKER-248; UNLOCKER-254 |
 | [0031](0031-it-system-platform-invariant.md) | Инвариант платформы ИТ-системы: Conflict при расхождении с решением | Принято | 2026-10-12 | решения владельца 2026-10-10/11; UNLOCKER-259 |
+| [0032](0032-dev-dependency-targeted-override.md) | Dev-зависимости без исправления: точечный override вместо подавления алерта (расширяет 0027) | Принято | 2026-10-13 | решение владельца 2026-10-13; UNLOCKER-277 |
 
 ## Открытые вопросы
 
