@@ -147,7 +147,7 @@
       ]
     },
     "redator_progress": {
-      "part": "R.6a (UNLOCKER-271)",
+      "part": "R.6a (UNLOCKER-271), 13 из 21 единиц",
       "granularity": "hybrid",
       "folder_naming": "_reversa_sdd/<короткое имя модуля>/ (как flowcharts/), use case — вложенные папки",
       "units_done": [
@@ -161,11 +161,11 @@
         "adapters/deploymap-adapter",
         "ingestion/event-journal",
         "ingestion/normalizer",
-        "ingestion/identity-resolution"
+        "ingestion/identity-resolution",
+        "ingestion/graph-projector",
+        "ingestion/ingestion-service"
       ],
       "units_pending": [
-        "ingestion/graph-projector",
-        "ingestion/ingestion-service",
         "access/graph-query-core",
         "access/mcp-server",
         "access/admin-console",
@@ -282,9 +282,29 @@
             "gid-mapping-crosswalk",
             "source-conflicts"
           ]
+        },
+        "ingestion/graph-projector": {
+          "folder": "_reversa_sdd/graph-projector",
+          "files": 18,
+          "use_cases": [
+            "deferred-relations",
+            "process-event",
+            "project-request",
+            "reconcile-missing-set"
+          ]
+        },
+        "ingestion/ingestion-service": {
+          "folder": "_reversa_sdd/ingestion-service",
+          "files": 18,
+          "use_cases": [
+            "dispatch-journal",
+            "load-crosswalk",
+            "reconcile-source",
+            "replay-rebuild"
+          ]
         }
       },
-      "files_total": 164,
+      "files_total": 200,
       "completed_at": "2026-10-13T00:00:00Z"
     },
     "writer": {
@@ -301,8 +321,11 @@
         "_reversa_sdd/deploymap-adapter/",
         "_reversa_sdd/event-journal/",
         "_reversa_sdd/normalizer/",
-        "_reversa_sdd/identity-resolution/"
-      ]
+        "_reversa_sdd/identity-resolution/",
+        "_reversa_sdd/graph-projector/",
+        "_reversa_sdd/ingestion-service/"
+      ],
+      "units_done": "13/21"
     }
   },
   "engines": [

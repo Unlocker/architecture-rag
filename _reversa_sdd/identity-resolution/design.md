@@ -57,6 +57,8 @@ Lock `conflict|<gid>` -> замена утверждений с флагом `au
 
 ADR: [0019](../../docs/adr/0019-identity-resolution-no-auto-merge.md) (без auto-merge, три ступени), [0020](../../docs/adr/0020-tombstone-instead-of-hard-delete.md) (tombstone, `source_conflict` не удаляется по духу), [0030](../../docs/adr/0030-deployment-system-conflict.md) и [0031](../../docs/adr/0031-it-system-platform-invariant.md) (`RELATION`), [0003](../../docs/adr/0003-gid-and-source-record-identity.md) (gid) — только как ссылки; карта `_reversa_sdd/adrs/retroactive-map.md:28,46`.
 
+- Спецификации потребителей: проекция и tombstone/`retract` — [`graph-projector`](../graph-projector/design.md) (use case [`process-event`](../graph-projector/process-event/design.md)); сборка бинов, `CrosswalkService`, загрузка crosswalk — [`ingestion-service`](../ingestion-service/design.md) (use case [`load-crosswalk`](../ingestion-service/load-crosswalk/design.md)). Открытый 🔴 «`approve` не обновляет граф до replay» (Q-03) разобран в [`graph-projector/questions.md`](../graph-projector/questions.md) (Q-02).
+
 ## Решения проекта
 
 | Решение | Evidence | Уверенность |

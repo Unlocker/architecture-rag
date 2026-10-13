@@ -72,7 +72,7 @@
 
 ## Fase 4: Geração 📝
 
-- [ ] **Redator** — Specs SDD por componente. Часть 1 ✅ (R.6a, UNLOCKER-271): 11 единиц — contracts/*, adapters/*, event-journal, normalizer, identity-resolution в `_reversa_sdd/<модуль>/`. Часть 2 (R.6b, UNLOCKER-272): graph-projector, ingestion-service, access/*, platform/*
+- [ ] **Redator** — Specs SDD por componente. Часть 1 ✅ (R.6a, UNLOCKER-271): 13 единиц — contracts/*, adapters/*, ingestion/{event-journal, normalizer, identity-resolution, graph-projector, ingestion-service} в `_reversa_sdd/<модуль>/`. Часть 2 (R.6b, UNLOCKER-272): access/*, platform/*
 - [ ] **Redator** — OpenAPI (se aplicável)
 - [ ] **Redator** — User Stories (se aplicável)
 - [ ] **Redator** — Code/Spec Matrix
