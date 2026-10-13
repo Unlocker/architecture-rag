@@ -31,6 +31,8 @@ import java.util.List;
 final class McpTestJwt {
 
   static final String RESOURCE = "https://mcp.test/mcp";
+  static final String ADMIN_ROLE = "archrag-console-admin";
+  static final String READER_ROLE = "archrag-reader";
 
   private final KeyPair keys;
   private final HttpServer jwks;
@@ -60,7 +62,7 @@ final class McpTestJwt {
     return "http://localhost:" + jwks.getAddress().getPort() + "/jwks";
   }
 
-  /** Валидный токен с заданными scopes (может быть пустым). */
+  /** Валидный токен с заданными scopes (может быть пустым) и обеими realm-ролями. */
   String token(String... scopes) {
     return tokenFor("test-user", RESOURCE, scopes);
   }
@@ -72,11 +74,17 @@ final class McpTestJwt {
 
   /** Как {@link #tokenFor}, но с заданным клиентом (claim {@code azp}); по умолчанию токены выданы {@code archrag-demo}. */
   String tokenForClient(String azp, String subject, String audience, String... scopes) {
+    return tokenWithRoles(List.of(ADMIN_ROLE, READER_ROLE), azp, subject, audience, scopes);
+  }
+
+  /** Как {@link #tokenForClient}, но с заданными realm-ролями ({@code realm_access.roles}); по умолчанию обе роли. */
+  String tokenWithRoles(List<String> roles, String azp, String subject, String audience, String... scopes) {
     try {
       var claims = new JWTClaimsSet.Builder().issuer(RESOURCE).subject(subject).audience(audience).claim("azp", azp)
           .issueTime(Date.from(Instant.now().minusSeconds(60)))
           .expirationTime(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
-          .claim("scope", String.join(" ", List.of(scopes))).build();
+          .claim("scope", String.join(" ", List.of(scopes)))
+          .claim("realm_access", java.util.Map.of("roles", roles)).build();
       var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
       jwt.sign(new RSASSASigner((RSAPrivateKey) keys.getPrivate()));
       return jwt.serialize();

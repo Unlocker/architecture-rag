@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.ingestionservice;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -49,7 +50,18 @@ class AdminControllerTest {
   @MockitoBean AdapterControlClient adapters;
 
   private static RequestPostProcessor admin() {
-    return jwt().jwt(j -> j.subject("alice")).authorities(new SimpleGrantedAuthority("SCOPE_architecture.admin"));
+    return jwt().jwt(j -> j.subject("alice")).authorities(new SimpleGrantedAuthority("SCOPE_architecture.admin"),
+        new SimpleGrantedAuthority("ROLE_archrag-console-admin"));
+  }
+
+  /** Scope верный, realm-роли {@code archrag-console-admin} нет. */
+  private static RequestPostProcessor scopeWithoutRole() {
+    return jwt().jwt(j -> j.subject("carol")).authorities(new SimpleGrantedAuthority("SCOPE_architecture.admin"));
+  }
+
+  /** Роль верная, scope {@code architecture.admin} нет. */
+  private static RequestPostProcessor roleWithoutScope() {
+    return jwt().jwt(j -> j.subject("dave")).authorities(new SimpleGrantedAuthority("ROLE_archrag-console-admin"));
   }
 
   private static RequestPostProcessor otherScope() {
@@ -90,6 +102,17 @@ class AdminControllerTest {
     for (String[] e : ENDPOINTS) {
       mvc.perform(post(e[0]).with(otherScope()).contentType(MediaType.APPLICATION_JSON).content(e[1]))
           .andExpect(status().isForbidden());
+    }
+    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations);
+  }
+
+  @Test
+  void adminScopeWithoutRoleOrRoleWithoutScopeIs403() throws Exception {
+    for (RequestPostProcessor caller : java.util.List.of(scopeWithoutRole(), roleWithoutScope())) {
+      for (String[] e : ENDPOINTS) {
+        mvc.perform(post(e[0]).with(caller).contentType(MediaType.APPLICATION_JSON).content(e[1]))
+            .andExpect(status().isForbidden());
+      }
     }
     verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations);
   }
@@ -154,25 +177,25 @@ class AdminControllerTest {
   @Test
   void reconcileProxiesToAdapterAndPassesStatusAsIs() throws Exception {
     when(adapters.knows("eam")).thenReturn(true);
-    when(adapters.snapshot("eam")).thenReturn(new AdapterControlClient.Response(202, "{\"outcome\":\"SNAPSHOT_COMPLETED\"}"));
+    when(adapters.snapshot(eq("eam"), anyString())).thenReturn(new AdapterControlClient.Response(202, "{\"outcome\":\"SNAPSHOT_COMPLETED\"}"));
 
     mvc.perform(post("/admin/reconcile/urn:corp:eam").with(admin())).andExpect(status().isAccepted())
         .andExpect(jsonPath("$.outcome").value("SNAPSHOT_COMPLETED"));
     verify(operations).run(eq("RECONCILE"), eq("alice"), any(), eq(null), any(), any());
 
-    when(adapters.snapshot("eam")).thenReturn(new AdapterControlClient.Response(409, "{\"outcome\":\"ALREADY_RUNNING\"}"));
+    when(adapters.snapshot(eq("eam"), anyString())).thenReturn(new AdapterControlClient.Response(409, "{\"outcome\":\"ALREADY_RUNNING\"}"));
     mvc.perform(post("/admin/reconcile/eam").with(admin())).andExpect(status().isConflict());
   }
 
   @Test
   void reconcileUnknownSourceIs404AndUnavailableAdapterIs502() throws Exception {
     when(adapters.knows("scm")).thenReturn(true);
-    when(adapters.snapshot("scm")).thenThrow(new AdapterUnavailableException());
+    when(adapters.snapshot(eq("scm"), anyString())).thenThrow(new AdapterUnavailableException());
 
     mvc.perform(post("/admin/reconcile/nope").with(admin())).andExpect(status().isNotFound());
     mvc.perform(post("/admin/reconcile/scm").with(admin())).andExpect(status().isBadGateway());
     mvc.perform(post("/admin/reconcile/bad source").with(admin())).andExpect(status().isBadRequest());
-    verify(adapters, never()).snapshot("nope");
+    verify(adapters, never()).snapshot(eq("nope"), anyString());
   }
 
   @Test

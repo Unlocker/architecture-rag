@@ -503,7 +503,8 @@ class F4AcceptanceIT {
   /** Admin API ingestion-сервиса с токеном {@code architecture.admin}, подписанным тестовым ключом. */
   private HttpResponse<String> adminPost(String path, String body) throws Exception {
     var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now())
-        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin");
+        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin")
+        .claim("realm_access", java.util.Map.of("roles", java.util.List.of("archrag-console-admin")));
     String token = new NimbusJwtEncoder(new ImmutableSecret<>(KEY))
         .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
     var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))

@@ -18,6 +18,11 @@ x-adapter-env: &adapter-env
   ARCHRAG_PG_USER: ${POSTGRES_USER:?}
   ARCHRAG_S3_ENDPOINT: http://seaweedfs:8333
   ARCHRAG_S3_BUCKET: ${S3_BUCKET:?}
+  # /control/snapshot принимает только токен администратора (его пробрасывает ingestion): без этих трёх
+  # переменных контекст не поднимается. Audience совпадает с ARCHRAG_ADMIN_RESOURCE_URI ingestion.
+  ARCHRAG_CONTROL_OIDC_ISSUER_URI: http://keycloak:8080/realms/archrag
+  ARCHRAG_CONTROL_OIDC_JWKS_URI: http://keycloak:8080/realms/archrag/protocol/openid-connect/certs
+  ARCHRAG_CONTROL_AUDIENCE: urn:archrag:admin
 
 x-adapter-secrets: &adapter-secrets
   - { source: pg_password, target: ARCHRAG_PG_PASSWORD }

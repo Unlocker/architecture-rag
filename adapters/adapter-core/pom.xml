@@ -23,6 +23,11 @@
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>event-schemas</artifactId>
     </dependency>
+    <!-- Проверка JWT на /control/snapshot без Spring; версия в dependencyManagement корневого pom. -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
     <!-- Заглушки источников нужны только тестам. -->
     <dependency>
       <groupId>io.github.unlocker.archrag</groupId>

@@ -36,6 +36,20 @@ class LauncherConfigTest {
   }
 
   @Test
+  void controlAuthIsOffUnlessIssuerJwksAndAudienceAreAllSet() {
+    var env = fullEnv();
+    assertThat(LauncherConfig.adapter(SourceSystem.EAM, env).control()).isNull();
+    env.put("ARCHRAG_CONTROL_OIDC_ISSUER_URI", "http://keycloak:8080/realms/archrag");
+    env.put("ARCHRAG_CONTROL_AUDIENCE", "urn:archrag:admin");
+    assertThat(LauncherConfig.adapter(SourceSystem.EAM, env).control()).isNull();
+    env.put("ARCHRAG_CONTROL_OIDC_JWKS_URI", "http://keycloak:8080/realms/archrag/protocol/openid-connect/certs");
+    var control = LauncherConfig.adapter(SourceSystem.EAM, env).control();
+    assertThat(control.issuer()).isEqualTo("http://keycloak:8080/realms/archrag");
+    assertThat(control.audience()).isEqualTo("urn:archrag:admin");
+    assertThat(control.jwksUri()).hasToString("http://keycloak:8080/realms/archrag/protocol/openid-connect/certs");
+  }
+
+  @Test
   void adapterOverrides() {
     var env = fullEnv();
     env.put("ARCHRAG_WEBHOOK_PORT", "9000");

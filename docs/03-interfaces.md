@@ -26,13 +26,13 @@ flowchart LR
 
 | Интерфейс | Тип | Кто вызывает | Кто обслуживает | Доступность | Аутентификация |
 |---|---|---|---|---|---|
-| MCP `/mcp` | Streamable HTTP (stateless), JSON-RPC | AI-агент | `access/mcp-server` (порт Spring по умолчанию 8080, `server.port` в `application.yml` не задан) | внешний; публикация через proxy — E5, не в `develop` | JWT (issuer + audience), scope `architecture.read` на `tools/call` |
+| MCP `/mcp` | Streamable HTTP (stateless), JSON-RPC | AI-агент | `access/mcp-server` (порт Spring по умолчанию 8080, `server.port` в `application.yml` не задан) | внешний; публикация через proxy — E5, не в `develop` | JWT (issuer + audience), realm-роль `archrag-reader` на все методы, scope `architecture.read` на `tools/call` |
 | `GET /.well-known/oauth-protected-resource` | HTTP | MCP-клиент | `access/mcp-server` | внешний | нет (публичный) |
 | `GET /actuator/health/**` | HTTP | оркестратор | `access/mcp-server` | внутренний | нет (публичный) |
 | Webhook адаптеров `POST /webhook` | HTTP | мастер-система (заглушка) | `adapters/*` через `WebhookServer` | внешний; порт задаёт код, который запускает адаптер | HMAC-SHA256 + timestamp, JWT нет |
-| `POST /control/snapshot` | HTTP | ingestion-сервис (`/admin/reconcile`) | `adapters/*` через `WebhookServer`, тот же порт, что `/webhook` | только внутренняя сеть | **нет** |
-| Admin REST `/admin/*` | HTTP | оператор | `ingestion/ingestion-service`, порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081) | только внутренняя сеть | JWT, scope `architecture.admin` |
-| Админ-консоль: UI и `/api/graph/*`, `/api/sync/*`, `/api/identity/*`, `/api/audit` | HTTP | оператор (браузер) | `access/admin-console`, порт 8080 в контейнере | только `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; через proxy не публикуется | JWT (issuer, audience `urn:archrag:console`), scope `architecture.admin`; UI и `/console-config.json` публичны |
+| `POST /control/snapshot` | HTTP | ingestion-сервис (`/admin/reconcile`) | `adapters/*` через `WebhookServer`, тот же порт, что `/webhook` | только внутренняя сеть | JWT администратора (его пробрасывает ingestion): issuer, подпись по JWKS, срок, audience админского REST, роль `archrag-console-admin`; `401` без токена, `403` без роли |
+| Admin REST `/admin/*` | HTTP | оператор | `ingestion/ingestion-service`, порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081) | только внутренняя сеть | JWT, scope `architecture.admin` + realm-роль `archrag-console-admin` |
+| Админ-консоль: UI и `/api/graph/*`, `/api/sync/*`, `/api/identity/*`, `/api/audit` | HTTP | оператор (браузер) | `access/admin-console`, порт 8080 в контейнере | только `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; через proxy не публикуется | JWT (issuer, audience `urn:archrag:console`), scope `architecture.admin` + realm-роль `archrag-console-admin` на `/api/**`; UI и `/console-config.json` публичны |
 | Источники `GET /changes`, `GET /objects/{type}/{id}` | HTTP | адаптеры | заглушки `platform/source-stubs` | внутренний | нет |
 
 Что публикуется через reverse proxy демо-стенда, определит E5 (compose и proxy в `develop` нет): см. [раздел 6](#6-безопасность-на-границах).
@@ -70,7 +70,7 @@ flowchart LR
  "scopes_supported":["architecture.read"],"resource_name":"arch-rag"}
 ```
 
-- Scope проверяется только на `tools/call` (`ToolScopeFilter`, после `AuthorizationFilter`). Остальные методы MCP (`tools/list`, `initialize`) требуют только валидный токен.
+- Realm-роль `archrag-reader` (`realm_access.roles`) требуется на любой запрос к `/mcp`, включая `initialize` и `tools/list` (`403` без неё). Scope проверяется дополнительно на `tools/call` (`ToolScopeFilter`, после `AuthorizationFilter`). Роль превращается в authority `ROLE_…` одним `JwtAuthenticationConverter` на сервис.
 - Tool без записи в `archrag.mcp.security.tool-scopes` отклоняется (fail-closed) с `403` и аудитом `DENIED_UNKNOWN_TOOL`.
 - Поведение при отказе:
   - без токена или с невалидным: `401`, `WWW-Authenticate: Bearer resource_metadata="<url>/.well-known/oauth-protected-resource"`;
@@ -553,11 +553,12 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (`baseline`
 
 Конфигурация Spring Security: `McpSecurityConfiguration` (mcp-server) и `SecurityConfiguration` (ingestion-service). Секреты, токены и реальные адреса в документе не приводятся; значения берутся из env или Docker secrets.
 
-- **MCP:** OIDC resource server; проверяются подпись, issuer и audience; scope `architecture.read` на `tools/call`; Neo4j — отдельная read-only учётка (`archrag.neo4j.reader.*`), которой нет в writer-конфигурации ingestion (`access/*` не получает writer-учётных данных; Community Edition не поддерживает RBAC, read-only обеспечивает приложение, ADR [0004](adr/0004-neo4j-community-constraints.md), [0005](adr/0005-readonly-mcp-by-application.md)).
+- **MCP:** OIDC resource server; проверяются подпись, issuer и audience; realm-роль `archrag-reader` на все методы; scope `architecture.read` на `tools/call`; Neo4j — отдельная read-only учётка (`archrag.neo4j.reader.*`), которой нет в writer-конфигурации ingestion (`access/*` не получает writer-учётных данных; Community Edition не поддерживает RBAC, read-only обеспечивает приложение, ADR [0004](adr/0004-neo4j-community-constraints.md), [0005](adr/0005-readonly-mcp-by-application.md)).
 - **Webhook:** JWT нет; подлинность — HMAC-SHA256 по `timestamp + "." + body`, replay window 5 минут, постоянное время сравнения; причина отказа наружу не раскрывается.
-- **Admin REST:** OIDC resource server, scope `architecture.admin`; проверяются подпись, issuer, срок и audience (`ARCHRAG_ADMIN_RESOURCE_URI`, обязательна: без неё сервис не стартует).
-- **Админ-консоль:** OIDC resource server, scope `architecture.admin`, audience `urn:archrag:console`; граф только через `executeRead` reader-учёткой, PostgreSQL только ролью `archrag_console_ro`; подробности — [раздел 4b](#4b-админ-консоль-безопасность-и-доступ-на-стенде).
-- **Не защищено на уровне приложения:** `POST /control/snapshot` адаптера и источники заглушек (`/changes`, `/objects`). Их защита — сетевая граница (не публиковать).
+- **Admin REST:** OIDC resource server, scope `architecture.admin` и realm-роль `archrag-console-admin`; проверяются подпись, issuer, срок и audience (`ARCHRAG_ADMIN_RESOURCE_URI`, обязательна: без неё сервис не стартует).
+- **Админ-консоль:** OIDC resource server, scope `architecture.admin` и realm-роль `archrag-console-admin` на `/api/**`, audience `urn:archrag:console`; граф только через `executeRead` reader-учёткой, PostgreSQL только ролью `archrag_console_ro`; подробности — [раздел 4b](#4b-админ-консоль-безопасность-и-доступ-на-стенде).
+- **`POST /control/snapshot` адаптера:** bearer-токен администратора из `/admin/reconcile/*` пробрасывается адаптеру; он сам проверяет issuer, подпись по JWKS (RS256), срок, audience и роль `archrag-console-admin` (`ARCHRAG_CONTROL_OIDC_ISSUER_URI`, `ARCHRAG_CONTROL_OIDC_JWKS_URI`, `ARCHRAG_CONTROL_AUDIENCE`). Без этих переменных контекст не поднимается (fail closed). Webhook остаётся на HMAC.
+- **Не защищено на уровне приложения:** источники заглушек (`/changes`, `/objects`). Их защита — сетевая граница (не публиковать).
 
 | Интерфейс | Аутентификация | Scope | Опубликован через proxy | Порт и путь в compose |
 |---|---|---|---|---|

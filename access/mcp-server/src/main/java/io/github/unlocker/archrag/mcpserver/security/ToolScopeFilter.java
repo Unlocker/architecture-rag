@@ -32,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Работает только на {@code POST /mcp}. Тело читается не более {@code max-request-bytes} и
  * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется
- * (fail-closed). Отказы пишутся в аудит. Остальные методы MCP требуют только валидный токен.
+ * (fail-closed). Отказы пишутся в аудит. Роль {@code archrag-reader} на все методы MCP проверяет цепочка Spring Security до этого фильтра.
  */
 final class ToolScopeFilter extends OncePerRequestFilter {
 

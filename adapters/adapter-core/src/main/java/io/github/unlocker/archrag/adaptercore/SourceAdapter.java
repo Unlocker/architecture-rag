@@ -57,10 +57,18 @@ public final class SourceAdapter implements AutoCloseable {
     return connector;
   }
 
-  /** Запускает webhook endpoint на {@code address}. */
-  public synchronized WebhookServer startWebhook(InetSocketAddress address) {
+  /** Запускает webhook endpoint на {@code address} без {@code /control/snapshot}. */
+  public WebhookServer startWebhook(InetSocketAddress address) {
+    return startWebhook(address, null);
+  }
+
+  /**
+   * Запускает webhook endpoint на {@code address}; {@code /control/snapshot} поднимается только с
+   * {@code controlAuth}.
+   */
+  public synchronized WebhookServer startWebhook(InetSocketAddress address, ControlTokenValidator controlAuth) {
     if (server == null) {
-      server = new WebhookServer(webhook, address, poller::snapshotOnce);
+      server = new WebhookServer(webhook, address, poller::snapshotOnce, controlAuth);
     }
     return server;
   }

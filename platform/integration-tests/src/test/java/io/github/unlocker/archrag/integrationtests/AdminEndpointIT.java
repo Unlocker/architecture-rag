@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.unlocker.archrag.adaptercore.ControlTokenValidator;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
@@ -437,7 +438,8 @@ class AdminEndpointIT {
     var eam = StubSources.eam(Clock.systemUTC());
     try (var server = new StubSourceServer(eam);
         var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
-      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), EAM_CONTROL_PORT));
+      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), EAM_CONTROL_PORT),
+          new ControlTokenValidator(ADMIN_RESOURCE, URI.create(JWT.jwkSetUri()), ADMIN_RESOURCE, McpTestJwt.ADMIN_ROLE));
       long markers = scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'");
 
       var r = admin("/admin/reconcile/eam", null);
@@ -448,6 +450,39 @@ class AdminEndpointIT {
           .isEqualTo(markers + 1);
       assertThat(scalarLong("select count(*) from admin_audit where operation = 'RECONCILE' and status = 'SUCCEEDED'"))
           .isGreaterThanOrEqualTo(1);
+    }
+  }
+
+  @Test
+  void adminRoleIsRequiredInAdditionToScope() throws Exception {
+    seed();
+    String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+        "architecture.admin");
+    assertThat(post("/admin/reconcile/eam", noRole, null).statusCode()).isEqualTo(403);
+    assertThat(post("/admin/rebuild?confirm=true", noRole, null).statusCode()).isEqualTo(403);
+  }
+
+  @Test
+  void controlSnapshotRejectsMissingTokenAndMissingRoleButAcceptsAdmin() throws Exception {
+    seed();
+    var eam = StubSources.eam(Clock.systemUTC());
+    try (var server = new StubSourceServer(eam);
+        var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
+      int controlPort = freePort();
+      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), controlPort),
+          new ControlTokenValidator(ADMIN_RESOURCE, URI.create(JWT.jwkSetUri()), ADMIN_RESOURCE, McpTestJwt.ADMIN_ROLE));
+      long markers = scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'");
+      URI uri = URI.create("http://127.0.0.1:" + controlPort + "/control/snapshot");
+
+      assertThat(http.send(HttpRequest.newBuilder(uri).POST(HttpRequest.BodyPublishers.noBody()).build(),
+          HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+      String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+          "architecture.admin");
+      assertThat(http.send(HttpRequest.newBuilder(uri).header("Authorization", "Bearer " + noRole)
+          .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString()).statusCode())
+          .isEqualTo(403);
+      assertThat(scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'"))
+          .isEqualTo(markers);
     }
   }
 

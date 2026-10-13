@@ -71,7 +71,7 @@
 
 ## Riscos e Lacunas
 
-- 🟡 `initialize` и `tools/list` доступны любому токену с audience MCP: список и описания tools видны без `architecture.read` (П-6, Q-02).
+- 🟢 `initialize` и `tools/list` требуют роль `archrag-reader` (UNLOCKER-290; П-6, Q-02); scope — только на `tools/call`.
 - 🟡 Согласованность `@McpTool` ↔ `tool-scopes` проверяется только в рантайме: забытый tool получит `403` (Q-04, матрица №8).
 - 🟡 `find_runtime_footprint` не нормализует `systemGid` (не `strip`, не `lowercase`), в отличие от трёх других tools (Н-7, Q-06).
 - 🟢 [R.8: ответ владельца, вопрос 12] Нет rate limiting (Q-09).

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk. Доступен только со scope
- * {@value SecurityConfiguration#ADMIN_SCOPE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
+ * {@value SecurityConfiguration#ADMIN_SCOPE} и ролью {@value SecurityConfiguration#ADMIN_ROLE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
  * Операции синхронные, идут под {@link AdminLock} и пишутся в аудит ({@link AdminOperations}).
  */
 @RestController
@@ -109,7 +109,7 @@ public class AdminController {
           .body("{\"error\":\"unknown source\"}");
     }
     AdapterControlClient.Response r = operations.run(
-        "RECONCILE", jwt.getSubject(), Map.of("source", code), null, () -> adapters.snapshot(code),
+        "RECONCILE", jwt.getSubject(), Map.of("source", code), null, () -> adapters.snapshot(code, jwt.getTokenValue()),
         resp -> Map.of("adapterStatus", resp.status()));
     return ResponseEntity.status(r.status()).contentType(MediaType.APPLICATION_JSON).body(r.body());
   }

@@ -124,7 +124,7 @@ ADR [0026](../../docs/adr/0026-admin-console-readonly-loopback.md). Как от�
 
 Проверка: `./console-smoke.sh` (вход Authorization Code + PKCE на curl; 401 без токена, 403 без `architecture.admin`, 200 на `/api/graph/stats` и `/api/sync/sources`; токен консоли в admin REST ingestion — 401; консоль недоступна по внешнему IP хоста; в контейнере только reader- и `archrag_console_ro`-секреты). Он не зависит от `hosts` и подменяет адрес Keycloak через `curl --connect-to` по `ARCHRAG_KEYCLOAK_PORT`. Admin REST ingestion принимает токены только клиентов из `ARCHRAG_ADMIN_ALLOWED_CLIENTS` (по умолчанию `archrag-demo`).
 
-Realm: клиент `archrag-admin-console` (публичный, PKCE S256, redirect только `127.0.0.1:${ARCHRAG_CONSOLE_PORT}`), роль `archrag-console-admin`, демо-пользователь из `.env`. Realm импортируется только при первом старте Keycloak: после правки `archrag-realm.json` пересоздайте контейнер (`docker compose up -d --force-recreate keycloak`).
+Realm: клиент `archrag-admin-console` (публичный, PKCE S256, redirect только `127.0.0.1:${ARCHRAG_CONSOLE_PORT}`), роли `archrag-console-admin` (admin: `/admin/**`, `/api/**`, `/control/snapshot`) и `archrag-reader` (MCP), scope `roles` с claim `realm_access.roles`, демо-пользователь из `.env` и сервисный аккаунт `archrag-demo` (обе роли). Realm импортируется только при первом старте Keycloak: после правки `archrag-realm.json` пересоздайте контейнер (`docker compose up -d --force-recreate keycloak`).
 
 ## Наблюдаемость
 
