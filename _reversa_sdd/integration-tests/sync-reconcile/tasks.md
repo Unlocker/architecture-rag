@@ -30,7 +30,7 @@
   - Origin: [`../questions.md`](../questions.md) Q-03, Q-10
   - Критерий готовности: решение архитектора, тест добавлен либо пробел принят
   - Уверенность: 🔴
-- [ ] T-07: 🔴 измерение polling-границы «интервал + 5 с» (критерий 2, `k2c` без замера; Q-35)
+- [ ] T-07: 🟢 [R.8: ответ владельца, вопрос 14] измерение polling-границы «интервал + 5 с» (критерий 2, `k2c` без замера; Q-35)
   - Origin: `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:348-362`; `docs/00-vision.md:799`
   - Критерий готовности: замер задержки polling с порогом интервал + 5 с
   - Уверенность: 🔴

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Метрики | Arch RAG</title>
+    <meta name="reversa-category" content="diagram">
+    <meta name="reversa-template" content="metricas">
+    <meta name="reversa-source-md" content="../confidence-report.md">
+    <meta name="reversa-producer-agent" content="reversa-docs-analyst">
+    <meta name="reversa-generated-at" content="2026-10-13T10:20:13Z">
+    <meta name="reversa-schema-version" content="1">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/site.css">
+    <script src="assets/vendor/highcharts.js"></script>
+    <script src="assets/vendor/highcharts-accessibility.js"></script>
+    <script src="assets/vendor/highcharts-exporting.js"></script>
+    <script src="assets/vendor/highcharts-treemap.js"></script>
+    <script src="assets/vendor/highcharts-sankey.js"></script>
+</head>
+<body data-style="sober" data-page="metricas" data-sidebar="none">
+    <header class="reversa-doc-header">
+        <a class="reversa-doc-logo" href="index.html" aria-label="На главную">
+            <span class="seal" aria-hidden="true"><svg class="seal-mini" viewBox="0 0 200 200" width="32" height="32" role="img" aria-label="Печать проекта"><circle cx="100" cy="100" r="96" fill="#f5f3ee" stroke="#1e2937" stroke-width="4"/><polygon points="121.3,14.6 136.0,56.7 180.0,63.4 156.3,101.1 178.5,139.8 134.2,144.7 117.9,186.2 86.4,154.6 43.8,167.7 48.8,123.4 12.0,98.2 49.8,74.6 46.5,30.1 88.6,44.9" fill="#7c8a99" fill-opacity="0.35" stroke="#1e2937" stroke-width="1"/><polygon points="54.7,47.9 90.4,64.7 112.5,32.1 121.6,70.5 160.8,67.5 136.5,98.5 163.4,127.3 124.0,127.6 118.2,166.6 93.4,136.0 59.3,155.7 67.8,117.2 31.1,102.9 66.4,85.5" fill="#3d4a5c" fill-opacity="0.50" stroke="#1e2937" stroke-width="1"/><polygon points="50.5,93.0 73.0,82.0 74.6,57.0 97.2,67.6 117.8,53.3 123.6,77.7 147.6,84.8 132.2,104.5 141.6,127.8 116.5,128.0 104.2,149.8 88.4,130.4 63.7,134.4 69.0,109.9" fill="#7c8a99" fill-opacity="0.65" stroke="#1e2937" stroke-width="1"/><polygon points="129.1,110.6 114.1,114.4 109.9,129.4 97.5,120.0 83.2,126.0 82.8,110.5 69.2,103.1 81.1,93.1 78.4,77.8 93.6,80.9 103.9,69.2 110.9,83.1 126.5,83.8 120.0,98.0" fill="#7c8a99" fill-opacity="0.80" stroke="#1e2937" stroke-width="1"/><circle cx="100" cy="100" r="9" fill="#1e2937"/></svg></span>
+            <span class="project-name">Arch RAG</span>
+        </a>
+        <nav class="reversa-doc-nav" aria-label="Разделы документации">
+            <a href="index.html" data-page-id="index">Обзор</a>
+            <a href="arquitetura.html" data-page-id="arquitetura">Архитектура 3D</a>
+            <a href="modulos.html" data-page-id="modulos">Модули</a>
+            <a href="metricas.html" data-page-id="metricas" class="is-active" aria-current="page">Метрики</a>
+            <a href="features.html" data-page-id="features">Единицы</a>
+            <a href="glossario.html" data-page-id="glossario">Глоссарий</a>
+            <a href="deck.html" data-page-id="deck">Дек</a>
+        </nav>
+        <div class="reversa-doc-toolbar">
+            <button type="button" class="theme-toggle" aria-label="Сменить тему">
+                <span class="theme-toggle-label">Тема</span>
+            </button>
+        </div>
+    </header>
+    <main class="reversa-doc-main" role="main">
+        <div class="reversa-doc-payload">
+            <h1 class="reversa-doc-title">Метрики</h1>
+<div class="kpis"><div class="kpi"><b>440</b><span>файлов кода</span></div><div class="kpi"><b>18600</b><span>строк основного кода</span></div><div class="kpi"><b>20232</b><span>строк тестов</span></div><div class="kpi"><b>21</b><span>Maven-модулей и единиц</span></div><div class="kpi"><b>71</b><span>зависимостей между модулями</span></div><div class="kpi"><b>82%</b><span>общая достоверность specs</span></div></div>
+<p class="md-note">Метрики кода посчитаны по файлам, отслеживаемым git (.java, .ts, .tsx, .js), без каталога specs. «Сложность» - грубая оценка числа ветвлений, а не цикломатическая сложность.</p>
+<section class="reversa-doc-dashboard" data-layout="grid-2x2">
+<article class="reversa-doc-chart"><h2>Строки кода по модулям</h2><p class="hint">Размер - LOC вместе с тестами.</p><div id="chart-treemap"></div></article>
+<article class="reversa-doc-chart"><h2>Топ 20 по числу ветвлений</h2><p class="hint">Основной код, без тестов.</p><div id="chart-complexity"></div></article>
+<article class="reversa-doc-chart"><h2>Размеры файлов</h2><p class="hint">Число файлов по диапазонам LOC.</p><div id="chart-histogram"></div></article>
+<article class="reversa-doc-chart"><h2>Зависимости между модулями</h2><p class="hint">Ширина потока - число import (минимум 1).</p><div id="chart-sankey"></div></article>
+<article class="reversa-doc-chart wide"><h2>Код и тесты по модулям</h2><div id="chart-tests"></div></article>
+<article class="reversa-doc-chart"><h2>Достоверность specs по единицам</h2><p class="hint">Вхождения меток (сводка confidence-report).</p><div id="chart-conf"></div></article>
+<article class="reversa-doc-chart"><h2>Языки</h2><div id="chart-lang"></div></article>
+</section>
+        </div>
+    </main>
+    <aside class="reversa-doc-sidebar" aria-label="Управление" data-page="metricas"></aside>
+    <footer class="reversa-doc-footer">
+        <span class="reversa-doc-footer-text">Сгенерировано Reversa, <time datetime="2026-10-13T10:20:13Z">2026-10-13</time></span>
+        <span class="reversa-doc-footer-sep" aria-hidden="true">|</span>
+        <a href="../confidence-report.md" class="reversa-doc-source-link">Источник в markdown</a>
+    </footer>
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/sidebar.js"></script>
+    <script src="assets/js/metrics.js"></script>
+</body>
+</html>

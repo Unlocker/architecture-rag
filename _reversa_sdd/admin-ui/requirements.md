@@ -87,7 +87,7 @@ flowchart LR
 | Сборка | Исходники в production-jar не публикуются (`devtool: false`) | `access/admin-ui/webpack.config.js:34-35` | 🟢 |
 | Доступность (a11y) | Роли `tablist`/`tab`, `role="alert"` для ошибок, подписи таблиц `aria-label` | `access/admin-ui/src/pages/SyncPage.tsx:23-34`; `access/admin-ui/src/components/common.tsx:29` | 🟡 (SLO/требований a11y нет, выведено из разметки) |
 
-> Inferido a partir do código. Validar с эксплуатацией: SLO, поддерживаемые браузеры и целевой объём данных не заданы 🔴 (см. [`questions.md`](questions.md) Q-12).
+> Inferido a partir do código. Validar с эксплуатацией: SLO, поддерживаемые браузеры и целевой объём данных не заданы 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-12).
 
 ## Критерии приёмки (сквозные)
 

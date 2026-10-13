@@ -38,11 +38,11 @@
 ## Tarefas de Teste
 
 - [ ] TT-01: `access/admin-ui/src/pages/GraphPage.test.tsx` — 17 тестов (сводка, поиск, карточка, Deployment, окрестность, гонка); Cytoscape замокан
-- [ ] TT-02: 🔴 нет теста синхронности `ASSET_TYPES`/`RELATION_TYPES` с бэкендом (Q-05)
+- [ ] TT-02: 🟢 [R.8: ответ владельца, вопрос 9] нет теста синхронности `ASSET_TYPES`/`RELATION_TYPES` с бэкендом (Q-05)
 - [ ] TT-03: 🟡 нет теста отрисовки Cytoscape в реальном браузере под CSP (Q-10)
 
 ## Ordem Sugerida
 T-06 → T-05 → T-03 → T-04 → T-02 → T-01 → T-07.
 
 ## Lacunas Pendentes (🔴)
-См. [`../questions.md`](../questions.md): Q-04, Q-05 (🔴); Q-10, Q-16 (🟡).
+См. [`../questions.md`](../questions.md): Q-04, Q-05 (🟢 [R.8: ответ владельца, вопрос 9]); Q-10, Q-16 (🟡).

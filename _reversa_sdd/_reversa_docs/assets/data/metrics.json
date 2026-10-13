@@ -1,0 +1,970 @@
+{
+ "schemaVersion": 1,
+ "generatedAt": "2026-10-13T10:20:12Z",
+ "totals": {
+  "files": 440,
+  "loc": 38832,
+  "mainLoc": 18600,
+  "testLoc": 20232,
+  "units": 21,
+  "unitDirs": 21,
+  "confidence": 82,
+  "edges": 71,
+  "cycles": 0
+ },
+ "treemap_loc_by_folder": [
+  {
+   "folder": "access/admin-console",
+   "group": "access",
+   "loc": 2236,
+   "modules": 32
+  },
+  {
+   "folder": "access/admin-ui",
+   "group": "access",
+   "loc": 2323,
+   "modules": 35
+  },
+  {
+   "folder": "access/graph-query-core",
+   "group": "access",
+   "loc": 1592,
+   "modules": 24
+  },
+  {
+   "folder": "access/mcp-server",
+   "group": "access",
+   "loc": 4054,
+   "modules": 44
+  },
+  {
+   "folder": "adapters/adapter-core",
+   "group": "adapters",
+   "loc": 2180,
+   "modules": 22
+  },
+  {
+   "folder": "adapters/asset-adapter",
+   "group": "adapters",
+   "loc": 145,
+   "modules": 5
+  },
+  {
+   "folder": "adapters/deploymap-adapter",
+   "group": "adapters",
+   "loc": 281,
+   "modules": 6
+  },
+  {
+   "folder": "adapters/eam-adapter",
+   "group": "adapters",
+   "loc": 1319,
+   "modules": 11
+  },
+  {
+   "folder": "adapters/scm-adapter",
+   "group": "adapters",
+   "loc": 145,
+   "modules": 5
+  },
+  {
+   "folder": "contracts/canonical-model",
+   "group": "contracts",
+   "loc": 1427,
+   "modules": 45
+  },
+  {
+   "folder": "contracts/event-schemas",
+   "group": "contracts",
+   "loc": 489,
+   "modules": 23
+  },
+  {
+   "folder": "contracts/source-spi",
+   "group": "contracts",
+   "loc": 321,
+   "modules": 11
+  },
+  {
+   "folder": "ingestion/event-journal",
+   "group": "ingestion",
+   "loc": 528,
+   "modules": 6
+  },
+  {
+   "folder": "ingestion/graph-projector",
+   "group": "ingestion",
+   "loc": 3893,
+   "modules": 28
+  },
+  {
+   "folder": "ingestion/identity-resolution",
+   "group": "ingestion",
+   "loc": 1376,
+   "modules": 23
+  },
+  {
+   "folder": "ingestion/ingestion-service",
+   "group": "ingestion",
+   "loc": 2161,
+   "modules": 34
+  },
+  {
+   "folder": "ingestion/normalizer",
+   "group": "ingestion",
+   "loc": 2091,
+   "modules": 21
+  },
+  {
+   "folder": "platform/demo-launcher",
+   "group": "platform",
+   "loc": 928,
+   "modules": 8
+  },
+  {
+   "folder": "platform/integration-tests",
+   "group": "platform",
+   "loc": 9319,
+   "modules": 40
+  },
+  {
+   "folder": "platform/source-stubs",
+   "group": "platform",
+   "loc": 2024,
+   "modules": 17
+  }
+ ],
+ "top_complexity": [
+  {
+   "id": "ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java",
+   "name": "PostgresEventJournal",
+   "complexity": 100,
+   "loc": 380
+  },
+  {
+   "id": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java",
+   "name": "EventProcessor",
+   "complexity": 98,
+   "loc": 614
+  },
+  {
+   "id": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Json.java",
+   "name": "Json",
+   "complexity": 72,
+   "loc": 256
+  },
+  {
+   "id": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java",
+   "name": "PostgresIdentityCandidates",
+   "complexity": 66,
+   "loc": 260
+  },
+  {
+   "id": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/PropertyJson.java",
+   "name": "PropertyJson",
+   "complexity": 61,
+   "loc": 241
+  },
+  {
+   "id": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java",
+   "name": "PostgresSourceConflicts",
+   "complexity": 60,
+   "loc": 290
+  },
+  {
+   "id": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java",
+   "name": "GraphProjector",
+   "complexity": 59,
+   "loc": 710
+  },
+  {
+   "id": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/Json.java",
+   "name": "Json",
+   "complexity": 59,
+   "loc": 216
+  },
+  {
+   "id": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java",
+   "name": "TraceDependenciesTool",
+   "complexity": 46,
+   "loc": 238
+  },
+  {
+   "id": "adapters/eam-adapter/src/main/java/io/github/unlocker/archrag/eamadapter/EamApiConnector.java",
+   "name": "EamApiConnector",
+   "complexity": 46,
+   "loc": 261
+  },
+  {
+   "id": "platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java",
+   "name": "EamApiStub",
+   "complexity": 34,
+   "loc": 217
+  },
+  {
+   "id": "access/admin-ui/src/pages/sync/SourcesTab.tsx",
+   "name": "SourcesTab",
+   "complexity": 32,
+   "loc": 83
+  },
+  {
+   "id": "ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java",
+   "name": "PostgresIdentityMapping",
+   "complexity": 32,
+   "loc": 147
+  },
+  {
+   "id": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java",
+   "name": "GraphController",
+   "complexity": 30,
+   "loc": 231
+  },
+  {
+   "id": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java",
+   "name": "QueryTemplate",
+   "complexity": 28,
+   "loc": 129
+  },
+  {
+   "id": "contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java",
+   "name": "ProcessingStatus",
+   "complexity": 28,
+   "loc": 41
+  },
+  {
+   "id": "ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/DeployMapMapper.java",
+   "name": "DeployMapMapper",
+   "complexity": 27,
+   "loc": 232
+  },
+  {
+   "id": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java",
+   "name": "Poller",
+   "complexity": 25,
+   "loc": 206
+  },
+  {
+   "id": "access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java",
+   "name": "GraphQueryExecutor",
+   "complexity": 24,
+   "loc": 170
+  },
+  {
+   "id": "adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/HttpSourceConnector.java",
+   "name": "HttpSourceConnector",
+   "complexity": 24,
+   "loc": 143
+  }
+ ],
+ "loc_histogram": {
+  "bins": [
+   0,
+   50,
+   100,
+   200,
+   400,
+   800,
+   100000
+  ],
+  "counts": [
+   216,
+   98,
+   68,
+   48,
+   8,
+   2
+  ]
+ },
+ "dependency_sankey": {
+  "nodes": [
+   {
+    "id": "contracts/canonical-model"
+   },
+   {
+    "id": "contracts/event-schemas"
+   },
+   {
+    "id": "contracts/source-spi"
+   },
+   {
+    "id": "adapters/adapter-core"
+   },
+   {
+    "id": "adapters/eam-adapter"
+   },
+   {
+    "id": "adapters/scm-adapter"
+   },
+   {
+    "id": "adapters/asset-adapter"
+   },
+   {
+    "id": "adapters/deploymap-adapter"
+   },
+   {
+    "id": "ingestion/event-journal"
+   },
+   {
+    "id": "ingestion/normalizer"
+   },
+   {
+    "id": "ingestion/identity-resolution"
+   },
+   {
+    "id": "ingestion/graph-projector"
+   },
+   {
+    "id": "ingestion/ingestion-service"
+   },
+   {
+    "id": "access/graph-query-core"
+   },
+   {
+    "id": "access/mcp-server"
+   },
+   {
+    "id": "access/admin-console"
+   },
+   {
+    "id": "access/admin-ui"
+   },
+   {
+    "id": "platform/source-stubs"
+   },
+   {
+    "id": "platform/demo-launcher"
+   },
+   {
+    "id": "platform/integration-tests"
+   },
+   {
+    "id": "platform/docker"
+   }
+  ],
+  "links": [
+   {
+    "source": "contracts/event-schemas",
+    "target": "contracts/canonical-model",
+    "value": 1
+   },
+   {
+    "source": "contracts/source-spi",
+    "target": "contracts/canonical-model",
+    "value": 1
+   },
+   {
+    "source": "adapters/adapter-core",
+    "target": "contracts/source-spi",
+    "value": 44
+   },
+   {
+    "source": "adapters/adapter-core",
+    "target": "contracts/event-schemas",
+    "value": 27
+   },
+   {
+    "source": "adapters/adapter-core",
+    "target": "platform/source-stubs",
+    "value": 8
+   },
+   {
+    "source": "adapters/eam-adapter",
+    "target": "adapters/adapter-core",
+    "value": 7
+   },
+   {
+    "source": "adapters/eam-adapter",
+    "target": "contracts/source-spi",
+    "value": 23
+   },
+   {
+    "source": "adapters/eam-adapter",
+    "target": "contracts/event-schemas",
+    "value": 2
+   },
+   {
+    "source": "adapters/eam-adapter",
+    "target": "platform/source-stubs",
+    "value": 15
+   },
+   {
+    "source": "adapters/scm-adapter",
+    "target": "adapters/adapter-core",
+    "value": 3
+   },
+   {
+    "source": "adapters/scm-adapter",
+    "target": "contracts/source-spi",
+    "value": 4
+   },
+   {
+    "source": "adapters/scm-adapter",
+    "target": "contracts/event-schemas",
+    "value": 2
+   },
+   {
+    "source": "adapters/scm-adapter",
+    "target": "platform/source-stubs",
+    "value": 3
+   },
+   {
+    "source": "adapters/asset-adapter",
+    "target": "adapters/adapter-core",
+    "value": 3
+   },
+   {
+    "source": "adapters/asset-adapter",
+    "target": "contracts/source-spi",
+    "value": 4
+   },
+   {
+    "source": "adapters/asset-adapter",
+    "target": "contracts/event-schemas",
+    "value": 2
+   },
+   {
+    "source": "adapters/asset-adapter",
+    "target": "platform/source-stubs",
+    "value": 3
+   },
+   {
+    "source": "adapters/deploymap-adapter",
+    "target": "adapters/adapter-core",
+    "value": 3
+   },
+   {
+    "source": "adapters/deploymap-adapter",
+    "target": "contracts/source-spi",
+    "value": 6
+   },
+   {
+    "source": "adapters/deploymap-adapter",
+    "target": "contracts/event-schemas",
+    "value": 2
+   },
+   {
+    "source": "adapters/deploymap-adapter",
+    "target": "contracts/canonical-model",
+    "value": 1
+   },
+   {
+    "source": "adapters/deploymap-adapter",
+    "target": "platform/source-stubs",
+    "value": 7
+   },
+   {
+    "source": "ingestion/event-journal",
+    "target": "contracts/event-schemas",
+    "value": 16
+   },
+   {
+    "source": "ingestion/normalizer",
+    "target": "contracts/canonical-model",
+    "value": 89
+   },
+   {
+    "source": "ingestion/normalizer",
+    "target": "contracts/event-schemas",
+    "value": 7
+   },
+   {
+    "source": "ingestion/normalizer",
+    "target": "contracts/source-spi",
+    "value": 2
+   },
+   {
+    "source": "ingestion/normalizer",
+    "target": "platform/source-stubs",
+    "value": 3
+   },
+   {
+    "source": "ingestion/identity-resolution",
+    "target": "contracts/canonical-model",
+    "value": 53
+   },
+   {
+    "source": "ingestion/graph-projector",
+    "target": "contracts/canonical-model",
+    "value": 72
+   },
+   {
+    "source": "ingestion/graph-projector",
+    "target": "contracts/event-schemas",
+    "value": 43
+   },
+   {
+    "source": "ingestion/graph-projector",
+    "target": "ingestion/normalizer",
+    "value": 7
+   },
+   {
+    "source": "ingestion/graph-projector",
+    "target": "ingestion/identity-resolution",
+    "value": 20
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "contracts/canonical-model",
+    "value": 5
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "contracts/event-schemas",
+    "value": 45
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "ingestion/event-journal",
+    "value": 3
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "ingestion/normalizer",
+    "value": 1
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "ingestion/identity-resolution",
+    "value": 9
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "ingestion/graph-projector",
+    "value": 10
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "adapters/adapter-core",
+    "value": 1
+   },
+   {
+    "source": "ingestion/ingestion-service",
+    "target": "contracts/source-spi",
+    "value": 6
+   },
+   {
+    "source": "access/graph-query-core",
+    "target": "contracts/canonical-model",
+    "value": 1
+   },
+   {
+    "source": "access/mcp-server",
+    "target": "access/graph-query-core",
+    "value": 54
+   },
+   {
+    "source": "access/admin-console",
+    "target": "access/admin-ui",
+    "value": 1
+   },
+   {
+    "source": "access/admin-console",
+    "target": "access/graph-query-core",
+    "value": 23
+   },
+   {
+    "source": "platform/source-stubs",
+    "target": "contracts/source-spi",
+    "value": 24
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "contracts/source-spi",
+    "value": 6
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "adapters/adapter-core",
+    "value": 5
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "adapters/eam-adapter",
+    "value": 2
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "adapters/scm-adapter",
+    "value": 1
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "adapters/asset-adapter",
+    "value": 1
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "adapters/deploymap-adapter",
+    "value": 1
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "contracts/event-schemas",
+    "value": 1
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "ingestion/event-journal",
+    "value": 2
+   },
+   {
+    "source": "platform/demo-launcher",
+    "target": "platform/source-stubs",
+    "value": 13
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "contracts/canonical-model",
+    "value": 89
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "contracts/event-schemas",
+    "value": 78
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "contracts/source-spi",
+    "value": 14
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "adapters/adapter-core",
+    "value": 26
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "platform/source-stubs",
+    "value": 32
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "adapters/eam-adapter",
+    "value": 3
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "adapters/scm-adapter",
+    "value": 7
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "adapters/asset-adapter",
+    "value": 6
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "adapters/deploymap-adapter",
+    "value": 6
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "ingestion/event-journal",
+    "value": 39
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "ingestion/normalizer",
+    "value": 23
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "ingestion/identity-resolution",
+    "value": 40
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "ingestion/graph-projector",
+    "value": 54
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "ingestion/ingestion-service",
+    "value": 11
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "access/graph-query-core",
+    "value": 52
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "access/mcp-server",
+    "value": 17
+   },
+   {
+    "source": "platform/integration-tests",
+    "target": "access/admin-console",
+    "value": 2
+   }
+  ]
+ },
+ "language_distribution": [
+  {
+   "language": "java",
+   "modules": 405,
+   "loc": 36509
+  },
+  {
+   "language": "js",
+   "modules": 2,
+   "loc": 50
+  },
+  {
+   "language": "ts",
+   "modules": 33,
+   "loc": 2273
+  }
+ ],
+ "main_vs_test": [
+  {
+   "module": "access/admin-console",
+   "main": 1580,
+   "test": 656
+  },
+  {
+   "module": "access/admin-ui",
+   "main": 1693,
+   "test": 630
+  },
+  {
+   "module": "access/graph-query-core",
+   "main": 1153,
+   "test": 439
+  },
+  {
+   "module": "access/mcp-server",
+   "main": 1964,
+   "test": 2090
+  },
+  {
+   "module": "adapters/adapter-core",
+   "main": 1296,
+   "test": 884
+  },
+  {
+   "module": "adapters/asset-adapter",
+   "main": 40,
+   "test": 105
+  },
+  {
+   "module": "adapters/deploymap-adapter",
+   "main": 40,
+   "test": 241
+  },
+  {
+   "module": "adapters/eam-adapter",
+   "main": 529,
+   "test": 790
+  },
+  {
+   "module": "adapters/scm-adapter",
+   "main": 40,
+   "test": 105
+  },
+  {
+   "module": "contracts/canonical-model",
+   "main": 907,
+   "test": 520
+  },
+  {
+   "module": "contracts/event-schemas",
+   "main": 380,
+   "test": 109
+  },
+  {
+   "module": "contracts/source-spi",
+   "main": 268,
+   "test": 53
+  },
+  {
+   "module": "ingestion/event-journal",
+   "main": 509,
+   "test": 19
+  },
+  {
+   "module": "ingestion/graph-projector",
+   "main": 2518,
+   "test": 1375
+  },
+  {
+   "module": "ingestion/identity-resolution",
+   "main": 1181,
+   "test": 195
+  },
+  {
+   "module": "ingestion/ingestion-service",
+   "main": 1442,
+   "test": 719
+  },
+  {
+   "module": "ingestion/normalizer",
+   "main": 1094,
+   "test": 997
+  },
+  {
+   "module": "platform/demo-launcher",
+   "main": 558,
+   "test": 370
+  },
+  {
+   "module": "platform/integration-tests",
+   "main": 7,
+   "test": 9312
+  },
+  {
+   "module": "platform/source-stubs",
+   "main": 1401,
+   "test": 623
+  }
+ ],
+ "confidence_by_unit": [
+  {
+   "unit": "adapter-core",
+   "g": 256,
+   "y": 88,
+   "r": 28,
+   "pct": 81
+  },
+  {
+   "unit": "admin-console",
+   "g": 326,
+   "y": 70,
+   "r": 14,
+   "pct": 88
+  },
+  {
+   "unit": "admin-ui",
+   "g": 323,
+   "y": 93,
+   "r": 16,
+   "pct": 86
+  },
+  {
+   "unit": "asset-adapter",
+   "g": 68,
+   "y": 16,
+   "r": 15,
+   "pct": 77
+  },
+  {
+   "unit": "canonical-model",
+   "g": 236,
+   "y": 63,
+   "r": 29,
+   "pct": 82
+  },
+  {
+   "unit": "demo-launcher",
+   "g": 222,
+   "y": 81,
+   "r": 16,
+   "pct": 82
+  },
+  {
+   "unit": "deploymap-adapter",
+   "g": 116,
+   "y": 15,
+   "r": 14,
+   "pct": 85
+  },
+  {
+   "unit": "docker",
+   "g": 351,
+   "y": 103,
+   "r": 18,
+   "pct": 85
+  },
+  {
+   "unit": "eam-adapter",
+   "g": 198,
+   "y": 61,
+   "r": 8,
+   "pct": 86
+  },
+  {
+   "unit": "event-journal",
+   "g": 210,
+   "y": 79,
+   "r": 9,
+   "pct": 84
+  },
+  {
+   "unit": "event-schemas",
+   "g": 138,
+   "y": 45,
+   "r": 21,
+   "pct": 79
+  },
+  {
+   "unit": "graph-projector",
+   "g": 343,
+   "y": 83,
+   "r": 13,
+   "pct": 88
+  },
+  {
+   "unit": "graph-query-core",
+   "g": 317,
+   "y": 57,
+   "r": 20,
+   "pct": 88
+  },
+  {
+   "unit": "identity-resolution",
+   "g": 187,
+   "y": 44,
+   "r": 13,
+   "pct": 86
+  },
+  {
+   "unit": "ingestion-service",
+   "g": 243,
+   "y": 59,
+   "r": 16,
+   "pct": 86
+  },
+  {
+   "unit": "integration-tests",
+   "g": 366,
+   "y": 155,
+   "r": 31,
+   "pct": 80
+  },
+  {
+   "unit": "mcp-server",
+   "g": 364,
+   "y": 75,
+   "r": 17,
+   "pct": 88
+  },
+  {
+   "unit": "normalizer",
+   "g": 239,
+   "y": 58,
+   "r": 12,
+   "pct": 87
+  },
+  {
+   "unit": "scm-adapter",
+   "g": 61,
+   "y": 14,
+   "r": 10,
+   "pct": 80
+  },
+  {
+   "unit": "source-spi",
+   "g": 150,
+   "y": 41,
+   "r": 37,
+   "pct": 75
+  },
+  {
+   "unit": "source-stubs",
+   "g": 270,
+   "y": 62,
+   "r": 57,
+   "pct": 77
+  }
+ ]
+}

@@ -31,4 +31,4 @@ T-01 → T-02 → T-03 → T-04 → T-06 → T-05 → T-07.
 
 ## Открытые вопросы
 
-[`../questions.md`](../questions.md): Q-17, Q-18 (🟡), Q-08 (🔴, формулировка `docs/02-data-model.md:273`).
+[`../questions.md`](../questions.md): Q-17, Q-18 (🟡), Q-08 (🟢 [R.8: ответ владельца, вопрос 7], формулировка `docs/02-data-model.md:273`).

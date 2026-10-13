@@ -76,7 +76,7 @@
 | `Candidate` | `left*/right*(source,type,id), labelFamily, matched[{feature,value}]\|null, score, status, firstSeenAt, updatedAt` | `access/admin-ui/src/api/types.ts:166-184` |
 | `Audit` | `id,operation,actor,status,replayId,request,requestTruncated,result,resultTruncated,error,startedAt,finishedAt` | `access/admin-ui/src/api/types.ts:186-199` |
 
-Типы — копия формы Java-records (`access/admin-ui/src/api/types.ts:1`); общего генератора или контрактного теста нет 🔴 (Q-05).
+Типы — копия формы Java-records (`access/admin-ui/src/api/types.ts:1`); общего генератора или контрактного теста нет 🟢 [R.8: ответ владельца, вопрос 9] (Q-05).
 
 ## 7. Константы UI (`access/admin-ui/src/api/constants.ts`)
 

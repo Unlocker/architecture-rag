@@ -57,7 +57,7 @@ flowchart LR
 - Сбой записи аудита не меняет ответ 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/audit/ReadAuditInterceptor.java:54-57`).
 - Ответы 401/403 Spring Security в аудит чтений не попадают (перехватчик срабатывает после фильтров безопасности) 🟡 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/SpaWebConfiguration.java:42-45`; Q-06).
 - Ролевого ограничения внутри scope `architecture.admin` нет: любой пользователь realm получает токен консоли; принято владельцем 2026-10-08 как ограничение PoC 🟡 (`docs/adr/0026-admin-console-readonly-loopback.md`; П-9; Q-02).
-- Привязка к loopback обеспечивается только публикацией порта в Compose (`127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}:8080`); `server.address` приложения не задан 🔴 (`platform/docker/docker-compose.yml:292-293`; Q-01).
+- Привязка к loopback обеспечивается только публикацией порта в Compose (`127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}:8080`); `server.address` приложения не задан 🟢 [R.8: ответ владельца, вопрос 8] (`platform/docker/docker-compose.yml:292-293`; Q-01).
 
 ## Requisitos Funcionais
 
@@ -87,7 +87,7 @@ flowchart LR
 | Наблюдаемость | Метрик нет; открыт только `health` (liveness/readiness) | `access/admin-console/src/main/resources/application.yml:51-58` | 🟢 |
 | Эксплуатация | Порт 8080 в контейнере, на хосте `127.0.0.1:8090` (по умолчанию) | `platform/docker/docker-compose.yml:292-293` | 🟢 |
 
-> Inferido a partir do código. SLO, лимиты частоты запросов и retention аудита чтений в модуле не заданы 🔴 (см. [`questions.md`](questions.md) Q-06, Q-12).
+> Inferido a partir do código. SLO, лимиты частоты запросов и retention аудита чтений в модуле не заданы 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-06, Q-12).
 
 ## Критерии приёмки (сквозные)
 
@@ -138,7 +138,7 @@ flowchart LR
 | Аудит чтений (RF-06) | Must | ADR 0026 |
 | Ролевая модель внутри scope | Won't | Принято владельцем как ограничение PoC (П-9) |
 | Изменяющие операции в консоли | Won't | Остаются в admin REST ingestion (ADR 0013, 0026) |
-| Закрытие записей DLQ из консоли | Won't | Нет в коде (🔴 Q-03) |
+| Закрытие записей DLQ из консоли | Won't | Нет в коде (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-03) |
 
 ## Зависит от / Связанные спецификации
 

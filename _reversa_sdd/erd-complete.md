@@ -78,8 +78,8 @@ erDiagram
 
 | № | Что | Ссылки |
 |---|---|---|
-| 🔴 Э-1 | `dlq_entry.replayed_at` и `identity_candidate.status` присутствуют в схеме, но кодом не изменяются (Р-3, Р-4) | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:47-48`; [`detective-gaps.md`](detective-gaps.md) §2 |
-| 🔴 Э-2 | `SyncRun` создаётся со статусом `RUNNING` и не получает `endedAt`/итог (Р-5) | `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:695-700` |
+| 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2, 3)] Э-1 | `dlq_entry.replayed_at` и `identity_candidate.status` присутствуют в схеме, но кодом не изменяются (Р-3, Р-4) | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:47-48`; [`detective-gaps.md`](detective-gaps.md) §2 |
+| 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] Э-2 | `SyncRun` создаётся со статусом `RUNNING` и не получает `endedAt`/итог (Р-5) | `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:695-700` |
 | 🟡 Э-3 | `inbox_event.status` без `CHECK`: допустимые значения держит только `ProcessingStatus` в Java | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:13-13`; `database/data-dictionary.md` §3 |
 | 🟡 Э-4 | Свойства, пропущенные в частичной записи, исчезают из `property_assertion`, но остаются в графе (конфликт «рассасывается» без изменения графа) | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:81-103`; `_reversa_sdd/code-analysis.md:619-619` |
 | 🟡 Э-5 | `ASSERTS.confidence` всегда `1.0` — поле не несёт информации | `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:462-462` |

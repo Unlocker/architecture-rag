@@ -75,9 +75,9 @@
 
 | № | Связь | Где в модуле | Защита |
 |---|-------|--------------|--------|
-| 2 | Таблица кодов источников `eam / scm / cmdb / deploymap` (шесть копий) | `access/admin-ui/src/api/constants.ts:27` ↔ `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:19` | нет теста «покрыты все `SourceSystemCode`» 🔴 (Q-05) |
+| 2 | Таблица кодов источников `eam / scm / cmdb / deploymap` (шесть копий) | `access/admin-ui/src/api/constants.ts:27` ↔ `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:19` | нет теста «покрыты все `SourceSystemCode`» 🟢 [R.8: ответ владельца, вопрос 9] (Q-05) |
 | 9 | Allowlist'ы меток и типов связей | `access/admin-ui/src/api/constants.ts:5-25` ↔ `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/AssetTemplates.java:16-17, 102-103`, `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/ConsoleTemplates.java:38` | бэкенд отвечает 400 на неизвестное значение; UI тестируется отдельно 🟡 (Q-05) |
-| 10 | Порог устаревания 7 суток | `access/admin-ui/src/api/constants.ts:56` ↔ `access/mcp-server/src/main/resources/application.yml:44` (`archrag.query.stale-after: P7D`) | связи нет 🔴 (Q-04) |
+| 10 | Порог устаревания 7 суток | `access/admin-ui/src/api/constants.ts:56` ↔ `access/mcp-server/src/main/resources/application.yml:44` (`archrag.query.stale-after: P7D`) | связи нет 🟢 [R.8: ответ владельца, вопрос 9] (Q-04) |
 | — | Список статусов события (§3 «Новый статус события») | `access/admin-ui/src/api/constants.ts:29-40` ↔ `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:22-33` | таблица продублирована, теста нет 🟡 (Q-05) |
 | 3 | Регистр источника: URN в журнале, верхний регистр в графе, нижний в консоли | UI оперирует коротким нижним регистром (`access/admin-ui/src/api/constants.ts:27`); перевод делает консоль (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:36-37`) | соглашение 🟡 |
 
@@ -101,10 +101,10 @@
 
 ## Riscos e Lacunas
 
-- 🔴 `health()` в «Источниках» содержит ветки «последний прогон `FAILED`» и «`failed > 0`», недостижимые при текущем проекторе: `SyncRun.status` всегда `RUNNING`, счётчики не обновляются — Q-01.
-- 🔴 Вкладка DLQ по умолчанию просит `replayed=false`, но `dlq_entry.replayed_at` никто не заполняет, поэтому «открытые» = все записи — Q-02.
-- 🔴 Фильтр кандидатов `RESOLVED` пуст: `identity_candidate.status` не выходит из `OPEN` — Q-03.
-- 🔴 Порог «устарел» 7 суток не связан с `archrag.query.stale-after`; allowlist'ы продублированы без теста — Q-04, Q-05.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] `health()` в «Источниках» содержит ветки «последний прогон `FAILED`» и «`failed > 0`», недостижимые при текущем проекторе: `SyncRun.status` всегда `RUNNING`, счётчики не обновляются — Q-01.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Вкладка DLQ по умолчанию просит `replayed=false`, но `dlq_entry.replayed_at` никто не заполняет, поэтому «открытые» = все записи — Q-02.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] Фильтр кандидатов `RESOLVED` пуст: `identity_candidate.status` не выходит из `OPEN` — Q-03.
+- 🟢 [R.8: ответ владельца, вопрос 9] Порог «устарел» 7 суток не связан с `archrag.query.stale-after`; allowlist'ы продублированы без теста — Q-04, Q-05.
 - 🟡 `logout()` не подключён к UI; токен не обновляется тихо — Q-06, Q-07.
 - 🟡 Cytoscape под строгой CSP проверяется только в jsdom; реальная проверка — смоук стенда — Q-10.
 - 🟡 Локальный запуск `npm start` (порт 3000) не совпадает с redirect URI клиента Keycloak (`127.0.0.1:<порт консоли>/*`) — Q-13.

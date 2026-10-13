@@ -96,7 +96,7 @@
 |--------|----------|-------------|
 | Публикация порта | `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}:8080`, только loopback | `platform/docker/docker-compose.yml:292-293` 🟢 |
 | Сети контейнера | `backend` (PostgreSQL, JWKS Keycloak), `graph` (Neo4j), `console-edge` (только публикация порта); в сети `edge` и за reverse proxy консоли нет | `platform/docker/docker-compose.yml:290-291, 543` 🟢 |
-| Привязка внутри приложения | `server.address` не задан: сервис слушает все интерфейсы контейнера | `access/admin-console/src/main/resources/application.yml:43-44` 🔴 (Q-01) |
+| Привязка внутри приложения | `server.address` не задан: сервис слушает все интерфейсы контейнера | `access/admin-console/src/main/resources/application.yml:43-44` 🟢 [R.8: ответ владельца, вопрос 8] (Q-01) |
 | Healthcheck | `curl -fs http://127.0.0.1:8080/actuator/health` | `platform/docker/docker-compose.yml:300-305` 🟢 |
 | Секреты контейнера | только `neo4j_reader_password`, `console_pg_password` | `platform/docker/docker-compose.yml:287-289` 🟢 |
 | Keycloak-клиент | `archrag-admin-console`, PKCE `S256`, scope `architecture.admin` optional | `platform/docker/keycloak/archrag-realm.json:77-90` 🟢 |

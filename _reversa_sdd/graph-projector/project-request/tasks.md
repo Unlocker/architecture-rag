@@ -23,7 +23,7 @@
 - [ ] **T-09. `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun`.**
   Origin: `GP/GraphProjector.java:467-505, 687-703`. Критерий готовности: `relationOnlyEventIsProjectedNotQuarantined` (юнит); AC-12; IT `SourceConflictIT` (маркеры `ASSERTS.conflicts`). Уверенность: 🟢 (IT конфликтов — 🟡: тест вне этого модуля).
 - [ ] **T-10. `closeAssertion`.** Для полноты контракта; нет производителя.
-  Origin: `GP/GraphProjector.java:668-685`. Критерий готовности: IT `closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent`. Уверенность: 🟢 (поведение) / 🔴 (нужность, Q-03).
+  Origin: `GP/GraphProjector.java:668-685`. Критерий готовности: IT `closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent`. Уверенность: 🟢 (поведение) / 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] (нужность, Q-03).
 - [ ] **T-11. Порты чтения.** `applied`, `isActive`, `activeRecords`, `DeploymentLookup`, `EamLookup` — `executeRead`, параметры, `try-with-resources`.
   Origin: `GP/GraphProjector.java:113-300`. Критерий готовности: AC-13; `eamSystemOfServiceFindsTheSingleDecomposingSystem`, `eamSystemOfServiceIsEmptyWithoutSystem`. Уверенность: 🟢.
 - [ ] **T-12. `TemporalRelationMigration`.** По типам `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN`: отдельная сессия и `executeWrite` на тип; `validFrom = coalesce(min(firstSeenAt узлов записи), $now)` только где `validFrom IS NULL`.

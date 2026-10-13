@@ -57,5 +57,5 @@ flowchart TD
 ## Риски
 
 - 🟡 `validity == null` допустим для темпоральных типов — поведение определяет проектор.
-- 🔴 `CloseAssertion` не имеет производителя в `main` (см. [`../questions.md`](../questions.md) Q-3).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] `CloseAssertion` не имеет производителя в `main` (см. [`../questions.md`](../questions.md) Q-3).
 - 🟡 Исключения не несут `cause`/значений источника, но сообщение `UpsertRelation` включает имена типа и меток (`CM/command/UpsertRelation.java:33`).

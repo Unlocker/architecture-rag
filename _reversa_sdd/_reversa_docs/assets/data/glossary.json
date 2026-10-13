@@ -1,0 +1,168 @@
+{
+ "schemaVersion": 1,
+ "generatedAt": "2026-10-13T10:20:13Z",
+ "concepts": [
+  {
+   "term": "ITSystem",
+   "definition": "ИТ-система предприятия (корень иерархии). Связи: USES_SOLUTION→Solution, DECOMPOSED_INTO→Service, OWNED_BY→Team",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Solution / Platform",
+   "definition": "Решение и платформа, на которой оно построено. Связи: USES_PLATFORM",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Service",
+   "definition": "Сервис - единица разработки и развёртывания. Связи: IMPLEMENTED_IN→Repository, HAS_DEPLOYMENT→Deployment, DEPENDS_ON→Service, OWNED_BY→Team",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Repository",
+   "definition": "Git-репозиторий исходного кода. Связи: цель IMPLEMENTED_IN, DEPLOYED_FROM {commit}",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Deployment",
+   "definition": "Развёртывание сервиса в окружении. Связи: IN_ENVIRONMENT→Environment, RUNS_ON→ComputeInstance/Namespace, DEPLOYED_FROM→Repository",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Environment / ComputeInstance (VirtualMachine, PhysicalServer) / Namespace / KubernetesCluster",
+   "definition": "Окружение и инфраструктура исполнения. Связи: HOSTED_ON, PART_OF",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "Team",
+   "definition": "Владелец систем и сервисов. Связи: цель OWNED_BY",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "SourceSystem / SourceRecord / SyncRun",
+   "definition": "Provenance: кто и когда утверждал факт. Связи: OWNS_RECORD, ASSERTS, PROCESSED",
+   "source": "soul.md §2",
+   "kind": "Сущность"
+  },
+  {
+   "term": "SourceKey",
+   "definition": "ключ записи источника (source, sourceType, sourceId); source - SourceSystemCode (EAM, SCM, CMDB, DEPLOYMAP, MANUAL)",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "gid",
+   "definition": "UUID канонического узла; выдаётся один раз и навсегда только IdentityMapping",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "SourceRecord",
+   "definition": "узел «запись источника» с версией, hash, active; утверждает (ASSERTS) канонический узел",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "MASTER / SUPPLEMENTARY",
+   "definition": "значение authority на ребре ASSERTS: источник - мастер метки узла или нет",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Tombstone",
+   "definition": "пометка SourceRecord.active=false + deletedAt; физического удаления нет",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Missing set",
+   "definition": "активные записи источника, которых нет в завершённом snapshot",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Crosswalk",
+   "definition": "подтверждённое оператором соответствие двух SourceKey одной сущности",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Кандидат (identity_candidate)",
+   "definition": "подозрение «две записи - один объект»; только запись, узлы не объединяются",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Конфликт (source_conflict)",
+   "definition": "расхождение значения неавторитетной записи с авторитетной",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "Дельта / snapshot",
+   "definition": "инкрементальное чтение по курсору и полное чтение с маркером snapshot-complete",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "GraphCommand",
+   "definition": "единственный вход проектора: UpsertNode, UpsertRelation, DeferRelation, TombstoneSourceRecord, CloseAssertion",
+   "source": "domain.md §1",
+   "kind": "Термин"
+  },
+  {
+   "term": "D1. Neo4j - производная read-only витрина; источник истины - мастер-системы",
+   "definition": "граф можно целиком перестроить из журнала (replay/rebuild); любое изменение идёт через ingestion, а не через MCP.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D2. Идентичность: gid + SourceRecord {source, sourceType, sourceId}; sourceId - без префикса системы",
+   "definition": "актив подтверждается несколькими источниками; MERGE только по ключам под constraint.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D3. Postgres inbox как event backbone за интерфейсами EventJournal/CanonicalEventPublisher; raw payload в S3 (SeaweedFS)",
+   "definition": "Kafka - только production-вариант; идемпотентность по source + eventId, версия по sourceVersion.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D4. Authority matrix на уровне полей и связей; identity resolution без авто-слияния",
+   "definition": "расхождения источников фиксируются как конфликты, а не молча перезаписываются.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D5. Tombstone вместо hard delete; удаление только после snapshot-complete; структурные связи темпоральны",
+   "definition": "граф хранит историю; checkpoint двигается только после коммита Neo4j.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D6. Агентам - предметные tools с параметризованными шаблонами; read-only обеспечивает приложение, не Neo4j Community",
+   "definition": "любой новый tool = новый шаблон + scope в Spring Security; MCP - Streamable HTTP в режиме STATELESS (🟡 docs/00-vision.md:555 называет STREAMABLE, код и ADR 0017 - STATELESS).",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D7. Java 21 + Spring Boot 4 + Spring AI 2 + Maven multi-module; четыре контура как модули; Docker Compose стенд",
+   "definition": "направление зависимостей contracts ← adapters/ingestion/access ← platform; access не зависит от ingestion.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  },
+  {
+   "term": "D8. Мастер-системы в PoC - заглушки; Deployment берётся из deploy map + Helm charts",
+   "definition": "реальные интеграции вне PoC; форматы источников задаёт код заглушек.",
+   "source": "soul.md §3",
+   "kind": "Решение"
+  }
+ ]
+}

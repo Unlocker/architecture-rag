@@ -17,10 +17,10 @@
 - **F3, невалидный ввод:** шесть отказов tool-ошибкой без стектрейса: неизвестный gid (`asset not found`), не-UUID (`gid must be a UUID`), `mode=foo` (`mode must be trace or impact`), `impact` + `direction=downstream` (`direction must be upstream for mode impact`), `maxDepth=7` (`maxDepth must be in 1..6`), `environment` в режиме trace (`environment is supported only for mode impact`) 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F3AcceptanceIT.java:365-375`).
 - **F3, задержки:** холодный impact (измерен в s4) ≤ 15 с; p95 по 10 тёплым вызовам trace и impact ≤ 5 с 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F3AcceptanceIT.java:248-250, 391-417`).
 - **F4** (`explain_provenance`): подготовка — `@Primary EventProcessor` с `ScmItSystemMapper`, два актива связаны через `POST /admin/crosswalks` (обязательно до первого события любой из записей), критичность `HIGH` (EAM) и `LOW` (SCM); провенанс двух источников: EAM `MASTER` (`authoritative`, `sourceId 9101`), SCM `SUPPLEMENTARY`, `conflictState = OPEN`, `conflictProperties ∋ criticality`; значение мастера (`HIGH`) читается через `get_asset`; фильтр `property=criticality` оставляет конфликт, `property=name` — `NONE` 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java:189-250, 328-371`).
-- **F4, tombstone:** удаление SCM-записи (supplementary) через инкрементальный путь оставляет актив текущим (`isCurrent`, `deletedAt = null`), снимает конфликт (`NONE`) и находится поиском; tombstone **мастера** (объект eam-api архивирован, reconcile после snapshot) закрывает актив (`isCurrent = false`, `deletedAt` задан) при активной записи SCM — правило «закрыт, когда нет активных MASTER-утверждений» 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java:375-401, 432-448`); 🔴 формулировка ADR 0020 шире — Q-05.
+- **F4, tombstone:** удаление SCM-записи (supplementary) через инкрементальный путь оставляет актив текущим (`isCurrent`, `deletedAt = null`), снимает конфликт (`NONE`) и находится поиском; tombstone **мастера** (объект eam-api архивирован, reconcile после snapshot) закрывает актив (`isCurrent = false`, `deletedAt` задан) при активной записи SCM — правило «закрыт, когда нет активных MASTER-утверждений» 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java:375-401, 432-448`); 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 4)] формулировка ADR 0020 шире — Q-05.
 - **Ошибки tools** не содержат стектрейса и эха значения: `isError = true`, текст не пуст, не содержит `"\tat "` и `"Exception"` 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:337-346`).
 - **Доступ:** сырой `POST /mcp` с `tools/call` без токена → 401; со scope `architecture.other` → 403 с `WWW-Authenticate`, содержащим `insufficient_scope`; проверен tool класса: `search_assets` (F1), `find_runtime_footprint` (F2), `trace_dependencies` (F3), `explain_provenance` (F4) 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:349-359`).
-- 🔴 Не проверено: `stale = true` (Q-06); неверный audience/issuer, просроченный и подделанный токен, `tools/list` без scope, отдельно `get_asset` и `ping` (Q-01, Q-12); полный набор `tool-scopes` из `application.yml` (Q-25).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Не проверено: `stale = true` (Q-06); неверный audience/issuer, просроченный и подделанный токен, `tools/list` без scope, отдельно `get_asset` и `ping` (Q-01, Q-12); полный набор `tool-scopes` из `application.yml` (Q-25).
 
 ## Requisitos Funcionais
 
@@ -121,7 +121,7 @@
 |-----------|--------|---------------|
 | RF-01..RF-05 | Must | Критерий PoC 5 и 7 |
 | RF-06 | Should | Критерий 9, пороги ориентировочные |
-| `stale=true`, audience/exp, `tools/list` без scope | Won't | Не реализовано (🔴 Q-01, Q-06, Q-12) |
+| `stale=true`, audience/exp, `tools/list` без scope | Won't | Не реализовано (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Q-01, Q-06, Q-12) |
 
 ## Rastreabilidade de Código
 

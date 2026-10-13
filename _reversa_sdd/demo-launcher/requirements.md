@@ -80,7 +80,7 @@ flowchart LR
 | Observabilidade | Только `System.Logger` (INFO/WARNING), метрик нет | `platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:51, 91, 128` | 🟢 |
 | Эксплуатация | Параметры, не вынесенные в env: порт 8091, размер страницы polling 100, окно replay 5 мин, `RetryPolicy.defaults()` | `platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:54, 114-116` | 🟢 |
 
-> Inferido a partir do código. SLO не заданы: модуль — демо-инфраструктура 🔴 (см. [`questions.md`](questions.md) Q-10).
+> Inferido a partir do código. SLO не заданы: модуль — демо-инфраструктура 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-10).
 
 ## Критерии приёмки (сквозные)
 

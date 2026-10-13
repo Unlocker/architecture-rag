@@ -27,7 +27,7 @@
 
 - [ ] TT-01: `EamApiControlTest` (platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/EamApiControlTest.java:47-80)
 - [ ] TT-02: `LauncherConfigTest` — ветка EAM API stub (platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/LauncherConfigTest.java:95-104)
-- [ ] TT-03: 🔴 нет теста согласованности `EamApiControl.TYPES` и `EamApiSeed` (Q-03)
+- [ ] TT-03: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] нет теста согласованности `EamApiControl.TYPES` и `EamApiSeed` (Q-03)
 - [ ] TT-04: 🔴 нет теста `runEamApiStub` и `archive` неизвестного объекта/неверного `type` у `/control/archive` (Q-05)
 
 ## Ordem Sugerida

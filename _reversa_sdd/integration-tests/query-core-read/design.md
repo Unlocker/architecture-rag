@@ -54,7 +54,7 @@
 
 ## Riscos e Lacunas
 
-- 🔴 Q-01/Q-12: scope и 401/403 здесь не участвуют (HTTP нет) — отказы проверяет `acceptance-mcp-f1-f4` и только для вызовов `tools/call`.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11)] Q-01/Q-12: scope и 401/403 здесь не участвуют (HTTP нет) — отказы проверяет `acceptance-mcp-f1-f4` и только для вызовов `tools/call`.
 - 🟡 Q-31: `HOSTED_ON`, `PhysicalServer` и `fetchedAt` вставляются Cypher-ом.
 - 🟡 Q-17: время плотного графа и холодного вызова не измеряется явно.
 - 🟡 `GraphQueryCoreIT` и `RuntimeFootprintIT` без схемы; `getAsset` и поиск зависят от индекса `asset_text`, который создаёт `Neo4jSchema` (spec-impact § 2 № 4) 🟢 (`SearchAssetsIT` применяет схему и ждёт индексы: `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SearchAssetsIT.java:116-120`).

@@ -40,7 +40,7 @@
 | Безопасность | Проверки используют положительные контроли (иначе «отсутствие» ничего не доказывает) | `platform/docker/smoke.sh:49-52, 56`; `platform/docker/console-smoke.sh:98, 111, 121-123` | 🟢 |
 | Безопасность | Скрипты не зависят от `/etc/hosts` и системных прокси (`--connect-to`, `no_proxy="*"`) | `platform/docker/console-smoke.sh:14-19` | 🟢 |
 | Безопасность | Временные файлы создаются с `umask 077`, токен — через временный файл заголовка, не argv | `platform/docker/console-smoke.sh:16, 43`; `platform/docker/smoke.sh:63-71` | 🟢 |
-| Покрытие CI | `smoke.sh` запускается в CI; `console-smoke.sh` — нет | `.github/workflows/ci.yml:78, 81, 85, 92` | 🔴 Q-07 |
+| Покрытие CI | `smoke.sh` запускается в CI; `console-smoke.sh` — нет | `.github/workflows/ci.yml:78, 81, 85, 92` | 🟢 [R.8: ответ владельца, вопрос 14] Q-07 |
 
 ## Критерии приёмки
 

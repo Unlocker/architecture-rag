@@ -28,7 +28,7 @@ flowchart TD
 
 ## Visão Geral
 
-`platform/integration-tests` — единственный модуль, который доказывает сквозные свойства PoC: адаптеры (на заглушках) → журнал `inbox_event` + S3 raw → диспетчер, нормализатор, identity, проектор → Neo4j → MCP-tools и консоль. В `src/main` лежит только маркер `IntegrationTestsModule` с `package-info`; вся работа — в `src/test`: 31 класс `*IT` (298 `@Test`), один unit-класс `IntegrationTestsSmokeTest` (1 `@Test`, выполняется surefire) и 6 вспомогательных классов (около 10,7 тыс. строк в `src/test`) 🟢 (`platform/integration-tests/src/main/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsModule.java:3-7`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsSmokeTest.java:7-13`). Тесты не содержат прод-логики. Покрывают критерии готовности PoC 1–7 и 9 (`docs/00-vision.md:798-807`) и ловушки 1–6, 9, 10, 13, 14 профиля агента; критерий 8 (backup/restore) и ловушки 7, 8 не покрыты (🔴 Q-02, Q-03).
+`platform/integration-tests` — единственный модуль, который доказывает сквозные свойства PoC: адаптеры (на заглушках) → журнал `inbox_event` + S3 raw → диспетчер, нормализатор, identity, проектор → Neo4j → MCP-tools и консоль. В `src/main` лежит только маркер `IntegrationTestsModule` с `package-info`; вся работа — в `src/test`: 31 класс `*IT` (298 `@Test`), один unit-класс `IntegrationTestsSmokeTest` (1 `@Test`, выполняется surefire) и 6 вспомогательных классов (около 10,7 тыс. строк в `src/test`) 🟢 (`platform/integration-tests/src/main/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsModule.java:3-7`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/IntegrationTestsSmokeTest.java:7-13`). Тесты не содержат прод-логики. Покрывают критерии готовности PoC 1–7 и 9 (`docs/00-vision.md:798-807`) и ловушки 1–6, 9, 10, 13, 14 профиля агента; критерий 8 (backup/restore) и ловушки 7, 8 не покрыты (🟢 [R.8: ответ владельца, вопрос 14] Q-02, Q-03).
 
 ## Responsabilidades
 
@@ -49,7 +49,7 @@ flowchart TD
 - Схемы JWT в IT три: настоящая проверка подписи по JWKS (`McpTestJwt`), подменённый `JwtDecoder` на HS256 (issuer/audience/`azp` не проверяются), без токенов 🟢; реальная цепочка ingestion (issuer + audience + `azp`) работает только в `AdminEndpointIT` 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:96-99`).
 - Порядок методов `@Order` обязателен для F1–F4, `SyncAcceptanceIT`, `EamKeyMigrationIT`; одиночный запуск отдельного метода этих классов недопустим 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:84-85`).
 - Секретов в Git нет: пароль читающей учётки Neo4j (литерал в `CREATE USER`, `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:181`), пароль роли PostgreSQL (`SyncConsoleIT.RO_PASSWORD`, `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:42`), ключ HS256 (константа `KEY`), секреты webhook (константы `SECRET`), токен заглушки EAM API (`EamApiSupport.TOKEN`, `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/EamApiSupport.java:19`), ключи S3 (`ContainersSmokeIT.S3_ACCESS_KEY`, `S3_SECRET_KEY`) — тестовые литералы-константы 🟢; значения в спецификацию не переносятся.
-- 🔴 Несколько негативных проверок безопасности асимметричны (консоль, `crosswalks`, `reconcile`, MCP audience/exp) — Q-01.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11)] Несколько негативных проверок безопасности асимметричны (консоль, `crosswalks`, `reconcile`, MCP audience/exp) — Q-01.
 
 ## Таблица «IT-класс → проверяемое поведение → модули»
 
@@ -107,7 +107,7 @@ flowchart TD
 | RF-09 | Метрики лага и открытой DLQ из журнала | Should | [`admin-console-security`](admin-console-security/requirements.md) AC-08 |
 | RF-10 | Миграция ключа EAM приводит к графу без дублей и без карантина | Should | [`sync-reconcile`](sync-reconcile/requirements.md) AC-06 |
 | RF-11 | `verify` без профиля не требует Docker; профиль `integration-tests` включает failsafe; CI запускает оба независимо | Must | AC-03 |
-| RF-12 | Backup/restore Neo4j и replay после восстановления (К8) | Won't | вне модуля, `platform/docker` (🔴 Q-02) |
+| RF-12 | Backup/restore Neo4j и replay после восстановления (К8) | Won't | вне модуля, `platform/docker` (🟢 [R.8: ответ владельца, вопрос 14] Q-02) |
 
 ## Requisitos Não Funcionais
 
@@ -156,8 +156,8 @@ flowchart TD
 |-----------|--------|---------------|
 | RF-01..RF-08, RF-11 | Must | Единственная проверка критериев К1–К7 и ловушек корректности на настоящих хранилищах |
 | RF-09, RF-10 | Should | Метрики и разовая миграция |
-| RF-12 (K8 backup/restore) | Won't | Проверяется скриптами `platform/docker`, не модулем (🔴 Q-02) |
-| Проверка ловушек 7 и 8 (побочные эффекты в transaction functions, закрытие сессий) | Won't | Не реализовано (🔴 Q-03) |
+| RF-12 (K8 backup/restore) | Won't | Проверяется скриптами `platform/docker`, не модулем (🟢 [R.8: ответ владельца, вопрос 14] Q-02) |
+| Проверка ловушек 7 и 8 (побочные эффекты в transaction functions, закрытие сессий) | Won't | Не реализовано (🟢 [R.8: ответ владельца, вопрос 14] Q-03) |
 | Общий базовый класс каркаса F1–F4 | Won't | Дублирование ≈ 200 строк принято (🟡 Q-21) |
 
 ## Зависит от / Связанные спецификации

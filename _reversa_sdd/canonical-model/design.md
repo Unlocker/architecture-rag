@@ -166,7 +166,7 @@
 
 ## Риски и пробелы
 
-- 🔴 `SyncRunStatus.SUCCEEDED/FAILED` и `SyncRun.endedAt` никем не выставляются: проектор создаёт узел только со `status = 'RUNNING'` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:698`; `CM/provenance/SyncRunStatus.java:5`). Источник: `_reversa_sdd/detective-gaps.md` Р-5.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] `SyncRunStatus.SUCCEEDED/FAILED` и `SyncRun.endedAt` никем не выставляются: проектор создаёт узел только со `status = 'RUNNING'` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:698`; `CM/provenance/SyncRunStatus.java:5`). Источник: `_reversa_sdd/detective-gaps.md` Р-5.
 - 🔴 `docs/02-data-model.md:170` не называет `platformId` среди явных правил `ITSystem`; код — называет (`CM/authority/AuthorityMatrix.java:95-96`, ADR 0031).
 - 🔴 ADR 0008 (`docs/adr/0008-authority-matrix-field-level.md:14`) называет только `DEPENDS_ON` — EAM; мастер `DECOMPOSED_INTO` = SCM существует лишь в коде (`CM/authority/AuthorityMatrix.java:108`) и `docs/02`.
 - 🔴 `CloseAssertion` нигде в `main` не создаётся (поиск по `ingestion/`, `adapters/`, `access/`, `platform/`): потребляют `ingestion/graph-projector/.../GraphProjector.java:347`, `EventProcessor.java:577`; производителя нет — неясно, мёртвая ли команда или задел.

@@ -81,7 +81,8 @@
 
 - [x] ✅ **Revisor** — Revisão cruzada de specs (R.7, UNLOCKER-273: `_reversa_sdd/{gaps,confidence-report}.md`)
 - [x] ✅ **Revisor** — Resolução de lacunas com o usuário (20/20 ответов владельца 2026-10-13, `_reversa_sdd/questions.md`, `gaps.md` §5)
-- [x] ✅ **Revisor** — Relatório de confiança final (80%, пересчитать после ответов)
+- [x] ✅ **Revisor** — Relatório de confiança final (80% → 82% после ответов владельца, R.8)
+- [x] ✅ **Finalização (R.8, UNLOCKER-274)** — переклассификация 🔴 по ответам владельца, HTML-сайт `_reversa_sdd/_reversa_docs/`, раздел README
 
 ---
 

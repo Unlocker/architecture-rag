@@ -64,7 +64,7 @@ Docker Compose (`docker compose cp/exec/port`), `curl`, `openssl`, `python3 -I` 
 
 ## Riscos e Lacunas
 
-- 🔴 `console-smoke.sh` в CI не запускается; граница консоли в CI не проверяется — Q-07.
+- 🟢 [R.8: ответ владельца, вопрос 14] `console-smoke.sh` в CI не запускается; граница консоли в CI не проверяется — Q-07.
 - 🟡 Секрет клиента попадает в argv `curl` у `smoke.sh` и `console-smoke.sh` — Q-08.
 - 🟡 `POST /control/snapshot` адаптера не аутентифицируется — Q-22.
 - 🟡 Роль консоли не принудительна — Q-04.

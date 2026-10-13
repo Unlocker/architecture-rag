@@ -16,7 +16,7 @@
 - **audit**: `request` и `result` длиннее 4000 символов (по `length(...::text)`) не возвращаются: поле `null` и признак `requestTruncated`/`resultTruncated = true`; `error` режется до 500 символов 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:35-36, 241-264`; тест `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:240`).
 - Страницы: `page ≥ 0`, `1 ≤ size ≤ 200`, по умолчанию 50; `total` — `count(*)` под тем же фильтром 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/PageRequest.java:10-24`; `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:271-289`).
 - `admin_audit.request`/`result` возвращаются дословно (без маскирования); безопасность содержимого — на стороне ingestion 🟡 (Q-16).
-- `identity_candidate.status` не выходит из `OPEN`, закрытие конфликта вручную невозможно: список «открытых» отражает это (Р-4, П-22) 🔴 вне модуля (`../../detective-gaps.md:22, 51`; Q-10 в `ingestion-service`).
+- `identity_candidate.status` не выходит из `OPEN`, закрытие конфликта вручную невозможно: список «открытых» отражает это (Р-4, П-22) 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] вне модуля (`../../detective-gaps.md:22, 51`; Q-10 в `ingestion-service`).
 
 ## Requisitos Funcionais
 

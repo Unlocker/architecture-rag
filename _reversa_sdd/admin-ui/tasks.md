@@ -65,8 +65,8 @@
 - [ ] TT-02: `access/admin-ui/src/auth/authService.test.ts` — конфигурация (валидная, неполная, HTTP-ошибка), `init` без/с кодом, устаревший `state`, восстановление hash
 - [ ] TT-03: `access/admin-ui/src/App.test.tsx`, `access/admin-ui/src/useHashRoute.test.ts` — навигация, вход при отсутствии токена, ошибка входа, неизвестный hash
 - [ ] TT-04: `access/admin-ui/src/pages/GraphPage.test.tsx` (17 тестов), `access/admin-ui/src/pages/SyncPage.test.tsx` (16 тестов) — см. use case
-- [ ] TT-05: 🔴 нет теста на дрейф констант и типов относительно бэкенда (Q-05) и на отсутствие не-`GET` вызовов (Q-11)
-- [ ] TT-06: 🔴 нет теста достижимости веток светофора на реальных данных проектора (Q-01): `health()` проверяется на синтетических `SourceStatus` (`access/admin-ui/src/pages/SyncPage.test.tsx:79-90`)
+- [ ] TT-05: 🟢 [R.8: ответ владельца, вопрос 9] нет теста на дрейф констант и типов относительно бэкенда (Q-05) и на отсутствие не-`GET` вызовов (Q-11)
+- [ ] TT-06: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] нет теста достижимости веток светофора на реальных данных проектора (Q-01): `health()` проверяется на синтетических `SourceStatus` (`access/admin-ui/src/pages/SyncPage.test.tsx:79-90`)
 
 ## Tarefas de Migração de Dados
 

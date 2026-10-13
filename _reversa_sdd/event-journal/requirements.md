@@ -127,7 +127,7 @@ Retention `inbox_event`, `dlq_entry`, S3 raw не определён (созна
 
 ## Открытые вопросы
 
-См. [`questions.md`](questions.md): 🔴 R-1..R-4.
+См. [`questions.md`](questions.md): 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-1..R-4.
 
 ## Прослеживаемость кода
 

@@ -59,7 +59,7 @@
 
 ## Riscos e Lacunas
 
-- 🔴 `measure.sh` и `deployment-commit-check.sh` не входят в CI — Q-07.
+- 🟢 [R.8: ответ владельца, вопрос 14] `measure.sh` и `deployment-commit-check.sh` не входят в CI — Q-07.
 - 🟡 Seed зашит в скрипты; `measure.sh` меняет состояние заглушек — Q-17.
 - 🟡 Метрика `archrag_ingestion_dlq_open` завышена (не уменьшается после replay), поэтому проверка «DLQ не вырос» корректна как рост, но панель «открытые» вводит в заблуждение (Н-3 `../../tech-debt.md:58`).
 - 🟡 Дашборд называет панель «Error / archrag_ingestion_dlq_open rate», README — «Error / DLQ rate» (`platform/docker/observability/grafana/dashboards/archrag-poc.json:79`; `platform/docker/README.md:146`).

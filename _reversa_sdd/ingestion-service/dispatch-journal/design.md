@@ -67,7 +67,7 @@
 
 ## Riscos e Lacunas
 
-- 🔴 Нет лимита повторов; бесконечный `RETRYING`/исключение — Q-01.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Нет лимита повторов; бесконечный `RETRYING`/исключение — Q-01.
 - 🟡 После `stop()` повторный `start()` не возобновляет работу (`stopped` необратим) — Q-09.
 - 🟡 Замок берётся на страницу из `batchSize` событий; длинная страница удерживает админские операции (они получают 409) — Q-06.
 - 🟡 Ссылка Н-2 в `../../tech-debt.md:57` на `JournalDispatcher.java:100` указывает на `tryAcquire`, а не на место повтора (повтор — `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:119-121, 156-162` и `PostgresEventJournal.java:209-217`).

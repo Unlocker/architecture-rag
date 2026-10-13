@@ -1,0 +1,1490 @@
+{
+ "schemaVersion": 1,
+ "generatedAt": "2026-10-13T10:20:13Z",
+ "sddRoot": "_reversa_sdd",
+ "specs": [
+  {
+   "id": "adapter-core",
+   "slug": "adapter-core",
+   "path": "_reversa_sdd/adapter-core",
+   "module": "adapters/adapter-core",
+   "group": "adapters",
+   "title": "adapters/adapter-core",
+   "purpose": "Общий код адаптеров: REST-коннектор, приём подписанного webhook, polling с backoff, полный snapshot с маркером, запись в inbox",
+   "tldr": "Общее ядро всех адаптеров мастер-систем. Читает источник по REST (`GET /changes`, `GET /objects/{type}/{id}`), принимает подписанный webhook, превращает `SourceChange` в `CanonicalEvent` и фиксирует его в inbox: сначала raw payload в объектное хранилище, затем `EventJournal.append`. Ничего не пишет в источник, Neo4j-доступа и source DTO за пределами адаптера нет 🟢 (`AC/package-info.java:1-5`, `AC/SourceAdapter.java:12-16`, `AC/HttpSourceConnector.java:25`, `adapters/adapter-core/pom.xml:17-32`). Конкретные адаптеры (`eam`, `scm`, `asset`, `deploymap`) только выбирают `SourceSystem` и конфигурацию.",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "full-snapshot",
+     "title": "full-snapshot, Полный snapshot и маркер snapshot-complete",
+     "summary": "Полное перечитывание источника с `cursor = null` под одним `syncRunId`. Запускается тремя путями: (1) первый `pollOnce`, когда checkpoint `<code>-poller` пуст; (2) периодическая reconciliation `SourceAdapter.startReconciliation` (по умолчанию каждые 6 ч ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "incremental-poll",
+     "title": "incremental-poll, Инкрементальное чтение источника",
+     "summary": "Один цикл `Poller.pollOnce()` при уже существующем курсоре: читает страницы изменений после курсора, пишет каждое изменение в inbox и после записи **всей** страницы сдвигает курсор. Вызывается расписанием `SourceAdapter.startPolling` (каждые `pollInterval` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "receive-webhook",
+     "title": "receive-webhook, Приём подписанного webhook",
+     "summary": "Мастер-система шлёт `POST /webhook` с уведомлением («объект изменился»), подписанным HMAC-SHA256. Адаптер проверяет подпись и окно replay, разбирает уведомление, **берёт актуальное состояние у источника** (`fetchById`), записывает его в inbox (raw в S3, затем ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "source-fetch-retry",
+     "title": "source-fetch-retry, Чтение источника по REST и повторы",
+     "summary": "Must - всё, кроме RF-13 (Should: защитное поведение). Формат HTTP-date в `Retry-After` - Won't (осознанно, комментарий в коде `:116`).",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 256,
+    "y": 88,
+    "r": 28
+   },
+   "confidence": 81,
+   "code": {
+    "files": 22,
+    "loc": 1296,
+    "testLoc": 884
+   }
+  },
+  {
+   "id": "admin-console",
+   "slug": "admin-console",
+   "path": "_reversa_sdd/admin-console",
+   "module": "access/admin-console",
+   "group": "access",
+   "title": "access/admin-console: требования",
+   "purpose": "Read-only админ-консоль: статика SPA (admin-ui) и REST /api/** (граф через graph-query-core, журнал/DLQ/идентичность/аудит из PostgreSQL ролью archrag_console_ro), OAuth2 resource server со scope architecture.admin, аудит чтений",
+   "tldr": "Read-only админ-консоль: статика SPA (admin-ui) и REST /api/** (граф через graph-query-core, журнал/DLQ/идентичность/аудит из PostgreSQL ролью archrag_console_ro), OAuth2 resource server со scope architecture.admin, аудит чтений",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "auth-and-spa",
+     "title": "auth-and-spa: требования",
+     "summary": "Вход оператора и безопасность API: консоль - OAuth2 resource server (JWT, issuer, обязательный audience, scope `architecture.admin` на `/api/**`), раздаёт статику SPA с fallback на `index.html`, отдаёт публичный `console-config.json` для OIDC-логина браузера ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "graph-browse",
+     "title": "graph-browse: требования",
+     "summary": "Оператор просматривает граф: сводка (число узлов по меткам, связей по типам, время обновления), поиск активов, карточка актива с записями источников, окрестность узла глубиной 1–2 для визуализации. Все четыре эндпоинта - `GET /api/graph/**`, читают граф ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "identity-audit",
+     "title": "identity-audit: требования",
+     "summary": "Оператор просматривает идентичность и аудит админских операций: конфликты значений источников (`source_conflict`), кандидаты на совпадение (`identity_candidate`) и журнал операций ingestion (`admin_audit`: replay, rebuild, reconcile, crosswalk). Все три ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "sync-journal",
+     "title": "sync-journal: требования",
+     "summary": "Оператор видит состояние синхронизации: сводка по четырём источникам (checkpoints, последний `SyncRun` из графа, число событий по статусам, время последнего `PROJECTED`, отставание), журнал событий `inbox_event` с фильтрами и страницами, карточка события с ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 326,
+    "y": 70,
+    "r": 14
+   },
+   "confidence": 88,
+   "code": {
+    "files": 32,
+    "loc": 1580,
+    "testLoc": 656
+   }
+  },
+  {
+   "id": "admin-ui",
+   "slug": "admin-ui",
+   "path": "_reversa_sdd/admin-ui",
+   "module": "access/admin-ui",
+   "group": "access",
+   "title": "access/admin-ui: требования",
+   "purpose": "SPA админ-консоли (React 18 + TypeScript + Webpack), собирается Maven-модулем через frontend-maven-plugin; hash-роутинг graph/sync, OIDC Authorization Code + PKCE с токеном в памяти, только GET-вызовы /api/**",
+   "tldr": "SPA админ-консоли (React 18 + TypeScript + Webpack), собирается Maven-модулем через frontend-maven-plugin; hash-роутинг graph/sync, OIDC Authorization Code + PKCE с токеном в памяти, только GET-вызовы /api/**",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "build-bundle",
+     "title": "build-bundle: требования",
+     "summary": "Сборка SPA - часть обычного `./mvnw verify`: `frontend-maven-plugin` скачивает фиксированные Node и npm в `target/`, ставит зависимости (`npm ci`), гоняет Jest и собирает Webpack-бандл в `target/classes/META-INF/resources`, откуда `admin-console` отдаёт ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "graph-explorer",
+     "title": "graph-explorer: требования",
+     "summary": "Раздел «Граф» (`#/graph`): сводка графа, поиск активов, карточка выбранного актива (свойства, жизненный цикл, происхождение) и интерактивная окрестность узла. Всё - чтение графа через `GET /api/graph/**` под reader-учёткой на стороне консоли; UI изменений не ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "identity-audit",
+     "title": "identity-audit: требования",
+     "summary": "Две вкладки раздела «Синхронизация»: «Identity» (конфликты источников и кандидаты на совпадение) и «Аудит» (журнал админ-операций ingestion). Обе только читают через `GET /api/identity/*` и `GET /api/audit`; закрыть конфликт, подтвердить кандидата или ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "oidc-login",
+     "title": "oidc-login: требования",
+     "summary": "Оператор открывает консоль на loopback; UI читает публичную конфигурацию, завершает или начинает вход по Authorization Code + PKCE, хранит токен в памяти и подставляет его в каждый `GET`. На 401 вход перезапускается (один раз на пачку параллельных ответов) ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "sync-monitoring",
+     "title": "sync-monitoring: требования",
+     "summary": "Раздел «Синхронизация» (`#/sync`) показывает оператору состояние конвейера: вкладки «Источники» (светофор по четырём источникам), «Журнал событий» (inbox с фильтрами и карточкой события без payload) и «DLQ» (карантин с кодом и причиной). Данные читает консоль ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 21,
+   "labels": {
+    "g": 323,
+    "y": 93,
+    "r": 16
+   },
+   "confidence": 86,
+   "code": {
+    "files": 35,
+    "loc": 1693,
+    "testLoc": 630
+   }
+  },
+  {
+   "id": "asset-adapter",
+   "slug": "asset-adapter",
+   "path": "_reversa_sdd/asset-adapter",
+   "module": "adapters/asset-adapter",
+   "group": "adapters",
+   "title": "asset-adapter: требования",
+   "purpose": "Тонкая привязка адаптера к источнику SourceSystem.CMDB; логика в adapter-core",
+   "tldr": "Адаптер источника **CMDB** (материальные активы: `COMPUTE_INSTANCE`, виртуальные и физические хосты). Имя модуля `asset`, код источника `cmdb`. Модуль не содержит собственной логики: он фиксирует источник `SourceSystem.CMDB` и собирает типовой `SourceAdapter` из `adapter-core` 🟢 (`AA/AssetAdapter.java:15-39`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": false,
+    "decisions": false,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "assemble-adapter",
+     "title": "assemble-adapter: сборка CMDB-адаптера",
+     "summary": "Вызывающий код (launcher, IT) получает `AdapterConfig` и собирает `SourceAdapter` для источника `CMDB` 🟢 (`AA/AssetAdapter.java:23-38`).",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "source-contract",
+     "title": "source-contract: контракт коннектора на заглушке CMDB",
+     "summary": "Для источника CMDB должен выполняться контракт `SourceConnector`: постраничный snapshot с `snapshotComplete`, инкремент по курсору, `GET by id`, видимость удаления как tombstone, обработка `429` с `Retry-After` 🟢.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 10,
+   "labels": {
+    "g": 68,
+    "y": 16,
+    "r": 15
+   },
+   "confidence": 77,
+   "code": {
+    "files": 5,
+    "loc": 40,
+    "testLoc": 105
+   }
+  },
+  {
+   "id": "canonical-model",
+   "slug": "canonical-model",
+   "path": "_reversa_sdd/canonical-model",
+   "module": "contracts/canonical-model",
+   "group": "contracts",
+   "title": "contracts/canonical-model - Требования",
+   "purpose": "Каноническая модель графа: узлы, связи, команды проекции, authority matrix, provenance",
+   "tldr": "Модуль-контракт без логики хранения и ввода-вывода: каноническая модель графа Arch RAG. Он задаёт (1) типы данных узлов (`NodeData`, 11 records), (2) метки Neo4j и иерархию меток (`NodeLabel`), (3) типы связей с допустимыми концами и признаком темпоральности (`RelationType`), (4) команды проекции (`GraphCommand`, 5 records), (5) provenance-типы (`SourceKey`, `SourceRecord`, `SyncRun`, …), (6) матрицу авторитетности источников (`AuthorityMatrix`), (7) каноническую форму Git URL (`GitUrls`). Все инварианты проверяются в конструкторах: некорректный объект создать нельзя 🟢 (`CM/Invariants.java:9-14`, `CM/package-info.java:1`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "authority-lookup",
+     "title": "authority-lookup - Требования",
+     "summary": "Узлы (`CM/authority/AuthorityMatrix.java:79-91`):",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "git-url-normalization",
+     "title": "git-url-normalization - Требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "node-model-invariants",
+     "title": "node-model-invariants - Требования",
+     "summary": "Каждый `NodeData` - record, который при создании проверяет свои поля. Нормализатор, получивший плохое значение источника, получает исключение до отправки команды в проектор. Общая схема: обязательное поле - `Invariants.requireText` (NPE на `null`, IAE на ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "relation-command-validation",
+     "title": "relation-command-validation - Требования",
+     "summary": "Создание команд `UpsertRelation`, `CloseAssertion`, `DeferRelation` проверяет структурную допустимость связи (пара меток по `RelationType`), темпоральность и свойства. Это единственный барьер перед проектором: нормализатор, нарушивший инвариант, получает ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 236,
+    "y": 63,
+    "r": 29
+   },
+   "confidence": 82,
+   "code": {
+    "files": 45,
+    "loc": 907,
+    "testLoc": 520
+   }
+  },
+  {
+   "id": "demo-launcher",
+   "slug": "demo-launcher",
+   "path": "_reversa_sdd/demo-launcher",
+   "module": "platform/demo-launcher",
+   "group": "platform",
+   "title": "platform/demo-launcher: требования",
+   "purpose": "Единый исполняемый jar стенда: запуск адаптера источника, заглушки источника или заглушки EAM API по аргументам и env; управляющие эндпоинты /control/* заглушек; /health адаптера",
+   "tldr": "Единый исполняемый jar стенда: запуск адаптера источника, заглушки источника или заглушки EAM API по аргументам и env; управляющие эндпоинты /control/* заглушек; /health адаптера",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "run-adapter",
+     "title": "run-adapter: требования",
+     "summary": "Запуск `DemoLauncher adapter <EAM|SCM|CMDB|DEPLOY_MAP>`: процесс собирает адаптер одного источника поверх PostgreSQL inbox (`PostgresEventJournal`) и S3-хранилища raw payload, поднимает webhook-сервер (`POST /webhook`, `POST /control/snapshot`), polling и ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "run-eam-api-stub",
+     "title": "run-eam-api-stub: требования",
+     "summary": "Запуск `DemoLauncher eam-api-stub`: процесс поднимает заглушку EAM в формате реального API (`EamApiStub`, начальные данные `EamApiSeed`) на `ARCHRAG_STUB_PORT` с проверкой токена `Authorization: Token ...`, а также управляющий вход `POST /control/upsert` и ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "run-source-stub",
+     "title": "run-source-stub: требования",
+     "summary": "Запуск `DemoLauncher stub <EAM|SCM|CMDB|DEPLOY_MAP>`: процесс поднимает in-memory заглушку мастер-системы с начальными данными (`StubSources.seeded`) и HTTP-фасадом источника (`GET /changes`, `GET /objects/{type}/{id}`) на `ARCHRAG_STUB_PORT`, а также ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 15,
+   "labels": {
+    "g": 222,
+    "y": 81,
+    "r": 16
+   },
+   "confidence": 82,
+   "code": {
+    "files": 8,
+    "loc": 558,
+    "testLoc": 370
+   }
+  },
+  {
+   "id": "deploymap-adapter",
+   "slug": "deploymap-adapter",
+   "path": "_reversa_sdd/deploymap-adapter",
+   "module": "adapters/deploymap-adapter",
+   "group": "adapters",
+   "title": "adapters/deploymap-adapter",
+   "purpose": "Тонкая привязка адаптера к источнику SourceSystem.DEPLOY_MAP; логика в adapter-core; формат deploy map лежит вне модуля (platform/source-stubs, normalizer)",
+   "tldr": "Тонкая привязка адаптера к источнику «deploy map и Helm charts» (мастер `Deployment`, ADR 0009). Фабрика `DeploymapAdapter.create` проверяет, что конфигурация относится к `DEPLOY_MAP`, и возвращает `adapter-core.SourceAdapter` (`adapters/deploymap-adapter/src/main/java/io/github/unlocker/archrag/deploymapadapter/DeploymapAdapter.java:32-38`) 🟢. Дополнительно модуль владеет тестовыми fixtures временного формата `deploymap-poc-1` и их контрактными тестами 🟢.",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": false,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "assemble-adapter",
+     "title": "Use case: assemble-adapter (сборка адаптера deploymap)",
+     "summary": "Получить рабочий `SourceAdapter` для источника deploy map: собрать `AdapterConfig` и вызвать `DeploymapAdapter.create`. Вход - `config`, `EventJournal`, `RawPayloadStore`; выход - `SourceAdapter` либо `IllegalArgumentException` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "fixtures-contract",
+     "title": "Use case: fixtures-contract (контракт fixtures deploymap-poc-1)",
+     "summary": "Набор JSON-fixtures в `adapters/deploymap-adapter/src/test/resources/deploymap` с тестами `DeployMapFixturesContractTest`. Держит согласованность временного формата `deploymap-poc-1` с заглушками SCM/EAM/deploy map и описывает сценарии для нормализатора ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 11,
+   "labels": {
+    "g": 116,
+    "y": 15,
+    "r": 14
+   },
+   "confidence": 85,
+   "code": {
+    "files": 6,
+    "loc": 40,
+    "testLoc": 241
+   }
+  },
+  {
+   "id": "docker",
+   "slug": "docker",
+   "path": "_reversa_sdd/docker",
+   "module": "platform/docker",
+   "group": "platform",
+   "title": "platform/docker: требования",
+   "purpose": "Демо-стенд PoC на Docker Compose (не Maven-модуль): 23 сервиса (инфраструктура, приложения, заглушки мастер-систем, TLS reverse-proxy, профиль observability), Docker secrets из .env, раздельные сети edge/backend/graph и скрипты приёмки smoke, backup/restore, замеры",
+   "tldr": "Стенд поднимает все компоненты PoC одной командой `docker compose up -d --wait`: инфраструктуру (Neo4j, PostgreSQL, SeaweedFS, Keycloak), приложения репозитория (`ingestion`, `mcp-server`, `admin-console`, четыре `adapter-*`), заглушки мастер-систем, TLS reverse-proxy и профиль наблюдаемости. Образы приложений собираются из готовых `*-exec.jar` одним Dockerfile; секреты раздаются как Docker secrets из `.env` 🟢 (`platform/docker/docker-compose.yml:1-4, 38-526`; `platform/docker/Dockerfile:1-14`). Решение - ADR [0021](../../docs/adr/0021-compose-demo-stand.md): Compose вместо Kubernetes, Docker secrets вместо Vault, раздельные сети вместо ...",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "backup-restore",
+     "title": "backup-restore: требования",
+     "summary": "Neo4j Community не умеет online backup, поэтому резервная копия - холодный `neo4j-admin database dump` на остановленном графе плюс `pg_dump` PostgreSQL, всё с `manifest.json` (sha256, версия Neo4j, время начала) выгружается в S3 (SeaweedFS). Восстановление - ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "keycloak-oidc",
+     "title": "keycloak-oidc: требования",
+     "summary": "Keycloak (realm `archrag`, `start-dev`, импорт realm при первом старте) выдаёт три вида токенов: агентский (клиент `archrag-demo`, `client_credentials`, scope `architecture.read`, audience MCP), оператора admin REST (тот же клиент со scope ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "network-secrets",
+     "title": "network-secrets: требования",
+     "summary": "Граница стенда держится тремя механизмами: раздельными сетями Docker (`edge`, `backend`, `graph`, … с `internal`), публикацией портов только на `127.0.0.1` и раздачей секретов по принципу минимума (Docker secrets). Эти свойства проверяют `smoke.sh` (внешняя ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "observability-measure",
+     "title": "observability-measure: требования",
+     "summary": "Три связанных сценария стенда: (1) профиль `observability` - OTLP-метрики `mcp-server` и `ingestion` → OTel Collector → Prometheus → Grafana (дашборд «Arch RAG PoC»); (2) `measure.sh` - замеры критерия 9 PoC на поднятом стенде с профилем (p95 tools, задержка ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "stand-startup",
+     "title": "stand-startup: требования",
+     "summary": "Сценарий «собрать и поднять стенд»: Maven собирает `*-exec.jar`, оператор создаёт `.env`, `docker compose build` собирает образы, `docker compose up -d --wait` поднимает сервисы в порядке `depends_on` и возвращает управление, когда все сервисы (кроме ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 21,
+   "labels": {
+    "g": 351,
+    "y": 103,
+    "r": 18
+   },
+   "confidence": 85,
+   "code": {
+    "files": 0,
+    "loc": 0,
+    "testLoc": 0
+   }
+  },
+  {
+   "id": "eam-adapter",
+   "slug": "eam-adapter",
+   "path": "_reversa_sdd/eam-adapter",
+   "module": "adapters/eam-adapter",
+   "group": "adapters",
+   "title": "adapters/eam-adapter - требования",
+   "purpose": "Адаптер EAM: коннектор формата EAM Tool API (platforms/itproducts/itsystems) и составной коннектор с legacy-заглушкой (TEAM, SERVICE_DEPENDENCY)",
+   "tldr": "Модуль привязывает общий каркас адаптеров (`adapter-core`: webhook, polling, snapshot, запись в inbox) к источнику `SourceSystem.EAM` (`EA/EamAdapter.java:19`). Своей логики приёма событий у модуля нет: он поставляет **коннектор** - читателя `eam-api` («EAM Tool API», `docs/eam-api.yaml`, формат `ArchObject`) и склейку с «старой заглушкой» (`TEAM`, `SERVICE_DEPENDENCY`). Доступа к Neo4j, PostgreSQL и S3 у модуля нет: журнал и raw-хранилище приходят интерфейсами `event-schemas` (`EA/EamAdapter.java:33-39, 62-71`) 🟢.",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "composite-sync",
+     "title": "composite-sync - склейка `eam-api` и legacy в один источник `EAM`",
+     "summary": "Сценарий: инкремент обеих половин Дано курсор последней страницы snapshot, затем создана платформа 3999 и legacy TEAM-NEW Когда читается инкремент до hasMore == false Тогда в изменениях есть PLATFORM/3999 и TEAM/TEAM-NEW, нет IT_SYSTEM, snapshotComplete=false ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "eam-api-request",
+     "title": "eam-api-request - HTTP-доступ к `eam-api`, лимиты, ошибки, `fetchById`",
+     "summary": "Нижний слой `EamApiConnector`: построение и отправка `GET`-запросов с токеном, троттлинг 10 запросов/с, единственный повтор после 429 с `Retry-After`, отображение статусов на исключения и точечное чтение объекта (`fetchById`). Токен и тела ответов не попадают ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "fetch-changes",
+     "title": "fetch-changes - чтение изменений `eam-api` (`EamApiConnector.fetchChanges`)",
+     "summary": "Сценарий постраничного чтения трёх типов EAM (`platforms` → `itproducts` → `itsystems`) в двух режимах: полный snapshot (`cursor == null`, `sort=id`) и инкремент от водяного знака (`W,…`, `sort=-mtime`). Результат - `ChangePage` с `SourceChange` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 15,
+   "labels": {
+    "g": 198,
+    "y": 61,
+    "r": 8
+   },
+   "confidence": 86,
+   "code": {
+    "files": 11,
+    "loc": 529,
+    "testLoc": 790
+   }
+  },
+  {
+   "id": "event-journal",
+   "slug": "event-journal",
+   "path": "_reversa_sdd/event-journal",
+   "module": "ingestion/event-journal",
+   "group": "ingestion",
+   "title": "ingestion/event-journal: требования",
+   "purpose": "Журнал событий на PostgreSQL (inbox_event, consumer_checkpoint, dlq_entry) и raw payload в S3; миграция V1",
+   "tldr": "Реализация портов `contracts/event-schemas` на PostgreSQL (чистый JDBC, без ORM) и S3-совместимом хранилище (AWS SDK v2) плюс Flyway-миграция `V1`. Это «event backbone» PoC (ADR 0006): адаптер → inbox PostgreSQL → worker → Neo4j. Граница портов (`EventJournal`, `CanonicalEventPublisher`, `JournalReader`, `RawPayloadStore`) позволяет заменить реализацию (Kafka) без правок адаптеров и projector 🟢 (`PEJ:31-38`, `ES/EventJournal.java:7-12`, `ES/CanonicalEventPublisher.java:7`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": false,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "append-event",
+     "title": "Use case: append-event (идемпотентный приём события в inbox)",
+     "summary": "Адаптер, `Reconciler` и `ReplayService` записывают каноническое событие в `inbox_event` через `EventJournal.append` (или `CanonicalEventPublisher.publish`). Повтор того же `(source, eventId)` безопасен и не меняет сохранённую строку. `find` читает запись по ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "raw-payload-store",
+     "title": "Use case: raw-payload-store (raw payload в S3, адресация содержимым)",
+     "summary": "Must: RF-S1..S4, S6. Should: RF-S5. Won't: версионирование, lifecycle/retention, метаданные объекта, повторное чтение/проверка существующего объекта в `put`.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "read-journal",
+     "title": "Use case: read-journal (страницы журнала, ожидающие события, checkpoint, основа reconciliation)",
+     "summary": "Только чтение (кроме `saveCheckpoint`): `read` для replay/rebuild, `pending` для диспетчера, `loadCheckpoint`/`saveCheckpoint` для адаптеров и проектора, `snapshotContents`/`objectsReceivedSince` для missing set в `Reconciler`.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "transition-event",
+     "title": "Use case: transition-event (смена статуса, ошибки, DLQ)",
+     "summary": "Обработчики (`EventProcessor`, `JournalDispatcher`, `Reconciler`) переводят событие по состояниям `ProcessingStatus` через `transition`, а неисправимые ошибки уводят в карантин и DLQ через `toDlq`. Журнал гарантирует допустимость перехода, счётчик попыток и ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 17,
+   "labels": {
+    "g": 210,
+    "y": 79,
+    "r": 9
+   },
+   "confidence": 84,
+   "code": {
+    "files": 6,
+    "loc": 509,
+    "testLoc": 19
+   }
+  },
+  {
+   "id": "event-schemas",
+   "slug": "event-schemas",
+   "path": "_reversa_sdd/event-schemas",
+   "module": "contracts/event-schemas",
+   "group": "contracts",
+   "title": "contracts/event-schemas, Требования",
+   "purpose": "Контракт канонического события, журнала (inbox), статусов обработки, checkpoint и хранилища raw payload",
+   "tldr": "Контракт канонического события (CloudEvent 1.0 `architecture.asset.upserted.v1`) и четырёх портов: `EventJournal` (inbox, статусы, DLQ, checkpoint, snapshot), `JournalReader` (постраничное чтение), `RawPayloadStore` (S3-совместимый raw), `CanonicalEventPublisher` (граница варианта A/B). Модуль содержит только типы, интерфейсы и малую логику (`ProcessingStatus.canTransitionTo`, `SourceVersion`, конструкторные проверки); реализации лежат в `ingestion/event-journal` (`PostgresEventJournal`, `S3RawPayloadStore`) 🟢 (`ES/EventJournal.java:7-8`, `ES/RawPayloadStore.java:3`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": false,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "journal-append-dedup-dlq",
+     "title": "Use case: journal-append-dedup-dlq, Требования",
+     "summary": "Приём события в журнал с дедупликацией по `(source, eventId)`, переходы статусов, карантин с записью DLQ, checkpoint и выборки для reconcile. Контракт - `EventJournal` (`ES/EventJournal.java:13-61`); реализация вне модуля (`PostgresEventJournal`) 🟢.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "journal-keyset-read",
+     "title": "Use case: journal-keyset-read, Требования",
+     "summary": "Постраничное чтение журнала для replay, rebuild и диспетчера: `JournalReader.read(JournalQuery)` и `pending(...)` (`ES/JournalReader.java:12-29`) 🟢.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "processing-status-lifecycle",
+     "title": "Use case: processing-status-lifecycle, Требования",
+     "summary": "Допустимые переходы статуса обработки события в журнале. Функция `ProcessingStatus.canTransitionTo(next)` (`ES/ProcessingStatus.java:26-42`) - единственная логика; применение (под блокировкой строки) делает реализация `EventJournal.transition` 🟢.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "source-version-compare",
+     "title": "Use case: source-version-compare, Требования",
+     "summary": "Версия объекта в источнике: хранение строкой, сравнение числом. Нужна для решения «применять / игнорировать устаревшее» (`IGNORED_OLD_VERSION`), которое принимает `graph-projector` (`VersionDecision`), не контракт 🟢 (`ES/SourceVersion.java:3-9,18-26`).",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 17,
+   "labels": {
+    "g": 138,
+    "y": 45,
+    "r": 21
+   },
+   "confidence": 79,
+   "code": {
+    "files": 23,
+    "loc": 380,
+    "testLoc": 109
+   }
+  },
+  {
+   "id": "graph-projector",
+   "slug": "graph-projector",
+   "path": "_reversa_sdd/graph-projector",
+   "module": "ingestion/graph-projector",
+   "group": "ingestion",
+   "title": "ingestion/graph-projector: требования",
+   "purpose": "Обработка события журнала до конечного статуса, запись GraphCommand в Neo4j одной транзакцией, отложенные связи, reconciliation после snapshot, схема Neo4j",
+   "tldr": "Модуль превращает событие журнала в состояние графа Neo4j. Он (1) ведёт одно событие от `RECEIVED` до конечного статуса (`EventProcessor`), (2) применяет `ProjectionRequest` одной транзакцией записи (`GraphProjector`), (3) хранит и достраивает отложенные связи (`PendingRelations`), (4) обрабатывает missing set после маркера `snapshot-complete` (`Reconciler`) и (5) применяет схему Neo4j (`Neo4jSchema`) и разовую миграцию темпоральности (`TemporalRelationMigration`) 🟢 (`GP/EventProcessor.java:46-80`, `GP/GraphProjector.java:35-80`, `GP/Reconciler.java:27-57`). Граф - производная read-only витрина (ADR ...",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "deferred-relations",
+     "title": "graph-projector / deferred-relations: требования",
+     "summary": "Сценарий: связь, у которой один из концов в графе ещё не известен (битая ссылка, ссылка по alias), не вызывает `RETRYING`, а сохраняется узлом `PendingRelation` и достраивается обычным `upsertRelation`, когда конечная точка спроецирована 🟢 ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "process-event",
+     "title": "graph-projector / process-event: требования",
+     "summary": "Сценарий: событие журнала (`RECEIVED` или `RETRYING`) доводится до конечного статуса вызовом `EventProcessor.process(event, raw)` 🟢 (`GP/EventProcessor.java:185-199`). Входит: маршрут по `type`, решение по версии до записи, нормализация, получение `gid` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "project-request",
+     "title": "graph-projector / project-request: требования",
+     "summary": "Сценарий: `GraphProjector.project(ProjectionRequest)` применяет одно изменение объекта источника к Neo4j одной транзакцией `executeWrite` 🟢 (`GP/GraphProjector.java:106-111`). Вход - команды нормализатора плюс готовые `gid` и маркеры конфликтов; выход - ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "reconcile-missing-set",
+     "title": "graph-projector / reconcile-missing-set: требования",
+     "summary": "Сценарий: после маркера `architecture.sync.snapshot-complete.v1` активные записи источника, которых полный snapshot не отдал (missing set), получают tombstone 🟢 (`GP/Reconciler.java:27-31`). Маркер приходит в `EventProcessor.snapshotComplete`, тот вызывает ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 343,
+    "y": 83,
+    "r": 13
+   },
+   "confidence": 88,
+   "code": {
+    "files": 28,
+    "loc": 2518,
+    "testLoc": 1375
+   }
+  },
+  {
+   "id": "graph-query-core",
+   "slug": "graph-query-core",
+   "path": "_reversa_sdd/graph-query-core",
+   "module": "access/graph-query-core",
+   "group": "access",
+   "title": "access/graph-query-core: требования",
+   "purpose": "Реестр именованных Cypher-шаблонов и исполнитель GraphQueryExecutor: только executeRead, бюджет запроса (глубина, строки, пути, таймаут, байты), EXPLAIN=READ_ONLY перед первым исполнением, запрет узлов/связей/путей в результате",
+   "tldr": "Реестр именованных Cypher-шаблонов и исполнитель GraphQueryExecutor: только executeRead, бюджет запроса (глубина, строки, пути, таймаут, байты), EXPLAIN=READ_ONLY перед первым исполнением, запрет узлов/связей/путей в результате",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "asset-search",
+     "title": "asset-search: требования",
+     "summary": "Четыре шаблона чтения активов: `search_assets` (точное совпадение и FULLTEXT), `get_asset` (карточка), `asset_relations` (связи 1 уровня), `explain_provenance` (записи источников). `FulltextQuery.escape` делает ввод пользователя безопасным для Lucene. Все ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "budget-limits",
+     "title": "budget-limits: требования",
+     "summary": "Бюджет ограничивает запрос по глубине, числу строк/путей, времени и размеру ответа. Запрошенный вызывающим бюджет режется до потолков `QueryLimits`, которые задаёт конфигурация приложения; результат усекается с флагом `truncated`.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "execute-template",
+     "title": "execute-template: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "template-registry",
+     "title": "template-registry: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "trace-and-footprint",
+     "title": "trace-and-footprint: требования",
+     "summary": "Шаблоны обхода и обзора графа: `trace_downstream` / `trace_upstream` (пути зависимостей), `trace_impact` (кто пострадает), `runtime_footprint` (где развёрнута система) и консольные `graph_stats_*`, `graph_last_update`, `console_neighborhood_*` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 21,
+   "labels": {
+    "g": 317,
+    "y": 57,
+    "r": 20
+   },
+   "confidence": 88,
+   "code": {
+    "files": 24,
+    "loc": 1153,
+    "testLoc": 439
+   }
+  },
+  {
+   "id": "identity-resolution",
+   "slug": "identity-resolution",
+   "path": "_reversa_sdd/identity-resolution",
+   "module": "ingestion/identity-resolution",
+   "group": "ingestion",
+   "title": "ingestion/identity-resolution: требования",
+   "purpose": "gid и approved crosswalk в PostgreSQL, признаки и кандидаты на совпадение, конфликты источников по AuthorityMatrix",
+   "tldr": "Модуль хранит в PostgreSQL всё, что относится к идентичности записей источников, и ничего не пишет в граф. Три ступени политики ADR 0019 (без auto-merge): (1) deterministic mapping `(source, sourceType, sourceId) -> gid` и approved crosswalk; (2) кандидаты на совпадение по признакам (только запись подозрения); (3) конфликты источников по `AuthorityMatrix` (только фиксация расхождения). Три порта (`IdentityMapping`, `IdentityCandidates`, `SourceConflicts`) и их JDBC-реализации без ORM, чистые функции `FeatureExtractor`/`FeatureNormalizer`/`FeatureKind`/`LabelFamily`, миграции Flyway `V2`, `V4`, `V5`, `V7` 🟢 (`IR/package-info.java:1-19`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "candidate-matching",
+     "title": "candidate-matching: требования",
+     "summary": "По каждому upsert-событию снять признаки идентичности (hostname, URL репозитория, имя, владелец), заменить ими сохранённый набор записи и записать кандидатов на совпадение с другими записями того же семейства меток. Узлы не объединяются, `gid` не меняется ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "gid-mapping-crosswalk",
+     "title": "gid-mapping-crosswalk: требования",
+     "summary": "Выдача и поиск постоянного `gid` по ключу записи источника и ручное подтверждение соответствия двух записей (approved crosswalk) без слияния разных `gid` 🟢 (`IR/IdentityMapping.java:8-33`).",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "source-conflicts",
+     "title": "source-conflicts: требования",
+     "summary": "Хранение утверждений свойств каждой записи (`property_assertion`) и фиксация расхождений (`source_conflict`): неавторитетный источник (по `AuthorityMatrix`) утверждает значение, отличное от мастера. Граф и canonical-значение не меняются; ручного решения нет 🟢 ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 15,
+   "labels": {
+    "g": 187,
+    "y": 44,
+    "r": 13
+   },
+   "confidence": 86,
+   "code": {
+    "files": 23,
+    "loc": 1181,
+    "testLoc": 195
+   }
+  },
+  {
+   "id": "ingestion-service",
+   "slug": "ingestion-service",
+   "path": "_reversa_sdd/ingestion-service",
+   "module": "ingestion/ingestion-service",
+   "group": "ingestion",
+   "title": "ingestion/ingestion-service: требования",
+   "purpose": "Spring Boot-приложение ingestion: сборка компонентов, диспетчер журнала, админский REST (replay, rebuild, reconcile, crosswalk), аудит, метрики, безопасность",
+   "tldr": "Spring Boot-приложение ingestion: сборка компонентов, диспетчер журнала, админский REST (replay, rebuild, reconcile, crosswalk), аудит, метрики, безопасность",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "dispatch-journal",
+     "title": "dispatch-journal: требования",
+     "summary": "Фоновый сценарий: диспетчер периодически читает из журнала `inbox_event` события `RECEIVED` (и застрявшие в промежуточных статусах/`RETRYING` дольше `retryDelay`), достаёт raw из S3, собирает `CanonicalEvent` и передаёт в `EventProcessor`. Строки, которые до ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "load-crosswalk",
+     "title": "load-crosswalk: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "reconcile-source",
+     "title": "reconcile-source: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "replay-rebuild",
+     "title": "replay-rebuild: требования",
+     "summary": "Админские операции восстановления витрины из журнала: `replay` переигрывает события источника в диапазоне времени приёма под новым `replayId`; `rebuild` сначала стирает все узлы Neo4j, затем переигрывает весь журнал.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 243,
+    "y": 59,
+    "r": 16
+   },
+   "confidence": 86,
+   "code": {
+    "files": 34,
+    "loc": 1442,
+    "testLoc": 719
+   }
+  },
+  {
+   "id": "integration-tests",
+   "slug": "integration-tests",
+   "path": "_reversa_sdd/integration-tests",
+   "module": "platform/integration-tests",
+   "group": "platform",
+   "title": "platform/integration-tests: требования",
+   "purpose": "Сквозная приёмка на Testcontainers (Neo4j 5.26.31-community, postgres:16, SeaweedFS 4.48): 31 класс *IT (298 @Test) + smoke-тест; проверяет ingest/журнал, identity, projector, query-core, консоль, admin REST, приёмку F1-F4 через MCP по Streamable HTTP (STATELESS), sync/reconcile; failsafe только в профиле integration-tests, src/main содержит лишь маркер",
+   "tldr": "Итог: 31 `*IT` + 1 unit-класс = 32 класса; 298 + 1 = 299 `@Test`; `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@Disabled`, `@DisplayName` не используются 🟢.",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "acceptance-mcp-f1-f4",
+     "title": "acceptance-mcp-f1-f4: требования",
+     "summary": "Четыре приёмочных класса `F1AcceptanceIT`…`F4AcceptanceIT` доказывают критерии готовности PoC 5, 7 и 9: каждый из пяти MCP-tools (`search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies` в режимах trace и impact, `explain_provenance`) ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "admin-console-security",
+     "title": "admin-console-security: требования",
+     "summary": "Четыре класса проверяют операторский контур поверх реальных хранилищ: `AdminEndpointIT` - admin REST ingestion-сервиса (rebuild, replay, crosswalks, reconcile, замок 409, аудит) с **настоящей** цепочкой JWT (подпись, issuer, audience, `azp`-allowlist, scope) ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "projection-identity-conflicts",
+     "title": "projection-identity-conflicts: требования",
+     "summary": "Десять классов проверяют ядро конвейера на настоящих Neo4j и PostgreSQL без Spring и без HTTP: журнал событий и статусы (`EventJournalIT`), стабильные `gid` и crosswalk (`IdentityMappingIT`), кандидаты идентичности (`IdentityCandidateIT`), конфликты ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "query-core-read",
+     "title": "query-core-read: требования",
+     "summary": "Семь классов вызывают `GraphQueryExecutor` (и, для `ExplainProvenanceIT`, `ExplainProvenanceTool` как Java-метод) под учёткой Neo4j `mcp-reader` на настоящем Neo4j Community без HTTP, JWT и scope. Они доказывают критерии 6 и 7 и ловушки 1, 2, 3, 11: запросы ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "sync-reconcile",
+     "title": "sync-reconcile: требования",
+     "summary": "Пять классов доказывают синхронизацию источников с графом: `AdapterInboxIT` (приём webhook и маркер snapshot в реальном inbox), `JournalDispatcherIT` (фоновый диспетчер, карантин, неполный прогон), `ReconciliationIT` (удаление только после полного snapshot) ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 21,
+   "labels": {
+    "g": 366,
+    "y": 155,
+    "r": 31
+   },
+   "confidence": 80,
+   "code": {
+    "files": 40,
+    "loc": 7,
+    "testLoc": 9312
+   }
+  },
+  {
+   "id": "mcp-server",
+   "slug": "mcp-server",
+   "path": "_reversa_sdd/mcp-server",
+   "module": "access/mcp-server",
+   "group": "access",
+   "title": "access/mcp-server: требования",
+   "purpose": "MCP-сервер (Streamable HTTP, STATELESS, POST /mcp): 6 read-only tools поверх graph-query-core, OAuth2 resource server с проверкой scope на tools/call, аудит и метрики каждого вызова",
+   "tldr": "MCP-сервер (Streamable HTTP, STATELESS, POST /mcp): 6 read-only tools поверх graph-query-core, OAuth2 resource server с проверкой scope на tools/call, аудит и метрики каждого вызова",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "authorize-tool-call",
+     "title": "authorize-tool-call: требования",
+     "summary": "Сценарий защиты и аудита каждого запроса к `POST /mcp`: проверка JWT (issuer + audience), разбор тела JSON-RPC, проверка scope на `tools/call` по таблице `tool-scopes` (fail-closed), публикация Protected Resource Metadata, аудит и метрики каждого вызова ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "explain-provenance",
+     "title": "explain-provenance: требования",
+     "summary": "Tool `explain_provenance` отвечает на вопрос «откуда это известно и кому верить»: по `gid` актива (и, при желании, по имени свойства) возвращает записи источников с версией, `fetchedAt`, `contentHash`, `confidence`/`authority` ребра `ASSERTS`, признаком ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "find-runtime-footprint",
+     "title": "find-runtime-footprint: требования",
+     "summary": "Tool `find_runtime_footprint` отвечает на вопрос «где развёрнута система»: по `gid` узла `ITSystem` (и, при желании, коду окружения) возвращает сервисы системы, их действующие развёртывания (`Deployment`) по окружениям и вычислительные узлы (VM, физические ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "search-get-asset",
+     "title": "search-get-asset: требования",
+     "summary": "Два tools для навигации агента по витрине. `search_assets` находит кандидатов: точное совпадение по `gid`, `sourceId` (и `ITSystem.eamCode`), затем полнотекстовый поиск по имени и описанию только для `ITSystem` и `Service`. `get_asset` по `gid` возвращает ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "trace-dependencies",
+     "title": "trace-dependencies: требования",
+     "summary": "Tool `trace_dependencies` обходит граф от стартового актива по разрешённым типам связей и возвращает дедуплицированные узлы, связи и пути. Режим `trace` (по умолчанию) идёт вниз (по стрелкам) или вверх (против стрелок). Режим `impact` идёт только вверх против ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 21,
+   "labels": {
+    "g": 364,
+    "y": 75,
+    "r": 17
+   },
+   "confidence": 88,
+   "code": {
+    "files": 44,
+    "loc": 1964,
+    "testLoc": 2090
+   }
+  },
+  {
+   "id": "normalizer",
+   "slug": "normalizer",
+   "path": "_reversa_sdd/normalizer",
+   "module": "ingestion/normalizer",
+   "group": "ingestion",
+   "title": "ingestion/normalizer - требования",
+   "purpose": "Преобразование CanonicalEvent + raw в GraphCommand: мапперы EAM/SCM/CMDB/DEPLOYMAP, отложенные ссылки, предупреждения",
+   "tldr": "Модуль - чистая библиотека без Spring и без ввода-вывода (`ingestion/normalizer/pom.xml:15-34`: зависит только от `canonical-model`, `event-schemas`, `source-spi`; `source-stubs` только в `test`) 🟢. Он превращает событие `architecture.asset.upserted.v1` с source-специфичным `payload` (`Map<String,Object>`) в `GraphCommand`'ы канонической модели. Это **единственное** место, где существует source DTO (`NZ/CanonicalMapper.java:10-13`) 🟢. Проверки существования ссылок и привязки deploy map к сервису модуль не делает сам, а запрашивает через порты `ReferenceResolver` и `DeploymentLookup`, реализация которых подключается снаружи ...",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "bind-deployment",
+     "title": "bind-deployment - Маппинг deploy map и привязка Deployment к репозиторию и сервису",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "map-eam-objects",
+     "title": "map-eam-objects - Маппинг объектов EAM",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "normalize-event",
+     "title": "normalize-event - Нормализация одного события",
+     "summary": "Вход `Normalizer.normalize(CanonicalEvent, RawPayloadRef)`: проверить тип события, источник и версию схемы, собрать `SourceRecord`, отдать payload маппер­у источника и вернуть `Normalized` либо `Quarantined` 🟢 (`NZ/Normalizer.java:54-86`). Вызывается ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "resolve-references",
+     "title": "resolve-references - Связи и отложенные ссылки",
+     "summary": "Если связь ведёт на запись, которой нет в системе, нормализатор не создаёт фиктивный узел и не отбрасывает связь, а возвращает её в `Normalized.unresolved` как `UnresolvedReference(from, field, relationType, target, relation)`. Проектор сохраняет `relation` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 239,
+    "y": 58,
+    "r": 12
+   },
+   "confidence": 87,
+   "code": {
+    "files": 21,
+    "loc": 1094,
+    "testLoc": 997
+   }
+  },
+  {
+   "id": "scm-adapter",
+   "slug": "scm-adapter",
+   "path": "_reversa_sdd/scm-adapter",
+   "module": "adapters/scm-adapter",
+   "group": "adapters",
+   "title": "adapters/scm-adapter",
+   "purpose": "Тонкая привязка адаптера к источнику SourceSystem.SCM; логика в adapter-core",
+   "tldr": "Тонкая привязка адаптера к источнику `SourceSystem.SCM` (код `scm`, `source` событий `urn:corp:scm`). Собственной логики приёма данных нет: webhook, polling, snapshot, retry, запись в журнал и raw-хранилище реализует `adapters/adapter-core` (поток - `_reversa_sdd/flowcharts/adapter-core.md`). Модуль не знает Neo4j и ничего не пишет в источник (`adapters/adapter-core/.../SourceAdapter.java:12-15`) 🟢.",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": false,
+    "decisions": false,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "create-adapter",
+     "title": "Use case: create-adapter (сборка адаптера SCM)",
+     "summary": "Оркестратор (`DemoLauncher`, IT) строит конфигурацию `ScmAdapter.config(baseUri, secret)` и собирает `ScmAdapter.create(config, journal, rawStore)` (`platform/demo-launcher/.../DemoLauncher.java:141`; `ScmAdapter.java:23-38`) 🟢.",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "fetch-scm-changes",
+     "title": "Use case: fetch-scm-changes (контракт коннектора на SCM-заглушке)",
+     "summary": "Адаптер читает `GET /changes?limit=<n>[&cursor=<c>]` и `GET /objects/{type}/{id}` (`HttpSourceConnector.java:51-78`). Seed SCM: `REPOSITORY/repo-payments-api`, `SERVICE/svc-payments-api`, `SERVICE/svc-ledger-api` (3 объекта ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 10,
+   "labels": {
+    "g": 61,
+    "y": 14,
+    "r": 10
+   },
+   "confidence": 80,
+   "code": {
+    "files": 5,
+    "loc": 40,
+    "testLoc": 105
+   }
+  },
+  {
+   "id": "source-spi",
+   "slug": "source-spi",
+   "path": "_reversa_sdd/source-spi",
+   "module": "contracts/source-spi",
+   "group": "contracts",
+   "title": "contracts/source-spi - требования",
+   "purpose": "SPI мастер-систем: чтение изменений, DTO, проверка HMAC-подписи webhook",
+   "tldr": "SPI мастер-систем (EAM, SCM, CMDB, deploy map): единый контракт, через который адаптеры читают источник (постранично и «GET by id» после webhook), и единый формат подписи webhook-уведомлений. 🟢 (`SPI/package-info.java:1-4`, `SPI/SourceConnector.java:5-12`). Решение «мастер-системы - заглушки» - ADR 0010 (`docs/adr/0010-master-systems-are-stubs.md`).",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "fetch-by-id",
+     "title": "fetch-by-id - требования",
+     "summary": "После валидного webhook (`WebhookEvent` - уведомление без состояния) адаптер читает актуальное состояние объекта через `SourceConnector.fetchById(sourceType, sourceId)` и получает `SourceChange` 🟢 (`SPI/WebhookEvent.java:5-7` ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "fetch-changes",
+     "title": "fetch-changes - требования",
+     "summary": "Постраничное чтение изменений мастер-системы `SourceConnector.fetchChanges(cursor, limit)` → `ChangePage`: полный snapshot (`cursor == null`) и инкрементальный polling; сигнал недоступности через `SourceUnavailableException` 🟢 ...",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "verify-webhook-signature",
+     "title": "verify-webhook-signature - требования",
+     "summary": "Подписание (`sign`) и проверка (`verify`) webhook-уведомления мастер-системы по HMAC-SHA256 с защитой от replay по timestamp 🟢 (`SPI/WebhookSignature.java:12-20`).",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 15,
+   "labels": {
+    "g": 150,
+    "y": 41,
+    "r": 37
+   },
+   "confidence": 75,
+   "code": {
+    "files": 11,
+    "loc": 268,
+    "testLoc": 53
+   }
+  },
+  {
+   "id": "source-stubs",
+   "slug": "source-stubs",
+   "path": "_reversa_sdd/source-stubs",
+   "module": "platform/source-stubs",
+   "group": "platform",
+   "title": "platform/source-stubs: требования",
+   "purpose": "Заглушки мастер-систем PoC: in-memory StubSource с HTTP-фасадом /changes и /objects, заглушка формата реального EAM API (ArchObject), seed и негативные сценарии, отправитель подписанных webhook, мини-JSON",
+   "tldr": "Заглушки мастер-систем PoC: in-memory StubSource с HTTP-фасадом /changes и /objects, заглушка формата реального EAM API (ArchObject), seed и негативные сценарии, отправитель подписанных webhook, мини-JSON",
+   "files": {
+    "requirements": true,
+    "design": true,
+    "tasks": true,
+    "contracts": true,
+    "decisions": true,
+    "questions": true
+   },
+   "flowchart": true,
+   "useCases": [
+    {
+     "id": "eam-api-stub",
+     "title": "eam-api-stub: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "signed-webhook",
+     "title": "signed-webhook: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "stub-source-http",
+     "title": "stub-source-http: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    },
+    {
+     "id": "stub-source-journal",
+     "title": "stub-source-journal: требования",
+     "summary": "",
+     "files": [
+      "requirements.md",
+      "design.md",
+      "tasks.md"
+     ]
+    }
+   ],
+   "mdFiles": 18,
+   "labels": {
+    "g": 270,
+    "y": 62,
+    "r": 57
+   },
+   "confidence": 77,
+   "code": {
+    "files": 17,
+    "loc": 1401,
+    "testLoc": 623
+   }
+  }
+ ]
+}

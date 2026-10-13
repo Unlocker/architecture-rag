@@ -12,7 +12,7 @@
 |---|---|---|---|
 | `SourceRecord` | `(source, sourceType, sourceId)` UNIQUE | `source` (= `SourceSystemCode.name()`, верхний регистр), `sourceType`, `sourceId`, `sourceVersion` (строка-число), `contentHash`, `fetchedAt` (datetime UTC), `active` (bool), `deletedAt` (datetime, снимается при upsert) | `GP/GraphProjector.java:448-452, 513-516, 713-716` 🟢 |
 | `SourceSystem` | `code` UNIQUE | `code` = `$source` (`EAM`/`SCM`/`CMDB`/`DEPLOYMAP`) | `GP/GraphProjector.java:451` 🟢 |
-| `SyncRun` | `runId` UNIQUE | `runId`, `adapter` (= `SourceSystemCode.name()` записи, при создании), `status = 'RUNNING'` (при создании), `startedAt` (минимум по `eventTime`) | `GP/GraphProjector.java:695-700` 🟢; `endedAt`, счётчики не пишутся 🔴 Q-04 |
+| `SyncRun` | `runId` UNIQUE | `runId`, `adapter` (= `SourceSystemCode.name()` записи, при создании), `status = 'RUNNING'` (при создании), `startedAt` (минимум по `eventTime`) | `GP/GraphProjector.java:695-700` 🟢; `endedAt`, счётчики не пишутся 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] Q-04 |
 | Канонический узел (`ITSystem`, `Solution`, `Platform`, `Service`, `Repository`, `Team`, `Environment`, `Deployment`, `ComputeInstance`+подтипы `VirtualMachine`/`PhysicalServer`, `Namespace`, `KubernetesCluster`) | `gid` UNIQUE по каждой канонической метке | `gid` (строка UUID); `isCurrent`, `firstSeenAt` (минимум по `eventTime`), `lastSeenAt` (максимум), `deletedAt` (при архивации); авторитетные свойства `NodeData` (компоненты record'а, не `null`, `Instant` → datetime, enum → имя) | `GP/GraphProjector.java:422-462`, `GP/NodeProperties.java:25-55` 🟢 |
 | `PendingRelation` | `key` UNIQUE | см. §6 | `GP/PendingRelations.java:53-80` 🟢 |
 
@@ -75,9 +75,9 @@
 | `GRAPH_ERROR` (причина — имя класса) | `RETRYING` | прочие `Neo4jException` | `GP/EventProcessor.java:371-372` 🟢 |
 | `RECONCILIATION_TRIGGER_FAILED` (причина — имя класса) | `RETRYING` | любое `RuntimeException` из `ReconciliationTrigger.snapshotComplete` | `GP/EventProcessor.java:293-298` 🟢 |
 
-Конечные статусы, которые модуль выставляет: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`. `SUPERSEDED` входит в `FINISHED`, но не выставляется нигде 🔴 Q-01 (`GP/EventProcessor.java:99-105`). Коды `ProjectionException` приходят в `errorCode` как есть (`GP/EventProcessor.java:359-360`).
+Конечные статусы, которые модуль выставляет: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`. `SUPERSEDED` входит в `FINISHED`, но не выставляется нигде 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-01 (`GP/EventProcessor.java:99-105`). Коды `ProjectionException` приходят в `errorCode` как есть (`GP/EventProcessor.java:359-360`).
 
-> `docs/02-data-model.md:273` перечисляет коды неполно (нет `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `RECONCILIATION_TRIGGER_FAILED`, `UNKNOWN_SCHEMA_VERSION`) 🔴 Q-08.
+> `docs/02-data-model.md:273` перечисляет коды неполно (нет `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `RECONCILIATION_TRIGGER_FAILED`, `UNKNOWN_SCHEMA_VERSION`) 🟢 [R.8: ответ владельца, вопрос 7] Q-08.
 
 ## 5. Checkpoint
 
@@ -108,7 +108,7 @@ Raw в S3 (`rawStore.put(source, bytes)`): строка JSON `{"sourceType":"…
 |---|---|---|
 | `architecture.asset.upserted.v1` (`CanonicalEvent.TYPE_ASSET_UPSERTED`) | `source`, `data.sourceType/sourceId/sourceVersion`, `time` (→ `eventTime`), `id`, журнал: `syncRunId` | `GP/EventProcessor.java:193-194, 358` 🟢 |
 | `architecture.asset.deleted.v1` | то же; `dataschema` обязан быть `urn:corp:schema:asset-deleted:1`; `time` → `deletedAt` tombstone | `GP/EventProcessor.java:254-287` 🟢 |
-| `architecture.sync.snapshot-complete.v1` | `source`, `data.sourceId` (= `syncRunId`), `id` (маркера), `data.payload["objectCount"]` (число, иначе `0`) | `GP/EventProcessor.java:289-300, 629-631` 🟢 (`dataschema` не проверяется 🔴 Q-05) |
+| `architecture.sync.snapshot-complete.v1` | `source`, `data.sourceId` (= `syncRunId`), `id` (маркера), `data.payload["objectCount"]` (число, иначе `0`) | `GP/EventProcessor.java:289-300, 629-631` 🟢 (`dataschema` не проверяется 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] Q-05) |
 
 ### 6.3. Отложенная связь (`PendingRelation`)
 

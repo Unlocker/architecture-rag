@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-13T10:20:13Z",
+  "lastCheckpoint": "2026-10-13T10:20:13Z",
+  "pipelineDurationMs": 1366,
+  "completedAgents": [
+    "mapper",
+    "analyst",
+    "storyteller",
+    "publisher"
+  ],
+  "pendingAgents": [],
+  "pages": {
+    "arquitetura.html": {
+      "status": "created",
+      "agent": "reversa-docs-mapper",
+      "hash": "sha256:58ba7d559ec7ee94a558b0098c6de3fe71497f31e31a9d2c216ce8180ef26195"
+    },
+    "modulos.html": {
+      "status": "created",
+      "agent": "reversa-docs-mapper",
+      "hash": "sha256:3b7f58e01d0b206b87c5b7c6eefd6c70b6d5202264c22c0299f236627a09ebd6"
+    },
+    "metricas.html": {
+      "status": "created",
+      "agent": "reversa-docs-analyst",
+      "hash": "sha256:d6ecaa40b358cf2cbde1e10b20c1ec738a441be9fe6fe2150d9bacd9ec7f057f"
+    },
+    "glossario.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:fcd5c3cf85551937c6273def7aa098e9335d5a9af76136e15ace890c2986cde3"
+    },
+    "features/adapter-core.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:03497becec20832f462cfe80e2696f7e9376ec7c282325c39712b8a204ce92d1"
+    },
+    "features/admin-console.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:fd50f4988c1c942e317f6dd43afab536ef4997b90fc61517426db46d58ecdffa"
+    },
+    "features/admin-ui.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:bfe9a86c323ea2c892358b6af3d1bb3e9e78764be1d60b7f57b05a106b3d6a38"
+    },
+    "features/asset-adapter.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:717bd1e9e161736ed5eff0cf77d93cdadc939365d033ff48f565ed2219865da8"
+    },
+    "features/canonical-model.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:7575e2f9c6d21bf1199435b2f38e4d873e1e22e550dc811c164d38c04aecfff8"
+    },
+    "features/demo-launcher.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:47caa00c75f6d9ed171eb17dbc3ff54fc6b5697faf346e838bd609b3776e013b"
+    },
+    "features/deploymap-adapter.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:8c5c9268b09693ee4e14e42fa17559af707a7eaa4dd145eda977ce041068f647"
+    },
+    "features/docker.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:72876e55cc42f8f0f3f0aa1e8c2563d8689c69cdcc689169ea410d54db341252"
+    },
+    "features/eam-adapter.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:837e7ee7ebfc773072943e8c8047eb1a40354632c351bc942a2079fcb50a3ebc"
+    },
+    "features/event-journal.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:f2a92c400df43a2a267dc1048e8894827f127e86b78b35001e39186f05006599"
+    },
+    "features/event-schemas.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:4a1f9a13d485eb72dcb31395f2af6d5221dd88de44c33e066e0e9e9021634364"
+    },
+    "features/graph-projector.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:930896ca18083c4d6c27d811332f7751a3f7860287c6567535a25b855985d7c5"
+    },
+    "features/graph-query-core.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:cb8baf1277cb28bb139eee8370a56039b0bad60b83f01ed9d3f05897eb7e1a32"
+    },
+    "features/identity-resolution.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:e3ecb9c14ab53037acae37092147bfd8d33afdfcaa9ac7ab65fa1fb0fabb7288"
+    },
+    "features/ingestion-service.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:67d6e986fc9be55079f07c3b722c9868660989025da83232bfe51e4102eae589"
+    },
+    "features/integration-tests.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:8b6faa61b1fb910822a327a69f1b2e85481b697b83c6c21ab1a33ffc9fb546fa"
+    },
+    "features/mcp-server.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:805874d280b9302dd9eb5fa3e8ec6a1f8f371b1f6f877fe1607542fc49beb183"
+    },
+    "features/normalizer.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:5e91f4565432cd91a46c0f66d83f4d29efd53ae50afd91b99c9f8cfc3dcae522"
+    },
+    "features/scm-adapter.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:2a551c8b1dd51f1c8d8b0d3b8e27e277b6baee6266621dabdac3166c40e5837d"
+    },
+    "features/source-spi.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:f38a02339fdb42cbd8f524141edecc1976890e4e9fb6f0900d7f9e9afde1fb52"
+    },
+    "features/source-stubs.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:e98186229b34578f07577e419077f72a0e3e3974a99a787435eac0c39a37a4a2"
+    },
+    "features.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:1bd26e88af1db4757507bf2c1479df111611252dd6c2fbdb0d7a12479ebf00e1"
+    },
+    "deck.html": {
+      "status": "created",
+      "agent": "reversa-docs-storyteller",
+      "hash": "sha256:907df6d209e17ffd2375c3c2c91b9bd448743b0dc1dea4cda331931d45daf0aa"
+    },
+    "index.html": {
+      "status": "created",
+      "agent": "reversa-docs-publisher",
+      "hash": "sha256:0d01f20aeb8c9527b270d7ae9bf55cb45f4f580106fd167bc4d2f33e14a0eca3"
+    }
+  },
+  "pagesGenerated": [
+    "arquitetura.html",
+    "deck.html",
+    "features.html",
+    "features/adapter-core.html",
+    "features/admin-console.html",
+    "features/admin-ui.html",
+    "features/asset-adapter.html",
+    "features/canonical-model.html",
+    "features/demo-launcher.html",
+    "features/deploymap-adapter.html",
+    "features/docker.html",
+    "features/eam-adapter.html",
+    "features/event-journal.html",
+    "features/event-schemas.html",
+    "features/graph-projector.html",
+    "features/graph-query-core.html",
+    "features/identity-resolution.html",
+    "features/ingestion-service.html",
+    "features/integration-tests.html",
+    "features/mcp-server.html",
+    "features/normalizer.html",
+    "features/scm-adapter.html",
+    "features/source-spi.html",
+    "features/source-stubs.html",
+    "glossario.html",
+    "index.html",
+    "metricas.html",
+    "modulos.html"
+  ],
+  "pagesOmitted": [
+    {
+      "page": "timeline.html",
+      "reason": "chronicle.md not found (нет .reversa/chronicle.md)"
+    },
+    {
+      "page": "topologia.html",
+      "reason": "topology not detected (в architecture.md нет вариантов топологии легаси/современный)"
+    }
+  ],
+  "auxiliaryHtmls": [],
+  "auxiliaryHtmlsDiscovered": 0,
+  "auxiliaryDiscoveryAborted": false,
+  "cdnFallbackUsed": true,
+  "cdnFallbackDetails": [
+    {
+      "lib": "highcharts*",
+      "primary": "code.highcharts.com (HTTP 403)",
+      "used": "cdn.jsdelivr.net/npm/highcharts@11.4.8"
+    }
+  ],
+  "vendorMissing": [],
+  "vendor": [
+    "OrbitControls.js",
+    "d3.v7.min.js",
+    "highcharts-accessibility.js",
+    "highcharts-exporting.js",
+    "highcharts-sankey.js",
+    "highcharts-timeline.js",
+    "highcharts-treemap.js",
+    "highcharts.js",
+    "three.min.js"
+  ],
+  "smokeTestFailed": false,
+  "smokeTestErrors": [],
+  "brokenLinks": []
+}

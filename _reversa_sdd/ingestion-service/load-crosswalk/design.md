@@ -50,4 +50,4 @@
 
 - 🟡 `item == null` внутри массива даёт NPE в `describe` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java:74`) → `500`, без записи аудита.
 - 🟡 Пакет не атомарен; при сбое посреди пакета клиент не знает, что применено (смотреть `admin_audit`).
-- 🔴 Q-10: `identity_candidate.status` не обновляется после `approve` (в модуле вызова нет).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] Q-10: `identity_candidate.status` не обновляется после `approve` (в модуле вызова нет).

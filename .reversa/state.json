@@ -8,16 +8,15 @@
   "doc_level": "completo",
   "output_folder": "_reversa_sdd",
   "forward_folder": "_reversa_forward",
-  "phase": "revisao",
+  "phase": "concluido",
   "completed": [
     "reconhecimento",
     "escavacao",
     "interpretacao",
-    "geracao"
-  ],
-  "pending": [
+    "geracao",
     "revisao"
   ],
+  "pending": [],
   "checkpoints": {
     "scout": {
       "completed_at": "2026-10-12T17:22:37Z",
@@ -439,6 +438,23 @@
         "_reversa_sdd/questions.md"
       ],
       "note": "ответы владельца получены 2026-10-13; реализация расхождений — отдельными задачами; step-04-regression-check пропущен (нет _reversa_forward/)"
+    },
+    "finalizacao": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "task": "UNLOCKER-274",
+      "confidence_percent": 82,
+      "owner_answers_applied": 20,
+      "red_marks_before": 833,
+      "red_marks_after": 575,
+      "docs_site": "_reversa_sdd/_reversa_docs/index.html",
+      "files": [
+        "_reversa_sdd/confidence-report.md",
+        "_reversa_sdd/gaps.md",
+        "_reversa_sdd/questions.md",
+        "_reversa_sdd/_reversa_docs/",
+        "README.md"
+      ],
+      "note": "метки 🔴 переклассифицированы по ответам владельца; реализация расхождений — UNLOCKER-276"
     }
   },
   "engines": [

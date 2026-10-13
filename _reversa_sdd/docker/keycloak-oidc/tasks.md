@@ -38,11 +38,11 @@
 ## Tarefas de Teste
 
 - [ ] TT-01: `smoke.sh` (AC-01..AC-03) — в CI
-- [ ] TT-02: `console-smoke.sh` (AC-04..AC-06) — 🔴 не в CI (Q-07)
+- [ ] TT-02: `console-smoke.sh` (AC-04..AC-06) — 🟢 [R.8: ответ владельца, вопрос 14] не в CI (Q-07)
 - [ ] TT-03: 🟡 нет проверки токена консоли на `/mcp` и проверки отказа при смене redirect URI
 
 ## Ordem Sugerida
 T-01 → T-02 → T-03 → T-04 → T-05 → T-06 → T-07.
 
 ## Lacunas Pendentes (🔴)
-См. [`../questions.md`](../questions.md): Q-07 (🔴); Q-04, Q-09, Q-15, Q-20 (🟡).
+См. [`../questions.md`](../questions.md): Q-07 (🟢 [R.8: ответ владельца, вопрос 14]); Q-04, Q-09, Q-15, Q-20 (🟡).

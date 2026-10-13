@@ -72,9 +72,9 @@ flowchart LR
 | §1 строка `event-schemas` | `ProcessingStatus`, `CanonicalEvent`, `EventJournal`, `SourceVersion`: новый статус затрагивает `FINISHED`/`finish` | матрица §1, §3 «Новый статус» 🟢 |
 | §1 строки `normalizer`, `identity-resolution` | входные `NormalizationResult`/`DeploymentLookup` и порты PG: изменение — прямо затрагивает модуль | матрица §1 🟢 |
 | §1 строка `adapters/adapter-core` (через данные) | формат raw и типы событий `deleted`/`snapshot-complete`; `Reconciler` собирает raw DELETE вручную | матрица §1, §2 № 1, № 7 |
-| §2 № 1 | литералы `architecture.asset.deleted.v1`, `architecture.sync.snapshot-complete.v1` продублированы (`GP/EventProcessor.java:92-93`), общего источника и теста имён нет | 🔴 → [`questions.md`](questions.md) Q-06 |
-| §2 № 2 | таблица кодов источников — третья копия `sourceCode` (`GP/EventProcessor.java:634-645`), её же использует `Reconciler` (`GP/Reconciler.java:101`) | 🔴 → Q-06 |
-| §2 № 3 | регистр источника: в графе `SourceRecord.source` и `SyncRun.adapter` — `SourceSystemCode.name()` в верхнем регистре (`GP/GraphProjector.java:698, 713-716`), в журнале — URN, в консоли — нижний | 🔴 → Q-06 |
+| §2 № 1 | литералы `architecture.asset.deleted.v1`, `architecture.sync.snapshot-complete.v1` продублированы (`GP/EventProcessor.java:92-93`), общего источника и теста имён нет | 🟢 [R.8: ответ владельца, вопрос 9] → [`questions.md`](questions.md) Q-06 |
+| §2 № 2 | таблица кодов источников — третья копия `sourceCode` (`GP/EventProcessor.java:634-645`), её же использует `Reconciler` (`GP/Reconciler.java:101`) | 🟢 [R.8: ответ владельца, вопрос 9] → Q-06 |
+| §2 № 3 | регистр источника: в графе `SourceRecord.source` и `SyncRun.adapter` — `SourceSystemCode.name()` в верхнем регистре (`GP/GraphProjector.java:698, 713-716`), в журнале — URN, в консоли — нижний | 🟢 [R.8: ответ владельца, вопрос 9] → Q-06 |
 | §2 № 4 | индекс `asset_text` создаёт модуль (`GP/schema/Neo4jSchema.java:57-58`), читает `AssetTemplates.java:52` | 🟡 → [`contracts.md`](contracts.md) §3 |
 | §2 № 7 | tombstone-событие `Reconciler` собирается как raw JSON вручную (`GP/Reconciler.java:196-201`), формат читает replay (`IS/StoredEventReader`); совпадение с `InboxWriter.rawJson` — только по комментарию | 🟡 → Q-07 |
 | §2 № 12 | `AuthorityMatrix.defaults()` создаётся отдельно для `GraphProjector` и `SourceConflicts` (`IS/IngestionServiceConfiguration.java:64, 86`) | 🟢 |

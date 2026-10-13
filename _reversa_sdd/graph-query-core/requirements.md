@@ -84,7 +84,7 @@ flowchart LR
 | Сопровождаемость | Три копии `cypherList` в классах шаблонов | `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/AssetTemplates.java:215-217`; `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/DependencyTemplates.java:128-130`; `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/ConsoleTemplates.java:200-202` | 🟡 |
 | Потокобезопасность | Кэш вердиктов — `ConcurrentHashMap`; реестр неизменяем | `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:43`; `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java:23` | 🟢 |
 
-> Inferido a partir do código. SLO по задержке запросов в модуле не заданы 🔴 (см. [`questions.md`](questions.md) Q-10).
+> Inferido a partir do código. SLO по задержке запросов в модуле не заданы 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-10).
 
 ## Критерии приёмки (сквозные)
 
