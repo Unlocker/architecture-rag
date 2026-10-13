@@ -145,6 +145,164 @@
         "_reversa_sdd/tech-debt.md",
         "_reversa_sdd/traceability/spec-impact-matrix.md"
       ]
+    },
+    "redator_progress": {
+      "part": "R.6a (UNLOCKER-271)",
+      "granularity": "hybrid",
+      "folder_naming": "_reversa_sdd/<короткое имя модуля>/ (как flowcharts/), use case — вложенные папки",
+      "units_done": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "contracts/source-spi",
+        "adapters/adapter-core",
+        "adapters/eam-adapter",
+        "adapters/scm-adapter",
+        "adapters/asset-adapter",
+        "adapters/deploymap-adapter",
+        "ingestion/event-journal",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution"
+      ],
+      "units_pending": [
+        "ingestion/graph-projector",
+        "ingestion/ingestion-service",
+        "access/graph-query-core",
+        "access/mcp-server",
+        "access/admin-console",
+        "access/admin-ui",
+        "platform/source-stubs",
+        "platform/demo-launcher",
+        "platform/integration-tests",
+        "platform/docker"
+      ],
+      "globals_pending": [
+        "traceability/code-spec-matrix.md",
+        "openapi/",
+        "user-stories/",
+        "индекс specs"
+      ],
+      "per_unit": {
+        "contracts/canonical-model": {
+          "folder": "_reversa_sdd/canonical-model",
+          "files": 18,
+          "use_cases": [
+            "authority-lookup",
+            "git-url-normalization",
+            "node-model-invariants",
+            "relation-command-validation"
+          ]
+        },
+        "contracts/event-schemas": {
+          "folder": "_reversa_sdd/event-schemas",
+          "files": 17,
+          "use_cases": [
+            "journal-append-dedup-dlq",
+            "journal-keyset-read",
+            "processing-status-lifecycle",
+            "source-version-compare"
+          ]
+        },
+        "contracts/source-spi": {
+          "folder": "_reversa_sdd/source-spi",
+          "files": 15,
+          "use_cases": [
+            "fetch-by-id",
+            "fetch-changes",
+            "verify-webhook-signature"
+          ]
+        },
+        "adapters/adapter-core": {
+          "folder": "_reversa_sdd/adapter-core",
+          "files": 18,
+          "use_cases": [
+            "full-snapshot",
+            "incremental-poll",
+            "receive-webhook",
+            "source-fetch-retry"
+          ]
+        },
+        "adapters/eam-adapter": {
+          "folder": "_reversa_sdd/eam-adapter",
+          "files": 15,
+          "use_cases": [
+            "composite-sync",
+            "eam-api-request",
+            "fetch-changes"
+          ]
+        },
+        "adapters/scm-adapter": {
+          "folder": "_reversa_sdd/scm-adapter",
+          "files": 10,
+          "use_cases": [
+            "create-adapter",
+            "fetch-scm-changes"
+          ]
+        },
+        "adapters/asset-adapter": {
+          "folder": "_reversa_sdd/asset-adapter",
+          "files": 10,
+          "use_cases": [
+            "assemble-adapter",
+            "source-contract"
+          ]
+        },
+        "adapters/deploymap-adapter": {
+          "folder": "_reversa_sdd/deploymap-adapter",
+          "files": 11,
+          "use_cases": [
+            "assemble-adapter",
+            "fixtures-contract"
+          ]
+        },
+        "ingestion/event-journal": {
+          "folder": "_reversa_sdd/event-journal",
+          "files": 17,
+          "use_cases": [
+            "append-event",
+            "raw-payload-store",
+            "read-journal",
+            "transition-event"
+          ]
+        },
+        "ingestion/normalizer": {
+          "folder": "_reversa_sdd/normalizer",
+          "files": 18,
+          "use_cases": [
+            "bind-deployment",
+            "map-eam-objects",
+            "normalize-event",
+            "resolve-references"
+          ]
+        },
+        "ingestion/identity-resolution": {
+          "folder": "_reversa_sdd/identity-resolution",
+          "files": 15,
+          "use_cases": [
+            "candidate-matching",
+            "gid-mapping-crosswalk",
+            "source-conflicts"
+          ]
+        }
+      },
+      "files_total": 164,
+      "completed_at": "2026-10-13T00:00:00Z"
+    },
+    "writer": {
+      "status": "partial",
+      "part1_done": true,
+      "files": [
+        "_reversa_sdd/canonical-model/",
+        "_reversa_sdd/event-schemas/",
+        "_reversa_sdd/source-spi/",
+        "_reversa_sdd/adapter-core/",
+        "_reversa_sdd/eam-adapter/",
+        "_reversa_sdd/scm-adapter/",
+        "_reversa_sdd/asset-adapter/",
+        "_reversa_sdd/deploymap-adapter/",
+        "_reversa_sdd/event-journal/",
+        "_reversa_sdd/normalizer/",
+        "_reversa_sdd/identity-resolution/"
+      ]
     }
   },
   "engines": [
