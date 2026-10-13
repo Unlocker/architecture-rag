@@ -24,7 +24,7 @@
   - Уверенность: 🟢
 - [ ] **T-04** `PostgresEventJournal`: каркас (конструктор от `DataSource`, константы `MAX_REASON_LENGTH=500`, `COLUMNS` из 16 колонок, `map`, `withStatus`, `truncate`, `fingerprint`).
   - Origin: `PEJ:40-51`, `PEJ:356-402`
-  - Критерий готовности: маппинг строки в `JournalEntry` полон (16 полей, `payloadRef = null`, если `payload_key IS NULL`); `fingerprint` = первые 12 hex SHA-256 от `source + "\0" + eventId`.
+  - Критерий готовности: маппинг строки в `JournalEntry` полон (15 полей, `payloadRef = null`, если `payload_key IS NULL`); `fingerprint` = первые 12 hex SHA-256 от `source + "\0" + eventId`.
   - Уверенность: 🟢
 - [ ] **T-05** `append`/`publish`/`find` — см. [`append-event/tasks.md`](append-event/tasks.md).
   - Origin: `PEJ:53-111`

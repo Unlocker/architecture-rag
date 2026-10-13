@@ -61,7 +61,7 @@ sequenceDiagram
 
 ## Dependências
 
-Образ `quay.io/keycloak/keycloak:26.4` (`platform/docker/docker-compose.yml:138`); потребители токенов — `mcp-server`, `ingestion` ([`../../ingestion-service/design.md`](../../ingestion-service/design.md), проверка `azp`), `admin-console` ([`../../admin-ui/oidc-login/design.md`](../../admin-ui/oidc-login/design.md)); значения audience должны совпадать у Keycloak и потребителей ([`../contracts.md`](../contracts.md) §5). Матрица влияния §3 «Новый scope или роль»: `mcp-server`, `ingestion-service`, `admin-console`, Keycloak realm (`../traceability/spec-impact-matrix.md:62`).
+Образ `quay.io/keycloak/keycloak:26.4` (`platform/docker/docker-compose.yml:138`); потребители токенов — `mcp-server`, `ingestion` ([`../../ingestion-service/design.md`](../../ingestion-service/design.md), проверка `azp`), `admin-console` ([`../../admin-ui/oidc-login/design.md`](../../admin-ui/oidc-login/design.md)); значения audience должны совпадать у Keycloak и потребителей ([`../contracts.md`](../contracts.md) §5). Матрица влияния §3 «Новый scope или роль»: `mcp-server`, `ingestion-service`, `admin-console`, Keycloak realm (`../../traceability/spec-impact-matrix.md:62`).
 
 ## Decisões de Design Identificadas
 

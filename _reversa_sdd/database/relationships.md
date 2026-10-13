@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `inbox_event` → `dlq_entry` | 1 : 0..N (но не больше одной открытой, `replayed_at IS NULL`) | **FK** `FOREIGN KEY (source, event_id)` без `ON DELETE`; частичный `UNIQUE` на открытые | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:44, 48` 🟢 |
 | `inbox_event` ↔ `consumer_checkpoint` | N : 1 по `source` | логическая: `consumer_checkpoint.source` совпадает с `inbox_event.source` (URN) | `ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:260-262` 🟡 |
-| `identity_mapping` ↔ `identity_feature` | 1 : N по ключу записи `(source, source_type, source_id)` | логическая, без FK | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:39-41` 🟡 |
+| `identity_mapping` ↔ `identity_feature` | 1 : N по ключу записи `(source, source_type, source_id)` | логическая, без FK | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:38-42` 🟡 |
 | `identity_feature` → `identity_candidate` | N : M; кандидат — пара ключей с общими признаками | логическая | `ingestion/identity-resolution/src/main/resources/db/migration/V4__identity_candidate.sql:21-35` 🟡 |
 | `identity_mapping` ↔ `approved_crosswalk` | пара ключей M : N; оба конца получают общий `gid` | логическая; пара хранится в нормализованном порядке `left < right`, CHECK нет | `ingestion/identity-resolution/src/main/resources/db/migration/V2__identity_mapping.sql:14-26` 🟢 |
 | `identity_mapping.gid` ↔ `property_assertion.gid` ↔ `source_conflict.gid` | N : 1 по `gid` | логическая: `uuid` без FK; индексы `ix_identity_mapping_gid`, `ix_property_assertion_gid` | `V2:12`, `V5:19` 🟢 |

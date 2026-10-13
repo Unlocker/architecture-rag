@@ -52,4 +52,4 @@
 - 🔴 `create` не валидирует `null` аргументов (Q-1).
 - 🟡 Тест `adapterIsBoundToItsSource` строит «чужой» конфиг тернарником, который для SCM всегда даёт `EAM` (`ScmAdapterContractTest.java:44-48`) — это шаблон, общий с другими адаптерами; для SCM корректно, но избыточно.
 - 🟡 Ни один тест модуля не вызывает успешный `ScmAdapter.create` (только отказ с `null`-журналом, `ScmAdapterContractTest.java:49`).
-- 🟡 Документ `_reversa_sdd/flowcharts/scm-adapter.md` рисует `new SourceAdapter(config, HttpSourceConnector, journal, rawStore)`; в коде вызывается 3-арг. конструктор, коннектор создаётся внутри (`ScmAdapter.java:37`, `SourceAdapter.java:29-31`) — функционально эквивалентно.
+- 🟡 Документ `_reversa_sdd/flowcharts/scm-adapter.md` рисует `new SourceAdapter(config, HttpSourceConnector, journal, rawStore)`; в коде вызывается 3-арг. конструктор, коннектор создаётся внутри (`ScmAdapter.java:37`, `SourceAdapter.java:29-31`) — функционально эквивалентно. Блок-схема исправлена в R.6c (UNLOCKER-275).

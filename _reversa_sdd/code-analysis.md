@@ -21,7 +21,7 @@
 ## A. `contracts/canonical-model`
 
 **Назначение.** Каноническая модель графа: типы узлов, типы связей, команды проекции, матрица авторитетности, provenance 🟢 (Javadoc пакетов; `docs/02-data-model.md` §2–4).
-Состав: 38 файлов main — пакеты `node` (19), `relation` (2), `command` (6), `provenance` (7), `authority` (1), корень (`Invariants`, маркер, `package-info`). Тесты: 45 `@Test` (в т. ч. 4 `@ParameterizedTest` в `GitUrlsTest`) в 7 классах 🟢.
+Состав: 38 файлов main — пакеты `node` (19), `relation` (2), `command` (6), `provenance` (7), `authority` (1), корень (`Invariants`, маркер, `package-info`). Тесты: 45 `@Test` и 3 `@ParameterizedTest` (все три в `GitUrlsTest`) в 7 классах 🟢.
 
 ### A1. Поток управления и публичные операции
 
@@ -32,7 +32,7 @@
 | `Invariants.requireText / optionalText` | обязательный и необязательный текст; пустая строка у необязательного **отвергается** (`null` — «не передано») | `CM/Invariants.java:21-35` 🟢 |
 | `Invariants.copyProperties` | проверка и неизменяемая копия карты свойств связи | `CM/Invariants.java:49-58` 🟢 |
 | `NodeLabel.isA` | транзитивная проверка подтипа по цепочке `supertype` | `CM/node/NodeLabel.java:54-61` 🟢 |
-| `NodeLabel.canonical()` | все метки, кроме провенанс-меток | `CM/node/NodeLabel.java:64-71` 🟢 |
+| `NodeLabel.canonical()` | все метки, кроме провенанс-меток | `CM/node/NodeLabel.java:68-71` 🟢 |
 | `RelationType.allows(from, to)` | пара меток допустима с учётом подтипов | `CM/relation/RelationType.java:73-75` 🟢 |
 | `AuthorityMatrix.isAuthoritative(...)` ×3 | авторитетность источника для узла / свойства / связи | `CM/authority/AuthorityMatrix.java:48-60` 🟢 |
 | `GitUrls.normalize` | приведение URL репозитория к канону | `CM/node/GitUrls.java:30-74` 🟢 |
@@ -45,7 +45,7 @@
 
 1. **Иерархия меток.** `VIRTUAL_MACHINE` и `PHYSICAL_SERVER` — подтипы `COMPUTE_INSTANCE` (`NodeLabel.java:23-24`); остальные метки плоские 🟢. Глубина > 1 поддержана циклом `isA`, но в данных не используется 🟡.
 2. **Допустимость связи.** `sources.stream().anyMatch(from::isA) && targets.stream().anyMatch(to::isA)` (`RelationType.java:74`) 🟢. Пример: `RUNS_ON` объявлена на `COMPUTE_INSTANCE`, поэтому принимает и `VirtualMachine`, и `PhysicalServer`.
-3. **Темпоральность и identity-свойства.** 11 из 15 типов связей `temporal=true` (`RelationType.java:13-24`); identity-свойства допустимы только у темпоральных, иначе `IllegalArgumentException` при инициализации enum (`RelationType.java:42-44`). Сейчас identity-свойство одно — `DEPLOYED_FROM{commit}` (ADR [0029](../docs/adr/0029-helm-chart-system-repo-commit.md)); смена такого свойства закрывает старую связь и открывает новую (`RelationType.java:48-52`) 🟢.
+3. **Темпоральность и identity-свойства.** 10 из 15 типов связей `temporal=true` (`RelationType.java:13-27`); identity-свойства допустимы только у темпоральных, иначе `IllegalArgumentException` при инициализации enum (`RelationType.java:42-44`). Сейчас identity-свойство одно — `DEPLOYED_FROM{commit}` (ADR [0029](../docs/adr/0029-helm-chart-system-repo-commit.md)); смена такого свойства закрывает старую связь и открывает новую (`RelationType.java:48-52`) 🟢.
 4. **Authority matrix.** Поиск точный и fail-closed: нет записи — пустое множество (`AuthorityMatrix.java:63-75`); свойство без собственного правила наследует правило метки, суперметка не опрашивается (`AuthorityMatrix.java:68-70`) 🟢. `MANUAL` не входит ни в одно правило (`AuthorityMatrix.java:79-113`) — «ручное разрешение» вынесено в отдельное утверждение (Javadoc `AuthorityMatrix.java:20-22`) 🟢.
 5. **Нормализация Git URL** (`GitUrls.normalize`): scp-форма `git@host:org/repo` и схемы `ssh`/`git`/`https` → `https`; `http` остаётся `http`; порт сохраняется только для `http(s)`; схема и хост в нижнем регистре, путь — как есть; удаляются `.git` и хвостовые `/`; прочие схемы → `IllegalArgumentException("unsupported git url scheme")` (`GitUrls.java:40-73`, `76-91`) 🟢. Идемпотентность нормализации используется как инвариант `Deployment.repositoryUrl` (`Deployment.java:30-32`) 🟢.
 6. **Валидация `Deployment`.** `sourceCommit` — ровно 40 hex в нижнем регистре; `eamSystemId > 0` (`Deployment.java:20, 27-35`) 🟢.
@@ -119,7 +119,7 @@ Feature flags и параметры окружения в модуле отсу�
 
 Поля — в `data-dictionary.md` (раздел E). Важное:
 
-- `JournalEntry` — 16 полей, **нет** `type`/`subject`; они вынесены в `StoredEvent(entry, type, subject)` (`ES/JournalEntry.java:14-29`, `ES/StoredEvent.java:12`) 🟢.
+- `JournalEntry` — 15 полей, **нет** `type`/`subject`; они вынесены в `StoredEvent(entry, type, subject)` (`ES/JournalEntry.java:14-29`, `ES/StoredEvent.java:12`) 🟢.
 - `SnapshotContents(objects, eventCount, firstReceivedAt)` — множество объектов копируется `Set.copyOf` (`ES/SnapshotContents.java:14-18`) 🟢.
 - `Checkpoint(consumer, source, cursor, updatedAt)` — без проверок (`ES/Checkpoint.java:13`) 🟢.
 
@@ -187,7 +187,7 @@ Feature flags и параметры окружения в модуле отсу�
 |---|---|---|---|---|
 | `canonical-model` | 38 | 36 | 11 `NodeData`, 5 `GraphCommand`, 15 `RelationType` | A5: `SourceSystem` ×3, `platformId` в `docs/02`, `CloseAssertion` |
 | `event-schemas` | 18 | 16 | 4 порта, 10 статусов | E5: типы событий вне контракта, нет валидации `JournalEntry`, разнобой NPE/IAE |
-| `source-spi` | 10 | 10 | 1 порт, 1 утилита подписи | S5: инварианты `SourceChange` только в Javadoc, `long` vs `SourceVersion` |
+| `source-spi` | 10 | 9 | 1 порт, 1 утилита подписи | S5: инварианты `SourceChange` только в Javadoc, `long` vs `SourceVersion` |
 
 ---
 
@@ -1046,7 +1046,7 @@ Feature flags и параметры окружения в модуле отсу�
 
 ### X4.2 Алгоритмы и встроенные правила
 
-1. **Светофор источника** `health(s)` (`UI/pages/sync/SourcesTab.tsx:11-18`) 🟢: `bad`, если есть события в `QUARANTINED`/`RETRYING`, либо последний прогон `FAILED` или `failed > 0`, либо `lagSeconds > 3600`; иначе `warn`, если нет `lastProjectedAt`, нет `lastSyncRun` или `lagSeconds > 900`; иначе `ok`. Пороги — константы UI `LAG_WARN_SECONDS = 15·60`, `LAG_BAD_SECONDS = 60·60` (`UI/api/constants.ts:62-63`). Подписи бейджа: «норма» / «нет данных» / «проблемы». Автообновление раз в 30 с (`SOURCES_REFRESH_MS`).
+1. **Светофор источника** `health(s)` (`UI/pages/sync/SourcesTab.tsx:11-18`) 🟢: `bad`, если есть события в `QUARANTINED`/`RETRYING`, либо последний прогон `FAILED` или `failed > 0` (🔴 на данных проектора эти две ветки недостижимы: `SyncRun` остаётся `RUNNING` — `admin-ui/questions.md` Q-01, Р-5), либо `lagSeconds > 3600`; иначе `warn`, если нет `lastProjectedAt`, нет `lastSyncRun` или `lagSeconds > 900`; иначе `ok`. Пороги — константы UI `LAG_WARN_SECONDS = 15·60`, `LAG_BAD_SECONDS = 60·60` (`UI/api/constants.ts:62-63`). Подписи бейджа: «норма» / «нет данных» / «проблемы». Автообновление раз в 30 с (`SOURCES_REFRESH_MS`).
 2. **Устаревший актив** `isStale(card)` (`UI/pages/graph/AssetCard.tsx:9-13`): `isCurrent` и `lastSeenAt` старше 7 суток (`STALE_AFTER_MS`, `constants.ts:56`) 🟢.
 3. **Безопасность вывода** 🟢: все значения (свойства, причины, значения конфликтов) выводятся как текст React (экранируются), `dangerouslySetInnerHTML` не используется (grep); URL репозитория показывается текстом, без ссылки (`AssetCard.tsx:15,25`); подписи узлов графа рисуются Cytoscape на canvas, HTML не интерпретируется (Javadoc `UI/components/GraphCanvas.tsx:6-9`). Это закрывает ловушку 11 на стороне клиента (тексты источников — недоверенные данные).
 4. **Allowlist'ы продублированы в UI** (`UI/api/constants.ts:1-63`): `ASSET_TYPES` (7), `RELATION_TYPES` (9), `SOURCES` (4), `EVENT_STATUSES` (10) — как в `AssetTemplates`/`ConsoleTemplates`/`SyncSources`; бэкенд всё равно отвергает неизвестные значения (400). Список `RELATION_TYPES` = `NEIGHBORHOOD_RELATION_TYPES` (8 + `HOSTED_ON`) 🟢.
@@ -1173,7 +1173,7 @@ TypeScript-интерфейсы ответов (`UI/api/types.ts`) — зерк�
 
 **Состояние.** `journal: List<Entry(seq, change, notified)>`, `versions: Map<"type/id", Long>`, флаги `webhooksSuppressed`, `reorderNextPage`, счётчик `failuresLeft` со `status`/`retryAfter` (`SS/StubSource.java:31-41`). Все публичные методы `synchronized` (класс потокобезопасен, `:29`) 🟢.
 
-**Запись.** `upsert` → `COMPLETE`, `upsertPartial` → `PARTIAL` (в payload только переданные поля, значения могут быть `null`), `delete` → `DELETE` + `COMPLETE` + пустой payload (`:54-70`). Все три идут через `append` (`:182-190`): `sourceVersion = versions.merge(type/id, 1, sum)` — **версия монотонна на ключ и растёт также на `DELETE`**, повторный upsert после delete продолжает нумерацию; `updatedAt = clock.instant()` (UTC `Instant`, ловушка 10); `seq = journal.size() + 1`; `notified = !webhooksSuppressed` 🟢. `SourceChange` копирует payload в `LinkedHashMap`, сохраняя `null`-значения (`contracts/source-spi/.../SourceChange.java:41-44`) — именно на этом держится сценарий «неполная запись не затирает» (ловушка 5; тест `SST/StubSourceTest.java:154`) 🟢.
+**Запись.** `upsert` → `COMPLETE`, `upsertPartial` → `PARTIAL` (в payload только переданные поля, значения могут быть `null`), `delete` → `DELETE` + `COMPLETE` + пустой payload (`:54-70`). Все три идут через `append` (`:182-190`): `sourceVersion = versions.merge(type/id, 1, sum)` — **версия монотонна на ключ и растёт также на `DELETE`**, повторный upsert после delete продолжает нумерацию; `updatedAt = clock.instant()` (UTC `Instant`, ловушка 10); `seq = journal.size() + 1`; `notified = !webhooksSuppressed` 🟢. `SourceChange` копирует payload в `LinkedHashMap`, сохраняя `null`-значения (`contracts/source-spi/.../SourceChange.java:39-42`) — именно на этом держится сценарий «неполная запись не затирает» (ловушка 5; тест `SST/StubSourceTest.java:154`) 🟢.
 
 **`fetchChanges(cursor, limit)`** (`:108-168`) 🟢:
 1. `limit ≤ 0` → `IllegalArgumentException` (`:109-111`); затем `failIfRequested()` (`:112`) — счётчик сбоев уменьшается только на допустимом вызове.
@@ -1300,7 +1300,7 @@ TypeScript-интерфейсы ответов (`UI/api/types.ts`) — зерк�
 
 ### Y2.4 `StubControl` и `EamApiControl`
 
-Оба — отдельный `HttpServer` на порту 8091, **без аутентификации**, на всех интерфейсах контейнера (`new InetSocketAddress(8091)`, `DL/DemoLauncher.java:90,100`); защита — что порт не публикуется и не проксируется (Javadoc `DL/StubControl.java:18-20`, `DL/EamApiControl.java:19-21`, `platform/docker/README.md:51`) 🟡. Исполняется только изнутри контейнера (`docker compose exec … curl`), этим пользуются `platform/docker/scripts/backup-restore-check.sh:16`, `deployment-commit-check.sh:107`, `measure.sh:196,260`.
+Оба — отдельный `HttpServer` на порту 8091, **без аутентификации**, на всех интерфейсах контейнера (`new InetSocketAddress(STUB_CONTROL_PORT)`, константа `8091`: `DL/DemoLauncher.java:54, 90, 100`); защита — что порт не публикуется и не проксируется (Javadoc `DL/StubControl.java:18-20`, `DL/EamApiControl.java:19-21`, `platform/docker/README.md:51`) 🟡. Исполняется только изнутри контейнера (`docker compose exec … curl`), этим пользуются `platform/docker/scripts/backup-restore-check.sh:16`, `deployment-commit-check.sh:107`, `measure.sh:196,260`.
 
 **`StubControl`** (`DL/StubControl.java`) 🟢: `POST /control/upsert` с телом `{"type","id","payload","notify"?}`.
 1. Не-`POST` → `405 {"error":"POST expected"}` (`:56-58`).

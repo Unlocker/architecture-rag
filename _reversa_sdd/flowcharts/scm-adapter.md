@@ -8,7 +8,7 @@
 flowchart TD
   A["ScmAdapter.create(config, journal, rawStore)"] --> C{"config.system() == SYSTEM (SourceSystem.SCM)?"}
   C -- нет --> X["IllegalArgumentException: config is for ..., expected ..."]
-  C -- да --> SA["new SourceAdapter(config, HttpSourceConnector, journal, rawStore)"]
+  C -- да --> SA["new SourceAdapter(config, journal, rawStore)<br/>HttpSourceConnector создаётся внутри (SourceAdapter.java:29-31)"]
   SA --> W["WebhookHandler + Poller (adapter-core)"]
 ```
 
