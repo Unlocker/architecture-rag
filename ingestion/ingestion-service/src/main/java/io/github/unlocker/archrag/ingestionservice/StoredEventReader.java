@@ -94,6 +94,12 @@ public class StoredEventReader {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("syncRunId", entry.sourceId());
     payload.put("objectCount", count.asLong());
+    String completeness = text(root, "completeness");
+    if (completeness != null && !completeness.equals("COMPLETE") && !completeness.equals("PARTIAL")) {
+      throw new IllegalArgumentException("marker raw payload has no valid completeness");
+    }
+    // Маркеры до UNLOCKER-279 поля не имеют: это COMPLETE.
+    payload.put("completeness", completeness == null ? "COMPLETE" : completeness);
     return new CanonicalEvent(
         entry.eventId(),
         entry.source(),

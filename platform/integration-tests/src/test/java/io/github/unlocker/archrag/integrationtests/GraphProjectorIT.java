@@ -423,6 +423,19 @@ class GraphProjectorIT {
     assertThat(openHosts()).containsExactly("h-a");
   }
 
+  @Test
+  void partialRecordWithIncompleteHostsDoesNotCloseOtherRunsOn() {
+    String a = host("h-a");
+    String b = host("h-b");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    // PARTIAL называет только b: список связей неполон, связь с a остаётся открытой.
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of(b), "_completeness", "PARTIAL"));
+
+    assertThat(openHosts()).containsExactlyInAnyOrder("h-a", "h-b");
+  }
+
   /** Известное ограничение: пустой список неотличим от отсутствующего поля, поэтому ничего не закрывает. */
   @Test
   void emptyHostsListClosesNothingKnownLimitation() {
@@ -862,7 +875,7 @@ class GraphProjectorIT {
   void snapshotCompleteIsHandedToReconciliationAndNotProjected() {
     var event = new CanonicalEvent("snapshot-complete:run-9", "urn:corp:eam", "architecture.sync.snapshot-complete.v1",
         "sync-run/run-9", T1, "urn:corp:schema:snapshot-complete:1", null,
-        new AssetEventData("SYNC_RUN", "run-9", new SourceVersion("1"), Map.of()));
+        new AssetEventData("SYNC_RUN", "run-9", new SourceVersion("1"), Map.of("syncRunId", "run-9", "objectCount", 0L)));
 
     var result = handle(event, "run-9");
 

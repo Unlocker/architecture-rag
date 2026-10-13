@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import org.neo4j.driver.exceptions.ClientException;
@@ -90,6 +91,8 @@ public final class EventProcessor {
   /** Свойство узла, несущее платформу ИТ-системы и решения; имя {@code RELATION}-конфликта (ADR 0031). */
   static final String PLATFORM_PROPERTY = "platformId";
   static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
+  private static final String COMPLETENESS_KEY = "_completeness";
+  private static final String PARTIAL = "PARTIAL";
   static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
   private static final String IT_SYSTEM_TYPE = "IT_SYSTEM";
@@ -287,12 +290,19 @@ public final class EventProcessor {
   }
 
   private ProcessingResult snapshotComplete(CanonicalEvent event, JournalEntry entry) {
+    // Без валидного objectCount полноту прогона проверить нечем: reconcile не запускается, маркер в карантин.
+    OptionalLong objectCount = objectCount(event);
+    if (objectCount.isEmpty()) {
+      return quarantine(event, SnapshotRejectedException.MISSING_OBJECT_COUNT, "marker has no valid objectCount");
+    }
     advance(event, ProcessingStatus.VALIDATED);
     advance(event, ProcessingStatus.NORMALIZED);
     advance(event, ProcessingStatus.RESOLVED);
     try {
       reconciliation.snapshotComplete(
-          event.source(), event.data().sourceId(), event.id(), objectCount(event));
+          event.source(), event.data().sourceId(), event.id(), objectCount.getAsLong(), isPartial(event));
+    } catch (SnapshotRejectedException e) {
+      return quarantine(event, e.code(), e.getMessage());
     } catch (RuntimeException e) {
       return retry(event, "RECONCILIATION_TRIGGER_FAILED", e.getClass().getSimpleName());
     }
@@ -355,7 +365,8 @@ public final class EventProcessor {
       result =
           projection.project(
               new ProjectionRequest(
-                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands, markers));
+                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands, markers,
+                  PARTIAL.equals(event.data().payload().get(COMPLETENESS_KEY))));
     } catch (ProjectionException e) {
       return retry(event, e.code(), e.getMessage());
     } catch (IllegalArgumentException e) {
@@ -626,8 +637,16 @@ public final class EventProcessor {
     return new ProcessingResult(ProcessingStatus.QUARANTINED, code, null);
   }
 
-  private static long objectCount(CanonicalEvent event) {
-    return event.data().payload().get("objectCount") instanceof Number n ? n.longValue() : 0;
+  /** {@code objectCount} маркера; пусто, если поля нет, оно не целое число или отрицательное. */
+  private static OptionalLong objectCount(CanonicalEvent event) {
+    return event.data().payload().get("objectCount") instanceof Number n && (n instanceof Long || n instanceof Integer) && n.longValue() >= 0
+        ? OptionalLong.of(n.longValue())
+        : OptionalLong.empty();
+  }
+
+  /** Маркер заявил полноту {@code PARTIAL}; отсутствие поля означает {@code COMPLETE} (формат до UNLOCKER-279). */
+  private static boolean isPartial(CanonicalEvent event) {
+    return PARTIAL.equals(event.data().payload().get("completeness"));
   }
 
   /** Код системы по {@code source} события ({@code urn:corp:eam} → {@code EAM}); {@code null} для неизвестного. */

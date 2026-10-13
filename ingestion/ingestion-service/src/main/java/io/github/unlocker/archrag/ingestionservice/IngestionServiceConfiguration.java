@@ -55,8 +55,9 @@ public class IngestionServiceConfiguration {
   }
 
   @Bean
-  IdentityCandidates identityCandidates(DataSource dataSource, PostgresEventJournal migrated) {
-    return new PostgresIdentityCandidates(dataSource);
+  IdentityCandidates identityCandidates(
+      DataSource dataSource, PostgresEventJournal migrated, IngestionMetrics metrics) {
+    return new PostgresIdentityCandidates(dataSource, metrics::recordCandidatesOverflow);
   }
 
   @Bean
@@ -93,8 +94,13 @@ public class IngestionServiceConfiguration {
       RawPayloadStore rawStore,
       GraphProjector projector,
       IdentityMapping identity,
-      SourceConflicts conflicts) {
-    return new Reconciler(journal, rawStore, projector, Clock.systemUTC(), identity, conflicts);
+      SourceConflicts conflicts,
+      IdentityCandidates candidates,
+      ReconcileProperties props,
+      IngestionMetrics metrics) {
+    return new Reconciler(
+        journal, rawStore, projector, Clock.systemUTC(), identity, conflicts, candidates, props.maxMissingShare(),
+        metrics::recordReconcileSkipped);
   }
 
   @Bean

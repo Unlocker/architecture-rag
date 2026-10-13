@@ -124,6 +124,26 @@ class StoredEventReaderContractTest {
   }
 
   @Test
+  void partialSnapshotMarkerKeepsCompletenessAndLegacyMarkerIsComplete() {
+    var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 3L, true);
+    var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
+        marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
+        new RawPayloadRef("raw/x", "h"), T, T);
+    var stored = new StoredEvent(entry, marker.type(), marker.subject());
+
+    var partial = reader.toEvent(stored, InboxWriter.markerRawJson(marker).getBytes(StandardCharsets.UTF_8));
+    var legacy = reader.toEvent(stored,
+        ("{\"syncRunId\":\"run-1\",\"objectCount\":3,\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8));
+
+    assertThat(partial).isEqualTo(marker);
+    assertThat(partial.data().payload()).containsEntry("completeness", "PARTIAL");
+    assertThat(legacy.data().payload()).containsEntry("completeness", "COMPLETE");
+    assertThatThrownBy(() -> reader.toEvent(stored,
+        ("{\"syncRunId\":\"run-1\",\"objectCount\":3,\"completeness\":\"BOGUS\",\"updatedAt\":\"" + T + "\"}")
+            .getBytes(StandardCharsets.UTF_8))).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void snapshotMarkerWithoutObjectCountIsRejected() {
     var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 1L);
     var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
