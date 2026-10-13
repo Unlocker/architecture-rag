@@ -29,7 +29,7 @@
     <spring-ai.version>2.0.1</spring-ai.version>
     <testcontainers.version>2.0.5</testcontainers.version>
     <aws-sdk.version>2.55.11</aws-sdk.version>
-    <!-- Spring Boot BOM её не ведёт; версия та же, что приходит транзитивно через Spring Security. -->
+    <!-- Spring Boot BOM её не ведёт; версия та же, что приходит транзитивно через Spring Security. При апгрейде Boot сверять с версией из spring-security-oauth2-jose. -->
     <nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
