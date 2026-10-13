@@ -7,15 +7,15 @@
 | № | Сущность | Где хранится | Значения | Кто переводит |
 |---|---|---|---|---|
 | 1 | Событие журнала | `inbox_event.status` | 10 значений `ProcessingStatus` | `EventProcessor`, `JournalDispatcher`, `Reconciler` |
-| 2 | Запись DLQ | `dlq_entry` (+ `replayed_at`) | «открыта» / «переиграна» | `PostgresEventJournal.toDlq`; закрытия нет 🔴 |
-| 3 | Кандидат на совпадение | `identity_candidate.status` | `OPEN` | только значение по умолчанию 🔴 |
+| 2 | Запись DLQ | `dlq_entry` (+ `replayed_at`) | «открыта» / «переиграна» | `PostgresEventJournal.toDlq`; закрытия нет 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] |
+| 3 | Кандидат на совпадение | `identity_candidate.status` | `OPEN` | только значение по умолчанию 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] |
 | 4 | Конфликт источников | `source_conflict.status` | `OPEN`, `RESOLVED` | `PostgresSourceConflicts` |
 | 5 | Запись источника | `SourceRecord.active` | активна / tombstone | `GraphProjector` |
 | 6 | Канонический узел | `isCurrent`, `deletedAt` | текущий / архивный | `GraphProjector` |
 | 7 | Темпоральная связь | `validFrom`, `validTo` | открыта / закрыта | `GraphProjector` |
 | 8 | Отложенная связь | узел `PendingRelation` | отложена / достроена | `GraphProjector`, `PendingRelations` |
 | 9 | Прогон snapshot | checkpoint `<код>-snapshot` | `run:<id>` / `done:<id>` | `Poller` |
-| 10 | Прогон `SyncRun` в графе | `SyncRun.status` | только `RUNNING` | 🔴 дальше не переходит |
+| 10 | Прогон `SyncRun` в графе | `SyncRun.status` | только `RUNNING` | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] дальше не переходит |
 | 11 | Админская операция | `admin_audit.status` | `STARTED`, `SUCCEEDED`, `FAILED` | `AdminOperations` |
 
 ---
@@ -65,8 +65,8 @@ stateDiagram-v2
     RETRYING --> PROJECTED
     RETRYING --> QUARANTINED
     RETRYING --> IGNORED_OLD_VERSION
-    QUARANTINED --> RETRYING: 🔴 в коде не вызывается
-    PROJECTED --> SUPERSEDED: 🔴 в коде не вызывается
+    QUARANTINED --> RETRYING: 🟡 решение принято, UNLOCKER-276 п. 2, в коде не вызывается
+    PROJECTED --> SUPERSEDED: 🟡 решение принято, UNLOCKER-276 п. 2, в коде не вызывается
     PROJECTED --> [*]
     DUPLICATE --> [*]
     IGNORED_OLD_VERSION --> [*]
@@ -105,9 +105,9 @@ stateDiagram-v2
 
 ### 1.5. Пробелы автомата (🔴)
 
-- 🔴 **`SUPERSEDED` недостижим.** Кроме определения в enum и перечня в `FINISHED`, значение встречается лишь в списке статусов консоли (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:31`). Ни `EventProcessor`, ни `Reconciler`, ни `JournalDispatcher` в него не переводят. `docs/00-vision.md:385` и `docs/02-data-model.md:250` описывают переход `PROJECTED → SUPERSEDED`; смысл «вытеснено новой версией» вместо этого реализован через `IGNORED_OLD_VERSION` для самого *старого* события и вообще не помечает ранее спроецированную строку.
-- 🔴 **Выхода из `QUARANTINED` нет.** `canTransitionTo` разрешает `QUARANTINED → RETRYING` (`ProcessingStatus.java:38`), `docs/02-data-model.md:241` называет это «решением оператора», но админский REST (`AdminController.java:61-123`) не содержит операции возврата из карантина, а `JournalDispatcher` карантин не выбирает (`PostgresEventJournal.java:213-216`). Практически карантин терминален; «починка» — только `replay`, который создаёт *новую* строку `replay:*`, а карантинная строка остаётся (связано с R.3, `_reversa_sdd/database/data-dictionary.md:94`).
-- 🔴 **`RETRYING` без предела попыток.** `attempts` растёт, но порога перевода в `QUARANTINED` по числу попыток нет (`PostgresEventJournal.java:345`; `JournalDispatcher.java:111-121`). Событие с постоянным сбоем `GRAPH_CLIENT_ERROR` (не `Statement`/`Request`) будет повторяться бесконечно 🟡.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **`SUPERSEDED` недостижим.** Кроме определения в enum и перечня в `FINISHED`, значение встречается лишь в списке статусов консоли (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:31`). Ни `EventProcessor`, ни `Reconciler`, ни `JournalDispatcher` в него не переводят. `docs/00-vision.md:385` и `docs/02-data-model.md:250` описывают переход `PROJECTED → SUPERSEDED`; смысл «вытеснено новой версией» вместо этого реализован через `IGNORED_OLD_VERSION` для самого *старого* события и вообще не помечает ранее спроецированную строку.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **Выхода из `QUARANTINED` нет.** `canTransitionTo` разрешает `QUARANTINED → RETRYING` (`ProcessingStatus.java:38`), `docs/02-data-model.md:241` называет это «решением оператора», но админский REST (`AdminController.java:61-123`) не содержит операции возврата из карантина, а `JournalDispatcher` карантин не выбирает (`PostgresEventJournal.java:213-216`). Практически карантин терминален; «починка» — только `replay`, который создаёт *новую* строку `replay:*`, а карантинная строка остаётся (связано с R.3, `_reversa_sdd/database/data-dictionary.md:94`).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **`RETRYING` без предела попыток.** `attempts` растёт, но порога перевода в `QUARANTINED` по числу попыток нет (`PostgresEventJournal.java:345`; `JournalDispatcher.java:111-121`). Событие с постоянным сбоем `GRAPH_CLIENT_ERROR` (не `Statement`/`Request`) будет повторяться бесконечно 🟡.
 - 🟡 Строка `DUPLICATE` из `append` (повтор `eventId`) и статус `DUPLICATE` (повтор версии при другом `eventId`) — разные вещи с одним именем: первый возвращается вызывающему как исход вставки и в БД не пишется, второй сохраняется в `inbox_event.status`.
 
 ---
@@ -118,12 +118,12 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> Открыта: toDlq (QUARANTINED + INSERT)
     Открыта --> Открыта: повторный toDlq (ON CONFLICT DO NOTHING)
-    Открыта --> Переиграна: 🔴 replayed_at нигде не пишется
+    Открыта --> Переиграна: 🟡 решение принято, UNLOCKER-276 п. 2, replayed_at нигде не пишется
 ```
 
 - `toDlq` в одной транзакции переводит событие в `QUARANTINED` и вставляет строку; конфликт по частичному индексу `uq_dlq_entry_open (source, event_id) WHERE replayed_at IS NULL` молча пропускается (`PostgresEventJournal.java:132-160`; `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:48`) 🟢.
 - Инвариант «не больше одной необработанной записи на событие» защищает от дубля при повторном карантине (повторный `toDlq` из `QUARANTINED` возможен: `ProcessingStatus.java:27-29` разрешает переход в себя, `PostgresEventJournal.java:139` не проверяет текущий статус, `EventJournalIT.repeatedDlqKeepsSingleRecord:187-196` вызывает `toDlq` дважды подряд; `uq_dlq_entry_open` и `ON CONFLICT` защищают от последовательного дубля, при этом `error_code`/`error_reason` в `inbox_event` перезаписываются, а `dlq_entry` хранит первые значения) 🟢 `[Ревью R.7]`.
-- 🔴 `replayed_at` читается (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:158`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`), но не пишется: `UPDATE dlq_entry` в репозитории нет. Метрика «открытых записей DLQ» поэтому никогда не уменьшается после `replay` (ответ на вопрос R.3, `_reversa_sdd/database/data-dictionary.md:187-193`: это недоделка, ADR на такой выбор нет) 🔴.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `replayed_at` читается (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:158`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`), но не пишется: `UPDATE dlq_entry` в репозитории нет. Метрика «открытых записей DLQ» поэтому никогда не уменьшается после `replay` (ответ на вопрос R.3, `_reversa_sdd/database/data-dictionary.md:187-193`: это недоделка, ADR на такой выбор нет) 🔴.
 
 ---
 
@@ -133,14 +133,14 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> OPEN: record (DEFAULT 'OPEN')
     OPEN --> OPEN: повтор record обновляет matched, score, updated_at
-    OPEN --> [*]: 🔴 переходов в другое состояние в коде нет
+    OPEN --> [*]: 🟡 решение принято, UNLOCKER-276 п. 3, переходов в другое состояние в коде нет
 ```
 
 - Создание: `INSERT ... ON CONFLICT (...) DO UPDATE SET matched, score, updated_at`; `status` и `first_seen_at` при повторе не трогаются (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:54-61`) 🟢.
 - Поле `IdentityCandidate.status` — просто `String` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:14-22`), перечисления значений нет 🟢.
 - Кандидат не исчезает, когда признаки перестали совпадать: `forget` удаляет `identity_feature` записи, но не `identity_candidate` (`PostgresIdentityCandidates.java:105-120`) 🟡.
 - Кандидат не приводит к объединению: единственный путь к общему `gid` — approved crosswalk, который оператор загружает вручную (`CrosswalkService.java:35-64`), причём обратной связи «crosswalk подтвердил кандидата» нет, статус остаётся `OPEN` 🔴.
-- 🔴 `APPROVED`/`REJECTED`/`MERGED` в коде не определены; жизненный цикл кандидата не завершён (вопрос R.3 о нём остаётся открытым: решения владельца в `docs/adr/` нет, ADR 0019 говорит только «кандидаты порождают лишь запись»).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] `APPROVED`/`REJECTED`/`MERGED` в коде не определены; жизненный цикл кандидата не завершён (вопрос R.3 о нём остаётся открытым: решения владельца в `docs/adr/` нет, ADR 0019 говорит только «кандидаты порождают лишь запись»).
 
 ---
 
