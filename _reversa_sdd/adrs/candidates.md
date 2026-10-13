@@ -6,8 +6,8 @@
 |---|---|---|
 | К-1 | Версионирование и идемпотентность изменений | высокий |
 | К-2 | Хранилище утверждений и конфликтов источников в PostgreSQL | высокий |
-| К-3 | Отложенные связи и alias-ключи | средний |
-| К-4 | Какие связи темпоральны и как версия замещает связи | средний |
+| К-3 | Механизм отложенных связей (`PendingRelation`) и alias-ключ EAM | средний |
+| К-4 | Область замещения связей версией записи и нетемпоральные связи | средний |
 | К-5 | Reconcile: tombstone через журнал и ручной snapshot адаптера | высокий |
 | К-6 | Параметры candidate matching | средний |
 | К-7 | Один диспетчер журнала и `AdminLock` | средний |
@@ -37,20 +37,21 @@
 - **Затронутый код.** `ingestion/identity-resolution`, `ingestion/graph-projector`, `access/admin-console`.
 - **Пересечения с ADR.** 0008, 0019, 0030, 0031.
 
-## К-3. Отложенные связи и alias-ключи 🟡
+## К-3. Механизм отложенных связей (`PendingRelation`) и alias-ключ EAM 🟡
 
-- **Суть решения в коде.** Нормализатор не создаёт фиктивных узлов: связь с неизвестным концом превращается в `UnresolvedReference` → `DeferRelation`; проектор хранит её узлом `PendingRelation` (ключ — constraint) и достраивает в транзакции проекции конечной точки. Отложенные связи записи заменяются целиком при каждой применённой проекции и удаляются tombstone. Для ссылок, ключ которых в источнике неизвестен, действуют alias-ключи: `SourceKey(SCM, REPOSITORY_URL, <нормализованный url>)` и `SourceKey(EAM, IT_SYSTEM_CODE, <eamCode>)`; конец-псевдоним подменяется реальным ключом записи. Reconciliation отложенные связи не лечит; срока годности у них нет.
-- **Откуда.** `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:13-102`; `EventProcessor.java:77-79, 221-223`; `GraphProjector.java:62-67, 73-76, 92-95, 327-337, 362-415`; `PendingRelations.java`. Коммиты `51d88d3` (UNLOCKER-214), `31bfe03`, `61bbe5c` (UNLOCKER-255), `8fd4ae1` (UNLOCKER-250). ADR 0029 использует alias репозитория, но не вводит механизм.
-- **Почему важно.** Допущение об однопоточности (`JournalDispatcher` + один экземпляр + `AdminLock`) прописано только в Javadoc: ради него отсутствует повторная проверка после записи отложенной связи. При масштабировании на второй экземпляр правило сломается.
-- **Альтернативы.** создавать stub-узел для неизвестного конца (отвергнуто: ловушка с «чужими» `gid` — `EventProcessor.java:589-597`); возвращать `RETRYING` до прихода конца (так было до E1.14, см. `docs/02-data-model.md:273`).
+- **Уже покрыто ADR (не кандидат).** ADR 0029, п. 7: связь `DEPLOYED_FROM` на неизвестный репозиторий откладывается на alias `(SCM, REPOSITORY_URL, url)` и достраивается, когда SCM пришлёт репозиторий с этим URL; ADR 0030/0031 используют отложенную `DECOMPOSED_INTO`/`USES_SOLUTION` в проверках.
+- **Чего в реестре нет.** (а) Сам механизм: нормализатор не создаёт фиктивных узлов, неизвестный конец превращается в `UnresolvedReference` → `DeferRelation`; проектор хранит связь узлом `PendingRelation` (ключ закреплён constraint), достраивает её в транзакции проекции конечной точки, заменяет отложенные связи записи целиком при каждой применённой проекции и удаляет при tombstone. (б) Второй alias-ключ `SourceKey(EAM, IT_SYSTEM_CODE, <eamCode>)` ↔ запись EAM `ITSystem` с тем же `eamCode` (ключ `ITSystem` в EAM — целочисленный `id`, а `eam_id` — свойство; на ключ `(EAM, IT_SYSTEM, <eam_id>)` ссылаться нельзя). (в) Границы: срока годности у отложенной связи нет, reconciliation её не лечит, повторной проверки после записи нет (допущение одного экземпляра, см. К-7).
+- **Откуда.** `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:13-102`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:77-79, 221-223`; `GraphProjector.java:62-67, 73-76, 92-95, 327-337, 362-415`; `ScmMapper.java:68-82`. Коммиты `51d88d3` (UNLOCKER-214), `31bfe03`, `61bbe5c` (UNLOCKER-255).
+- **Почему важно.** Допущение об однопоточности прописано только в Javadoc; при втором экземпляре сервиса правило молча сломается.
+- **Альтернативы.** создавать stub-узел для неизвестного конца (отвергнуто: `gid` чужого конца не создаётся, `EventProcessor.java:589-597`); возвращать `RETRYING` до прихода конца (так было до E1.14, см. `docs/02-data-model.md:273`).
 - **Затронутый код.** `ingestion/normalizer`, `ingestion/graph-projector`, `contracts/canonical-model` (`DeferRelation`).
-- **Пересечения с ADR.** 0003, 0029.
+- **Пересечения с ADR.** 0003, 0029, 0030, 0031.
 
-## К-4. Какие связи темпоральны и как версия замещает связи 🟡
+## К-4. Область замещения связей версией записи и нетемпоральные связи 🟡
 
-- **Суть решения в коде.** Темпоральны 10 из 15 типов `RelationType`; нетемпоральны `PART_OF`, `HOSTED_ON` и служебные `ASSERTS`, `OWNS_RECORD`, `PROCESSED`. При применении версии записи открытые связи *типов, которые версия утверждает или откладывает*, от этой записи, но отсутствующие в версии, закрываются `validTo = max(validFrom, eventTime)`; типы, которых в версии нет, не трогаются; tombstone и повтор версии ничего не замещают. Идентичность связи — тройка `(from, to, identityProps)`, сейчас единственное свойство идентичности — `DEPLOYED_FROM.commit`.
-- **Откуда.** `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:13-27, 48-55`; `GraphProjector.java:69-71, 350-352, 611-645`. Коммиты `5b3ba6c` (UNLOCKER-217), `0707d21` → `95594a6` (убрали `validTo` с `HOSTED_ON`), `8fd4ae1`.
-- **Почему важно.** ADR 0028 говорит «по механизму UNLOCKER-217», но сам механизм и осознанная нетемпоральность `PART_OF`/`HOSTED_ON` нигде не записаны. Известный риск: `PARTIAL`-запись с неполным списком однотипных связей закроет остальные ([`../state-machines.md`](../state-machines.md), §7).
+- **Уже покрыто ADR (не кандидат).** ADR 0028, п. 2: новая версия записи замещает свои связи («механизм UNLOCKER-217», открытая связь, не подтверждённая версией, закрывается), tombstone закрывает рёбра через `validTo`; ADR 0029, п. 5: свойство `commit` входит в identity `DEPLOYED_FROM`, смена commit даёт новое ребро.
+- **Чего в реестре нет.** (а) Замещение *ограничено типами, которые версия утверждает или откладывает*: тип, которого в версии нет вообще, не трогается (иначе отсутствие поля означало бы удаление), tombstone и повтор версии ничего не замещают. (б) Идентичность связи обобщена как тройка `(from, to, identityProps)` через `RelationType.identityProperties()`, а не пара концов. (в) `PART_OF` и `HOSTED_ON` нетемпоральны **намеренно** (`validTo` на `HOSTED_ON` был добавлен и убран, `0707d21` → `95594a6`); ADR 0028 говорит только о четырёх структурных типах. (г) Известное взаимодействие с `PARTIAL`: запись с неполным списком однотипных связей закроет остальные связи этого типа, потому что полнота нормализатором и проектором не учитывается ([`../state-machines.md`](../state-machines.md), §7).
+- **Откуда.** `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:13-27, 48-55`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:69-71, 350-352, 611-645`.
 - **Альтернативы.** замещать все типы связей записи (отвергнуто: отсутствующий тип означает «не передано», а не «удалено»); хранить историю отдельными узлами.
 - **Затронутый код.** `contracts/canonical-model`, `ingestion/graph-projector`, `access/graph-query-core`.
 - **Пересечения с ADR.** 0020, 0028, 0029.
@@ -59,7 +60,7 @@
 
 - **Суть решения в коде.** (а) Каждый tombstone `Reconciler` до записи в граф фиксируется событием `architecture.asset.deleted.v1` с `eventId = reconcile:<syncRunId>:<type>/<id>` и raw в S3, чтобы replay и rebuild воспроизводили удаления; повтор доводит строку до конечного статуса. (б) Missing set считается по журналу (а не по графу): объект, по которому после начала прогона пришло любое событие, не удаляется; неполный прогон (меньше событий, чем `objectCount`) не удаляет ничего. (в) `POST /admin/reconcile/{source}` не пересчитывает старый missing set, а запускает *новый полный snapshot* в adapter-сервисе (`/control/snapshot`).
 - **Откуда.** `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/Reconciler.java:28-57, 100-194`; `AdminController.java:94-115`; `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54-66`. Коммиты `24a0b0b`, `14a6e1f` → `9656ce5`, `53474af` (UNLOCKER-169/170).
-- **Почему важно.** ADR 0020 фиксирует «удаляем только после `snapshot-complete`», но не воспроизводимость удалений из журнала и не то, что ручной reconcile — это новый snapshot. Ручной вызов зависит от неаутентифицированного `/control/snapshot` ([`../permissions.md`](../permissions.md), §7 🔴).
+- **Почему важно.** ADR 0020 фиксирует «удаляем только после `snapshot-complete`», но не воспроизводимость удалений из журнала и не то, что ручной reconcile — это новый snapshot. Ручной вызов зависит от неаутентифицированного `/control/snapshot` (известное ограничение, `docs/03-interfaces.md:560`; [`../permissions.md`](../permissions.md), §7).
 - **Альтернативы.** повторять сохранённый missing set (был сделан и заменён); физическое удаление (ADR 0020 отклоняет).
 - **Затронутый код.** `ingestion/graph-projector`, `ingestion/ingestion-service`, `adapters/adapter-core`.
 - **Пересечения с ADR.** 0013, 0020.

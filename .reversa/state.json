@@ -115,8 +115,8 @@
       ],
       "state_machines": 11,
       "adr_candidates": 10,
-      "gaps_red": 9,
-      "gaps_yellow": 20,
+      "gaps_red": 6,
+      "gaps_yellow": 22,
       "files": [
         "_reversa_sdd/domain.md",
         "_reversa_sdd/state-machines.md",

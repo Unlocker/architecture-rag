@@ -30,11 +30,11 @@
 | Демо-стенд на Compose; раздельные сети, Docker secrets | `b7f401d` UNLOCKER-196; `59c4fcb` UNLOCKER-197; `9140698` UNLOCKER-199 | [0021](../../docs/adr/0021-compose-demo-stand.md) | 🟢 |
 | Вне PoC: semantic retrieval и др. | `docs/00-vision.md` | [0022](../../docs/adr/0022-out-of-poc-scope.md) | 🟢 |
 | Ветвление `develop → epic → feature` | `docs/01-development-order.md` | [0023](../../docs/adr/0023-branching-process.md) | 🟢 |
-| `sourceId` без префикса системы | `d96c699` UNLOCKER-247; `ScmMapper.java:60-64` | [0024](../../docs/adr/0024-open-source-id-format.md) | 🟢 |
+| `sourceId` без префикса системы | `d96c699` UNLOCKER-247; `ScmMapper.java:68-71` | [0024](../../docs/adr/0024-open-source-id-format.md) | 🟢 |
 | Индекс `deployment_env` удалён | `d96c699`; `Neo4jSchema` без этого индекса | [0025](../../docs/adr/0025-open-deployment-env-index.md) | 🟢 |
 | Консоль — read-only, loopback; `azp` allow-list | `0f9579e`, `cef6def`, `ea33d7e` (azp), `8fd0e65`, `bf780a2` | [0026](../../docs/adr/0026-admin-console-readonly-loopback.md) | 🟢 |
 | Фронтенд React + TypeScript + Webpack | `265754f` UNLOCKER-235; `0ea8ec2`, `63924fb` UNLOCKER-253 | [0027](../../docs/adr/0027-frontend-react-typescript-webpack.md) | 🟢 |
-| Структурные связи темпоральны | `5b3ba6c` UNLOCKER-217; `38b5d79` UNLOCKER-218 | [0028](../../docs/adr/0028-structural-relations-temporal.md) | 🟡 механика замещения (UNLOCKER-217) только упомянута — К-4 |
+| Структурные связи темпоральны | `5b3ba6c` UNLOCKER-217; `38b5d79` UNLOCKER-218 | [0028](../../docs/adr/0028-structural-relations-temporal.md) | 🟡 область замещения (по типам) и нетемпоральные связи в ADR не описаны — К-4 |
 | Helm chart: система, репозиторий, commit; `DEPLOYED_FROM {commit}` | `2ba0b18`, `8fd4ae1` UNLOCKER-250; `0864fc7` UNLOCKER-252 | [0029](../../docs/adr/0029-helm-chart-system-repo-commit.md) | 🟢 |
 | Конфликт «система EAM из chart ↔ система сервиса» | `ab61b2c` UNLOCKER-254 | [0030](../../docs/adr/0030-deployment-system-conflict.md) | 🟢 |
 | Инвариант платформы ИТ-системы | `bc4043d`, `5e2e349`, `3e90c3e` UNLOCKER-259 | [0031](../../docs/adr/0031-it-system-platform-invariant.md) | 🟢 |
@@ -65,7 +65,3 @@ ADR: «High-water mark двигается после успешной проек
 ### 3.3. `docs/02-data-model.md` и состояния
 
 `docs/02-data-model.md:241-273` и `docs/00-vision.md:383-386` описывают `PROJECTED → SUPERSEDED` и выход `QUARANTINED → RETRYING` «решением оператора»; в коде оба перехода разрешены в `canTransitionTo`, но **никем не выполняются** ([`../state-machines.md`](../state-machines.md), §1.5) 🔴. `docs/02-data-model.md:273` называет `UNRESOLVED_ENDPOINT` типичной причиной `RETRYING` («конец связи ещё не пришёл»); после E1.14 штатный случай — `DeferRelation` без повтора, а `UNRESOLVED_ENDPOINT` остаётся для связи, чей конец известен нормализатору, но не имеет `gid` (`EventProcessor.java:221-223, 589-597`) 🟡.
-
-### 3.4. Brief агента и ADR 0017
-
-Бриф разработчика называет `spring.ai.mcp.server.protocol=STREAMABLE`; в репозитории `STATELESS` по ADR 0017. Расхождения кода с ADR нет; расхождение — между брифом агента и ADR (решает архитектор) 🟡.

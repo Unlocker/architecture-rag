@@ -19,7 +19,7 @@
 | `architecture.read` | MCP-клиент | `tools/call` всех шести tools | `ARCHRAG_MCP_RESOURCE_URI` (маппер `mcp-audience` на клиенте `archrag-demo`) |
 | `architecture.admin` | оператор, консоль | `/admin/**` ingestion; `/api/**` консоли | `ARCHRAG_ADMIN_RESOURCE_URI` (маппер на самом scope), у консоли дополнительно `ARCHRAG_CONSOLE_RESOURCE_URI` |
 
-`archrag-realm.json:5-20, 62-72, 91-102` 🟢. Audience проверяется каждым сервисом (`spring.security.oauth2.resourceserver.jwt.audiences`): `mcp-server` — `archrag.mcp.security.resource-uri` (`access/mcp-server/src/main/resources/application.yml:12-17`), `admin-console` — `archrag.console.resource-uri` (`access/admin-console/src/main/resources/application.yml:15-19`), ingestion — `ARCHRAG_ADMIN_RESOURCE_URI` (`ingestion/ingestion-service/src/main/resources/application.yml:17`) 🟢.
+`archrag-realm.json:5-20, 62-72, 91-102` 🟢. Audience проверяется каждым сервисом (`spring.security.oauth2.resourceserver.jwt.audiences`): `mcp-server` — `archrag.mcp.security.resource-uri` (`access/mcp-server/src/main/resources/application.yml:18-20, 25`), `admin-console` — `archrag.console.resource-uri` (`access/admin-console/src/main/resources/application.yml:15-19`), ingestion — `ARCHRAG_ADMIN_RESOURCE_URI` (`ingestion/ingestion-service/src/main/resources/application.yml:17`) 🟢.
 
 ## 3. MCP-сервер (`access/mcp-server`)
 
@@ -39,10 +39,10 @@
 ### 3.2. Как проверяется
 
 - Цепочка Spring Security: без сессий и CSRF; `/actuator/health/**` и `/.well-known/oauth-protected-resource/**` публичны, всё остальное `authenticated()` (`access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java:37-47`) 🟢.
-- Фильтр `ToolScopeFilter` стоит после `AuthorizationFilter` и **читает тело `POST /mcp`** (лимит `max-request-bytes`, 1 МБ) (`McpSecurityConfiguration.java:61`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:60-80`) 🟢. Для `tools/call` берётся имя из `params.name`; нет записи в `tool-scopes` → отказ `DENIED_UNKNOWN_TOOL`; нет `SCOPE_<scope>` → `DENIED_SCOPE` и `WWW-Authenticate: Bearer error="insufficient_scope", scope="…"` (`ToolScopeFilter.java:82-95, 124-130`) 🟢. То есть **новый tool без записи в `tool-scopes` недоступен** (fail-closed, ловушка 13).
+- Фильтр `ToolScopeFilter` стоит после `AuthorizationFilter` и **читает тело `POST /mcp`** (лимит `max-request-bytes`, 1 МБ) (`McpSecurityConfiguration.java:61`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:60-80`) 🟢. Для `tools/call` берётся имя из `params.name`; нет записи в `tool-scopes` → отказ `DENIED_UNKNOWN_TOOL`; нет `SCOPE_<scope>` → `DENIED_SCOPE` и `WWW-Authenticate: Bearer error="insufficient_scope", scope="…"` (`ToolScopeFilter.java:82-95, 124-130`) 🟢. То есть **новый tool без записи в `tool-scopes` недоступен** (fail-closed).
 - 🟡 Скоуп проверяется **только** для метода `tools/call`: `initialize`, `tools/list` и прочие методы требуют лишь валидный токен с audience MCP (`ToolScopeFilter.java:82-95`). Любой держатель такого токена видит список и описания tools.
 - Метаданные ресурса (RFC 9728): `resource`, `authorization_servers = issuer`, `scopes_supported` собирается из значений `tool-scopes` (`McpSecurityConfiguration.java:33, 48-60`) 🟢.
-- Транспорт — Streamable HTTP в режиме `STATELESS` (без сессий) по ADR 0017 (`access/mcp-server/src/main/resources/application.yml:7-12`) 🟢. Бриф агента называет `STREAMABLE`; фактическое решение — `STATELESS` и оно зафиксировано ADR 0017 (коммит `fd2fe4f`), расхождения с ADR нет.
+- Транспорт — Streamable HTTP в режиме `STATELESS` (без сессий) по ADR 0017 (`access/mcp-server/src/main/resources/application.yml:7-12`) 🟢. Режим зафиксирован ADR 0017 (уточнение — коммит `fd2fe4f`); код ему соответствует.
 
 ### 3.3. Read-only гарантия (ADR 0005)
 
@@ -55,7 +55,7 @@
 | Проверка плана | `EXPLAIN` шаблона обязан дать `READ_ONLY` | `GraphQueryExecutor.java:27-28, 115-118` 🟢 |
 | Сеть | `mcp-server` в сетях `edge`, `graph`, `observability`, но **не** в `backend`: PostgreSQL недостижим | `docker-compose.yml:240` 🟢 |
 
-🔴 **Сама учётка `archrag_reader` писать может.** `init-reader.sh` делает только `CREATE USER … IF NOT EXISTS` без `DENY`/ролей (`platform/docker/neo4j/init-reader.sh:14`), а Community не знает привилегий; запрет записи держится приложением (ADR 0005, перенос в production gap list). Это согласуется с R.3 (`_reversa_sdd/database/data-dictionary.md:141`).
+🟡 **Сама учётка `archrag_reader` писать может** (известное ограничение: ADR 0005, перенос в production gap list; наследовано из R.3, не новое расхождение). `init-reader.sh` делает только `CREATE USER … IF NOT EXISTS` без `DENY`/ролей (`platform/docker/neo4j/init-reader.sh:14`), а Community не знает привилегий; запрет записи держится приложением Это согласуется с R.3 (`_reversa_sdd/database/data-dictionary.md:141`).
 
 ### 3.4. Аудит вызовов (UNLOCKER-180)
 
@@ -103,7 +103,7 @@
 | Хранилище | Учётка | Права | Кто использует |
 |---|---|---|---|
 | Neo4j | `neo4j` (writer) | полные | `ingestion` (проектор), `neo4j-init` |
-| Neo4j | `archrag_reader` | на уровне СУБД не ограничена 🔴; запись исключена приложением | `mcp-server`, `admin-console` |
+| Neo4j | `archrag_reader` | на уровне СУБД не ограничена 🟡 (ADR 0005); запись исключена приложением | `mcp-server`, `admin-console` |
 | PostgreSQL | владелец схемы (Flyway) | полные | `ingestion`, адаптеры (inbox) |
 | PostgreSQL | `archrag_console_ro` | `SELECT` на 6 таблиц | `admin-console` |
 | S3 (SeaweedFS) | ключи записи | запись/чтение raw | адаптеры, `ingestion` |
@@ -114,14 +114,14 @@
 
 - Webhook: `POST /webhook` адаптера проверяет `X-Archrag-Timestamp` и `X-Archrag-Signature` = `HMAC-SHA256(secret, timestamp + "." + body)` в окне `replayWindow`; невалидно → 401. Тело уведомления **не** содержит данных: адаптер делает `fetchById` у источника и кладёт в inbox то, что получил от него (`contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:16, 47-90`; `WebhookHandler.java:17-22, 56-65`) 🟢.
 - Через reverse-proxy публикуются `/webhooks/{eam,scm,cmdb,deploymap}` (`platform/docker/proxy/nginx.conf:43-61`) 🟢.
-- 🔴 `POST /control/snapshot` адаптера **не аутентифицируется**: проверяется только метод (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54-66`). Защита — только сегментация: nginx публикует точный путь `/webhooks/*`, а `/control/*` достижим из сети `backend`, где живут `ingestion`, `admin-console`, `postgres`, `keycloak`. Запуск snapshot сам по себе ничего не удаляет, но запускает `Reconciler` на маркере; любой сервис `backend` может его вызвать.
+- 🟡 `POST /control/snapshot` адаптера **не аутентифицируется**: проверяется только метод (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54-71`). Это документированное ограничение (`docs/03-interfaces.md:33, 368, 560, 567`; комментарий `platform/docker/proxy/nginx.conf:42`): защита только сетевая. Адаптеры состоят в сетях `edge` и `backend` (`platform/docker/docker-compose.yml:28-30, 320`), поэтому порт `:8080/control/snapshot` достижим из `edge` (`mcp-server`, заглушки, Keycloak, reverse-proxy, который, однако, публикует только точные пути `/webhooks/*`) и из `backend` (`ingestion`, `admin-console`, `postgres`, `keycloak`). Запуск snapshot сам по себе ничего не удаляет, но запускает `Reconciler` на маркере; любой сервис этих сетей может его вызвать.
 
 ## 8. Сводная матрица «субъект × ресурс»
 
 | Субъект \ Ресурс | MCP tools | Admin REST | Консоль `/api` | Neo4j | PostgreSQL | S3 |
 |---|---|---|---|---|---|---|
 | Агент (`archrag-demo`, `read`) | вызов | — | — | — | — | — |
-| Оператор (`archrag-demo`, `admin`) | вызов (если и `read`) | все операции | `/api` доступен по scope, но `azp` консоли — другой клиент | — | — | — |
+| Оператор (`archrag-demo`, `admin`) | вызов (если и `read`) | все операции | `/api` — отказ по audience (токен `archrag-demo` не несёт audience консоли) | — | — | — |
 | Пользователь консоли (`archrag-admin-console`, `admin`) | — | 401 (`azp` не в списке) | чтение | — (косвенно через reader) | — (косвенно `console_ro`) | — |
 | `mcp-server` | — | — | — | read (учётка `archrag_reader`) | нет доступа | нет |
 | `admin-console` | — | — | — | read | `SELECT` 6 таблиц | нет |

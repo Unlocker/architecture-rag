@@ -159,7 +159,7 @@ stateDiagram-v2
 - Закрытие: `UPDATE ... SET status='RESOLVED'` (`PostgresSourceConflicts.java:61-66`) в случаях: значения сравнялись; запись сняла утверждение (`retract`); у `RELATION` пуст `master`; запись пришла без свойства/связи (`SourceConflicts.java:30-54`) 🟢.
 - Строка никогда не удаляется (ADR 0020 по духу; прямой нормы про `source_conflict` в ADR нет) 🟢.
 - Условие конфликта: у свойства есть утверждение авторитетной записи и утверждение неавторитетной с другим значением (точное сравнение строк) (`PostgresSourceConflicts.java:44-47`; Javadoc `SourceConflicts.java:10-18`) 🟢. Значение узла от конфликта не зависит: пишет только авторитетный источник (`GraphProjector.java:422-432`).
-- Вручную конфликт не закрывается: ни в консоли (только `GET`), ни в admin REST операции «resolve» нет; `MANUAL` в `AuthorityMatrix` никогда не авторитетен, ручное решение отложено «на E3» (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:14-22`) 🔴 по отношению к фразе видения «конфликт требует решения».
+- Вручную конфликт не закрывается: ни в консоли (только `GET`), ни в admin REST операции «resolve» нет; `MANUAL` в `AuthorityMatrix` никогда не авторитетен, ручное решение отложено «на E3» (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:14-22`). Видение предусматривает ручное решение как отдельное утверждение (`docs/00-vision.md:399`), `docs/02-data-model.md:360` прямо пишет «ручных решений нет»: это документированная отложенная работа 🟡, не расхождение.
 - 🟡 Конфликты `RELATION` не обновляют маркер `ASSERTS.conflicts`, если проверка вызвана событием второй стороны (ограничения 1 в ADR 0030 и 0031): `source_conflict` обновляется сразу, граф — со следующим событием.
 
 ---
@@ -250,7 +250,7 @@ stateDiagram-v2
 
 - Курсор `<код>-poller` сдвигается только после успешного `append` всей страницы (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:22-25, 136`); пустой checkpoint означает полный snapshot (`Poller.java:93-94`) 🟢.
 - Прерванный snapshot продолжается под тем же `syncRunId` (`run:<id>`); маркер ставится только после последней страницы и подтверждения источника `snapshotComplete` (`Poller.java:147-171, 180-186`); если источник закончил без `snapshot-complete`, бросается `IllegalStateException` (`Poller.java:164-167`) 🟢.
-- Удаления выполняются *отдельно*, в проекторе: `Reconciler` берёт множество объектов прогона из журнала и сверяет `objectCount` маркера; меньше событий, чем заявлено, — `IllegalStateException`, ничего не удаляется (`Reconciler.java:105-108`) 🟢. Это и есть «полный snapshot» из ловушки 9.
+- Удаления выполняются *отдельно*, в проекторе: `Reconciler` берёт множество объектов прогона из журнала и сверяет `objectCount` маркера; меньше событий, чем заявлено, — `IllegalStateException`, ничего не удаляется (`Reconciler.java:105-108`) 🟢. Удаление на середине загрузки невозможно: без маркера `snapshot-complete` missing set не считается.
 
 ---
 

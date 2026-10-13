@@ -58,8 +58,8 @@
 
 ### 2.4. Как матрица применяется (поведение, не декларация)
 
-1. **Свойства.** Проектор пишет свойство узла, только если источник события авторитетен для `(label, property)`; остальные пропускает и возвращает в `ProjectionResult.skippedProperties` (`GraphProjector.java:422-432`) 🟢. `null` в свойства не попадает (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/NodeProperties.java:16, 34`): неполная запись не затирает известное (ловушка 5) 🟢.
-2. **Связи.** Связь пишется, только если *утверждающая запись* (`assertedBy`) авторитетна для её типа; иначе пропускается и попадает в `skippedRelations` (`GraphProjector.java:559-563`) 🟢. Утверждающая запись — сама запись события (`CommandSink.relation`, `self`) (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:62-63`) 🟢. Пример: `DECOMPOSED_INTO` идёт от `ITSystem` к `Service`, но утверждает её запись `Service` из SCM (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/ScmMapper.java:65-85`) 🟢.
+1. **Свойства.** Проектор пишет свойство узла, только если источник события авторитетен для `(label, property)`; остальные пропускает и возвращает в `ProjectionResult.skippedProperties` (`GraphProjector.java:422-432`) 🟢. `null` в свойства не попадает (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/NodeProperties.java:16, 34`): неполная запись не затирает известное (отдельной семантики «удалить поле» у источника нет) 🟢.
+2. **Связи.** Связь пишется, только если *утверждающая запись* (`assertedBy`) авторитетна для её типа; иначе пропускается и попадает в `skippedRelations` (`GraphProjector.java:559-563`) 🟢. Утверждающая запись — сама запись события (`CommandSink.relation`, `self`) (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:62-63`) 🟢. Пример: `DECOMPOSED_INTO` идёт от `ITSystem` к `Service`, но утверждает её запись `Service` из SCM (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/ScmMapper.java:68-82`) 🟢.
 3. **Узел.** `MASTER` у ребра `ASSERTS` — результат `isAuthoritative(label, source)`; неавторитетная запись получает `SUPPLEMENTARY` (`GraphProjector.java:422, 441`) и не удерживает узел живым и не воскрешает его (см. [`state-machines.md`](state-machines.md), §6) 🟢.
 4. **Расхождение значений.** Неавторитетное значение с другим текстом порождает `source_conflict`, но не заменяет canonical-значение (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:44-47`) 🟢. Сравниваются *утверждения всех записей `gid`* в PostgreSQL, а не состояние графа, поэтому результат не зависит от порядка прихода мастера и неавторитетного источника (Javadoc `SourceConflicts.java:10-18`) 🟢.
 5. **Конфликты связей** (`kind = RELATION`) — отдельные проверки двух инвариантов, см. §6.
@@ -76,7 +76,7 @@
 
 - `gid` для `SourceKey` создаётся один раз: `INSERT ... ON CONFLICT DO NOTHING` + чтение, гонка сходится к одному значению; rebuild и повтор возвращают тот же `gid` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityMapping.java:20-28, 46`; `IdentityMapping.java:11-13`) 🟢.
 - `resolve` вызывается **до** транзакции Neo4j и только для ключа самой записи (`EventProcessor.java:587-588`); `gid` чужого конца связи не создаётся: нет mapping — `ProjectionException(UNRESOLVED_ENDPOINT)` → `RETRYING` (`EventProcessor.java:589-597`) 🟢. Это защита от фиктивных узлов.
-- Формат `sourceId` — ключ источника без префикса системы (ADR 0024). Системе EAM ключ `ITSystem` — целочисленный `id`; `eam_id` — свойство `eamCode`, а не ключ; на ключ `(EAM, IT_SYSTEM, <systemCode>)` ссылаться нельзя, он живёт как alias (`ScmMapper.java:60-64`; `GraphProjector.java:92-95`) 🟢.
+- Формат `sourceId` — ключ источника без префикса системы (ADR 0024). Системе EAM ключ `ITSystem` — целочисленный `id`; `eam_id` — свойство `eamCode`, а не ключ; на ключ `(EAM, IT_SYSTEM, <systemCode>)` ссылаться нельзя, он живёт как alias (`ScmMapper.java:68-71`; `GraphProjector.java:92-95`) 🟢.
 
 ### 3.2. Approved crosswalk
 
@@ -97,9 +97,9 @@
 - Tombstone записи удаляет её признаки (`forget`), но не уже созданных кандидатов (`EventProcessor.java:270-274`; [`state-machines.md`](state-machines.md), §3) 🟡.
 - 🔴 Жизненный цикл кандидата не завершён: статус всегда `OPEN` (подробно — [`state-machines.md`](state-machines.md), §3).
 
-### 3.4. Порядок побочных эффектов (ловушка 7)
+### 3.4. Порядок побочных эффектов
 
-В `upsert` вне транзакции Neo4j и **до** неё выполняются: `resolveGids` → `recordCandidates` (PostgreSQL) → `ignoreIfOlderOnRetry` → `assertProperties`/`assertSystemRelation`/`assertSystemPlatform` (PostgreSQL) → только затем `projection.project` (`EventProcessor.java:225-251, 346-358`) 🟢. Внутри `executeWrite` нет записей в PostgreSQL/S3, что защищает от повторов транзиентных ошибок драйвера (`GraphProjector.java:38-41`) 🟢. Цена: после падения между PostgreSQL-шагами и записью в граф повторное событие заново заменяет признаки и утверждения (операции идемпотентны, `EventProcessor.java:234, 247`).
+В `upsert` вне транзакции Neo4j и **до** неё выполняются: `resolveGids` → `recordCandidates` (PostgreSQL) → `ignoreIfOlderOnRetry` → `assertProperties`/`assertSystemRelation`/`assertSystemPlatform` (PostgreSQL) → только затем `projection.project` (`EventProcessor.java:225-251, 346-358`) 🟢. Внутри `executeWrite` нет записей в PostgreSQL/S3: функция транзакции повторяется драйвером при транзиентных ошибках, и побочные эффекты вне Neo4j повторились бы (`GraphProjector.java:38-41`) 🟢. Цена: после падения между PostgreSQL-шагами и записью в граф повторное событие заново заменяет признаки и утверждения (операции идемпотентны, `EventProcessor.java:234, 247`).
 
 ---
 
@@ -141,7 +141,7 @@
 
 - Допустимые концы и тип связи задаёт `RelationType`: например, `RUNS_ON: Deployment → ComputeInstance | Namespace`, `OWNED_BY: ITSystem | Service → Team` (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:13-27, 72-75`) 🟢. Нарушение → `IllegalArgumentException` → `QUARANTINED/INVALID_COMMANDS` (`EventProcessor.java:361-362`) 🟢.
 - Время — `Instant`, в Neo4j `datetime` UTC (`NodeProperties.utc`); `firstSeenAt` только уменьшается, `lastSeenAt` только растёт (`GraphProjector.java:458-459`) 🟢; `firstSeenAt ≤ lastSeenAt`, `isCurrent == (deletedAt == null)` держит код, не БД (`_reversa_sdd/database/business-rules.md`, §3).
-- Значения свойств: `String`, `Boolean`, `Long`, `Integer`, конечный `Double`, `Instant` и их списки; `null` и `NaN` отклоняются (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java:37-70`) 🟢.
+- Значения свойств: `String`, `Boolean`, `Long`, `Integer`, конечный `Double`, `Instant` и их списки; `null` и `NaN` отклоняются (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java:49-78`) 🟢.
 - Метки подтипов, типы связей и идентичные свойства связи подставляются в Cypher только из `enum` (`GraphProjector.java:78-79, 442-446`) 🟢.
 
 ### 6.2. Иерархия EAM и инвариант IT System ↔ Platform (ADR 0031)
@@ -164,7 +164,7 @@
 ### 6.4. Развёртывание привязано к репозиторию и commit (ADR 0029)
 
 - `DEPLOYED_FROM {commit}` темпоральна, `commit` входит в идентичность связи (`RelationType.java:20`; `GraphProjector.java:69-71, 580-584`) 🟢.
-- Alias-ключи разрешают ссылки «по URL репозитория» и «по коду системы»: `SourceKey(SCM, REPOSITORY_URL, url)` достраивается записью SCM `REPOSITORY` с тем же `url` (URL нормализуется `GitUrls`), `SourceKey(EAM, IT_SYSTEM_CODE, code)` — записью EAM `ITSystem` с тем же `eamCode` (`GraphProjector.java:73-76, 92-95`; `ScmMapper.java:100-103`) 🟢.
+- Alias-ключи разрешают ссылки «по URL репозитория» и «по коду системы»: `SourceKey(SCM, REPOSITORY_URL, url)` достраивается записью SCM `REPOSITORY` с тем же `url` (URL нормализуется `GitUrls`), `SourceKey(EAM, IT_SYSTEM_CODE, code)` — записью EAM `ITSystem` с тем же `eamCode` (`GraphProjector.java:73-76, 92-95`; `ScmMapper.java:99-112`) 🟢.
 
 ### 6.5. Валидация и карантин на входе
 
@@ -173,12 +173,12 @@
 | `source` не `urn:corp:{eam,scm,cmdb,deploymap}` | `UNKNOWN_SOURCE` | `QUARANTINED` (`EventProcessor.java:203-205, 633-645`) |
 | тип события не в `{asset.upserted, asset.deleted, sync.snapshot-complete}` | `UNSUPPORTED_EVENT_TYPE` | `QUARANTINED` (`EventProcessor.java:193-198`) |
 | неизвестная версия `dataschema` | `UNKNOWN_SCHEMA_VERSION` | `QUARANTINED` (`Normalizer.java:65`; `EventProcessor.java:259-261`) |
-| нет обязательного поля / неизвестное значение словаря / нарушение инвариантов модели | `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD`, `UNKNOWN_SOURCE_TYPE` | `QUARANTINED` (`Normalizer.java:79-83`; `EamMapper.java:124`; `ScmMapper.java:90`) |
+| нет обязательного поля / неизвестное значение словаря / нарушение инвариантов модели | `MISSING_REQUIRED_FIELD`, `INVALID_PAYLOAD`, `UNKNOWN_SOURCE_TYPE` | `QUARANTINED` (`Normalizer.java:79-83`; `EamMapper.java:124`; `ScmMapper.java:95`) |
 | неизвестное значение `criticality` | не ошибка: `criticality = null`, сырое значение в `unmappedCriticality`, предупреждение `UNMAPPED_CRITICALITY` | запись применяется (`EamMapper.java:161-179`) |
 | нечисловая `sourceVersion` | `IllegalArgumentException` при построении `SourceVersion` | отклоняется до сравнения (`SourceVersion.java:13-15`) |
-| недоверенный текст источника | не интерпретируется как инструкция; в логи и причины не попадает целиком (ловушка 11): причины фиксированные, `toString` конфликта без значений | `EventProcessor.java:234, 247`; `SourceConflict.java:77-81` 🟢 |
+| недоверенный текст источника | не интерпретируется как инструкция; в логи и причины не попадает целиком: причины фиксированные, `toString` конфликта без значений | `EventProcessor.java:234, 247`; `SourceConflict.java:77-81` 🟢 |
 
-`PARTIAL`-полнота событием не учитывается нормализатором: «отсутствующее поле» равно «поле не передано» (оно просто не пишется), а не «поле удалено» (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/NodeProperties.java:16`); явной семантики удаления поля нет — это совпадает с ловушкой 5 🟢. 🟡 Различие `COMPLETE`/`PARTIAL` влияет только на замещение темпоральных связей (см. [`state-machines.md`](state-machines.md), §7).
+`PARTIAL`-полнота событием не учитывается нормализатором: «отсутствующее поле» равно «поле не передано» (оно просто не пишется), а не «поле удалено» (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/NodeProperties.java:16`); явной семантики удаления поля нет — то есть неполная запись не затирает известное 🟢. 🟡 Различие `COMPLETE`/`PARTIAL` влияет только на замещение темпоральных связей (см. [`state-machines.md`](state-machines.md), §7).
 
 ---
 
@@ -200,7 +200,7 @@
 - Предметные шаблоны с параметрами `$gid`, `$limit`; единственное допустимое место подстановки в Cypher — верхняя граница пути `{maxDepth}`, она проверяется регулярным выражением и числом из диапазона `1..ceiling` (`access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplate.java:28, 60-137`) 🟢.
 - Реестр отклоняет шаблон, чей литеральный `maxDepth` выше потолка (`access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/QueryTemplateRegistry.java:35-38`) 🟢.
 - Исполнитель — `executeRead` в сессии `AccessMode.READ`; первый запуск шаблона сопровождается `EXPLAIN`, обязанным дать `READ_ONLY` (`access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:27-36, 78-82, 115-118`) 🟢.
-- Лимиты MCP: `max-depth 6`, `max-nodes 500`, `max-paths 50`, `timeout 5s`, `max-response-bytes 512KB` (`access/mcp-server/src/main/resources/application.yml:45-50`) 🟢. Консоль: окрестность ≤ 2, запрос поиска ≤ 200 символов, страница ≤ 50 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:41-44`) 🟢. `trace_dependencies` вне диапазона отклоняется ошибкой, без clamp (`CLAUDE.md`, «Ключевые инварианты»).
+- Лимиты MCP: `max-depth 6`, `max-nodes 500`, `max-paths 50`, `timeout 5s`, `max-response-bytes 512KB` (`access/mcp-server/src/main/resources/application.yml:45-50`) 🟢. Консоль: окрестность ≤ 2, запрос поиска ≤ 200 символов, страница ≤ 50 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:41-44`) 🟢. `trace_dependencies` вне диапазона отклоняется ошибкой, без clamp (`access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/TraceDependenciesTool.java:134-136`).
 
 ---
 

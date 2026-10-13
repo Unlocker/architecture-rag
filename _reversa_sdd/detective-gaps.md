@@ -4,7 +4,7 @@
 
 ## 1. Ответы на вопросы, оставленные R.3
 
-R.3 передал Detective вопросы в [`database/data-dictionary.md`](database/data-dictionary.md), §8 (строки 187-193), и два пробела в [`database/business-rules.md`](database/business-rules.md), §3 (строки 47-48). Ссылку на «находку R.3 №5» из плана этапа сопоставить не удалось: нумерованный список §9 (`database/data-dictionary.md:195-208`) относится к расхождениям с `docs/02-data-model.md`, а №5 там — про число constraints. Состояния без перехода помечены 🔴 со ссылкой на сами пробелы R.3 (`database/data-dictionary.md:94-95`).
+R.3 передал Detective вопросы в [`database/data-dictionary.md`](database/data-dictionary.md), §8 (строки 187-193), и два пробела в [`database/business-rules.md`](database/business-rules.md), §3 (строки 47-48). «Находка R.3 №5» из плана этапа — п. 5 списка 🔴 в итоговом комментарии R.3 к UNLOCKER-268: «`dlq_entry.replayed_at` и `identity_candidate.status != 'OPEN'` в коде нигде не выставляются» (в файлах R.3 она описана в `database/data-dictionary.md:94-95`). Оба состояния помечены 🔴 ниже.
 
 | Вопрос R.3 | Ответ Detective |
 |---|---|
@@ -18,13 +18,10 @@ R.3 передал Detective вопросы в [`database/data-dictionary.md`](d
 |---|---|---|---|
 | Р-1 | Статус `SUPERSEDED` недостижим: определён в enum и в `FINISHED`, но ни один код в него не переводит; `docs/00-vision.md` и `docs/02-data-model.md` описывают `PROJECTED → SUPERSEDED` | `state-machines.md` §1.5 | `contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/ProcessingStatus.java:39`; `docs/00-vision.md:385`; `docs/02-data-model.md:250` |
 | Р-2 | Выхода из `QUARANTINED` нет: переход `QUARANTINED → RETRYING` разрешён, `docs/02-data-model.md` называет его «решением оператора», но админский REST такой операции не содержит, диспетчер карантин не выбирает | `state-machines.md` §1.5 | `ProcessingStatus.java:38`; `docs/02-data-model.md:241`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:61-123`; `ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-216` |
-| Р-3 | `dlq_entry.replayed_at` не пишется; метрика открытых записей DLQ не уменьшается после replay | `state-machines.md` §2 | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`; `database/data-dictionary.md:94` |
-| Р-4 | `identity_candidate.status` не выходит из `OPEN`; нет ни перечисления значений, ни операции для оператора | `state-machines.md` §3 | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:14-22`; `database/data-dictionary.md:95` |
+| Р-3 | `dlq_entry.replayed_at` не пишется; метрика открытых записей DLQ не уменьшается после replay (находка R.3 №5) | `state-machines.md` §2 | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`; `database/data-dictionary.md:94` |
+| Р-4 | `identity_candidate.status` не выходит из `OPEN`; нет ни перечисления значений, ни операции для оператора (находка R.3 №5) | `state-machines.md` §3 | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:14-22`; `database/data-dictionary.md:95` |
 | Р-5 | `SyncRun.status` создаётся как `RUNNING` и никогда не переходит в `SUCCEEDED`/`FAILED`, `endedAt` не пишется, хотя enum и поле модели есть | `state-machines.md` §10 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/SyncRunStatus.java:4-6`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:695-700` |
-| Р-6 | `POST /control/snapshot` адаптера не аутентифицируется (проверяется только метод); защита — только сегментация сетей Docker | `permissions.md` §7 | `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54-66`; `platform/docker/proxy/nginx.conf:42` |
-| Р-7 | Учётка Neo4j `archrag_reader` не ограничена на уровне СУБД (Community); запрет записи держится приложением. Известное ограничение ADR 0005, здесь — как факт кода | `permissions.md` §3.3 | `platform/docker/neo4j/init-reader.sh:14`; `database/data-dictionary.md:141` |
-| Р-8 | Конфликт источников нельзя закрыть вручную: `MANUAL` никогда не авторитетен, операции «resolve» нет ни в консоли, ни в admin REST | `state-machines.md` §4 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java:14-22` |
-| Р-9 | `docs/02-data-model.md:273` объясняет `RETRYING` как «конец связи ещё не пришёл»; после E1.14 штатный случай — `DeferRelation` без повтора, `UNRESOLVED_ENDPOINT` остаётся только для связи с концом без `gid` | `adrs/retroactive-map.md` §3.3 | `docs/02-data-model.md:273`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:221-223, 589-597` |
+| Р-6 | `docs/02-data-model.md:273` объясняет `RETRYING` как «конец связи ещё не пришёл»; после E1.14 штатный случай — `DeferRelation` без повтора, `UNRESOLVED_ENDPOINT` остаётся только для связи с концом без `gid` | `adrs/retroactive-map.md` §3.3 | `docs/02-data-model.md:273`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:221-223, 589-597` |
 
 ## 3. Реестр 🟡
 
@@ -44,12 +41,14 @@ R.3 передал Detective вопросы в [`database/data-dictionary.md`](d
 | П-12 | Crosswalk меняет `identity_mapping`, граф переписывается только следующим replay/rebuild | `domain.md` §3.2 |
 | П-13 | Запись `admin_audit` остаётся `STARTED`, если процесс убит или сбой записи итога; автоматического закрытия нет | `state-machines.md` §11; К-8 |
 | П-14 | Маскирование аргументов в аудите MCP эвристическое (по именам ключей) | `permissions.md` §3.4 |
-| П-15 | Бриф агента называет `STREAMABLE`, в репозитории `STATELESS` по ADR 0017 | `adrs/retroactive-map.md` §3.4 |
+| П-15 | `POST /control/snapshot` адаптера не аутентифицируется; защита только сетевая (адаптеры в сетях `edge` и `backend`). Документированное ограничение (`docs/03-interfaces.md:33, 368, 560`) | `permissions.md` §7 |
 | П-16 | ADR 0008 не упоминает мастера `DECOMPOSED_INTO` (SCM), хотя он закреплён в матрице | `adrs/retroactive-map.md` §1 |
 | П-17 | `PART_OF` и `HOSTED_ON` нетемпоральны намеренно (`95594a6`), но это нигде не записано | `adrs/candidates.md` К-4 |
 | П-18 | Версия tombstone `Reconciler` равна применённой, поэтому upsert той же версии объект не воскресит | `state-machines.md` §5 |
 | П-19 | Аудит чтений консоли — только лог, не таблица, retention не определён | `permissions.md` §5; К-8 |
 | П-20 | Retention `inbox_event`, `dlq_entry`, `admin_audit`, S3 raw не определён (PoC) | `domain.md` §5 |
+| П-21 | Учётка Neo4j `archrag_reader` не ограничена на уровне СУБД (Community); запрет записи держит приложение. Ограничение ADR 0005, наследовано из R.3 (`database/data-dictionary.md:141`), не новое расхождение | `permissions.md` §3.3 |
+| П-22 | Конфликт нельзя закрыть вручную (`MANUAL` не авторитетен, операции нет). Документированная отложенная работа: `docs/00-vision.md:399`, `docs/02-data-model.md:360` | `state-machines.md` §4 |
 
 ## 4. Кандидаты в ADR (кратко)
 
