@@ -1,0 +1,86 @@
+# platform/integration-tests: дизайн
+
+> Ссылки даны полными путями от корня репозитория. Требования: [`requirements.md`](requirements.md). Контракты: [`contracts.md`](contracts.md).
+> Use case-спецификации: [`acceptance-mcp-f1-f4/`](acceptance-mcp-f1-f4/design.md), [`sync-reconcile/`](sync-reconcile/design.md), [`projection-identity-conflicts/`](projection-identity-conflicts/design.md), [`query-core-read/`](query-core-read/design.md), [`admin-console-security/`](admin-console-security/design.md).
+> Сквозные части (способы запуска, жизненный цикл контейнеров, JWT, ожидание, изоляция, вспомогательные классы) описаны здесь и в use case не дублируются.
+
+## Интерфейс
+
+Пакет `io.github.unlocker.archrag.integrationtests`. Все вспомогательные классы package-private и лежат в `src/test`; публичного API у модуля нет, кроме маркера `IntegrationTestsModule` 🟢.
+
+| Символ | Сигнатура | Результат / исключения | Трассировка |
+|--------|-----------|------------------------|-------------|
+| `TestImages.NEO4J` | `DockerImageName` | `neo4j:5.26.31-community` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/TestImages.java:9` 🟢 |
+| `ContainersSmokeIT.s3Container()` | `() -> GenericContainer<?>` | SeaweedFS: `server -s3 -dir=/data`, порт 8333, ожидание `GET /` со статусом < 500, старт ≤ 120 с | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java:52-60` 🟢 |
+| `ContainersSmokeIT.S3_IMAGE` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | константы | образ `chrislusf/seaweedfs:4.48`; тестовые ключи S3 (значения в спецификацию не переносятся) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java:35, 44, 46` 🟢 |
+| `McpTestJwt()` | конструктор | RSA-2048 в памяти, JWKS на `HttpServer` (loopback, порт 0, `GET /jwks`, `kid=test`) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:38-57` 🟢 |
+| `McpTestJwt.RESOURCE` | `"https://mcp.test/mcp"` | issuer и audience по умолчанию | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:33` 🟢 |
+| `jwkSetUri()` | `() -> String` | `http://localhost:<port>/jwks` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:59-61` 🟢 |
+| `token(scopes...)` / `tokenFor(sub, aud, scopes...)` / `tokenForClient(azp, sub, aud, scopes...)` | `-> String` | подписанный RS256 JWT; `azp` по умолчанию `archrag-demo`; `iat = now − 60 с`, `exp = now + 5 мин`, `scope` — через пробел | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:64-86` 🟢 |
+| `McpTestJwt.close()` | `() -> void` | останавливает JWKS | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:88-90` 🟢 |
+| `AssetFixtures(projector)` | конструктор | засев графа через настоящий `GraphProjector` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java:38-40` 🟢 |
+| `AssetFixtures.node` / `nodeFrom` / `tombstone` / `relation` | `-> SourceKey` / `void` | исход проекции обязан быть `APPLIED`, иначе `IllegalStateException("Fixture was not applied: …")` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java:42-94` 🟢 |
+| `CanonicalGraph.dump(driver)` | `-> List<String>` | отсортированные строки: канонические узлы, `SourceRecord`, связи из фиксированного списка 10 типов | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/CanonicalGraph.java:30-50` 🟢 |
+| `CanonicalGraph.EXCLUDED_KEYS` | `Set<String>` | пуст: сравнение не ослаблять без решения архитектора | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/CanonicalGraph.java:19-23` 🟢 |
+| `EamApiSupport(clock)` / `adapter(legacyUri, secret, journal, rawStore)` / `close()` | | `EamApiStub` + `EamApiSeed` с токеном `TOKEN` и составной адаптер EAM (`eam-api` + старая заглушка) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/EamApiSupport.java:17-38` 🟢 |
+| `ScmItSystemMapper` | `CanonicalMapper` | `IT_SYSTEM` SCM → `UpsertNode(ITSystem(name, criticality))`, остальное — стандартный `ScmMapper` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ScmItSystemMapper.java:16-45` 🟢 |
+
+## Способы запуска тестируемого кода
+
+| Способ | Классы | Как | Трассировка |
+|--------|--------|-----|-------------|
+| **M** — вручную, без Spring | 19 классов (журнал, identity, проектор, query-core, проекции, `ReconciliationIT`, `AdapterInboxIT`) | `@Testcontainers` + `@Container static final`; в `@BeforeAll`: драйвер Neo4j, `Neo4jSchema.apply`, `PGSimpleDataSource`, `JournalMigrations.apply`, затем `new PostgresEventJournal / GraphProjector / EventProcessor(...)` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:88-110`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ReconciliationIT.java:88-106` 🟢 |
+| **SB** — `@SpringBootTest` ingestion | `AdminEndpointIT`, `JournalDispatcherIT`, `EamKeyMigrationIT`, `SyncAcceptanceIT`, `F1`–`F4` (8 классов) | `@SpringBootTest(classes = IngestionServiceApplication.class, webEnvironment = RANDOM_PORT)`; свойства через `@DynamicPropertySource` (`spring.datasource.*`, `archrag.neo4j.*`, `archrag.s3.*`, JWT, `archrag.dispatcher.*`, `archrag.adapters.*.control-url`) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:55-56, 84-105`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:61-63, 86-104` 🟢 |
+| **SA** — второе приложение вручную | `AdminConsoleIT`, `SyncConsoleIT`, MCP-приложение внутри `F1`–`F4` | `new SpringApplicationBuilder(X.class).run(args)`; свойства — аргументами командной строки (`--server.port=0`, `--spring.autoconfigure.exclude=DataSource…,Flyway…`), потому что на classpath два `application.yml` | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:187-220`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:127-151` 🟢 |
+| **Бин как Java-метод** | `ExplainProvenanceIT` | `AnnotationConfigApplicationContext` с `ExplainProvenanceTool` и `GraphQueries`; без Security, фильтра scope и HTTP | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ExplainProvenanceIT.java:125-130` 🟡 |
+
+Жизненный цикл контейнеров у SB-классов двух видов 🟢: (а) `@Testcontainers` + `@Container` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:54, 64-71`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:60, 68-75`); (б) `@TestInstance(PER_CLASS)` + `static { NEO4J.start(); POSTGRES.start(); S3.start(); }` без `@Testcontainers` — F1–F4, `EamKeyMigrationIT`, `SyncAcceptanceIT` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:75-97`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:84-111`). Явного `stop()` нет, контейнеры гасит Ryuk 🟡.
+
+## Типовой сквозной класс (F1–F4, `SyncAcceptanceIT`)
+
+1. `static {}`: старт Neo4j, PostgreSQL, S3.
+2. `@DynamicPropertySource`: адреса контейнеров, плейсхолдеры JWT (`issuer-uri`/`audiences` = `http://unused.invalid`), `control-url` адаптеров (`http://127.0.0.1:1/control/snapshot`, если reconcile не вызывается), `@TestConfiguration` с `JwtDecoder` на HS256 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:99-126`).
+3. `@BeforeAll`: `PostgresEventJournal(ds)`, `S3RawPayloadStore.create(...).ensureBucket()`, `EamApiSupport(clock)`, `StubSources.seeded(clock)` → по `StubSourceServer` на источник → реальные адаптеры (`eamApi.adapter`, `ScmAdapter.create`, `AssetAdapter.create`, `DeploymapAdapter.create`) → `poller().pollOnce()` на каждом, исход `SNAPSHOT_COMPLETED` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:141-165`).
+4. `awaitTrue`: очередь пуста (нет `RECEIVED/RETRYING/VALIDATED/NORMALIZED/RESOLVED`) и `QUARANTINED = 0`; затем ожидание индексов Neo4j `ONLINE` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:166-178`).
+5. `CREATE USER mcp-reader` в БД `system` (Community: пользователь без ролей), запуск MCP через `SpringApplicationBuilder(McpServerApplication.class)` с лимитами `max-depth=6`, `max-nodes=500`, `max-paths=50`, `timeout=5s`, `max-response-bytes=512KB` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:180-219`).
+6. Сценарии `s1…sN` (`@Order`): `McpSyncClient` на `HttpClientStreamableHttpTransport`, заголовок `Authorization: Bearer <McpTestJwt.token("architecture.read")>`, таймаут запроса 60 с; негатив доступа — сырой `POST /mcp` без клиента (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:363-399`).
+7. `@AfterAll`: закрыть MCP, JWKS, адаптеры, сервера заглушек, `EamApiSupport`, хранилище (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:222-236`).
+
+## Алгоритмы и встроенные правила
+
+- **Ожидание.** `awaitTrue(condition[, timeout])`: `deadline = nanoTime + timeout`; пока условие ложно — `Thread.sleep(200)`; по истечении `AssertionError("condition not reached within …")` без состояния системы в сообщении (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:413-427`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:524-538`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:282-293`) 🟢.
+- **Перцентиль.** `SyncAcceptanceIT.percentile`: `rank = ceil(p/100 · n)`, элемент `sorted[max(rank,1) − 1]`; `F3AcceptanceIT.percentile`: `sorted[ceil(p/100 · n) − 1]`. При `n = 10` p95 равен максимуму 🟡 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:453-457`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F3AcceptanceIT.java:497-500`).
+- **Канонический дамп.** Узлы с меткой из `{ITSystem, Service, Repository, Team, Environment, Deployment, ComputeInstance}` и их свойства, все `SourceRecord`, связи типов `DECOMPOSED_INTO|IMPLEMENTED_IN|HAS_DEPLOYMENT|IN_ENVIRONMENT|RUNS_ON|PART_OF|HOSTED_ON|DEPENDS_ON|OWNED_BY|ASSERTS` с обоими концами; свойства сортируются (`TreeMap`), строки сортируются (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/CanonicalGraph.java:25-50`) 🟢. Метки `Solution`, `Platform` и связи `USES_SOLUTION`, `USES_PLATFORM`, `DEPLOYED_FROM` в дамп не входят 🟡 (Q-18).
+- **Изоляция.** `@BeforeEach MATCH (n) DETACH DELETE n` (классы запросов и проектора), `TRUNCATE dlq_entry, inbox_event, consumer_checkpoint` (`ReconciliationIT`), `TRUNCATE consumer_checkpoint` (`JournalDispatcherIT`), уникальные UUID в ключах (`EventJournalIT`, `IdentityMappingIT`, …) или намеренно накапливаемое состояние (F1–F4, `SyncAcceptanceIT`, `EamKeyMigrationIT`, `AdminEndpointIT`) (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:113-117`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ReconciliationIT.java:108-121`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:112-119`) 🟢.
+- **Время.** Фиксированные `Instant.parse("2026-…Z")` почти везде; `Clock.systemUTC()` в классах с настоящими адаптерами и `Reconciler`; подмены часов нет (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:143`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ReconciliationIT.java:104`) 🟢.
+
+## Конфигурация и константы
+
+Свойства приложений, которые IT передают, и константы — в [`contracts.md`](contracts.md) §2–§4. Бюджет запросов в IT: `QueryLimits(6, 500, 50, 5 с, 512 КиБ)` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminConsoleIT.java:66`); таймаут берётся из системного свойства `archrag.it.queryTimeoutSeconds` (по умолчанию 5) в `GetAssetIT`, `SearchAssetsIT`, `TraceDependenciesIT`, `DeploymentCommitReadIT`; `RuntimeFootprintIT` задаёт 5 с жёстко 🟡 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/RuntimeFootprintIT.java:31`).
+
+## Зависит от / Связанные спецификации
+
+- `pom.xml`: 17 проектных модулей в `test`-scope (`canonical-model`, `event-schemas`, `source-spi`, `adapter-core`, `source-stubs`, 4 адаптера, `event-journal`, `normalizer`, `identity-resolution`, `graph-projector`, `ingestion-service`, `graph-query-core`, `mcp-server`, `admin-console`), `spring-boot-starter-test`, `testcontainers-{junit-jupiter,neo4j,postgresql}`, `neo4j-java-driver`, `postgresql`; версий нет (BOM корня) 🟢 (`platform/integration-tests/pom.xml:17-134`). `admin-console` стоит после `mcp-server` намеренно: на classpath два `application.yml` 🟡 (`platform/integration-tests/pom.xml:98-103`).
+- Не объявлены, но используются транзитивно: `nimbus-jose-jwt`, клиент MCP (`io.modelcontextprotocol.client`), `spring-security-oauth2-jose`, `logback`, AWS SDK 🟡: исчезновение транзитивной зависимости сломает компиляцию тестов, а не прод (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/McpTestJwt.java:3-8`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:222-224`).
+- Модули под тестом — спецификации в разделе «Зависит от» [`requirements.md`](requirements.md).
+
+## Decisões de Design Identificadas
+
+| Решение | Evidence | Уверенность |
+|---------|----------|-------------|
+| Точный тег Neo4j в IT, потому что плавающий тег может сломать CI без изменений кода | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/TestImages.java:5-9` | 🟢 (UNLOCKER-215) |
+| S3 в тестах — SeaweedFS вместо MinIO | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/ContainersSmokeIT.java:29-35`; ADR [0007](../../docs/adr/0007-s3-raw-storage-seaweedfs.md); `docs/00-vision.md:17` | 🟢 |
+| Awaitility не вводится, цикл `awaitTrue` в каждом классе | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:413`; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/EamKeyMigrationIT.java:309` | 🟢 |
+| Failsafe только под профилем, чтобы обычный `verify` не требовал Docker | `platform/integration-tests/pom.xml:136` | 🟢 |
+| Настоящий `GraphProjector` для засева графа в IT запросов (форма данных совпадает с продовой) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java:28-30, 89-94` | 🟢 |
+| Свойства второго приложения — аргументами командной строки из-за неопределённого `application.yml` на classpath | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:187-190` | 🟢 |
+| MCP в IT поднимается с `STATELESS`, как в `application.yml` mcp-server | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:201`; `access/mcp-server/src/main/resources/application.yml:11`; ADR [0017](../../docs/adr/0017-mcp-streamable-http.md) | 🟢 (🔴 расхождение с `docs/00-vision.md:555`, Q-14) |
+
+## Observabilidade
+
+Тесты печатают в `System.out` замеры задержек (`SyncAcceptanceIT.k2a`, `F3AcceptanceIT.s8`); метрики MCP/консоли/адаптеров и `/actuator/prometheus` в IT не проверяются 🟡 (проверяются в `platform/docker`).
+
+## Riscos e Lacunas
+
+- 🔴 Асимметрия негативных проверок безопасности — Q-01. 🔴 Нет IT для критерия 8 и ловушек 7–8 — Q-02, Q-03. 🔴 Дубль `@Order(2)` в F2 — Q-04. 🔴 `stale=true` нигде не проверяется — Q-06.
+- 🟡 Имитации там, где имя обещает реальный путь — Q-15. 🟡 Временные утверждения (p95 при n=10, холодный вызов) — Q-17. 🟡 `McpTestJwt` отдаёт `localhost`, слушает `getLoopbackAddress()` — Q-24. 🟡 `freePort()` закрывает сокет до использования — Q-23.

@@ -147,7 +147,7 @@
       ]
     },
     "redator_progress": {
-      "part": "R.6a (UNLOCKER-271), 13 из 21 единиц",
+      "part": "R.6a (UNLOCKER-271) 13 из 21 + R.6b (UNLOCKER-272) 8 из 21 = 21/21",
       "granularity": "hybrid",
       "folder_naming": "_reversa_sdd/<короткое имя модуля>/ (как flowcharts/), use case — вложенные папки",
       "units_done": [
@@ -163,9 +163,7 @@
         "ingestion/normalizer",
         "ingestion/identity-resolution",
         "ingestion/graph-projector",
-        "ingestion/ingestion-service"
-      ],
-      "units_pending": [
+        "ingestion/ingestion-service",
         "access/graph-query-core",
         "access/mcp-server",
         "access/admin-console",
@@ -175,12 +173,8 @@
         "platform/integration-tests",
         "platform/docker"
       ],
-      "globals_pending": [
-        "traceability/code-spec-matrix.md",
-        "openapi/",
-        "user-stories/",
-        "индекс specs"
-      ],
+      "units_pending": [],
+      "globals_pending": [],
       "per_unit": {
         "contracts/canonical-model": {
           "folder": "_reversa_sdd/canonical-model",
@@ -302,13 +296,104 @@
             "reconcile-source",
             "replay-rebuild"
           ]
+        },
+        "access/graph-query-core": {
+          "folder": "_reversa_sdd/graph-query-core",
+          "files": 21,
+          "use_cases": [
+            "asset-search",
+            "budget-limits",
+            "execute-template",
+            "template-registry",
+            "trace-and-footprint"
+          ]
+        },
+        "access/mcp-server": {
+          "folder": "_reversa_sdd/mcp-server",
+          "files": 21,
+          "use_cases": [
+            "authorize-tool-call",
+            "explain-provenance",
+            "find-runtime-footprint",
+            "search-get-asset",
+            "trace-dependencies"
+          ]
+        },
+        "access/admin-console": {
+          "folder": "_reversa_sdd/admin-console",
+          "files": 18,
+          "use_cases": [
+            "auth-and-spa",
+            "graph-browse",
+            "identity-audit",
+            "sync-journal"
+          ]
+        },
+        "access/admin-ui": {
+          "folder": "_reversa_sdd/admin-ui",
+          "files": 21,
+          "use_cases": [
+            "build-bundle",
+            "graph-explorer",
+            "identity-audit",
+            "oidc-login",
+            "sync-monitoring"
+          ]
+        },
+        "platform/source-stubs": {
+          "folder": "_reversa_sdd/source-stubs",
+          "files": 18,
+          "use_cases": [
+            "eam-api-stub",
+            "signed-webhook",
+            "stub-source-http",
+            "stub-source-journal"
+          ]
+        },
+        "platform/demo-launcher": {
+          "folder": "_reversa_sdd/demo-launcher",
+          "files": 15,
+          "use_cases": [
+            "run-adapter",
+            "run-eam-api-stub",
+            "run-source-stub"
+          ]
+        },
+        "platform/integration-tests": {
+          "folder": "_reversa_sdd/integration-tests",
+          "files": 21,
+          "use_cases": [
+            "acceptance-mcp-f1-f4",
+            "admin-console-security",
+            "projection-identity-conflicts",
+            "query-core-read",
+            "sync-reconcile"
+          ]
+        },
+        "platform/docker": {
+          "folder": "_reversa_sdd/docker",
+          "files": 21,
+          "use_cases": [
+            "backup-restore",
+            "keycloak-oidc",
+            "network-secrets",
+            "observability-measure",
+            "stand-startup"
+          ]
         }
       },
-      "files_total": 200,
-      "completed_at": "2026-10-13T00:00:00Z"
+      "files_total": 356,
+      "completed_at": "2026-10-13T03:41:53Z",
+      "globals_done": [
+        "_reversa_sdd/traceability/code-spec-matrix.md",
+        "_reversa_sdd/openapi/",
+        "_reversa_sdd/user-stories/",
+        "_reversa_sdd/index.md"
+      ],
+      "globals_files": 12
     },
     "writer": {
-      "status": "partial",
+      "status": "complete",
       "part1_done": true,
       "files": [
         "_reversa_sdd/canonical-model/",
@@ -323,9 +408,22 @@
         "_reversa_sdd/normalizer/",
         "_reversa_sdd/identity-resolution/",
         "_reversa_sdd/graph-projector/",
-        "_reversa_sdd/ingestion-service/"
+        "_reversa_sdd/ingestion-service/",
+        "_reversa_sdd/graph-query-core/",
+        "_reversa_sdd/mcp-server/",
+        "_reversa_sdd/admin-console/",
+        "_reversa_sdd/admin-ui/",
+        "_reversa_sdd/source-stubs/",
+        "_reversa_sdd/demo-launcher/",
+        "_reversa_sdd/integration-tests/",
+        "_reversa_sdd/docker/",
+        "_reversa_sdd/traceability/code-spec-matrix.md",
+        "_reversa_sdd/openapi/",
+        "_reversa_sdd/user-stories/",
+        "_reversa_sdd/index.md"
       ],
-      "units_done": "13/21"
+      "units_done": "21/21",
+      "part2_done": true
     }
   },
   "engines": [
