@@ -108,7 +108,7 @@ Raw в S3 (`rawStore.put(source, bytes)`): строка JSON `{"sourceType":"…
 |---|---|---|
 | `architecture.asset.upserted.v1` (`CanonicalEvent.TYPE_ASSET_UPSERTED`) | `source`, `data.sourceType/sourceId/sourceVersion`, `time` (→ `eventTime`), `id`, журнал: `syncRunId` | `GP/EventProcessor.java:193-194, 358` 🟢 |
 | `architecture.asset.deleted.v1` | то же; `dataschema` обязан быть `urn:corp:schema:asset-deleted:1`; `time` → `deletedAt` tombstone | `GP/EventProcessor.java:254-287` 🟢 |
-| `architecture.sync.snapshot-complete.v1` | `source`, `data.sourceId` (= `syncRunId`), `id` (маркера), `data.payload["objectCount"]` (число, иначе `0`) | `GP/EventProcessor.java:289-300, 629-631` 🟢 (`dataschema` не проверяется 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] Q-05) |
+| `architecture.sync.snapshot-complete.v1` | `source`, `data.sourceId` (= `syncRunId`), `id` (маркера), `data.payload["objectCount"]` (обязателен: целое ≥ 0, иначе карантин `SNAPSHOT_OBJECT_COUNT_MISSING`), `data.payload["completeness"]` (`COMPLETE`/`PARTIAL`, нет поля = `COMPLETE`) | `GP/EventProcessor.java:289-300, 629-631` 🟢 (`dataschema` не проверяется 🟡 Q-05) |
 
 ### 6.3. Отложенная связь (`PendingRelation`)
 

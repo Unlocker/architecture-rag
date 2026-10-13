@@ -88,12 +88,18 @@ public class StoredEventReader {
   private static CanonicalEvent marker(StoredEvent stored, JsonNode root) {
     JournalEntry entry = stored.entry();
     JsonNode count = root.get("objectCount");
-    if (count == null || !count.isIntegralNumber() || count.asLong() < 0) {
-      throw new IllegalArgumentException("marker raw payload has no valid objectCount");
-    }
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("syncRunId", entry.sourceId());
-    payload.put("objectCount", count.asLong());
+    // Невалидный objectCount не отвергается здесь: без поля EventProcessor уводит маркер в карантин с отдельным кодом.
+    if (count != null && count.isIntegralNumber() && count.asLong() >= 0) {
+      payload.put("objectCount", count.asLong());
+    }
+    String completeness = text(root, "completeness");
+    if (completeness != null && !completeness.equals("COMPLETE") && !completeness.equals("PARTIAL")) {
+      throw new IllegalArgumentException("marker raw payload has no valid completeness");
+    }
+    // Маркеры до UNLOCKER-279 поля не имеют: это COMPLETE.
+    payload.put("completeness", completeness == null ? "COMPLETE" : completeness);
     return new CanonicalEvent(
         entry.eventId(),
         entry.source(),

@@ -59,6 +59,7 @@ class IdentityCandidateIT {
   static PostgresEventJournal journal;
   static PostgresIdentityMapping identity;
   static PostgresIdentityCandidates candidates;
+  static final List<FeatureKind> overflowed = new java.util.concurrent.CopyOnWriteArrayList<>();
   static EventProcessor processor;
 
   @BeforeAll
@@ -72,7 +73,7 @@ class IdentityCandidateIT {
     JournalMigrations.apply(ds);
     journal = new PostgresEventJournal(ds);
     identity = new PostgresIdentityMapping(ds);
-    candidates = new PostgresIdentityCandidates(ds);
+    candidates = new PostgresIdentityCandidates(ds, overflowed::add);
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     processor =
         new EventProcessor(
@@ -267,9 +268,21 @@ class IdentityCandidateIT {
       host(uid(), "VIRTUAL_MACHINE", hostname, "1");
     }
     String last = uid();
+    overflowed.clear();
 
     host(last, "VIRTUAL_MACHINE", hostname, "1");
 
     assertThat(candidates.candidatesOf(key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", last))).isEmpty();
+    // Пропуск не молчаливый: listener (метрика) получает вид признака.
+    assertThat(overflowed).contains(FeatureKind.HOSTNAME);
+  }
+
+  @Test
+  void featureWithinLimitDoesNotReportOverflow() {
+    overflowed.clear();
+
+    host(uid(), "VIRTUAL_MACHINE", "calm-" + uid(), "1");
+
+    assertThat(overflowed).isEmpty();
   }
 }

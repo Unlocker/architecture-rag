@@ -54,9 +54,19 @@ class PollerTest {
     assertThat(all).hasSize(5);
     assertThat(all.getLast().type()).isEqualTo(EventMapper.TYPE_SNAPSHOT_COMPLETE);
     assertThat(all.getLast().data().sourceId()).isEqualTo("run-1");
-    assertThat(all.getLast().data().payload()).containsEntry("objectCount", 4L);
+    assertThat(all.getLast().data().payload()).containsEntry("objectCount", 4L).containsEntry("completeness", "COMPLETE");
     assertThat(journal.rows.values()).allMatch(row -> "run-1".equals(row.syncRunId()));
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE)).isPresent();
+  }
+
+  @Test
+  void snapshotWithPartialRecordProducesPartialMarker() {
+    eam.upsertPartial(StubSources.IT_SYSTEM, "EAM-3000", StubSources.fields("name", "Half"));
+
+    PollResult r = poller.pollOnce();
+
+    assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(journal.eventList().getLast().data().payload()).containsEntry("completeness", "PARTIAL");
   }
 
   @Test

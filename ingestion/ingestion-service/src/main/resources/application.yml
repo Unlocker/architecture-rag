@@ -39,6 +39,9 @@ archrag:
       control-url: ${ARCHRAG_CMDB_CONTROL_URL:}
     deploymap:
       control-url: ${ARCHRAG_DEPLOYMAP_CONTROL_URL:}
+  # Reconcile: доля активных записей источника, которую missing set может закрыть; больше — маркер в карантин.
+  reconcile:
+    max-missing-share: ${ARCHRAG_RECONCILE_MAX_MISSING_SHARE:0.5}
   # Диспетчер журнала: RECEIVED/RETRYING → EventProcessor. Один поток, один экземпляр сервиса.
   dispatcher:
     enabled: ${ARCHRAG_DISPATCHER_ENABLED:true}

@@ -216,6 +216,25 @@ class JournalDispatcherIT {
   }
 
   @Test
+  void markerWithoutObjectCountInRawGoesToDlqWithSpecificCodeAndClosesNothing() {
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String victim = "victim-" + uid();
+    eam.upsert("TEAM", victim, team("Victim"));
+    poller(eam).pollOnce();
+    awaitTrue("victim projected", () -> Boolean.TRUE.equals(active(victim)));
+    String runId = "nocount-" + uid();
+    CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 0L);
+    RawPayloadRef raw = rawStore.put(SOURCE, ("{\"syncRunId\":\"" + runId + "\",\"updatedAt\":\""
+        + Instant.now() + "\"}").getBytes(StandardCharsets.UTF_8));
+    journal.append(marker, raw, runId);
+
+    awaitTrue("marker quarantined", () -> status(marker.id()) == ProcessingStatus.QUARANTINED);
+    assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("SNAPSHOT_OBJECT_COUNT_MISSING");
+    assertThat(openDlqRows(marker.id())).isEqualTo(1);
+    assertThat(active(victim)).isTrue();
+  }
+
+  @Test
   void markerWithoutRawGoesToDlq() {
     String runId = "noraw-" + uid();
     CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 0L);

@@ -4,6 +4,7 @@ import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.sourcespi.ChangeOperation;
+import io.github.unlocker.archrag.sourcespi.Completeness;
 import io.github.unlocker.archrag.sourcespi.SourceChange;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import java.time.Instant;
@@ -33,6 +34,9 @@ public final class EventMapper {
 
   /** Зарезервированный ключ payload: {@code COMPLETE} или {@code PARTIAL}. */
   public static final String COMPLETENESS_KEY = "_completeness";
+
+  /** Полнота прогона в payload маркера и его raw; нет поля (формат до UNLOCKER-279) — {@code COMPLETE}. */
+  public static final String COMPLETENESS_FIELD = "completeness";
 
   /** {@code sourceType} маркера snapshot; {@code sourceId} — {@code syncRunId}. */
   public static final String SYNC_RUN_SOURCE_TYPE = "SYNC_RUN";
@@ -76,9 +80,18 @@ public final class EventMapper {
             payload));
   }
 
-  /** Маркер {@code snapshot-complete}: последнее событие прогона {@code syncRunId}. */
+  /** Маркер {@code snapshot-complete} прогона с полнотой {@code COMPLETE}. */
   public static CanonicalEvent snapshotComplete(
       SourceSystem system, String syncRunId, Instant time, long objectCount) {
+    return snapshotComplete(system, syncRunId, time, objectCount, false);
+  }
+
+  /**
+   * Маркер {@code snapshot-complete}: последнее событие прогона {@code syncRunId}. {@code partial} — среди записей
+   * прогона была {@code PARTIAL}; такой прогон reconciliation не использует для удалений.
+   */
+  public static CanonicalEvent snapshotComplete(
+      SourceSystem system, String syncRunId, Instant time, long objectCount, boolean partial) {
     return new CanonicalEvent(
         "snapshot-complete:" + syncRunId,
         sourceUrn(system),
@@ -91,7 +104,10 @@ public final class EventMapper {
             SYNC_RUN_SOURCE_TYPE,
             syncRunId,
             new SourceVersion("1"),
-            Map.of("syncRunId", syncRunId, "objectCount", objectCount)));
+            Map.of(
+                "syncRunId", syncRunId,
+                "objectCount", objectCount,
+                COMPLETENESS_FIELD, (partial ? Completeness.PARTIAL : Completeness.COMPLETE).name())));
   }
 
   /** Идентификатор события для изменения, прочитанного polling'ом: один и тот же при перечитывании. */

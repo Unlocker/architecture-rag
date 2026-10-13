@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.identityresolution.FeatureKind;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
@@ -89,6 +90,31 @@ class IngestionMetricsTest {
 
     assertThat(registry.get(IngestionMetrics.UNMAPPED_VALUES).tag("source", SourceSystem.EAM.code())
         .tag("property", "criticality").counter().count()).isEqualTo(2);
+  }
+
+  @Test
+  void candidatesOverflowSeriesExistsPerStrongFeatureWithZero() {
+    for (String kind : List.of("hostname", "repository_url", "name")) {
+      assertThat(registry.get(IngestionMetrics.CANDIDATES_OVERFLOW).tag("feature", kind).counter().count()).isZero();
+    }
+    assertThat(registry.find(IngestionMetrics.CANDIDATES_OVERFLOW).tag("feature", "owner").counter()).isNull();
+  }
+
+  @Test
+  void candidatesOverflowIncrementsByFeatureKindOnly() {
+    metrics.recordCandidatesOverflow(FeatureKind.HOSTNAME);
+    metrics.recordCandidatesOverflow(FeatureKind.HOSTNAME);
+
+    assertThat(registry.get(IngestionMetrics.CANDIDATES_OVERFLOW).tag("feature", "hostname").counter().count()).isEqualTo(2);
+    assertThat(registry.get(IngestionMetrics.CANDIDATES_OVERFLOW).tag("feature", "name").counter().count()).isZero();
+  }
+
+  @Test
+  void reconcileSkippedIsCountedBySourceAndReason() {
+    metrics.recordReconcileSkipped(SourceSystemCode.EAM, "PARTIAL");
+
+    assertThat(registry.get(IngestionMetrics.RECONCILE_SKIPPED).tag("source", "eam").tag("reason", "PARTIAL").counter().count())
+        .isEqualTo(1);
   }
 
   @Test

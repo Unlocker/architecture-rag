@@ -84,7 +84,7 @@
 | 3 | Перепроекция после `approve` | `PostgresIdentityMapping.java:80-145` трогает только crosswalk | задача кода |
 | 4 | Реализация по ADR 0020 | узел закрывается по любым активным assertions; HWM после коммита Neo4j | задача кода (при необходимости отдельная) |
 | 5 | Удалить `CloseAssertion` | `canonical-model`, `graph-projector`, `normalizer` | задача кода; поправить `docs/06:82` |
-| 6 | Защита нужна | `Reconciler`: маркер без `objectCount`, `PARTIAL`; после п. 15 | задача кода |
+| 6 | ✅ Реализовано в UNLOCKER-279 | `Reconciler`: маркер без `objectCount` → карантин; `PARTIAL` → без удалений; порог массового закрытия `archrag.reconcile.max-missing-share` (0.5); tombstone вызывает `forget` | выполнено |
 | 7 | Истина — код | правка docs/ADR | задача архитектора (docs) |
 | 8 | Loopback — свойство стенда | дополнить ADR 0026 | задача архитектора (ADR) |
 | 9 | Анализ дублей и предложение | `spec-impact-matrix.md` §2 | задача анализа (без кода) |

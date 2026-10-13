@@ -67,7 +67,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 | `correlationid` | polling: `null`; snapshot: `syncRunId`; webhook: `eventId` | то же | `syncRunId` |
 | `data.sourceType` / `sourceId` | как у изменения | то же | `SYNC_RUN` / `<syncRunId>` |
 | `data.sourceVersion` | `Long.toString(version)`, `[0-9]{1,40}` | то же | `"1"` |
-| `data.payload` | поля источника без `null` верхнего уровня + `_completeness` | пусто | `{syncRunId: string, objectCount: long}` |
+| `data.payload` | поля источника без `null` верхнего уровня + `_completeness` | пусто | `{syncRunId: string, objectCount: long, completeness: COMPLETE|PARTIAL}` |
 | столбец `sync_run_id` журнала | polling/webhook: `null`; snapshot: `syncRunId` | — | `syncRunId` |
 
 Места: `AC/EventMapper.java:29-42, 52-109`; передача `correlationId`/`syncRunId`: `AC/Poller.java:127, 154, 169`, `AC/WebhookHandler.java:105`.
@@ -90,7 +90,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 
 ### 3.2 Raw маркера (`InboxWriter.markerRawJson`, `:51-57`)
 
-`{"syncRunId":"<id>","objectCount":<long>,"updatedAt":"<Instant>"}` — `objectCount` нужен reconciliation, чтобы не удалять объекты при неполном журнале (Javadoc `:40-43`) 🟢.
+`{"syncRunId":"<id>","objectCount":<long>,"completeness":"COMPLETE|PARTIAL","updatedAt":"<Instant>"}` (`completeness` — UNLOCKER-279; `PARTIAL`, если среди записей прогона была `PARTIAL`; нет поля = `COMPLETE`) — `objectCount` нужен reconciliation, чтобы не удалять объекты при неполном журнале (Javadoc `:40-43`) 🟢.
 
 ## 4. HTTP-выход: контракт источника (`HttpSourceConnector`)
 

@@ -57,6 +57,8 @@ class EventProcessorTest {
   private FakeCandidates candidates;
   private FakeConflicts conflicts;
   private final List<String> snapshots = new ArrayList<>();
+  private final List<Boolean> partialSnapshots = new ArrayList<>();
+  private boolean rejectSnapshots;
   private EventProcessor processor;
 
   @BeforeEach
@@ -72,7 +74,21 @@ class EventProcessorTest {
             Normalizer.standard(key -> true),
             identity,
             projection,
-            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId),
+            new ReconciliationTrigger() {
+              @Override
+              public void snapshotComplete(String source, String run, String eventId, long count) {
+                snapshotComplete(source, run, eventId, count, false);
+              }
+
+              @Override
+              public void snapshotComplete(String source, String run, String eventId, long count, boolean partial) {
+                if (rejectSnapshots) {
+                  throw new SnapshotRejectedException(SnapshotRejectedException.MASS_CLOSE_LIMIT, "too many");
+                }
+                snapshots.add(source + "/" + run + "/" + eventId);
+                partialSnapshots.add(partial);
+              }
+            },
             candidates,
             conflicts);
   }
@@ -500,14 +516,79 @@ class EventProcessorTest {
     assertThat(result.errorCode()).isEqualTo("UNKNOWN_SCHEMA_VERSION");
   }
 
+  private static CanonicalEvent marker(String runId, Map<String, Object> payload) {
+    return new CanonicalEvent(
+        "snapshot-complete:" + runId, "urn:corp:eam", EventProcessor.TYPE_SNAPSHOT_COMPLETE, "sync-run/" + runId, T,
+        "urn:corp:schema:snapshot-complete:1", null, new AssetEventData("SYNC_RUN", runId, new SourceVersion("1"), payload));
+  }
+
+  @Test
+  void partialUpsertIsProjectedAsPartialAndCompleteIsNot() {
+    run(upsert("p1", "5", Map.of("name", "core", "_completeness", "PARTIAL")));
+    run(upsert("c1", "6", Map.of("name", "core", "_completeness", "COMPLETE")));
+
+    assertThat(projection.requests).extracting(ProjectionRequest::partial).containsExactly(true, false);
+  }
+
   @Test
   void snapshotCompleteIsHandedToReconciliationAndNotProjected() {
-    var result =
-        run(other("snapshot-complete:run-7", EventProcessor.TYPE_SNAPSHOT_COMPLETE, "urn:corp:schema:snapshot-complete:1", "SYNC_RUN", "run-7"));
+    var result = run(marker("run-7", Map.of("syncRunId", "run-7", "objectCount", 5L)));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(snapshots).containsExactly("urn:corp:eam/run-7/snapshot-complete:run-7");
     assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteWithExplicitZeroObjectCountIsAccepted() {
+    var result = run(marker("run-0", Map.of("syncRunId", "run-0", "objectCount", 0L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(snapshots).hasSize(1);
+  }
+
+  @Test
+  void snapshotCompleteWithoutObjectCountIsQuarantinedAndReconciliationIsNotCalled() {
+    var result = run(marker("run-8", Map.of("syncRunId", "run-8")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT);
+    assertThat(snapshots).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteWithInvalidObjectCountIsQuarantined() {
+    for (Object bad : new Object[] {-1L, "5", 2.5d}) {
+      var result = run(marker("run-" + bad, Map.of("syncRunId", "run", "objectCount", bad)));
+
+      assertThat(result.status()).as("objectCount=%s", bad).isEqualTo(ProcessingStatus.QUARANTINED);
+      assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT);
+    }
+    assertThat(snapshots).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteRejectedByReconciliationIsQuarantinedWithItsCode() {
+    rejectSnapshots = true;
+
+    var result = run(marker("run-9", Map.of("syncRunId", "run-9", "objectCount", 1L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MASS_CLOSE_LIMIT);
+  }
+
+  @Test
+  void partialMarkerIsPassedToReconciliationAsPartial() {
+    run(marker("run-p", Map.of("syncRunId", "run-p", "objectCount", 1L, "completeness", "PARTIAL")));
+
+    assertThat(partialSnapshots).containsExactly(true);
+  }
+
+  @Test
+  void markerWithoutCompletenessIsComplete() {
+    run(marker("run-c", Map.of("syncRunId", "run-c", "objectCount", 1L)));
+
+    assertThat(partialSnapshots).containsExactly(false);
   }
 
   @Test

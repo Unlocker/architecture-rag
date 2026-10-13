@@ -24,8 +24,8 @@ import javax.sql.DataSource;
  * сериализуются advisory-lock'ом на {@code (семейство, вид, значение)}: иначе при READ COMMITTED обе
  * транзакции не увидели бы друг друга и пара была бы потеряна. Общий {@code gid} проверяется по
  * {@code identity_mapping} той же БД. Если у одного признака больше {@value #MAX_MATCHES} совпадений,
- * кандидаты по нему не создаются (WARN с количеством, без значения); если у пары такой признак пропущен,
- * {@code matched} при upsert перезаписывается без него (допущение PoC).
+ * кандидаты по нему не создаются (WARN с видом признака и пределом, без значения, и {@link OverflowListener});
+ * если у пары такой признак пропущен, {@code matched} при upsert перезаписывается без него (допущение PoC).
  */
 public final class PostgresIdentityCandidates implements IdentityCandidates {
 
@@ -69,9 +69,23 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
           + " ORDER BY left_source, left_type, left_id, right_source, right_type, right_id";
 
   private final DataSource dataSource;
+  private final OverflowListener overflow;
+
+  /** Получатель фактов переполнения {@link #MAX_MATCHES} (метрика); вызывается вне значения признака. */
+  @FunctionalInterface
+  public interface OverflowListener {
+    OverflowListener NONE = kind -> {};
+
+    void overflow(FeatureKind kind);
+  }
 
   public PostgresIdentityCandidates(DataSource dataSource) {
+    this(dataSource, OverflowListener.NONE);
+  }
+
+  public PostgresIdentityCandidates(DataSource dataSource, OverflowListener overflow) {
     this.dataSource = dataSource;
+    this.overflow = java.util.Objects.requireNonNull(overflow, "overflow");
   }
 
   @Override
@@ -188,7 +202,7 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
   }
 
   /** Другие ключи с общими сильными признаками; {@code OWNER} повышает score, но пару сам не создаёт. */
-  private static Map<SourceKey, List<Feature>> findMatches(
+  private Map<SourceKey, List<Feature>> findMatches(
       Connection c, SourceKey key, NodeLabel family, List<Feature> own) throws SQLException {
     Map<SourceKey, List<Feature>> matches = new LinkedHashMap<>();
     for (Feature f : own) {
@@ -212,6 +226,7 @@ public final class PostgresIdentityCandidates implements IdentityCandidates {
       if (others.size() > MAX_MATCHES) {
         LOG.log(System.Logger.Level.WARNING,
             "identity candidates skipped: feature {0} of {1} matches more than {2} records", f.kind(), family, MAX_MATCHES);
+        overflow.overflow(f.kind());
         continue;
       }
       for (SourceKey other : others) {

@@ -137,7 +137,7 @@ class SourceConflictIT {
         new Normalizer(
             List.of(new EamMapper(), new ScmMapper(), new CmdbSystemMapper(), new DeployMapMapper()), projector::isActive);
     reconciler =
-        new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts);
+        new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts, new PostgresIdentityCandidates(ds), 1.0, Reconciler.SkipListener.NONE);
     processor =
         new EventProcessor(
             journal, normalizer, identity, projector, (source, run, id, count) -> {}, new PostgresIdentityCandidates(ds), conflicts);

@@ -4,6 +4,7 @@ import io.github.unlocker.archrag.eventschemas.Checkpoint;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.sourcespi.ChangePage;
+import io.github.unlocker.archrag.sourcespi.Completeness;
 import io.github.unlocker.archrag.sourcespi.SourceChange;
 import io.github.unlocker.archrag.sourcespi.SourceConnector;
 import io.github.unlocker.archrag.sourcespi.SourceUnavailableException;
@@ -148,11 +149,14 @@ public final class Poller {
     String runId = snapshotRunId(source);
     String cursor = null;
     long appended = 0;
+    // PARTIAL-запись делает весь прогон неполным: по нему reconciliation ничего не удаляет.
+    boolean partial = false;
     while (true) {
       ChangePage page = fetch(cursor, appended, runId);
       for (SourceChange c : page.changes()) {
         inbox.record(EventMapper.snapshotEventId(runId, c), c, runId, runId);
         appended++;
+        partial |= c.completeness() == Completeness.PARTIAL;
       }
       if (page.hasMore()) {
         if (page.nextCursor() == null || page.nextCursor().equals(cursor)) {
@@ -166,7 +170,7 @@ public final class Poller {
         throw new IllegalStateException(config.system().code() + " ended snapshot without snapshot-complete");
       }
       // Порядок: маркер, затем отметка прогона завершённым, затем переход на инкрементальный курсор.
-      inbox.record(EventMapper.snapshotComplete(config.system(), runId, clock.instant(), appended), runId);
+      inbox.record(EventMapper.snapshotComplete(config.system(), runId, clock.instant(), appended, partial), runId);
       journal.saveCheckpoint(snapshotConsumer(), source, DONE_PREFIX + runId);
       journal.saveCheckpoint(pollerConsumer(), source, page.nextCursor());
       return new PollResult(PollResult.Outcome.SNAPSHOT_COMPLETED, appended, runId);

@@ -75,7 +75,7 @@
 # AC-06 (StoredEventReaderContractTest.*)
 Дано raw, записанный EventMapper адаптера (upsert/partial/delete/marker)
 Когда StoredEventReader.toEvent собирает событие
-Тогда оно равно EventMapper.toEvent; marker без objectCount отклоняется (snapshotMarkerWithoutObjectCountIsRejected)
+Тогда оно равно EventMapper.toEvent; marker без валидного objectCount читается без этого поля, и `EventProcessor` уводит его в карантин `SNAPSHOT_OBJECT_COUNT_MISSING` (UNLOCKER-279; `snapshotMarkerWithoutObjectCountIsReadWithoutTheFieldSoThatEventProcessorQuarantinesIt`, IT `markerWithoutObjectCountInRawGoesToDlqWithSpecificCodeAndClosesNothing`)
 ```
 
 Интеграционно: `JournalDispatcherIT.eventsAppendedToJournalReachGraphWithoutManualCall`, `brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected`, `markerWithoutRawGoesToDlq` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:122, 137, 219`) 🟢.

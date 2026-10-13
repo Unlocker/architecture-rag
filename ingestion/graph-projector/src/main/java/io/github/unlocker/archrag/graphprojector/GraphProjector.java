@@ -347,7 +347,8 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
         case CloseAssertion close -> closeAssertion(tx, request, close);
       }
     }
-    if (!request.isTombstone()) {
+    // PARTIAL: список связей неполон, отсутствие связи не означает её закрытие.
+    if (!request.isTombstone() && !request.partial()) {
       closeReplacedRelations(tx, request);
     }
     if (request.isRelationOnly()) {

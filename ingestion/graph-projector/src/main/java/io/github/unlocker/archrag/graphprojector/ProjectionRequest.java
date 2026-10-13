@@ -33,6 +33,8 @@ import java.util.UUID;
  * @param syncRunId прогон синхронизации или {@code null}
  * @param gids {@code gid} по ключам источника
  * @param conflicts полный набор открытых конфликтов {@code gid} записи или {@link ConflictMarkers#none()}
+ * @param partial запись имеет полноту {@code PARTIAL}: список её связей неполон, поэтому связи того же типа, не
+ *     названные в запросе, не закрываются (замещающая семантика отключена); утверждения запроса применяются как обычно
  */
 public record ProjectionRequest(
     SourceKey key,
@@ -41,7 +43,20 @@ public record ProjectionRequest(
     String syncRunId,
     Map<SourceKey, UUID> gids,
     List<GraphCommand> commands,
-    ConflictMarkers conflicts) {
+    ConflictMarkers conflicts,
+    boolean partial) {
+
+  /** Запрос полной записи ({@code partial = false}). */
+  public ProjectionRequest(
+      SourceKey key,
+      SourceVersion version,
+      Instant eventTime,
+      String syncRunId,
+      Map<SourceKey, UUID> gids,
+      List<GraphCommand> commands,
+      ConflictMarkers conflicts) {
+    this(key, version, eventTime, syncRunId, gids, commands, conflicts, false);
+  }
 
   /** Запрос без изменения маркеров конфликтов. */
   public ProjectionRequest(
