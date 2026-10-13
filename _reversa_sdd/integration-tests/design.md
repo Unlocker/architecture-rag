@@ -74,7 +74,7 @@
 | Failsafe только под профилем, чтобы обычный `verify` не требовал Docker | `platform/integration-tests/pom.xml:136` | 🟢 |
 | Настоящий `GraphProjector` для засева графа в IT запросов (форма данных совпадает с продовой) | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AssetFixtures.java:28-30, 89-94` | 🟢 |
 | Свойства второго приложения — аргументами командной строки из-за неопределённого `application.yml` на classpath | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:187-190` | 🟢 |
-| MCP в IT поднимается с `STATELESS`, как в `application.yml` mcp-server | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:201`; `access/mcp-server/src/main/resources/application.yml:11`; ADR [0017](../../docs/adr/0017-mcp-streamable-http.md) | 🟢 (🔴 расхождение с `docs/00-vision.md:555`, Q-14) |
+| MCP в IT поднимается с `STATELESS`, как в `application.yml` mcp-server | `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:201`; `access/mcp-server/src/main/resources/application.yml:11`; ADR [0017](../../docs/adr/0017-mcp-streamable-http.md) | 🟢 (🟢 [R.8: ответ владельца, вопрос 7] расхождение с `docs/00-vision.md:555`, Q-14) |
 
 ## Observabilidade
 
@@ -82,5 +82,5 @@
 
 ## Riscos e Lacunas
 
-- 🔴 Асимметрия негативных проверок безопасности — Q-01. 🔴 Нет IT для критерия 8 и ловушек 7–8 — Q-02, Q-03. 🔴 Дубль `@Order(2)` в F2 — Q-04. 🔴 `stale=true` нигде не проверяется — Q-06.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Асимметрия негативных проверок безопасности — Q-01. 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Нет IT для критерия 8 и ловушек 7–8 — Q-02, Q-03. 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Дубль `@Order(2)` в F2 — Q-04. 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] `stale=true` нигде не проверяется — Q-06.
 - 🟡 Имитации там, где имя обещает реальный путь — Q-15. 🟡 Временные утверждения (p95 при n=10, холодный вызов) — Q-17. 🟡 `McpTestJwt` отдаёт `localhost`, слушает `getLoopbackAddress()` — Q-24. 🟡 `freePort()` закрывает сокет до использования — Q-23.

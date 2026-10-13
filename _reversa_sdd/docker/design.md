@@ -107,7 +107,7 @@
 
 | № | Связь | Где в стенде | Защита |
 |---|-------|--------------|--------|
-| 2, 3 | Коды источников и их регистр (`eam`, `scm`, `cmdb`, `deploymap`; `urn:corp:<код>`) | `platform/docker/scripts/lib.sh:21` (`REPLAY_SOURCES`); `platform/docker/docker-compose.yml:196-199` (`ARCHRAG_*_CONTROL_URL`); `platform/docker/docker-compose.yml:313, 346, 368` (`adapter EAM/SCM/CMDB/DEPLOY_MAP`); `platform/docker/proxy/nginx.conf:43-62` (`/webhooks/*`) | нет теста «покрыты все источники» 🔴 (Q-05) |
+| 2, 3 | Коды источников и их регистр (`eam`, `scm`, `cmdb`, `deploymap`; `urn:corp:<код>`) | `platform/docker/scripts/lib.sh:21` (`REPLAY_SOURCES`); `platform/docker/docker-compose.yml:196-199` (`ARCHRAG_*_CONTROL_URL`); `platform/docker/docker-compose.yml:313, 346, 368` (`adapter EAM/SCM/CMDB/DEPLOY_MAP`); `platform/docker/proxy/nginx.conf:43-62` (`/webhooks/*`) | нет теста «покрыты все источники» 🟢 [R.8: ответ владельца, вопрос 9] (Q-05) |
 | 15 | Имя модуля ≠ код источника (`asset-adapter` ↔ `cmdb`, `deploymap-adapter` ↔ `DEPLOY_MAP`/`deploymap`) | `platform/docker/docker-compose.yml:352-378` (`adapter-cmdb` запускает `CMDB`, `adapter-deploymap` — `DEPLOY_MAP`) | документация 🟡 |
 | 16 | Формат deploy map (`deploymap-poc-0/1`) | `platform/docker/scripts/deployment-commit-check.sh:104` (payload `deploymap-poc-1`) ↔ `platform/source-stubs` | `DeployMapFixturesContractTest` для адаптера; скрипт — только запуск 🟡 |
 | — | §3 «Новый источник данных»: правки в `docker` | новый `adapter-*` и `stub-*` в compose, `ARCHRAG_<КОД>_CONTROL_URL` у `ingestion`, маршрут `/webhooks/<код>` в nginx, элемент `REPLAY_SOURCES`, healthcheck и `depends_on` у `reverse-proxy` | см. [`stand-startup/tasks.md`](stand-startup/tasks.md) T-08 |
@@ -134,8 +134,8 @@
 ## Riscos e Lacunas
 
 - 🔴 Плавающие теги `neo4j:5-community` (и `postgres:16`): `restore.sh` откажется читать копию после смены минорной версии; в тестах тег уже точный (`5.26.31`) — Q-01.
-- 🔴 Документация утверждает «наружу публикуется только reverse-proxy», фактически — четыре порта на loopback — Q-02.
-- 🔴 CI `docker-stand` не запускает `console-smoke.sh`, `deployment-commit-check.sh`, `measure.sh`, хотя `CLAUDE.md` обещает «весь список» — Q-07.
+- 🟢 [R.8: ответ владельца, вопрос 8] Документация утверждает «наружу публикуется только reverse-proxy», фактически — четыре порта на loopback — Q-02.
+- 🟢 [R.8: ответ владельца, вопрос 14] CI `docker-stand` не запускает `console-smoke.sh`, `deployment-commit-check.sh`, `measure.sh`, хотя `CLAUDE.md` обещает «весь список» — Q-07.
 - 🟡 Роль консоли `archrag-console-admin` не проверяется; токен консоли получает любой пользователь realm (принято владельцем, П-9) — Q-04.
 - 🟡 `trap ERR` в `backup.sh`/`restore.sh` не срабатывает на сбой внутри функций `lib.sh` — Q-06.
 - 🟡 Секреты попадают в argv процессов в нескольких местах — Q-08; часть секретов лежит в `environment` — Q-09.

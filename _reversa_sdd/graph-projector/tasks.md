@@ -30,7 +30,7 @@
 
 - [ ] **TT-01. Юнит модуля** (Docker не нужен): `EventProcessorTest` (46), `ReconcilerTest` (12), `ProjectionRequestTest` (12), `Neo4jSchemaTest` (8), `VersionDecisionTest` (4), `PropertyJsonTest` (3), `GraphProjectorSmokeTest` (1) — всего 86 `@Test` по `grep -c` в `GPT/`. Уверенность: 🟢.
 - [ ] **TT-02. IT платформы** (Docker): `GraphProjectorIT` (51), `ReconciliationIT` (6), `Neo4jSchemaIT`, `DeployedFromIT`, `SourceConflictIT`, `GraphQueryCoreIT` (читающая сторона схемы). Origin: `IT/`. Уверенность: 🟢.
-- [ ] **TT-03 (пробел).** Тесты на 🔴 из [`questions.md`](questions.md): маркер без `objectCount` (Q-05); `finishTombstone` для строки в `QUARANTINED` (Q-12); общий тест имён типов событий и таблицы кодов источников (Q-06). Уверенность: 🔴.
+- [ ] **TT-03 (пробел).** Тесты на 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6); ответ владельца: вопросы 9] из [`questions.md`](questions.md): маркер без `objectCount` (Q-05); `finishTombstone` для строки в `QUARANTINED` (Q-12); общий тест имён типов событий и таблицы кодов источников (Q-06). Уверенность: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6); ответ владельца: вопросы 9].
 
 ## Порядок
 

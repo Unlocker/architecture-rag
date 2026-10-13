@@ -73,4 +73,4 @@ flowchart TD
 
 ## Риски и пробелы
 
-🟡 [`../questions.md`](../questions.md) Q-17, Q-18. 🔴: `docs/02-data-model.md:273` объясняет `RETRYING` как «конец связи ещё не пришёл» — после E1.14 это неверно (Q-08). Нет юнит-тестов `PendingRelations` без Docker 🟡.
+🟡 [`../questions.md`](../questions.md) Q-17, Q-18. 🟢 [R.8: ответ владельца, вопрос 7]: `docs/02-data-model.md:273` объясняет `RETRYING` как «конец связи ещё не пришёл» — после E1.14 это неверно (Q-08). Нет юнит-тестов `PendingRelations` без Docker 🟡.

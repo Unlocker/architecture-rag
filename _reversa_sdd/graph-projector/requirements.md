@@ -71,7 +71,7 @@
 | RF-12 | Схема Neo4j идемпотентна и порождается из `NodeLabel.canonical()` | Must | `Neo4jSchemaTest#everyCanonicalLabelHasGidConstraint`, `everyStatementIsIdempotent` 🟢 |
 | RF-13 | `TemporalRelationMigration.migrate` проставляет `validFrom` связям без него (ADR [0028](../../docs/adr/0028-structural-relations-temporal.md)) | Could | IT `temporalRelationMigrationFillsMissingValidFromAndIsIdempotent` 🟢 |
 | RF-14 | Передавать предупреждения нормализации в порт `NormalizationWarnings` (один раз, только непустые) | Could | `unmappedCriticalityIsReportedToWarningsPortOnce`, `eventWithoutWarningsDoesNotCallWarningsPort` 🟢 |
-| RF-15 | Обработка `CloseAssertion` в проекторе | Won't (мёртвый путь: никто не создаёт) | 🔴 [`questions.md`](questions.md) Q-03 |
+| RF-15 | Обработка `CloseAssertion` в проекторе | Won't (мёртвый путь: никто не создаёт) | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] [`questions.md`](questions.md) Q-03 |
 
 ## Требования нефункциональные
 

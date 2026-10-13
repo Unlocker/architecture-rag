@@ -49,4 +49,4 @@
 T-01 → T-02 → T-03 → T-06 → T-04 → T-05 → T-07.
 
 ## Lacunas Pendentes (🔴)
-См. [`../questions.md`](../questions.md): Q-01, Q-12 (🔴); Q-06, Q-08, Q-16 (🟡).
+См. [`../questions.md`](../questions.md): Q-01, Q-12 (🟢 [R.8: ответ владельца, вопрос 12]); Q-06, Q-08, Q-16 (🟡).

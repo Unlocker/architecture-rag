@@ -46,5 +46,5 @@
 Матрица влияния: «`adapters/eam-adapter` (`EamApiConnector`)» → `EamMapper` (формат `ArchObject`, критичность, `attrs`) проверяется `EamArchObjectMapperTest`; `eam-api-stub`/`docs/eam-api.yaml`. См. [`../design.md`](../design.md) §6.
 
 ## Риски
-- 🔴 Q-02, Q-03, Q-05 (расхождения `docs/06` с кодом), Q-04 (`docs/03`).
+- 🟢 [R.8: ответ владельца, вопрос 7] Q-02, Q-03, Q-05 (расхождения `docs/06` с кодом), Q-04 (`docs/03`).
 - 🟡 Q-07 (две таблицы критичности), Q-08 (`attrs: null`), Q-14 (`ownerTeam` в проде).

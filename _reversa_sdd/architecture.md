@@ -86,7 +86,7 @@ flowchart LR
 |---|---|---|
 | 🔴 А-1 | `docs/05-production-gap-list.md` п. 2.3 (аннотации MCP-tools) устарел: все шесть tools задают `readOnlyHint = true` | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java:43-43`; `docs/05-production-gap-list.md:29-29`; [`tech-debt.md`](tech-debt.md) §2 |
 | 🔴 А-2 | `docs/00-vision.md:555` называет `protocol=STREAMABLE`, код — `STATELESS` (ADR 0017, UNLOCKER-224) | `access/mcp-server/src/main/resources/application.yml:11-11`; `docs/00-vision.md:555-555` |
-| 🔴 А-3 | Недостижимые и незаполняемые состояния: `SUPERSEDED`, `QUARANTINED → RETRYING`, `dlq_entry.replayed_at`, `identity_candidate.status`, `SyncRun.status` (Р-1…Р-5) | [`detective-gaps.md`](detective-gaps.md) §2 |
+| 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 2)] А-3 | Недостижимые и незаполняемые состояния: `SUPERSEDED`, `QUARANTINED → RETRYING`, `dlq_entry.replayed_at`, `identity_candidate.status`, `SyncRun.status` (Р-1…Р-5) | [`detective-gaps.md`](detective-gaps.md) §2 |
 | 🔴 А-4 | Литералы типов событий и таблица кодов источников продублированы в 4–6 местах без общего источника и теста на совпадение | [`traceability/spec-impact-matrix.md`](traceability/spec-impact-matrix.md) §2 |
 | 🔴 А-5 | Раскладка модулей шире схемы `docs/00-vision.md:453`; `platform/observability` как модуля нет | `docs/00-vision.md:453-453`; `_reversa_sdd/inventory.md:98-98` |
 

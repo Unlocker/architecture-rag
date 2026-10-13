@@ -55,7 +55,7 @@ sequenceDiagram
 
 ## Riscos e Lacunas
 
-- 🔴 `replayed_at` не заполняется: фильтр DLQ «открытые» бесполезен (Q-03).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `replayed_at` не заполняется: фильтр DLQ «открытые» бесполезен (Q-03).
 - 🔴 События с `/` в `eventId` без карточки (Q-04).
 - 🟡 Пустые `fetched/applied/failed/endedAt` у `lastSyncRun` (Q-10).
 - 🟡 Копии таблиц кодов и статусов (Q-08).

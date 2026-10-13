@@ -35,7 +35,7 @@
 - BR-14. Строка `source_conflict` не удаляется; перестав расходиться, получает `RESOLVED` + `resolved_at`, при новом расхождении снова `OPEN`, `opened_at` сохраняется, `resolved_at = NULL` 🟢 (`IR/PostgresSourceConflicts.java:48-58,61-63`; IT `equalValueResolvesAndReopeningKeepsOpenedAt`).
 - BR-15. `RELATION`: пустой `master` или равные значения закрывают строку, расхождение — upsert `OPEN`; `PROPERTY` и `RELATION` не трогают друг друга при пересчёте 🟢 (`IR/PostgresSourceConflicts.java:105-119,59-60`; IT `relationClosesWhenMasterUnknownAndNeverOpensWithoutIt`, `retractResolvesRelationAndPropertyRecomputeLeavesItAlone`).
 - BR-16. Значения источника (недоверенный текст) не логируются и не попадают в `SourceConflict.toString()` и в исключения 🟢 (`IR/SourceConflict.java:77-81`, `IR/PostgresIdentityCandidates.java:212-214`).
-- BR-17. `identity_candidate.status` не выходит из `OPEN`, значений-перечисления нет 🔴 (`IR/IdentityCandidate.java:20`, `MIG/V4__identity_candidate.sql:31`; `_reversa_sdd/detective-gaps.md:22` Р-4).
+- BR-17. `identity_candidate.status` не выходит из `OPEN`, значений-перечисления нет 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] (`IR/IdentityCandidate.java:20`, `MIG/V4__identity_candidate.sql:31`; `_reversa_sdd/detective-gaps.md:22` Р-4).
 
 ## Функциональные требования
 

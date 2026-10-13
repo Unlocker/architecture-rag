@@ -18,7 +18,7 @@
 8. Поля `dlq_entry`: `reason = truncate(reason ?? errorCode)`, `error_code`, `payload_key` из записи (NULL, если raw нет), `created_at = now` 🟢 (`PEJ:145-148`).
 9. `toDlq` из `PROJECTED` и конечных статусов невозможен (исключение перехода, DLQ не создаётся) 🟢 (`PEJ:139`, `PEJ:335`).
 10. Повторный `toDlq` (QUARANTINED → QUARANTINED допустим): вторая запись DLQ не создаётся, но `error_code`/`error_reason` в `inbox_event` перезаписываются новыми значениями 🟢 (`PEJ:139-142`, `PEJ:339-344`).
-11. Выход из карантина (`QUARANTINED → RETRYING`) в main-коде никем не вызывается; `dlq_entry.replayed_at` не заполняется 🔴 (R-1, R-2).
+11. Выход из карантина (`QUARANTINED → RETRYING`) в main-коде никем не вызывается; `dlq_entry.replayed_at` не заполняется 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] (R-1, R-2).
 
 ## Требования
 

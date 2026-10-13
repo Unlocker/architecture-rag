@@ -91,7 +91,7 @@ flowchart LR
 | Observabilidade | Метрики экспортируются OTLP, по умолчанию выключено; `service.name=ingestion` | `ingestion/ingestion-service/src/main/resources/application.yml:50-61` | 🟢 |
 | Эксплуатация | Админский порт 8081 по умолчанию, наружу не публикуется | `ingestion/ingestion-service/src/main/resources/application.yml:2-4` | 🟢 |
 
-> Inferido a partir do código. Validar с эксплуатацией: SLO в модуле не заданы 🔴 (см. [`questions.md`](questions.md) Q-08).
+> Inferido a partir do código. Validar с эксплуатацией: SLO в модуле не заданы 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-08).
 
 ## Критерии приёмки (сквозные)
 
@@ -139,8 +139,8 @@ flowchart LR
 | `StoredEventReader` (RF-12) | Must | Без него нет ни диспетчера, ни replay |
 | Reconcile-прокси (RF-07) | Should | Ручной триггер snapshot; удаления делает `Reconciler` |
 | Метрики (RF-11) | Should | Дашборд PoC, не влияет на корректность |
-| Эскалация `RETRYING` → `QUARANTINED` по числу попыток | Won't | Не реализовано (🔴 Q-01) |
-| Выход из `QUARANTINED` через REST | Won't | Нет в коде (🔴 Q-02) |
+| Эскалация `RETRYING` → `QUARANTINED` по числу попыток | Won't | Не реализовано (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-01) |
+| Выход из `QUARANTINED` через REST | Won't | Нет в коде (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-02) |
 
 ## Зависит от / Связанные спецификации
 

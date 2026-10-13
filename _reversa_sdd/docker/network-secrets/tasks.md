@@ -33,11 +33,11 @@
 ## Tarefas de Teste
 
 - [ ] TT-01: `smoke.sh` — в CI трижды (`.github/workflows/ci.yml:78, 81, 85, 92`)
-- [ ] TT-02: 🔴 `console-smoke.sh` — не в CI (Q-07)
+- [ ] TT-02: 🟢 [R.8: ответ владельца, вопрос 14] `console-smoke.sh` — не в CI (Q-07)
 - [ ] TT-03: 🟡 нет проверки, что секреты не попадают в argv процессов (Q-08), и проверки заголовков безопасности proxy (Q-11)
 
 ## Ordem Sugerida
 T-01 → T-02 → T-03 → T-06 → T-04 → T-05.
 
 ## Lacunas Pendentes (🔴)
-См. [`../questions.md`](../questions.md): Q-07 (🔴); Q-04, Q-08, Q-09, Q-11, Q-15, Q-22 (🟡).
+См. [`../questions.md`](../questions.md): Q-07 (🟢 [R.8: ответ владельца, вопрос 14]); Q-04, Q-08, Q-09, Q-11, Q-15, Q-22 (🟡).

@@ -85,4 +85,4 @@ Docker Compose, образ `neo4j` (для `neo4j-admin`, `cypher-shell`), `post
 - 🟡 `trap ERR` не срабатывает в функциях — Q-06; пароль writer в argv `cypher-shell` — Q-08.
 - 🟡 Удаления reconcile не повторяются; `admin-console` не останавливается на время dump — Q-16.
 - 🟡 Сценарий проверяет только изменения источника EAM (ИТ-системы `9001`, `5101`); остальные источники в приёмке не участвуют (`platform/docker/scripts/backup-restore-check.sh:35-39`).
-- 🔴 RPO/RTO, расписание, ротация, PITR — не определены (Q-12).
+- 🟢 [R.8: ответ владельца, вопрос 12] RPO/RTO, расписание, ротация, PITR — не определены (Q-12).

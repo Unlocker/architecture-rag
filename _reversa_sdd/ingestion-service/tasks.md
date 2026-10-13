@@ -62,7 +62,7 @@
 - [ ] TT-04: `IngestionMetricsTest`, `IngestionMetricsIT`
 - [ ] TT-05: `AdminEndpointIT` — токены (`tokenForForeignAudienceIsUnauthorized`, `tokenOfForeignClientIsUnauthorizedEvenWithAdminAudienceAndScope`, `scopeIsEnforced`), `concurrentAdminOperationIsRejectedWith409`
 - [ ] TT-06: 🔴 нет теста конкуренции диспетчера и админской операции (`AdminEndpointIT` отключает диспетчер, `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:101`) — Q-06
-- [ ] TT-07: 🔴 нет теста совпадения литералов типов событий (`snapshot-complete`, `deleted`) между адаптером и ingestion — Q-05
+- [ ] TT-07: 🟢 [R.8: ответ владельца, вопрос 9] нет теста совпадения литералов типов событий (`snapshot-complete`, `deleted`) между адаптером и ingestion — Q-05
 
 ## Tarefas de Migração de Dados
 

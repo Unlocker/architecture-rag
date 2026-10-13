@@ -87,7 +87,7 @@ flowchart LR
 | Observabilidade | OTLP-экспорт метрик по умолчанию выключен, `service.name=mcp-server`, `service.instance.id=${HOSTNAME}` | `access/mcp-server/src/main/resources/application.yml:55-67` | 🟢 |
 | Escalabilidade | Нет rate limiting и квот на агента | `_reversa_sdd/tech-debt.md` 2.5 | 🔴 |
 
-> Inferido a partir do código. SLO (латентность, доступность) в модуле не заданы; измерения PoC — `docs/04-poc-measurements.md` 🔴 (см. [`questions.md`](questions.md) Q-10).
+> Inferido a partir do código. SLO (латентность, доступность) в модуле не заданы; измерения PoC — `docs/04-poc-measurements.md` 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-10).
 
 ## Критерии приёмки (сквозные)
 
@@ -139,7 +139,7 @@ flowchart LR
 | Четыре предметных tools + `get_asset` (RF-06..09) | Must | Содержимое витрины для агентов (ADR 0018) |
 | Аудит и метрики (RF-11) | Must | Критерий приёмки 9 PoC: p95 по tool |
 | `ping` (RF-10), health (RF-14) | Should | Диагностика и оркестрация |
-| Rate limiting / квоты на агента | Won't | Нет в коде (🔴 Q-09) |
+| Rate limiting / квоты на агента | Won't | Нет в коде (🟢 [R.8: ответ владельца, вопрос 12] Q-09) |
 | Сверка `@McpTool` ↔ `tool-scopes` при старте | Won't | Нет в коде (🔴 Q-04) |
 | Градация scope (read/privileged) | Won't | Один scope на всё (🟡 Q-03) |
 

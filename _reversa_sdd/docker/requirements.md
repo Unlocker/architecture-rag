@@ -114,7 +114,7 @@ flowchart LR
 | Наблюдаемость | Метрики OTLP выключены по умолчанию (`ARCHRAG_OBSERVABILITY=false`); Prometheus хранит 2 суток, скрейп 10 с | `platform/docker/docker-compose.yml:200, 486`; `platform/docker/observability/prometheus.yml:3` | 🟢 |
 | Эксплуатация | Нет лимитов ресурсов (`mem_limit`, `cpus`), нет расписания и ротации backup, нет PITR | `platform/docker/docker-compose.yml:38-526`; `platform/docker/README.md:189` | 🟡 |
 
-> Inferido a partir do código. Validar с эксплуатацией: SLO, RPO/RTO, лимиты ресурсов стенда не заданы 🔴 (см. [`questions.md`](questions.md) Q-12).
+> Inferido a partir do código. Validar с эксплуатацией: SLO, RPO/RTO, лимиты ресурсов стенда не заданы 🟢 [R.8: ответ владельца, вопрос 12] (см. [`questions.md`](questions.md) Q-12).
 
 ## Критерии приёмки (сквозные)
 

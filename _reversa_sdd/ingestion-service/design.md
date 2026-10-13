@@ -77,7 +77,7 @@
 - Gauges `archrag.ingestion.sync.lag` (секунды, самый старый ожидающий `inbox_event` по `source`) и `archrag.ingestion.dlq.open` (`dlq_entry WHERE replayed_at IS NULL`) обновляются `@Scheduled(fixedDelayString = "${archrag.metrics.refresh-interval:15s}")`; ожидающие статусы: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, RETRYING` (`:62-71, 131-147`) 🟢. `DataAccessException` → `LOG.warn` с классом, прежние значения сохраняются.
 - Счётчик `archrag.normalizer.unmapped.values{source,property}`: растёт на предупреждения нормализатора из таблицы `UNMAPPED_PROPERTIES = {UNMAPPED_CRITICALITY → criticality}`; предрегистрируется для `EAM`/`criticality`. Источник сообщений — `EventProcessor` (`metrics::recordWarnings`) (`:50-52, 93, 100-112`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:110-111`) 🟢.
 - `sourceTag`: `urn:corp:eam` → `eam`; код вне `SourceSystem` → `unknown` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:150-154`) 🟢. Теги `source` счётчика предупреждений — `SourceSystemCode.name().toLowerCase()` (`:109-112`); для `DEPLOYMAP` и `deploymap` совпадает с `SourceSystem.DEPLOY_MAP.code()` (`contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceSystem.java:9`, `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/SourceSystemCode.java:4-6`) 🟢.
-- 🔴 Метрика `dlq.open` не уменьшается (колонка `replayed_at` нигде не пишется) — см. [`questions.md`](questions.md) Q-03.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Метрика `dlq.open` не уменьшается (колонка `replayed_at` нигде не пишется) — см. [`questions.md`](questions.md) Q-03.
 
 ## Конфигурация
 
@@ -106,7 +106,7 @@
 
 | № | Связь | Где в модуле | Защита |
 |---|-------|--------------|--------|
-| 1 | Литералы типов `snapshot-complete` / `deleted` продублированы | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java:34`, `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java:37` ↔ `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java:29-32`, `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:92-94` | нет теста на имена типов 🔴 (Q-05) |
+| 1 | Литералы типов `snapshot-complete` / `deleted` продублированы | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java:34`, `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java:37` ↔ `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java:29-32`, `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:92-94` | нет теста на имена типов 🟢 [R.8: ответ владельца, вопрос 9] (Q-05) |
 | 5 | `GRANT SELECT` консоли ↔ SQL консоли | `ingestion/ingestion-service/src/main/resources/db/migration/V6__console_readonly_role.sql:15-16` | нет теста 🟡 |
 | 6 | Формат raw JSON: запись `EventMapper` ↔ чтение `StoredEventReader` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java:44-86` | `StoredEventReaderContractTest` 🟢 |
 | 12 | Три экземпляра `AuthorityMatrix.defaults()` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:64, 86` (+ `ExplainProvenanceTool`) | конфигурации матрицы нет 🟢 |
@@ -133,11 +133,11 @@
 
 ## Riscos e Lacunas
 
-- 🔴 Нет лимита повторов `RETRYING`; постоянная ошибка повторяется бесконечно — Q-01.
-- 🔴 `QUARANTINED` — тупик для оператора (REST-операции нет) — Q-02.
-- 🔴 `dlq_entry.replayed_at` не пишется — Q-03.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Нет лимита повторов `RETRYING`; постоянная ошибка повторяется бесконечно — Q-01.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `QUARANTINED` — тупик для оператора (REST-операции нет) — Q-02.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `dlq_entry.replayed_at` не пишется — Q-03.
 - 🔴 Replay/rebuild прерываются на первой «битой» строке журнала — Q-04, [`replay-rebuild/design.md`](replay-rebuild/design.md).
-- 🔴 Литералы типов событий без общего источника и без теста — Q-05.
+- 🟢 [R.8: ответ владельца, вопрос 9] Литералы типов событий без общего источника и без теста — Q-05.
 - 🟡 `JournalDispatcher.stop()` необратим: повторный `DispatcherRunner.start()` создаст executor, но `runOnce` сразу вернёт 0 (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:63, 89-91, 99`) — Q-09.
 - 🟡 Замок занимается диспетчером на время страницы; админская операция, пришедшая в этот момент, получает 409, а не ждёт. `docs/03-interfaces.md:386` говорит, что диспетчер «уступает» — это верно только между страницами. `AdminEndpointIT` отключает диспетчер (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:101`), конкуренция не тестируется — Q-06.
 - 🟡 Контейнерная проверка готовности опирается на «любой HTTP-ответ» (`platform/docker/docker-compose.yml:213-217`); комментарий compose «нет actuator» неточен (стартер подключён, `ingestion/ingestion-service/pom.xml:56-60`) — уже отмечено в `../code-analysis.md:1951`.

@@ -61,6 +61,6 @@
 
 ## Риски
 
-- 🔴 R-1: `replayed_at` не заполняется; 🔴 R-2: `QUARANTINED` без выхода; 🔴 R-3: `SUPERSEDED` недостижим; 🔴 R-4: нет лимита `attempts` (см. [`../questions.md`](../questions.md)).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-1: `replayed_at` не заполняется; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-2: `QUARANTINED` без выхода; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-3: `SUPERSEDED` недостижим; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-4: нет лимита `attempts` (см. [`../questions.md`](../questions.md)).
 - 🟡 Повторный `toDlq` расходится: `inbox_event.error_*` — новые значения, `dlq_entry` — первые.
 - 🟡 Успешный переход затирает код последней ошибки (`RETRYING → PROJECTED`).

@@ -39,11 +39,11 @@
 
 - [ ] TT-01: Шаг CI observability (AC-01) — есть
 - [ ] TT-02: `measure.sh` — вручную; результаты в `docs/04-poc-measurements.md`
-- [ ] TT-03: 🔴 `deployment-commit-check.sh` и `measure.sh` не в CI (Q-07)
+- [ ] TT-03: 🟢 [R.8: ответ владельца, вопрос 14] `deployment-commit-check.sh` и `measure.sh` не в CI (Q-07)
 - [ ] TT-04: 🟡 нет проверки, что панели дашборда возвращают данные (проверяется лишь наличие двух серий)
 
 ## Ordem Sugerida
 T-02 → T-01 → T-03 → T-04 → T-07 → T-05 → T-06.
 
 ## Lacunas Pendentes (🔴)
-См. [`../questions.md`](../questions.md): Q-07 (🔴); Q-17 (🟡).
+См. [`../questions.md`](../questions.md): Q-07 (🟢 [R.8: ответ владельца, вопрос 14]); Q-17 (🟡).

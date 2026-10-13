@@ -46,8 +46,8 @@
 
 - [ ] TT-01: `smoke.sh` (внешняя граница, критерий 6) — запускается в CI два раза
 - [ ] TT-02: `scripts/backup-restore-check.sh` (критерий 8) — запускается в CI
-- [ ] TT-03: `console-smoke.sh` (граница консоли) — 🔴 в CI не запускается (Q-07)
-- [ ] TT-04: `scripts/deployment-commit-check.sh` (UNLOCKER-248) — 🔴 в CI не запускается (Q-07)
+- [ ] TT-03: `console-smoke.sh` (граница консоли) — 🟢 [R.8: ответ владельца, вопрос 14] в CI не запускается (Q-07)
+- [ ] TT-04: `scripts/deployment-commit-check.sh` (UNLOCKER-248) — 🟢 [R.8: ответ владельца, вопрос 14] в CI не запускается (Q-07)
 - [ ] TT-05: `scripts/measure.sh` (критерий 9) — вручную, нужен профиль observability
 - [ ] TT-06: `shellcheck -S warning scripts/*.sh` — в CI; `smoke.sh`, `console-smoke.sh` и скрипты вне `scripts/` под shellcheck не попадают 🟡 (`.github/workflows/ci.yml:83`)
 - [ ] TT-07: 🟡 нет проверки `docker compose config` без `.env` (AC-02 в [`requirements.md`](requirements.md))
