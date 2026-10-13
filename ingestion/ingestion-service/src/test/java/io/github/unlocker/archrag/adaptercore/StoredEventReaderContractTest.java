@@ -144,15 +144,18 @@ class StoredEventReaderContractTest {
   }
 
   @Test
-  void snapshotMarkerWithoutObjectCountIsRejected() {
+  void snapshotMarkerWithoutObjectCountIsReadWithoutTheFieldSoThatEventProcessorQuarantinesIt() {
     var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 1L);
     var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
         marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
         new RawPayloadRef("raw/x", "h"), T, T);
     var stored = new StoredEvent(entry, marker.type(), marker.subject());
 
-    assertThatThrownBy(() -> reader.toEvent(stored,
-        ("{\"syncRunId\":\"run-1\",\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8)))
-        .isInstanceOf(IllegalArgumentException.class);
+    for (String raw : new String[] {"", ",\"objectCount\":-1", ",\"objectCount\":\"5\"", ",\"objectCount\":2.5"}) {
+      var event = reader.toEvent(stored,
+          ("{\"syncRunId\":\"run-1\"" + raw + ",\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8));
+
+      assertThat(event.data().payload()).as(raw).doesNotContainKey("objectCount");
+    }
   }
 }

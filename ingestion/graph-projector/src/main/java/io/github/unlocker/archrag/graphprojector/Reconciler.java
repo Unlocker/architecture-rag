@@ -224,8 +224,9 @@ public final class Reconciler implements ReconciliationTrigger {
     for (GraphProjection.ActiveRecord record : missing) {
       SourceKey key = record.key();
       String tombstoneId = journalTombstone(source, key, record.version(), now, syncRunId);
-      ConflictMarkers markers = retract(key, record.version());
-      if (!isStale(key, record.version())) {
+      boolean stale = isStale(key, record.version());
+      ConflictMarkers markers = stale ? ConflictMarkers.none() : retract(key);
+      if (!stale) {
         // Как в EventProcessor.delete: до записи в граф; сбой хранилища не глушится (повтор маркера идемпотентен).
         candidates.forget(key);
       }
@@ -251,11 +252,10 @@ public final class Reconciler implements ReconciliationTrigger {
   }
 
   /** Снимает утверждения записи; для записи без {@code gid} или с уже применённой более новой версией маркеры не меняются. */
-  private ConflictMarkers retract(SourceKey key, SourceVersion version) {
-    if (isStale(key, version)) {
-      return ConflictMarkers.none();
-    }
-    return identity.find(key).map(gid -> ConflictMarkers.of(gid, conflicts.retract(key, gid))).orElseGet(ConflictMarkers::none);
+  private ConflictMarkers retract(SourceKey key) {
+    return identity.find(key)
+        .map(gid -> ConflictMarkers.of(gid, conflicts.retract(key, gid)))
+        .orElseGet(ConflictMarkers::none);
   }
 
   /** Фиксирует tombstone в журнале до записи в граф; возвращает {@code eventId}. */

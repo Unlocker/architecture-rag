@@ -35,7 +35,7 @@ public final class EventMapper {
   /** Зарезервированный ключ payload: {@code COMPLETE} или {@code PARTIAL}. */
   public static final String COMPLETENESS_KEY = "_completeness";
 
-  /** Поле полноты прогона в payload маркера и его raw; отсутствие поля (формат до UNLOCKER-279) означает {@code COMPLETE}. */
+  /** Полнота прогона в payload маркера и его raw; нет поля (формат до UNLOCKER-279) — {@code COMPLETE}. */
   public static final String COMPLETENESS_FIELD = "completeness";
 
   /** {@code sourceType} маркера snapshot; {@code sourceId} — {@code syncRunId}. */

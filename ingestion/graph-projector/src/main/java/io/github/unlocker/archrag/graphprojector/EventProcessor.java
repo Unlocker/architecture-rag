@@ -639,8 +639,10 @@ public final class EventProcessor {
 
   /** {@code objectCount} маркера; пусто, если поля нет, оно не целое число или отрицательное. */
   private static OptionalLong objectCount(CanonicalEvent event) {
-    return event.data().payload().get("objectCount") instanceof Number n && (n instanceof Long || n instanceof Integer) && n.longValue() >= 0
-        ? OptionalLong.of(n.longValue())
+    Object value = event.data().payload().get("objectCount");
+    boolean integral = value instanceof Long || value instanceof Integer;
+    return integral && ((Number) value).longValue() >= 0
+        ? OptionalLong.of(((Number) value).longValue())
         : OptionalLong.empty();
   }
 
