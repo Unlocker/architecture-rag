@@ -1,0 +1,15 @@
+# ingestion/ingestion-service: решения
+
+| № | Решение | Источник | Код | Статус |
+|---|---------|----------|-----|--------|
+| D-1 | Операции оператора (replay, rebuild, reconcile, crosswalk) идут через админский эндпоинт ingestion, не через MCP; доступ — отдельный OIDC scope `architecture.admin` и внутренняя сеть | ADR [0013](../../docs/adr/0013-operator-ops-via-admin-endpoint.md) | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/SecurityConfiguration.java:28, 42` | 🟢 |
+| D-2 | Токен принимается только от клиентов из allow-list `azp`: audience админки выдаёт общий scope, токен консоли иначе дошёл бы до записывающего REST | ADR [0026](../../docs/adr/0026-admin-console-readonly-loopback.md), `../adrs/retroactive-map.md:51` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AuthorizedPartyValidator.java:9-31` | 🟢 |
+| D-3 | Консоль читает PostgreSQL только ролью `archrag_console_ro` (`SELECT` на шесть таблиц) | ADR [0026](../../docs/adr/0026-admin-console-readonly-loopback.md) | `ingestion/ingestion-service/src/main/resources/db/migration/V6__console_readonly_role.sql:6-16` | 🟢 |
+| D-4 | Один диспетчер журнала и `AdminLock` (кандидат К-7, ADR нет) | `../adrs/candidates.md` К-7 | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:23-44` | 🟡 (в реестре ADR отсутствует) |
+| D-5 | Reconcile = ручной новый snapshot адаптера; удаления — только `Reconciler` по маркеру (кандидат К-5; ADR 0020 «удаляем только после `snapshot-complete`») | ADR [0020](../../docs/adr/0020-tombstone-instead-of-hard-delete.md), К-5 | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdapterControlClient.java:12-15` | 🟡 |
+| D-6 | Аудит админских операций в `admin_audit` (кандидат К-8) | `../adrs/candidates.md` К-8 | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminOperations.java:10-18`; `V3__admin_audit.sql` | 🟡 |
+| D-7 | Идентичность подтверждается вручную, auto-merge нет; crosswalk без слияния существующих `gid` | ADR [0019](../../docs/adr/0019-identity-resolution-no-auto-merge.md) | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java:17-20` | 🟢 |
+| D-8 | Темпоральные связи: миграция `validFrom` при старте | ADR [0028](../../docs/adr/0028-structural-relations-temporal.md) | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:71-72` | 🟢 |
+| D-9 | Inbox в PostgreSQL как backbone событий; raw в S3 | ADR [0006](../../docs/adr/0006-postgres-inbox-event-backbone.md), [0007](../../docs/adr/0007-s3-raw-storage-seaweedfs.md) | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:45-49, 76-82` | 🟢 |
+
+Расхождения кода с ADR: не найдены; расхождения с `docs/03-interfaces.md` — Q-06, Q-11 в [`questions.md`](questions.md).

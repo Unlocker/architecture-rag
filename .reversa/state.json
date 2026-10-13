@@ -1,0 +1,708 @@
+{
+  "version": "1.3.4",
+  "project": "architecture-rag",
+  "user_name": "Сергей Максимов",
+  "chat_language": "ru",
+  "doc_language": "Русский",
+  "answer_mode": "chat",
+  "doc_level": "completo",
+  "output_folder": "_reversa_sdd",
+  "forward_folder": "_reversa_forward",
+  "phase": "concluido",
+  "completed": [
+    "reconhecimento",
+    "escavacao",
+    "interpretacao",
+    "geracao",
+    "revisao"
+  ],
+  "pending": [],
+  "checkpoints": {
+    "scout": {
+      "completed_at": "2026-10-12T17:22:37Z",
+      "files": [
+        "_reversa_sdd/inventory.md",
+        "_reversa_sdd/dependencies.md",
+        ".reversa/context/surface.json"
+      ]
+    },
+    "soul": {
+      "completed_at": "2026-10-12T17:22:37Z",
+      "files": [
+        "_reversa_sdd/soul.md"
+      ]
+    },
+    "archaeologist": {
+      "modules_analyzed": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "contracts/source-spi",
+        "adapters/adapter-core",
+        "adapters/eam-adapter",
+        "adapters/scm-adapter",
+        "adapters/asset-adapter",
+        "adapters/deploymap-adapter",
+        "ingestion/event-journal",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution",
+        "ingestion/graph-projector",
+        "ingestion/ingestion-service",
+        "access/graph-query-core",
+        "access/mcp-server",
+        "access/admin-console",
+        "access/admin-ui",
+        "platform/source-stubs",
+        "platform/demo-launcher",
+        "platform/integration-tests",
+        "platform/docker"
+      ],
+      "modules_pending": [],
+      "last_run_at": "2026-10-13T00:00:00Z",
+      "files": [
+        "_reversa_sdd/code-analysis.md",
+        "_reversa_sdd/data-dictionary.md",
+        "_reversa_sdd/flowcharts/canonical-model.md",
+        "_reversa_sdd/flowcharts/event-schemas.md",
+        "_reversa_sdd/flowcharts/source-spi.md",
+        ".reversa/context/modules.json",
+        "_reversa_sdd/flowcharts/adapter-core.md",
+        "_reversa_sdd/flowcharts/eam-adapter.md",
+        "_reversa_sdd/flowcharts/scm-adapter.md",
+        "_reversa_sdd/flowcharts/asset-adapter.md",
+        "_reversa_sdd/flowcharts/deploymap-adapter.md",
+        "_reversa_sdd/flowcharts/event-journal.md",
+        "_reversa_sdd/flowcharts/normalizer.md",
+        "_reversa_sdd/flowcharts/identity-resolution.md",
+        "_reversa_sdd/flowcharts/graph-projector.md",
+        "_reversa_sdd/flowcharts/ingestion-service.md",
+        "_reversa_sdd/flowcharts/graph-query-core.md",
+        "_reversa_sdd/flowcharts/mcp-server.md",
+        "_reversa_sdd/flowcharts/admin-console.md",
+        "_reversa_sdd/flowcharts/admin-ui.md",
+        "_reversa_sdd/flowcharts/source-stubs.md",
+        "_reversa_sdd/flowcharts/demo-launcher.md",
+        "_reversa_sdd/flowcharts/integration-tests.md",
+        "_reversa_sdd/flowcharts/docker.md"
+      ]
+    },
+    "data_master": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "tables_documented": 10,
+      "neo4j_constraints": 18,
+      "neo4j_indexes": 2,
+      "migrations": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "files": [
+        "_reversa_sdd/database/erd.md",
+        "_reversa_sdd/database/data-dictionary.md",
+        "_reversa_sdd/database/relationships.md",
+        "_reversa_sdd/database/business-rules.md",
+        "_reversa_sdd/database/procedures.md"
+      ]
+    },
+    "detective": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "business_rules_files": [
+        "_reversa_sdd/domain.md"
+      ],
+      "state_machines": 11,
+      "adr_candidates": 10,
+      "gaps_red": 6,
+      "gaps_yellow": 22,
+      "files": [
+        "_reversa_sdd/domain.md",
+        "_reversa_sdd/state-machines.md",
+        "_reversa_sdd/permissions.md",
+        "_reversa_sdd/adrs/retroactive-map.md",
+        "_reversa_sdd/adrs/candidates.md",
+        "_reversa_sdd/detective-gaps.md"
+      ]
+    },
+    "architect": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "doc_level": "completo",
+      "c4_levels": 3,
+      "integrations": 11,
+      "tech_debt_new": 18,
+      "gap_list_matched": 22,
+      "gap_list_stale": 3,
+      "spec_impact_couplings": 16,
+      "files": [
+        "_reversa_sdd/architecture.md",
+        "_reversa_sdd/c4-context.md",
+        "_reversa_sdd/c4-containers.md",
+        "_reversa_sdd/c4-components.md",
+        "_reversa_sdd/erd-complete.md",
+        "_reversa_sdd/integrations.md",
+        "_reversa_sdd/tech-debt.md",
+        "_reversa_sdd/traceability/spec-impact-matrix.md"
+      ]
+    },
+    "redator_progress": {
+      "part": "R.6a (UNLOCKER-271) 13 из 21 + R.6b (UNLOCKER-272) 8 из 21 = 21/21",
+      "granularity": "hybrid",
+      "folder_naming": "_reversa_sdd/<короткое имя модуля>/ (как flowcharts/), use case — вложенные папки",
+      "units_done": [
+        "contracts/canonical-model",
+        "contracts/event-schemas",
+        "contracts/source-spi",
+        "adapters/adapter-core",
+        "adapters/eam-adapter",
+        "adapters/scm-adapter",
+        "adapters/asset-adapter",
+        "adapters/deploymap-adapter",
+        "ingestion/event-journal",
+        "ingestion/normalizer",
+        "ingestion/identity-resolution",
+        "ingestion/graph-projector",
+        "ingestion/ingestion-service",
+        "access/graph-query-core",
+        "access/mcp-server",
+        "access/admin-console",
+        "access/admin-ui",
+        "platform/source-stubs",
+        "platform/demo-launcher",
+        "platform/integration-tests",
+        "platform/docker"
+      ],
+      "units_pending": [],
+      "globals_pending": [],
+      "per_unit": {
+        "contracts/canonical-model": {
+          "folder": "_reversa_sdd/canonical-model",
+          "files": 18,
+          "use_cases": [
+            "authority-lookup",
+            "git-url-normalization",
+            "node-model-invariants",
+            "relation-command-validation"
+          ]
+        },
+        "contracts/event-schemas": {
+          "folder": "_reversa_sdd/event-schemas",
+          "files": 17,
+          "use_cases": [
+            "journal-append-dedup-dlq",
+            "journal-keyset-read",
+            "processing-status-lifecycle",
+            "source-version-compare"
+          ]
+        },
+        "contracts/source-spi": {
+          "folder": "_reversa_sdd/source-spi",
+          "files": 15,
+          "use_cases": [
+            "fetch-by-id",
+            "fetch-changes",
+            "verify-webhook-signature"
+          ]
+        },
+        "adapters/adapter-core": {
+          "folder": "_reversa_sdd/adapter-core",
+          "files": 18,
+          "use_cases": [
+            "full-snapshot",
+            "incremental-poll",
+            "receive-webhook",
+            "source-fetch-retry"
+          ]
+        },
+        "adapters/eam-adapter": {
+          "folder": "_reversa_sdd/eam-adapter",
+          "files": 15,
+          "use_cases": [
+            "composite-sync",
+            "eam-api-request",
+            "fetch-changes"
+          ]
+        },
+        "adapters/scm-adapter": {
+          "folder": "_reversa_sdd/scm-adapter",
+          "files": 10,
+          "use_cases": [
+            "create-adapter",
+            "fetch-scm-changes"
+          ]
+        },
+        "adapters/asset-adapter": {
+          "folder": "_reversa_sdd/asset-adapter",
+          "files": 10,
+          "use_cases": [
+            "assemble-adapter",
+            "source-contract"
+          ]
+        },
+        "adapters/deploymap-adapter": {
+          "folder": "_reversa_sdd/deploymap-adapter",
+          "files": 11,
+          "use_cases": [
+            "assemble-adapter",
+            "fixtures-contract"
+          ]
+        },
+        "ingestion/event-journal": {
+          "folder": "_reversa_sdd/event-journal",
+          "files": 17,
+          "use_cases": [
+            "append-event",
+            "raw-payload-store",
+            "read-journal",
+            "transition-event"
+          ]
+        },
+        "ingestion/normalizer": {
+          "folder": "_reversa_sdd/normalizer",
+          "files": 18,
+          "use_cases": [
+            "bind-deployment",
+            "map-eam-objects",
+            "normalize-event",
+            "resolve-references"
+          ]
+        },
+        "ingestion/identity-resolution": {
+          "folder": "_reversa_sdd/identity-resolution",
+          "files": 15,
+          "use_cases": [
+            "candidate-matching",
+            "gid-mapping-crosswalk",
+            "source-conflicts"
+          ]
+        },
+        "ingestion/graph-projector": {
+          "folder": "_reversa_sdd/graph-projector",
+          "files": 18,
+          "use_cases": [
+            "deferred-relations",
+            "process-event",
+            "project-request",
+            "reconcile-missing-set"
+          ]
+        },
+        "ingestion/ingestion-service": {
+          "folder": "_reversa_sdd/ingestion-service",
+          "files": 18,
+          "use_cases": [
+            "dispatch-journal",
+            "load-crosswalk",
+            "reconcile-source",
+            "replay-rebuild"
+          ]
+        },
+        "access/graph-query-core": {
+          "folder": "_reversa_sdd/graph-query-core",
+          "files": 21,
+          "use_cases": [
+            "asset-search",
+            "budget-limits",
+            "execute-template",
+            "template-registry",
+            "trace-and-footprint"
+          ]
+        },
+        "access/mcp-server": {
+          "folder": "_reversa_sdd/mcp-server",
+          "files": 21,
+          "use_cases": [
+            "authorize-tool-call",
+            "explain-provenance",
+            "find-runtime-footprint",
+            "search-get-asset",
+            "trace-dependencies"
+          ]
+        },
+        "access/admin-console": {
+          "folder": "_reversa_sdd/admin-console",
+          "files": 18,
+          "use_cases": [
+            "auth-and-spa",
+            "graph-browse",
+            "identity-audit",
+            "sync-journal"
+          ]
+        },
+        "access/admin-ui": {
+          "folder": "_reversa_sdd/admin-ui",
+          "files": 21,
+          "use_cases": [
+            "build-bundle",
+            "graph-explorer",
+            "identity-audit",
+            "oidc-login",
+            "sync-monitoring"
+          ]
+        },
+        "platform/source-stubs": {
+          "folder": "_reversa_sdd/source-stubs",
+          "files": 18,
+          "use_cases": [
+            "eam-api-stub",
+            "signed-webhook",
+            "stub-source-http",
+            "stub-source-journal"
+          ]
+        },
+        "platform/demo-launcher": {
+          "folder": "_reversa_sdd/demo-launcher",
+          "files": 15,
+          "use_cases": [
+            "run-adapter",
+            "run-eam-api-stub",
+            "run-source-stub"
+          ]
+        },
+        "platform/integration-tests": {
+          "folder": "_reversa_sdd/integration-tests",
+          "files": 21,
+          "use_cases": [
+            "acceptance-mcp-f1-f4",
+            "admin-console-security",
+            "projection-identity-conflicts",
+            "query-core-read",
+            "sync-reconcile"
+          ]
+        },
+        "platform/docker": {
+          "folder": "_reversa_sdd/docker",
+          "files": 21,
+          "use_cases": [
+            "backup-restore",
+            "keycloak-oidc",
+            "network-secrets",
+            "observability-measure",
+            "stand-startup"
+          ]
+        }
+      },
+      "files_total": 356,
+      "completed_at": "2026-10-13T03:41:53Z",
+      "globals_done": [
+        "_reversa_sdd/traceability/code-spec-matrix.md",
+        "_reversa_sdd/openapi/",
+        "_reversa_sdd/user-stories/",
+        "_reversa_sdd/index.md"
+      ],
+      "globals_files": 12
+    },
+    "writer": {
+      "status": "complete",
+      "part1_done": true,
+      "files": [
+        "_reversa_sdd/canonical-model/",
+        "_reversa_sdd/event-schemas/",
+        "_reversa_sdd/source-spi/",
+        "_reversa_sdd/adapter-core/",
+        "_reversa_sdd/eam-adapter/",
+        "_reversa_sdd/scm-adapter/",
+        "_reversa_sdd/asset-adapter/",
+        "_reversa_sdd/deploymap-adapter/",
+        "_reversa_sdd/event-journal/",
+        "_reversa_sdd/normalizer/",
+        "_reversa_sdd/identity-resolution/",
+        "_reversa_sdd/graph-projector/",
+        "_reversa_sdd/ingestion-service/",
+        "_reversa_sdd/graph-query-core/",
+        "_reversa_sdd/mcp-server/",
+        "_reversa_sdd/admin-console/",
+        "_reversa_sdd/admin-ui/",
+        "_reversa_sdd/source-stubs/",
+        "_reversa_sdd/demo-launcher/",
+        "_reversa_sdd/integration-tests/",
+        "_reversa_sdd/docker/",
+        "_reversa_sdd/traceability/code-spec-matrix.md",
+        "_reversa_sdd/openapi/",
+        "_reversa_sdd/user-stories/",
+        "_reversa_sdd/index.md"
+      ],
+      "units_done": "21/21",
+      "part2_done": true
+    },
+    "reviewer": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "units_reviewed": 21,
+      "cross_review_engine": "none",
+      "reclassifications": 7,
+      "questions_generated": 20,
+      "questions_answered": 20,
+      "confidence_percent": 80,
+      "files": [
+        "_reversa_sdd/confidence-report.md",
+        "_reversa_sdd/gaps.md",
+        "_reversa_sdd/questions.md"
+      ],
+      "note": "ответы владельца получены 2026-10-13; реализация расхождений — отдельными задачами; step-04-regression-check пропущен (нет _reversa_forward/)"
+    },
+    "finalizacao": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "task": "UNLOCKER-274",
+      "confidence_percent": 82,
+      "owner_answers_applied": 20,
+      "red_marks_before": 833,
+      "red_marks_after": 575,
+      "docs_site": "_reversa_sdd/_reversa_docs/index.html",
+      "files": [
+        "_reversa_sdd/confidence-report.md",
+        "_reversa_sdd/gaps.md",
+        "_reversa_sdd/questions.md",
+        "_reversa_sdd/_reversa_docs/",
+        "README.md"
+      ],
+      "note": "метки 🔴 переклассифицированы по ответам владельца; реализация расхождений — UNLOCKER-276"
+    }
+  },
+  "engines": [
+    "claude-code"
+  ],
+  "agents": [
+    "reversa",
+    "reversa-add",
+    "reversa-agents-help",
+    "reversa-arbiter",
+    "reversa-archaeologist",
+    "reversa-architect",
+    "reversa-arquitetura-3d",
+    "reversa-audit",
+    "reversa-autonomous",
+    "reversa-brainstorm",
+    "reversa-challenger",
+    "reversa-clarify",
+    "reversa-code-express",
+    "reversa-coding",
+    "reversa-curator",
+    "reversa-data-master",
+    "reversa-debugger",
+    "reversa-debugger-debate",
+    "reversa-debugger-fix",
+    "reversa-debugger-graph",
+    "reversa-decouple",
+    "reversa-depth-inspection",
+    "reversa-design-system",
+    "reversa-designer",
+    "reversa-detective",
+    "reversa-docs",
+    "reversa-docs-analyst",
+    "reversa-docs-mapper",
+    "reversa-docs-publisher",
+    "reversa-docs-storyteller",
+    "reversa-drafter",
+    "reversa-especialista-d3",
+    "reversa-explorer",
+    "reversa-extract-soul",
+    "reversa-forward",
+    "reversa-forward-autonomous",
+    "reversa-framer",
+    "reversa-highcharts-visualizer",
+    "reversa-ideator",
+    "reversa-image-prompt-json",
+    "reversa-inspector",
+    "reversa-migrate",
+    "reversa-modularize",
+    "reversa-n8n",
+    "reversa-new",
+    "reversa-optimize",
+    "reversa-paradigm-advisor",
+    "reversa-plan",
+    "reversa-pre-spec",
+    "reversa-pricing-estimate",
+    "reversa-pricing-profile",
+    "reversa-pricing-size",
+    "reversa-principles",
+    "reversa-prune",
+    "reversa-quality",
+    "reversa-reconstructor",
+    "reversa-refactor",
+    "reversa-requirements",
+    "reversa-researcher",
+    "reversa-restructure",
+    "reversa-resume",
+    "reversa-reviewer",
+    "reversa-scout",
+    "reversa-screen-translator",
+    "reversa-selo-generativo",
+    "reversa-simplify",
+    "reversa-spec-sdd",
+    "reversa-standardize",
+    "reversa-strategist",
+    "reversa-sync",
+    "reversa-to-do",
+    "reversa-visor",
+    "reversa-writer"
+  ],
+  "created_files": [
+    ".claude/skills/reversa",
+    ".agents/skills/reversa",
+    ".claude/skills/reversa-add",
+    ".agents/skills/reversa-add",
+    ".claude/skills/reversa-agents-help",
+    ".agents/skills/reversa-agents-help",
+    ".claude/skills/reversa-arbiter",
+    ".agents/skills/reversa-arbiter",
+    ".claude/skills/reversa-archaeologist",
+    ".agents/skills/reversa-archaeologist",
+    ".claude/skills/reversa-architect",
+    ".agents/skills/reversa-architect",
+    ".claude/skills/reversa-arquitetura-3d",
+    ".agents/skills/reversa-arquitetura-3d",
+    ".claude/skills/reversa-audit",
+    ".agents/skills/reversa-audit",
+    ".claude/skills/reversa-autonomous",
+    ".agents/skills/reversa-autonomous",
+    ".claude/skills/reversa-brainstorm",
+    ".agents/skills/reversa-brainstorm",
+    ".claude/skills/reversa-challenger",
+    ".agents/skills/reversa-challenger",
+    ".claude/skills/reversa-clarify",
+    ".agents/skills/reversa-clarify",
+    ".claude/skills/reversa-code-express",
+    ".agents/skills/reversa-code-express",
+    ".claude/skills/reversa-coding",
+    ".agents/skills/reversa-coding",
+    ".claude/skills/reversa-curator",
+    ".agents/skills/reversa-curator",
+    ".claude/skills/reversa-data-master",
+    ".agents/skills/reversa-data-master",
+    ".claude/skills/reversa-debugger",
+    ".agents/skills/reversa-debugger",
+    ".claude/skills/reversa-debugger-debate",
+    ".agents/skills/reversa-debugger-debate",
+    ".claude/skills/reversa-debugger-fix",
+    ".agents/skills/reversa-debugger-fix",
+    ".claude/skills/reversa-debugger-graph",
+    ".agents/skills/reversa-debugger-graph",
+    ".claude/skills/reversa-decouple",
+    ".agents/skills/reversa-decouple",
+    ".claude/skills/reversa-depth-inspection",
+    ".agents/skills/reversa-depth-inspection",
+    ".claude/skills/reversa-design-system",
+    ".agents/skills/reversa-design-system",
+    ".claude/skills/reversa-designer",
+    ".agents/skills/reversa-designer",
+    ".claude/skills/reversa-detective",
+    ".agents/skills/reversa-detective",
+    ".claude/skills/reversa-docs",
+    ".agents/skills/reversa-docs",
+    ".claude/skills/reversa-docs-analyst",
+    ".agents/skills/reversa-docs-analyst",
+    ".claude/skills/reversa-docs-mapper",
+    ".agents/skills/reversa-docs-mapper",
+    ".claude/skills/reversa-docs-publisher",
+    ".agents/skills/reversa-docs-publisher",
+    ".claude/skills/reversa-docs-storyteller",
+    ".agents/skills/reversa-docs-storyteller",
+    ".claude/skills/reversa-drafter",
+    ".agents/skills/reversa-drafter",
+    ".claude/skills/reversa-especialista-d3",
+    ".agents/skills/reversa-especialista-d3",
+    ".claude/skills/reversa-explorer",
+    ".agents/skills/reversa-explorer",
+    ".claude/skills/reversa-extract-soul",
+    ".agents/skills/reversa-extract-soul",
+    ".claude/skills/reversa-forward",
+    ".agents/skills/reversa-forward",
+    ".claude/skills/reversa-forward-autonomous",
+    ".agents/skills/reversa-forward-autonomous",
+    ".claude/skills/reversa-framer",
+    ".agents/skills/reversa-framer",
+    ".claude/skills/reversa-highcharts-visualizer",
+    ".agents/skills/reversa-highcharts-visualizer",
+    ".claude/skills/reversa-ideator",
+    ".agents/skills/reversa-ideator",
+    ".claude/skills/reversa-image-prompt-json",
+    ".agents/skills/reversa-image-prompt-json",
+    ".claude/skills/reversa-inspector",
+    ".agents/skills/reversa-inspector",
+    ".claude/skills/reversa-migrate",
+    ".agents/skills/reversa-migrate",
+    ".claude/skills/reversa-modularize",
+    ".agents/skills/reversa-modularize",
+    ".claude/skills/reversa-n8n",
+    ".agents/skills/reversa-n8n",
+    ".claude/skills/reversa-new",
+    ".agents/skills/reversa-new",
+    ".claude/skills/reversa-optimize",
+    ".agents/skills/reversa-optimize",
+    ".claude/skills/reversa-paradigm-advisor",
+    ".agents/skills/reversa-paradigm-advisor",
+    ".claude/skills/reversa-plan",
+    ".agents/skills/reversa-plan",
+    ".claude/skills/reversa-pre-spec",
+    ".agents/skills/reversa-pre-spec",
+    ".claude/skills/reversa-pricing-estimate",
+    ".agents/skills/reversa-pricing-estimate",
+    ".claude/skills/reversa-pricing-profile",
+    ".agents/skills/reversa-pricing-profile",
+    ".claude/skills/reversa-pricing-size",
+    ".agents/skills/reversa-pricing-size",
+    ".claude/skills/reversa-principles",
+    ".agents/skills/reversa-principles",
+    ".claude/skills/reversa-prune",
+    ".agents/skills/reversa-prune",
+    ".claude/skills/reversa-quality",
+    ".agents/skills/reversa-quality",
+    ".claude/skills/reversa-reconstructor",
+    ".agents/skills/reversa-reconstructor",
+    ".claude/skills/reversa-refactor",
+    ".agents/skills/reversa-refactor",
+    ".claude/skills/reversa-requirements",
+    ".agents/skills/reversa-requirements",
+    ".claude/skills/reversa-researcher",
+    ".agents/skills/reversa-researcher",
+    ".claude/skills/reversa-restructure",
+    ".agents/skills/reversa-restructure",
+    ".claude/skills/reversa-resume",
+    ".agents/skills/reversa-resume",
+    ".claude/skills/reversa-reviewer",
+    ".agents/skills/reversa-reviewer",
+    ".claude/skills/reversa-scout",
+    ".agents/skills/reversa-scout",
+    ".claude/skills/reversa-screen-translator",
+    ".agents/skills/reversa-screen-translator",
+    ".claude/skills/reversa-selo-generativo",
+    ".agents/skills/reversa-selo-generativo",
+    ".claude/skills/reversa-simplify",
+    ".agents/skills/reversa-simplify",
+    ".claude/skills/reversa-spec-sdd",
+    ".agents/skills/reversa-spec-sdd",
+    ".claude/skills/reversa-standardize",
+    ".agents/skills/reversa-standardize",
+    ".claude/skills/reversa-strategist",
+    ".agents/skills/reversa-strategist",
+    ".claude/skills/reversa-sync",
+    ".agents/skills/reversa-sync",
+    ".claude/skills/reversa-to-do",
+    ".agents/skills/reversa-to-do",
+    ".claude/skills/reversa-visor",
+    ".agents/skills/reversa-visor",
+    ".claude/skills/reversa-writer",
+    ".agents/skills/reversa-writer",
+    ".reversa/templates/actions-template.md",
+    ".reversa/templates/principles-template.md",
+    ".reversa/templates/quality-template.md",
+    ".reversa/templates/requirements-template.md",
+    ".reversa/templates/roadmap-template.md",
+    ".reversa/scripts/sh/bind-to-extraction.sh",
+    ".reversa/scripts/sh/prepare-roadmap.sh",
+    ".reversa/scripts/sh/verify-prerequisites.sh",
+    ".reversa/scripts/ps/bind-to-extraction.ps1",
+    ".reversa/scripts/ps/prepare-roadmap.ps1",
+    ".reversa/scripts/ps/verify-prerequisites.ps1",
+    ".reversa/hooks.yml",
+    ".reversa/setup.json",
+    ".reversa/reversa-config.json",
+    ".reversa/hooks/README.md",
+    ".reversa/hooks/check-legacy-policy.mjs",
+    ".reversa/state.json",
+    ".reversa/config.toml",
+    ".reversa/config.user.toml",
+    ".reversa/plan.md",
+    ".reversa/version",
+    ".reversa/_config/manifest.yaml"
+  ]
+}

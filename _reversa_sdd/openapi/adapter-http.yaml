@@ -1,0 +1,61 @@
+# Источник: _reversa_sdd/adapter-core/contracts.md §1. HTTP-вход адаптеров (WebhookServer).
+openapi: 3.0.3
+info:
+  title: Arch RAG adapter HTTP inbound
+  version: "0.1.0"
+  description: >
+    JDK HttpServer на виртуальных потоках. /webhook защищён HMAC-подписью; /control/snapshot без аутентификации
+    (внутренняя сеть, потребитель — ingestion POST /admin/reconcile). Ответы без тела, кроме /control/snapshot.
+servers:
+  - url: http://adapter:{port}
+    variables: {port: {default: "8080"}}
+paths:
+  /webhook:
+    post:
+      summary: Принять уведомление источника и записать событие в inbox
+      x-source: adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54
+      parameters:
+        - {name: X-Archrag-Signature, in: header, required: true, description: "sha256=<hex>, HMAC-SHA256(secret, timestamp + \".\" + body)", schema: {type: string}}
+        - {name: X-Archrag-Timestamp, in: header, required: true, description: "unix-секунды", schema: {type: string}}
+        - {name: X-Archrag-Event-Id, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, source, sourceType, sourceId]
+              properties:
+                eventId: {type: string, description: "совпадает с X-Archrag-Event-Id"}
+                source: {type: string, description: "код адаптера, не URN"}
+                sourceType: {type: string}
+                sourceId: {type: string}
+                operation: {type: string, description: "читается только значение DELETE"}
+                sourceVersion: {type: number, description: "нужен только для DELETE, если источник объект не знает"}
+      responses:
+        "202": {description: записано (включая DUPLICATE)}
+        "400": {description: невалидное тело/поля/source/eventId, DELETE без sourceVersion}
+        "401": {description: подпись/timestamp неверны или вне окна}
+        "404": {description: источник не знает объект, операция не DELETE}
+        "405": {description: не POST}
+        "413": {description: тело больше 65536 байт}
+        "500": {description: внутренняя ошибка}
+        "503": {description: источник недоступен}
+  /control/snapshot:
+    post:
+      summary: Синхронно выполнить полный snapshot (Poller.snapshotOnce)
+      x-source: adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:55-57
+      responses:
+        "202": {description: исход, не относящийся к 409/503, content: {application/json: {schema: {$ref: "#/components/schemas/SnapshotOutcome"}}}}
+        "409": {description: ALREADY_RUNNING, content: {application/json: {schema: {$ref: "#/components/schemas/SnapshotOutcome"}}}}
+        "503": {description: GAVE_UP, content: {application/json: {schema: {$ref: "#/components/schemas/SnapshotOutcome"}}}}
+        "405": {description: не POST}
+        "500": {description: "тело {}"}
+components:
+  schemas:
+    SnapshotOutcome:
+      type: object
+      properties:
+        outcome: {type: string}
+        appended: {type: integer, format: int64}
+        syncRunId: {type: string}

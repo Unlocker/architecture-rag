@@ -1,0 +1,61 @@
+/* Дополнения к шасси: компоненты страниц Arch RAG (светлая сдержанная тема) */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.reversa-doc-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--reversa-space-md); padding: var(--reversa-space-lg) 0; }
+.reversa-doc-hero-seal { width: 220px; height: 220px; }
+.reversa-doc-hero-seal svg { width: 100%; height: 100%; }
+.reversa-doc-hero-tagline { max-width: 760px; color: var(--reversa-fg-muted); }
+.reversa-doc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--reversa-space-md); }
+.reversa-doc-card { display: block; background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); padding: var(--reversa-space-md); color: var(--reversa-fg); }
+.reversa-doc-card:hover { background: var(--reversa-surface-hover); text-decoration: none; }
+.reversa-doc-card h3 { margin: 0 0 4px; }
+.reversa-doc-card p { margin: 0; color: var(--reversa-fg-muted); font-size: var(--reversa-font-size-sm); }
+.reversa-doc-links { columns: 2 280px; margin: 0; padding-left: 20px; }
+.reversa-doc-3d-stage, .reversa-doc-graph-stage { background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); position: relative; min-height: 120px; overflow: hidden; }
+.reversa-doc-three-canvas canvas { width: 100% !important; height: 560px !important; }
+.reversa-doc-3d-loader { padding: var(--reversa-space-md); color: var(--reversa-fg-muted); }
+.reversa-doc-d3-canvas { width: 100%; height: 620px; }
+#city-info, #graph-info { margin-top: 8px; font-size: var(--reversa-font-size-sm); color: var(--reversa-fg-muted); min-height: 1.6em; }
+#graph-info h3 { margin: 0 0 4px; }
+.reversa-doc-dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--reversa-space-lg); }
+.reversa-doc-chart { background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); padding: var(--reversa-space-md); min-width: 0; }
+.reversa-doc-chart.wide { grid-column: 1 / -1; }
+.reversa-doc-chart h2 { font-size: var(--reversa-font-size-h3); margin-top: 0; }
+.reversa-doc-chart p.hint { margin: 0 0 8px; font-size: var(--reversa-font-size-sm); color: var(--reversa-fg-muted); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--reversa-space-md); }
+.kpi { background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); padding: var(--reversa-space-md); }
+.kpi b { display: block; font-size: 26px; }
+.kpi span { color: var(--reversa-fg-muted); font-size: var(--reversa-font-size-sm); }
+.md-note { color: var(--reversa-fg-muted); font-style: italic; }
+.md-table { overflow-x: auto; margin: 8px 0; }
+.md-table table, table.plain { border-collapse: collapse; font-size: var(--reversa-font-size-sm); width: 100%; }
+.md-table th, .md-table td, table.plain th, table.plain td { border: 1px solid var(--reversa-border); padding: 4px 8px; text-align: left; vertical-align: top; }
+.md-table th, table.plain th { background: var(--reversa-code-bg); }
+pre.md-code { max-height: 360px; overflow: auto; font-size: 12px; }
+blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--reversa-border); color: var(--reversa-fg-muted); }
+.reversa-doc-feature details { background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); margin: 8px 0; padding: 4px 12px; }
+.reversa-doc-feature details details { background: transparent; }
+.reversa-doc-feature summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.reversa-doc-feature-tldr { background: var(--reversa-surface); border-left: 4px solid var(--reversa-accent); padding: 8px 16px; border-radius: var(--reversa-radius); }
+.feature-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.conf-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--reversa-border); min-width: 120px; }
+.conf-bar i { display: block; }
+.conf-g { background: #4f6b5d; } .conf-y { background: #d3a032; } .conf-r { background: #c0392b; }
+.reversa-doc-deck { background: var(--reversa-surface); border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); padding: var(--reversa-space-lg); }
+.reversa-doc-deck-slides { list-style: none; margin: 0; padding: 0; min-height: 420px; }
+.reversa-doc-deck-slides > li { display: none; }
+.reversa-doc-deck-slides > li.is-current { display: block; }
+.reversa-doc-deck-slides h2 { font-size: 30px; }
+.reversa-doc-deck-nav { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 16px; }
+.reversa-doc-deck:fullscreen { background: var(--reversa-bg); padding: 48px; overflow: auto; }
+.glossary-search-wrap input { width: 100%; padding: 8px 12px; font-size: 16px; border: 1px solid var(--reversa-border); border-radius: var(--reversa-radius); }
+.reversa-doc-glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--reversa-space-md); margin-top: 16px; }
+.glossary-card h3 { margin: 0 0 6px; word-break: break-word; }
+.glossary-card p { margin: 8px 0; }
+.legend ul { margin: 4px 0; padding-left: 20px; }
+.sidebar-field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+.sidebar-field button { align-self: flex-start; }
+@media (max-width: 900px) { .reversa-doc-dashboard { grid-template-columns: 1fr; } }
+
+body[data-sidebar="none"] { grid-template-columns: 1fr; grid-template-areas: "header" "main" "footer"; }
+body[data-sidebar="none"] .reversa-doc-main { justify-self: center; }
+.feature-meta { margin-bottom: 12px; }

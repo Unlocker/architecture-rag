@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-10-12T17:20:38Z",
+  "project_root": "architecture-rag (корень репозитория)",
+  "languages": [
+    { "name": "Java", "extensions": [".java"], "file_count": 405 },
+    { "name": "TypeScript", "extensions": [".ts", ".tsx"], "file_count": 33 },
+    { "name": "SQL", "extensions": [".sql"], "file_count": 7 },
+    { "name": "Shell", "extensions": [".sh", ".ps1"], "file_count": 19 },
+    { "name": "JavaScript", "extensions": [".js"], "file_count": 2 }
+  ],
+  "primary_language": "Java",
+  "frameworks": [
+    { "name": "Spring Boot", "version": "4.1.1", "source": "pom.xml" },
+    { "name": "Spring AI (MCP server, webmvc)", "version": "2.0.1", "source": "pom.xml" },
+    { "name": "Testcontainers", "version": "2.0.5", "source": "pom.xml" },
+    { "name": "AWS SDK v2 (S3)", "version": "2.55.11", "source": "pom.xml" },
+    { "name": "Neo4j Java Driver", "version": "по Spring Boot BOM", "source": "pom.xml" },
+    { "name": "Flyway", "version": "по Spring Boot BOM", "source": "ingestion/event-journal/pom.xml" },
+    { "name": "React", "version": "18.3.1", "source": "access/admin-ui/package.json" },
+    { "name": "Webpack", "version": "5.111.1", "source": "access/admin-ui/package.json" },
+    { "name": "Cytoscape", "version": "3.30.4", "source": "access/admin-ui/package.json" }
+  ],
+  "package_manager": "Maven (wrapper 3.9.11); npm для access/admin-ui",
+  "entry_points": [
+    { "path": "access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/McpServerApplication.java", "type": "server_entry" },
+    { "path": "ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceApplication.java", "type": "server_entry" },
+    { "path": "access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/AdminConsoleApplication.java", "type": "server_entry" },
+    { "path": "platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java", "type": "launcher_entry" },
+    { "path": "access/admin-ui/src/index.tsx", "type": "spa_entry" }
+  ],
+  "config_files": [
+    "pom.xml", ".mvn/wrapper/maven-wrapper.properties", "access/mcp-server/src/main/resources/application.yml",
+    "access/admin-console/src/main/resources/application.yml", "ingestion/ingestion-service/src/main/resources/application.yml",
+    "access/admin-ui/package.json", "access/admin-ui/webpack.config.js", "access/admin-ui/tsconfig.json",
+    "platform/docker/docker-compose.yml", "platform/docker/keycloak/archrag-realm.json"
+  ],
+  "ci_cd": [".github/workflows/ci.yml"],
+  "docker": {
+    "dockerfile": "platform/docker/Dockerfile",
+    "compose": "platform/docker/docker-compose.yml"
+  },
+  "database_hints": [
+    { "path": "ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql", "type": "flyway_migration" },
+    { "path": "ingestion/identity-resolution/src/main/resources/db/migration/", "type": "migrations_dir" },
+    { "path": "ingestion/ingestion-service/src/main/resources/db/migration/", "type": "migrations_dir" },
+    { "path": "ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/schema/Neo4jSchema.java", "type": "neo4j_schema_in_code" }
+  ],
+  "test_framework": "JUnit 5 + AssertJ + Testcontainers (Jest для admin-ui)",
+  "test_file_count": 129,
+  "modules": [
+    "contracts/canonical-model", "contracts/event-schemas", "contracts/source-spi",
+    "adapters/adapter-core", "adapters/eam-adapter", "adapters/scm-adapter", "adapters/asset-adapter", "adapters/deploymap-adapter",
+    "ingestion/event-journal", "ingestion/normalizer", "ingestion/identity-resolution", "ingestion/graph-projector", "ingestion/ingestion-service",
+    "access/graph-query-core", "access/mcp-server", "access/admin-console", "access/admin-ui",
+    "platform/integration-tests", "platform/source-stubs", "platform/demo-launcher"
+  ],
+  "total_files": 613,
+  "organization_suggestion": {
+    "granularity": "module",
+    "rationale": "Maven multi-module: пять групп (contracts, adapters, ingestion, access, platform), 20 модулей с чёткими границами; HTTP-роутинг не централизован.",
+    "signals": [
+      { "type": "top_level_domain_folders", "evidence": ["contracts/", "adapters/", "ingestion/", "access/", "platform/"] },
+      { "type": "maven_modules", "evidence": ["pom.xml", "contracts/pom.xml", "adapters/pom.xml", "ingestion/pom.xml", "access/pom.xml", "platform/pom.xml"] }
+    ],
+    "features": []
+  },
+  "notes": {
+    "test_counts": "92 *Test.java в src/test модулей + 31 *IT.java в platform/integration-tests + 6 *.test.ts(x) в admin-ui; считались файлы, не методы",
+    "non_modules": "platform/docker (compose, Dockerfile, Keycloak, observability) — не Maven-модуль, pom.xml нет",
+    "adr_range": "docs/adr содержит ADR 0001–0031 (задача называет 0001–0028)"
+  }
+}

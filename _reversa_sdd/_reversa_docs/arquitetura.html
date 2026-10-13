@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архитектура 3D (Code City) | Arch RAG</title>
+    <meta name="reversa-category" content="diagram">
+    <meta name="reversa-template" content="arquitetura">
+    <meta name="reversa-source-md" content="../architecture.md">
+    <meta name="reversa-producer-agent" content="reversa-docs-mapper">
+    <meta name="reversa-generated-at" content="2026-10-13T10:20:13Z">
+    <meta name="reversa-schema-version" content="1">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/site.css">
+    <script src="assets/vendor/three.min.js"></script>
+    <script src="assets/vendor/OrbitControls.js"></script>
+</head>
+<body data-style="sober" data-page="arquitetura" data-sidebar="on">
+    <header class="reversa-doc-header">
+        <a class="reversa-doc-logo" href="index.html" aria-label="На главную">
+            <span class="seal" aria-hidden="true"><svg class="seal-mini" viewBox="0 0 200 200" width="32" height="32" role="img" aria-label="Печать проекта"><circle cx="100" cy="100" r="96" fill="#f5f3ee" stroke="#1e2937" stroke-width="4"/><polygon points="121.3,14.6 136.0,56.7 180.0,63.4 156.3,101.1 178.5,139.8 134.2,144.7 117.9,186.2 86.4,154.6 43.8,167.7 48.8,123.4 12.0,98.2 49.8,74.6 46.5,30.1 88.6,44.9" fill="#7c8a99" fill-opacity="0.35" stroke="#1e2937" stroke-width="1"/><polygon points="54.7,47.9 90.4,64.7 112.5,32.1 121.6,70.5 160.8,67.5 136.5,98.5 163.4,127.3 124.0,127.6 118.2,166.6 93.4,136.0 59.3,155.7 67.8,117.2 31.1,102.9 66.4,85.5" fill="#3d4a5c" fill-opacity="0.50" stroke="#1e2937" stroke-width="1"/><polygon points="50.5,93.0 73.0,82.0 74.6,57.0 97.2,67.6 117.8,53.3 123.6,77.7 147.6,84.8 132.2,104.5 141.6,127.8 116.5,128.0 104.2,149.8 88.4,130.4 63.7,134.4 69.0,109.9" fill="#7c8a99" fill-opacity="0.65" stroke="#1e2937" stroke-width="1"/><polygon points="129.1,110.6 114.1,114.4 109.9,129.4 97.5,120.0 83.2,126.0 82.8,110.5 69.2,103.1 81.1,93.1 78.4,77.8 93.6,80.9 103.9,69.2 110.9,83.1 126.5,83.8 120.0,98.0" fill="#7c8a99" fill-opacity="0.80" stroke="#1e2937" stroke-width="1"/><circle cx="100" cy="100" r="9" fill="#1e2937"/></svg></span>
+            <span class="project-name">Arch RAG</span>
+        </a>
+        <nav class="reversa-doc-nav" aria-label="Разделы документации">
+            <a href="index.html" data-page-id="index">Обзор</a>
+            <a href="arquitetura.html" data-page-id="arquitetura" class="is-active" aria-current="page">Архитектура 3D</a>
+            <a href="modulos.html" data-page-id="modulos">Модули</a>
+            <a href="metricas.html" data-page-id="metricas">Метрики</a>
+            <a href="features.html" data-page-id="features">Единицы</a>
+            <a href="glossario.html" data-page-id="glossario">Глоссарий</a>
+            <a href="deck.html" data-page-id="deck">Дек</a>
+        </nav>
+        <div class="reversa-doc-toolbar">
+            <button type="button" class="theme-toggle" aria-label="Сменить тему">
+                <span class="theme-toggle-label">Тема</span>
+            </button>
+        </div>
+    </header>
+    <main class="reversa-doc-main" role="main">
+        <div class="reversa-doc-payload">
+            <h1 class="reversa-doc-title">Архитектура 3D (Code City)</h1>
+<p>Каждое здание - один файл кода (Java, TypeScript, JavaScript), район - Maven-модуль (единица). Высота здания растёт с числом строк кода, цвет показывает грубую оценку числа ветвлений. Вращайте сцену мышью, колесо масштабирует.</p>
+<section class="reversa-doc-3d-stage" data-mode="code-city"><div id="three-canvas" class="reversa-doc-three-canvas"></div>
+<div class="reversa-doc-3d-loader" aria-live="polite">Загрузка Code City...</div></section>
+<div id="city-info" aria-live="polite">Наведите курсор на здание.</div>
+<details class="reversa-doc-3d-legend legend"><summary>Легенда</summary><ul>
+<li>Высота: строки кода (непустые), масштаб как корень из LOC.</li>
+<li>Цвет (режим «сложность»): оценка числа ветвлений (if/for/while/case/catch/&amp;&amp;/||/?); это не цикломатическая сложность, а грубая оценка.</li>
+<li>Район (пол): Maven-модуль; цвет пола - контур: contracts, adapters, ingestion, access, platform.</li>
+<li>Тестовые файлы входят в районы наравне с основным кодом; режим «код и тесты» их различает.</li></ul></details>
+        </div>
+    </main>
+    <aside class="reversa-doc-sidebar" aria-label="Управление" data-page="arquitetura"><div class="sidebar-field"><label>Масштаб высоты</label><input type="range" data-param="vscale" min="0.3" max="3" step="0.1" value="1" data-default="1"></div><div class="sidebar-field"><label>Свет</label><input type="range" data-param="light" min="0.2" max="1.5" step="0.1" value="0.8" data-default="0.8"></div><div class="sidebar-field"><label>Раскраска</label><select data-param="palette" data-default="complexity"><option value="complexity">сложность</option><option value="group">контур</option><option value="tests">код и тесты</option></select></div><div class="sidebar-field"><label>Действия</label><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="export-png">Скачать PNG</button></div></aside>
+    <footer class="reversa-doc-footer">
+        <span class="reversa-doc-footer-text">Сгенерировано Reversa, <time datetime="2026-10-13T10:20:13Z">2026-10-13</time></span>
+        <span class="reversa-doc-footer-sep" aria-hidden="true">|</span>
+        <a href="../architecture.md" class="reversa-doc-source-link">Источник в markdown</a>
+    </footer>
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/sidebar.js"></script>
+    <script src="assets/js/city.js"></script>
+</body>
+</html>

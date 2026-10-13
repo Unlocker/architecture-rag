@@ -1,0 +1,5 @@
+# asset-adapter: вопросы к человеку
+
+1. 🔴 Контракт реального CMDB (аутентификация, пагинация, лимиты, объём) не определён; адаптер умеет только формат заглушки (`GET /changes`, `GET /objects/{type}/{id}`). Evidence: `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/HttpSourceConnector.java:81-86` (нет заголовка авторизации); `docs/05-production-gap-list.md:43`.
+2. 🔴 Почему модуль/класс называются `asset`/`Asset`, а источник — `cmdb`? В коде причина не зафиксирована (`docs/03-interfaces.md:658`; `docs/00-vision.md:466` говорит `asset-adapter`, `:690` — «Asset DB»). Нужно ли переименование или достаточно записи в ADR.
+3. 🔴 Расхождение документации с кодом: `docs/03-interfaces.md:316` утверждает, что env-переменные и порты адаптеров «появятся вместе со стендом (E5, не в develop)», но `platform/demo-launcher` уже читает `ARCHRAG_SOURCE_URL`, `ARCHRAG_WEBHOOK_SECRET` (`platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/LauncherConfig.java:24-25`) и собирает `AssetAdapter` (`DemoLauncher.java:142`).

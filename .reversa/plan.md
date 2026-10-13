@@ -1,0 +1,105 @@
+# Plano de Exploração — architecture-rag
+
+> Criado pelo Reversa em 2026-10-12
+> Marque cada tarefa com ✅ quando concluída.
+> Você pode editar este plano antes de iniciar: adicione, remova ou reordene tarefas conforme necessário.
+
+---
+
+## Fase 1: Reconhecimento 🔍
+
+- [x] ✅ **Scout** — Mapeamento de estrutura de pastas e tecnologias
+- [x] ✅ **Scout** — Análise de dependências e gerenciadores de pacotes
+- [x] ✅ **Scout** — Identificação de entry points, CI/CD e configurações
+
+## Soul Extractor ✅
+
+- [x] ✅ **Soul Extractor** — `_reversa_sdd/soul.md` (R.1, UNLOCKER-262)
+
+## Decisão de organização das specs 🗂️
+
+> Entre o Scout e o Arqueólogo, o Reversa pergunta como você quer organizar as specs (por módulo, caso de uso, endpoint, híbrida, por features ou customizada). A escolha fica persistida em `.reversa/config.toml` na seção `[specs]` e não será reperguntada em execuções futuras. Para reapresentar o menu, remova manualmente a seção.
+
+## Fase 2: Escavação 🏗️
+
+> Переписано после Scout (R.1, UNLOCKER-262): по одному пункту Archaeologist на каждый из 17 модулей. Группы соответствуют подзадачам R.2a–R.2e. `platform/docker` — не Maven-модуль, входит в R.2e отдельным пунктом.
+
+### R.2a contracts (UNLOCKER-263)
+
+- [x] ✅ **Archaeologist** — `contracts/canonical-model`: узлы, связи, `GraphCommand`, `AuthorityMatrix`, инварианты
+- [x] ✅ **Archaeologist** — `contracts/event-schemas`: `CanonicalEvent`, `EventJournal`, `Checkpoint`, `ProcessingStatus`
+- [x] ✅ **Archaeologist** — `contracts/source-spi`: `SourceConnector`, `SourceChange`, вебхуки
+
+### R.2b adapters (UNLOCKER-264)
+
+- [x] ✅ **Archaeologist** — `adapters/adapter-core`: `Poller`, `WebhookServer`, `InboxWriter`, `RetryPolicy`
+- [x] ✅ **Archaeologist** — `adapters/eam-adapter`: адаптер EAM
+- [x] ✅ **Archaeologist** — `adapters/scm-adapter`: адаптер Git/SCM
+- [x] ✅ **Archaeologist** — `adapters/asset-adapter`: адаптер материальных активов
+- [x] ✅ **Archaeologist** — `adapters/deploymap-adapter`: адаптер deploy map / Helm
+
+### R.2c ingestion (UNLOCKER-265)
+
+- [x] ✅ **Archaeologist** — `ingestion/event-journal`: Postgres-журнал, S3 raw store
+- [x] ✅ **Archaeologist** — `ingestion/normalizer`: мапперы источников → `GraphCommand`
+- [x] ✅ **Archaeologist** — `ingestion/identity-resolution`: crosswalk, кандидаты, конфликты
+- [x] ✅ **Archaeologist** — `ingestion/graph-projector`: проекция в Neo4j, reconcile, `Neo4jSchema`
+- [x] ✅ **Archaeologist** — `ingestion/ingestion-service`: диспетчер журнала, админ-эндпоинт, replay/rebuild
+
+### R.2d access (UNLOCKER-266)
+
+- [x] ✅ **Archaeologist** — `access/graph-query-core`: шаблоны запросов, лимиты, executor
+- [x] ✅ **Archaeologist** — `access/mcp-server`: MCP tools, безопасность, аудит
+- [x] ✅ **Archaeologist** — `access/admin-console`: read-only консоль: REST и безопасность
+- [x] ✅ **Archaeologist** — `access/admin-ui`: SPA React/TypeScript
+
+### R.2e platform (UNLOCKER-267)
+
+- [x] ✅ **Archaeologist** — `platform/source-stubs`: заглушки мастер-систем
+- [x] ✅ **Archaeologist** — `platform/demo-launcher`: запуск адаптеров и заглушек
+- [x] ✅ **Archaeologist** — `platform/integration-tests`: IT-набор, фикстуры, приёмочные сценарии
+- [x] ✅ **Archaeologist** — `platform/docker (не модуль)`: compose, Dockerfile, Keycloak, observability, скрипты
+
+## Fase 3: Interpretação 🧠
+
+- [x] ✅ **Data Master** — `_reversa_sdd/database/`: схема Neo4j, Flyway V1–V7, роли, ключи S3, ERD (R.3, UNLOCKER-268)
+- [x] ✅ **Detetive** — Arqueologia Git e ADRs retroativos
+- [x] ✅ **Detetive** — Regras de negócio implícitas e máquinas de estado
+- [x] ✅ **Detetive** — Matriz de permissões (RBAC/ACL) (R.4, UNLOCKER-269: `_reversa_sdd/{domain,state-machines,permissions,detective-gaps}.md`, `_reversa_sdd/adrs/`)
+- [x] ✅ **Arquiteto** — Diagramas C4 (Contexto, Containers, Componentes) (R.5, UNLOCKER-270: `_reversa_sdd/{c4-context,c4-containers,c4-components,architecture}.md`)
+- [x] ✅ **Arquiteto** — ERD completo e integrações externas (R.5, UNLOCKER-270: `_reversa_sdd/{erd-complete,integrations,tech-debt}.md`)
+- [x] ✅ **Arquiteto** — Spec Impact Matrix (R.5, UNLOCKER-270: `_reversa_sdd/traceability/spec-impact-matrix.md`)
+
+## Fase 4: Geração 📝
+
+- [x] ✅ **Redator** — Specs SDD por componente. Часть 1 ✅ (R.6a, UNLOCKER-271): 13 единиц — contracts/*, adapters/*, ingestion/{event-journal, normalizer, identity-resolution, graph-projector, ingestion-service} в `_reversa_sdd/<модуль>/`. Часть 2 ✅ (R.6b, UNLOCKER-272): access/*, platform/* — 21/21, индекс `_reversa_sdd/index.md`
+- [x] ✅ **Redator** — OpenAPI (R.6b, UNLOCKER-272: `_reversa_sdd/openapi/*.yaml`)
+- [x] ✅ **Redator** — User Stories (R.6b, UNLOCKER-272: `_reversa_sdd/user-stories/`)
+- [x] ✅ **Redator** — Code/Spec Matrix (R.6b, UNLOCKER-272: `_reversa_sdd/traceability/code-spec-matrix.md`)
+
+## Fase 5: Revisão ✅
+
+- [x] ✅ **Revisor** — Revisão cruzada de specs (R.7, UNLOCKER-273: `_reversa_sdd/{gaps,confidence-report}.md`)
+- [x] ✅ **Revisor** — Resolução de lacunas com o usuário (20/20 ответов владельца 2026-10-13, `_reversa_sdd/questions.md`, `gaps.md` §5)
+- [x] ✅ **Revisor** — Relatório de confiança final (80% → 82% после ответов владельца, R.8)
+- [x] ✅ **Finalização (R.8, UNLOCKER-274)** — переклассификация 🔴 по ответам владельца, HTML-сайт `_reversa_sdd/_reversa_docs/`, раздел README
+
+---
+
+## Agentes Independentes
+
+> Execute estes agentes quando os recursos estiverem disponíveis — podem rodar em qualquer fase.
+
+- [ ] **Visor** — Análise de interface via screenshots
+- [ ] **Data Master** — Análise completa do banco de dados
+- [ ] **Design System** — Extração de tokens de design
+- [ ] **Tracer** — Análise dinâmica (requer sistema acessível)
+
+---
+
+## Próximo passo
+
+Após o Time de Descoberta concluir e o `_reversa_sdd/` estar populado, você pode disparar um dos fluxos seguintes:
+
+- `/reversa-migrate`: orquestrador do **Time de Migração** (Paradigm Advisor → Curator → Strategist → Designer → Screen Translator → Inspector). Gera as specs do sistema novo. Saída em `_reversa_sdd/migration/` e `_reversa_sdd/screens/`.
+- `/reversa-reconstructor`: gera plano bottom-up para reimplementar o software a partir das specs do legado (uma tarefa por sessão).

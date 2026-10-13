@@ -1,0 +1,106 @@
+# Источник: _reversa_sdd/ingestion-service/contracts.md §1. Только фактические ручки.
+openapi: 3.0.3
+info:
+  title: Arch RAG ingestion admin API
+  version: "0.1.0"
+  description: >
+    Операторские операции. Все POST, JSON. Токен: issuer ARCHRAG_OIDC_ISSUER_URI, aud ARCHRAG_ADMIN_RESOURCE_URI,
+    azp из archrag.admin.allowed-clients, scope architecture.admin. Одновременно выполняется одна операция (409 при занятом замке).
+    Ошибки: {"error":"<message>"}. Порт ARCHRAG_ADMIN_PORT (по умолчанию 8081), наружу не публикуется.
+servers:
+  - url: http://ingestion-service:8081
+security:
+  - bearer: [architecture.admin]
+paths:
+  /admin/replay:
+    post:
+      summary: Переиграть диапазон журнала под replayId
+      x-source: ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:59-82
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source: {type: string, pattern: "^[A-Za-z0-9:._-]{1,200}$"}
+                receivedFrom: {type: string, format: date-time}
+                receivedTo: {type: string, format: date-time}
+                replayId: {type: string, format: uuid, description: "если нет, генерируется"}
+      responses:
+        "200": {description: ReplayResult, content: {application/json: {schema: {$ref: "#/components/schemas/ReplayResult"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Busy"}
+  /admin/rebuild:
+    post:
+      summary: Стереть граф и переиграть весь журнал
+      x-source: ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:84-92
+      parameters:
+        - {name: confirm, in: query, required: true, description: "должно быть true", schema: {type: boolean, default: false}}
+      responses:
+        "200": {description: ReplayResult, content: {application/json: {schema: {$ref: "#/components/schemas/ReplayResult"}}}}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Busy"}
+  /admin/reconcile/{source}:
+    post:
+      summary: Запустить snapshot в adapter-сервисе, ответ адаптера пробрасывается как есть
+      x-source: ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:94-115
+      parameters:
+        - {name: source, in: path, required: true, description: "короткий код или urn:corp:<код>", schema: {type: string}}
+      responses:
+        "202": {description: "snapshot принят (тело адаптера)"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Busy"}
+        "502": {$ref: "#/components/responses/Error"}
+  /admin/crosswalks:
+    post:
+      summary: Подтвердить пары идентичности (1..1000), исход по каждому элементу
+      x-source: ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:117-123
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 1000
+              items: {$ref: "#/components/schemas/CrosswalkItem"}
+      responses:
+        "200":
+          description: исходы по элементам
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    index: {type: integer}
+                    status: {type: string, enum: [APPLIED, CONFLICT, INVALID]}
+                    gid: {type: string, format: uuid, nullable: true}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Busy"}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Error: {description: "{error}", content: {application/json: {schema: {type: object, properties: {error: {type: string}}}}}}
+    Busy: {description: "другая админская операция выполняется (или ALREADY_RUNNING от адаптера для reconcile)", content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+  schemas:
+    ReplayResult:
+      type: object
+      properties:
+        replayId: {type: string, format: uuid}
+        total: {type: integer}
+        statuses: {type: object, additionalProperties: {type: integer}, description: "ProcessingStatus + SKIPPED_SNAPSHOT_MARKER, SKIPPED_NO_RAW"}
+    SourceKey:
+      type: object
+      properties: {source: {type: string}, sourceType: {type: string}, sourceId: {type: string}}
+    CrosswalkItem:
+      type: object
+      properties:
+        left: {$ref: "#/components/schemas/SourceKey"}
+        right: {$ref: "#/components/schemas/SourceKey"}
+        reason: {type: string}
