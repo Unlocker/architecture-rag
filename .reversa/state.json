@@ -431,14 +431,14 @@
       "cross_review_engine": "none",
       "reclassifications": 7,
       "questions_generated": 20,
-      "questions_answered": 0,
+      "questions_answered": 20,
       "confidence_percent": 80,
       "files": [
         "_reversa_sdd/confidence-report.md",
         "_reversa_sdd/gaps.md",
         "_reversa_sdd/questions.md"
       ],
-      "note": "pending: ответы владельца на questions.md; step-04-regression-check пропущен (нет _reversa_forward/)"
+      "note": "ответы владельца получены 2026-10-13; реализация расхождений — отдельными задачами; step-04-regression-check пропущен (нет _reversa_forward/)"
     }
   },
   "engines": [
