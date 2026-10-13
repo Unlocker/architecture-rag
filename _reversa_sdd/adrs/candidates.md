@@ -1,0 +1,109 @@
+# Кандидаты в ADR
+
+> Detective, этап R.4 (UNLOCKER-269). Здесь только решения, **которых нет в `docs/adr/0001–0031`** (проверено поиском по ключевым словам: версии, `PendingRelation`, `source_conflict`, `AdminLock`, HMAC, `reconcile:` и др. — совпадений в ADR нет; часть описана в `docs/02-data-model.md`/`docs/03-interfaces.md`, но не как решение). Все кандидаты 🟡: это восстановление «почему» по коду и истории, решение принимает архитектор/владелец. Решения, покрытые ADR, — в [`retroactive-map.md`](retroactive-map.md). Формат ADR — `docs/adr/0000-template.md`; поле «Кто принял» остаётся пустым.
+
+| № | Заголовок | Приоритет |
+|---|---|---|
+| К-1 | Версионирование и идемпотентность изменений | высокий |
+| К-2 | Хранилище утверждений и конфликтов источников в PostgreSQL | высокий |
+| К-3 | Отложенные связи и alias-ключи | средний |
+| К-4 | Какие связи темпоральны и как версия замещает связи | средний |
+| К-5 | Reconcile: tombstone через журнал и ручной snapshot адаптера | высокий |
+| К-6 | Параметры candidate matching | средний |
+| К-7 | Один диспетчер журнала и `AdminLock` | средний |
+| К-8 | Аудит доступа: `admin_audit`, аудит MCP-вызовов | средний |
+| К-9 | Webhook — триггер, а не носитель данных | низкий |
+| К-10 | Словарные значения источника не угадываются | низкий |
+
+---
+
+## К-1. Версионирование и идемпотентность изменений 🟡
+
+- **Суть решения в коде.** Версия источника — неотрицательное десятичное число (до 40 цифр), сравнивается как `BigInteger`; нечисловая версия отклоняется. Исход сравнения: выше — применить; равна — `DUPLICATE` (повтор того же изменения под другим `eventId`, например webhook и polling; не ошибка); ниже — `IGNORED_OLD_VERSION`. Tombstone с равной версией применяется к ещё активной записи (удаление не обязано повышать версию). Сравнение выполняется дважды: до записи (пока событие `RECEIVED`, и повторно для `RETRYING`) и в транзакции Neo4j после блокировки записи (`SET r._lock`), чтобы параллельные проекции не обгоняли друг друга.
+- **Откуда.** `contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java:5-21`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/VersionDecision.java:5-38`; `EventProcessor.java:303-344`; `GraphProjector.java:304-324`. Коммиты `39262c9` (UNLOCKER-168), `768354b` (UNLOCKER-175 «skip stale retried events before writing assertions»).
+- **Почему важно.** ADR 0006/0020 требуют идемпотентности, но не фиксируют *правило сравнения версий*; нечисловая версия источника сломает приём целиком (отклоняется валидацией, а не сравнивается лексикографически).
+- **Альтернативы (по коду видно, что отвергнуты).** лексикографическое сравнение («99» > «184») — отвергнуто явно в Javadoc; last-write-wins по времени — отвергнуто ADR 0008.
+- **Последствия.** источник обязан отдавать монотонную числовую версию; версия tombstone `Reconciler` берётся из применённой записи, поэтому upsert той же версии объект не воскресит.
+- **Затронутый код.** `contracts/event-schemas`, `ingestion/graph-projector`.
+- **Пересечения с ADR.** 0006, 0020 (частично), 0008.
+
+## К-2. Хранилище утверждений и конфликтов источников в PostgreSQL 🟡
+
+- **Суть решения в коде.** Расхождения значений детектируются не по графу, а по таблицам `property_assertion` (утверждения каждой записи, флаг `authoritative` из `AuthorityMatrix`) и `source_conflict` (V5; `kind` добавлен в V7). Конфликт — пара «авторитетное утверждение / неавторитетное с другим значением»; сравнение по точному равенству строк; строки не удаляются, а переходят `OPEN`↔`RESOLVED`; canonical-значение конфликт не меняет. Граф получает только *имена* конфликтующих свойств (`ASSERTS.conflicts`), значения остаются в PostgreSQL. Утверждения записи заменяются целиком (`DELETE` + `INSERT`) до транзакции Neo4j.
+- **Откуда.** `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:36-66, 82-134`; `SourceConflicts.java:10-18`; `GraphProjector.java:56-59, 468-488`; миграции `V5__source_conflict.sql`, `V7__source_conflict_kind.sql`. Коммиты `a62d2d9`, `cc32189`, `768354b` (UNLOCKER-175).
+- **Почему важно.** ADR 0008 обещает «конфликты разбираются по явным правилам», ADR 0030/0031 **расширяют** `source_conflict`, но самого решения «где и как хранятся утверждения» в реестре нет; оба последующих ADR на него молча опираются.
+- **Альтернативы.** хранить конфликты узлом в Neo4j (отвергнуто косвенно: значения источника не должны попадать в граф, который читают агенты); вычислять конфликт на лету из `SourceRecord` (зависел бы от порядка прихода).
+- **Последствия.** две системы хранения должны быть согласованы (PostgreSQL до графа, без общей транзакции): окно, в котором конфликт уже есть, а маркер в графе ещё нет, — ограничение 1 в ADR 0030/0031.
+- **Затронутый код.** `ingestion/identity-resolution`, `ingestion/graph-projector`, `access/admin-console`.
+- **Пересечения с ADR.** 0008, 0019, 0030, 0031.
+
+## К-3. Отложенные связи и alias-ключи 🟡
+
+- **Суть решения в коде.** Нормализатор не создаёт фиктивных узлов: связь с неизвестным концом превращается в `UnresolvedReference` → `DeferRelation`; проектор хранит её узлом `PendingRelation` (ключ — constraint) и достраивает в транзакции проекции конечной точки. Отложенные связи записи заменяются целиком при каждой применённой проекции и удаляются tombstone. Для ссылок, ключ которых в источнике неизвестен, действуют alias-ключи: `SourceKey(SCM, REPOSITORY_URL, <нормализованный url>)` и `SourceKey(EAM, IT_SYSTEM_CODE, <eamCode>)`; конец-псевдоним подменяется реальным ключом записи. Reconciliation отложенные связи не лечит; срока годности у них нет.
+- **Откуда.** `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/CommandSink.java:13-102`; `EventProcessor.java:77-79, 221-223`; `GraphProjector.java:62-67, 73-76, 92-95, 327-337, 362-415`; `PendingRelations.java`. Коммиты `51d88d3` (UNLOCKER-214), `31bfe03`, `61bbe5c` (UNLOCKER-255), `8fd4ae1` (UNLOCKER-250). ADR 0029 использует alias репозитория, но не вводит механизм.
+- **Почему важно.** Допущение об однопоточности (`JournalDispatcher` + один экземпляр + `AdminLock`) прописано только в Javadoc: ради него отсутствует повторная проверка после записи отложенной связи. При масштабировании на второй экземпляр правило сломается.
+- **Альтернативы.** создавать stub-узел для неизвестного конца (отвергнуто: ловушка с «чужими» `gid` — `EventProcessor.java:589-597`); возвращать `RETRYING` до прихода конца (так было до E1.14, см. `docs/02-data-model.md:273`).
+- **Затронутый код.** `ingestion/normalizer`, `ingestion/graph-projector`, `contracts/canonical-model` (`DeferRelation`).
+- **Пересечения с ADR.** 0003, 0029.
+
+## К-4. Какие связи темпоральны и как версия замещает связи 🟡
+
+- **Суть решения в коде.** Темпоральны 10 из 15 типов `RelationType`; нетемпоральны `PART_OF`, `HOSTED_ON` и служебные `ASSERTS`, `OWNS_RECORD`, `PROCESSED`. При применении версии записи открытые связи *типов, которые версия утверждает или откладывает*, от этой записи, но отсутствующие в версии, закрываются `validTo = max(validFrom, eventTime)`; типы, которых в версии нет, не трогаются; tombstone и повтор версии ничего не замещают. Идентичность связи — тройка `(from, to, identityProps)`, сейчас единственное свойство идентичности — `DEPLOYED_FROM.commit`.
+- **Откуда.** `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/relation/RelationType.java:13-27, 48-55`; `GraphProjector.java:69-71, 350-352, 611-645`. Коммиты `5b3ba6c` (UNLOCKER-217), `0707d21` → `95594a6` (убрали `validTo` с `HOSTED_ON`), `8fd4ae1`.
+- **Почему важно.** ADR 0028 говорит «по механизму UNLOCKER-217», но сам механизм и осознанная нетемпоральность `PART_OF`/`HOSTED_ON` нигде не записаны. Известный риск: `PARTIAL`-запись с неполным списком однотипных связей закроет остальные ([`../state-machines.md`](../state-machines.md), §7).
+- **Альтернативы.** замещать все типы связей записи (отвергнуто: отсутствующий тип означает «не передано», а не «удалено»); хранить историю отдельными узлами.
+- **Затронутый код.** `contracts/canonical-model`, `ingestion/graph-projector`, `access/graph-query-core`.
+- **Пересечения с ADR.** 0020, 0028, 0029.
+
+## К-5. Reconcile: tombstone через журнал и ручной snapshot адаптера 🟡
+
+- **Суть решения в коде.** (а) Каждый tombstone `Reconciler` до записи в граф фиксируется событием `architecture.asset.deleted.v1` с `eventId = reconcile:<syncRunId>:<type>/<id>` и raw в S3, чтобы replay и rebuild воспроизводили удаления; повтор доводит строку до конечного статуса. (б) Missing set считается по журналу (а не по графу): объект, по которому после начала прогона пришло любое событие, не удаляется; неполный прогон (меньше событий, чем `objectCount`) не удаляет ничего. (в) `POST /admin/reconcile/{source}` не пересчитывает старый missing set, а запускает *новый полный snapshot* в adapter-сервисе (`/control/snapshot`).
+- **Откуда.** `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/Reconciler.java:28-57, 100-194`; `AdminController.java:94-115`; `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookServer.java:54-66`. Коммиты `24a0b0b`, `14a6e1f` → `9656ce5`, `53474af` (UNLOCKER-169/170).
+- **Почему важно.** ADR 0020 фиксирует «удаляем только после `snapshot-complete`», но не воспроизводимость удалений из журнала и не то, что ручной reconcile — это новый snapshot. Ручной вызов зависит от неаутентифицированного `/control/snapshot` ([`../permissions.md`](../permissions.md), §7 🔴).
+- **Альтернативы.** повторять сохранённый missing set (был сделан и заменён); физическое удаление (ADR 0020 отклоняет).
+- **Затронутый код.** `ingestion/graph-projector`, `ingestion/ingestion-service`, `adapters/adapter-core`.
+- **Пересечения с ADR.** 0013, 0020.
+
+## К-6. Параметры candidate matching 🟡
+
+- **Суть решения в коде.** Веса зашиты в `FeatureKind` (`HOSTNAME 0.6`, `REPOSITORY_URL 0.8`, `NAME 0.4` — сильные; `OWNER 0.2` — слабый, кандидата не создаёт); `score = min(1.0, сумма весов различных видов)`; сравнение внутри семейства меток (`ComputeInstance` и его подтипы — одно); предел `MAX_MATCHES = 50` совпадений на признак, сверх которого кандидаты по нему не создаются; параллельные `record` сериализует advisory-lock по `(семейство, вид, значение)`; признаки хранятся нормализованными, без сырых значений.
+- **Откуда.** `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/FeatureKind.java:8-47`; `PostgresIdentityCandidates.java:21-37, 190-215`; `FeatureExtractor.java:43-69`. Коммиты `931e33d`, `526f0e6`, `efdd337` (UNLOCKER-174).
+- **Почему важно.** ADR 0019 запрещает auto-merge, но порог/веса определяют, что вообще увидит оператор; при превышении `MAX_MATCHES` кандидаты теряются молча (WARN). Статус кандидата никогда не выходит из `OPEN` ([`../state-machines.md`](../state-machines.md), §3 🔴) — вместе с этим стоит принять решение о жизненном цикле.
+- **Альтернативы.** конфигурируемые веса (код говорит «зафиксированы в коде, не конфигурация»); ML-подобие (вне PoC, ADR 0022).
+- **Затронутый код.** `ingestion/identity-resolution`.
+- **Пересечения с ADR.** 0019, 0022.
+
+## К-7. Один диспетчер журнала и `AdminLock` 🟡
+
+- **Суть решения в коде.** `JournalDispatcher` однопоточный, экземпляр сервиса один; каждая страница обрабатывается под `AdminLock`, и replay/rebuild/reconcile/crosswalk тоже идут под ним, поэтому живая проекция и админские операции не пересекаются; занятый замок завершает проход диспетчера. Внутри объекта порядок сохраняется: после `RETRYING`/исключения более поздние события этого объекта пропускаются до следующего прохода. Проблемные строки без raw или с битым raw уходят в DLQ из диспетчера (отступление от «DLQ ведёт `EventProcessor`»).
+- **Откуда.** `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:23-44, 94-130`; `AdminLock.java`; `AdminOperations.java:10-18, 38-61`. Коммиты `009e383`, `f7331ab` (UNLOCKER-210).
+- **Почему важно.** На этом допущении держатся К-3 (нет повторной проверки отложенной связи) и непротиворечивость replay; в ADR о конкурентности ничего нет, масштабирование «на второй экземпляр» молча ломает инварианты.
+- **Альтернативы.** распределённый замок/очередь с партиционированием по `(source, sourceType, sourceId)` (Kafka, production gap list).
+- **Затронутый код.** `ingestion/ingestion-service`, `ingestion/graph-projector`.
+- **Пересечения с ADR.** 0006, 0013.
+
+## К-8. Аудит доступа 🟡
+
+- **Суть решения в коде.** Три разных канала: (1) админские операции — таблица `admin_audit`, запись `STARTED` обязательна *до* операции (нет аудита — нет операции), итог `SUCCEEDED`/`FAILED` с классом исключения (текст не пишется, он может нести данные источника); (2) MCP — структурный лог каждого `tools/call`, включая отказы (`principal`, tool, нормализованные аргументы с маскированием секретоподобных ключей, шаблоны, решение); (3) консоль — лог чтений. Значения из источников в аудит не попадают целиком.
+- **Откуда.** `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminOperations.java:10-18, 38-76`; `AdminAudit.java:33-56`; `V3__admin_audit.sql`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java:101-141`; `ToolArguments.java:10-27`. Коммиты `64d786f`, `6352d95` (UNLOCKER-180), `46e05d3` (UNLOCKER-237), `ab26e65` (UNLOCKER-170). ADR 0026 описывает только аудит чтений консоли.
+- **Почему важно.** Хранение, срок и неизменяемость аудита не определены: `admin_audit` не чистится (PoC), логи MCP/консоли живут в stdout; запись `STARTED` может остаться навсегда (процесс убит).
+- **Альтернативы.** единая таблица аудита для всех каналов; внешняя система аудита (production).
+- **Затронутый код.** `ingestion/ingestion-service`, `access/mcp-server`, `access/admin-console`.
+- **Пересечения с ADR.** 0013, 0026.
+
+## К-9. Webhook — триггер, а не носитель данных 🟡
+
+- **Суть решения в коде.** Тело webhook несёт только идентификатор объекта; адаптер проверяет `HMAC-SHA256(secret, timestamp + "." + body)` и окно timestamp, затем делает `fetchById` у источника и кладёт в inbox то, что вернул источник; подпись/окно не прошли — 401 без деталей; несовпадение идентификатора — 400. Так подмена тела уведомления не может подсунуть данные в граф.
+- **Откуда.** `contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/WebhookSignature.java:16-97`; `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/WebhookHandler.java:17-22, 56-65`. Коммиты `778bdd7`, `f7213de`, `681d5bc` (UNLOCKER-165/166). Упомянуто в `docs/00-vision.md:755`, но решением не оформлено.
+- **Почему важно.** Это граница доверия источников; `/control/snapshot` в том же сервере аутентификации не имеет ([`../permissions.md`](../permissions.md), §7).
+- **Альтернативы.** принимать данные из тела (отвергнуто: нет проверки целостности источника, нет единого пути для polling/webhook).
+- **Затронутый код.** `contracts/source-spi`, `adapters/adapter-core`.
+- **Пересечения с ADR.** 0010, 0014.
+
+## К-10. Словарные значения источника не угадываются 🟡
+
+- **Суть решения в коде.** Неизвестное значение словаря (пример — `criticality` EAM вне `HIGH|MEDIUM|LOW`) не отбрасывается и не маппится «по похожести»: каноническое поле остаётся `null`, сырое значение сохраняется в отдельное свойство, в журнал уходит только код предупреждения `UNMAPPED_CRITICALITY`, счётчик `archrag.normalizer.unmapped.values`; событие применяется, а не уходит в карантин. Для других полей неизвестное значение — `QUARANTINED/INVALID_PAYLOAD`.
+- **Откуда.** `ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/EamMapper.java:128-130, 161-179`; `NormalizationWarnings.java`. Коммит `3b5b80e` (UNLOCKER-256); `docs/06-eam-integration.md`.
+- **Почему важно.** Непоследовательность политики («иногда карантин, иногда предупреждение») нигде не оформлена; для новых источников выбор придётся делать заново.
+- **Затронутый код.** `ingestion/normalizer`.
+- **Пересечения с ADR.** 0010 (заглушки; допущения по реальной EAM).

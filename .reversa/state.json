@@ -107,6 +107,24 @@
         "_reversa_sdd/database/business-rules.md",
         "_reversa_sdd/database/procedures.md"
       ]
+    },
+    "detective": {
+      "completed_at": "2026-10-13T00:00:00Z",
+      "business_rules_files": [
+        "_reversa_sdd/domain.md"
+      ],
+      "state_machines": 11,
+      "adr_candidates": 10,
+      "gaps_red": 9,
+      "gaps_yellow": 20,
+      "files": [
+        "_reversa_sdd/domain.md",
+        "_reversa_sdd/state-machines.md",
+        "_reversa_sdd/permissions.md",
+        "_reversa_sdd/adrs/retroactive-map.md",
+        "_reversa_sdd/adrs/candidates.md",
+        "_reversa_sdd/detective-gaps.md"
+      ]
     }
   },
   "engines": [
