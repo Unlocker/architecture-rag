@@ -40,7 +40,7 @@ return ChangePage(changes, State(false, false, s.api, p.nextCursor).encode(), ha
 - Фаза `A` завершается страницей, у которой `legacyPhase=true` в курсоре; сама эта страница ещё несёт изменения `eam-api` и `hasMore=true` — переход к legacy будет **следующим** вызовом.
 - Итоговый курсор `I;A;eamapi:<W,…>|legacy:<курсор legacy>`; следующий цикл идёт обычным инкрементом: `api.fetchChanges("W,…")`, потом legacy.
 - Инкрементальный цикл всегда состоит минимум из двух вызовов `fetchChanges` (одна страница `A`, одна страница `L`).
-- `ChangePage` разрешает `snapshotComplete` только при `hasMore=false` (`contracts/source-spi/.../ChangePage.java:65-67`); оба возвращаемых варианта этому соответствуют.
+- `ChangePage` разрешает `snapshotComplete` только при `hasMore=false` (`contracts/source-spi/.../ChangePage.java:22-24`); оба возвращаемых варианта этому соответствуют.
 
 ## `stateOf` — чужой курсор (`:78-85`)
 

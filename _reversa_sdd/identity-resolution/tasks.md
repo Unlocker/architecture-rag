@@ -22,7 +22,7 @@
   - Критерий готовности: см. [`gid-mapping-crosswalk/tasks.md`](gid-mapping-crosswalk/tasks.md).
   - Уверенность: 🟢
 - [ ] T-04 Реализовать use case 2 (признаки, кандидаты).
-  - Origin: `IR/FeatureExtractor.java:29-82`, `IR/FeatureNormalizer.java:13-79`, `IR/PostgresIdentityCandidates.java:192-439`
+  - Origin: `IR/FeatureExtractor.java:29-82`, `IR/FeatureNormalizer.java:13-79`, `IR/PostgresIdentityCandidates.java:28-265`
   - Критерий готовности: см. [`candidate-matching/tasks.md`](candidate-matching/tasks.md).
   - Уверенность: 🟢
 - [ ] T-05 Реализовать use case 3 (утверждения, конфликты).

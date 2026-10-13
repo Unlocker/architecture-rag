@@ -3,7 +3,7 @@
 > Ссылается на [`../design.md`](../design.md) (каркас транзакции, интеграция с `EventProcessor`) и [`../contracts.md`](../contracts.md) (схема V4, нормализация). Блок-схема `record`: [`../../../flowcharts/identity-resolution.md`](../../flowcharts/identity-resolution.md) (номера строк в ней устарели, см. ниже).
 
 ## Интерфейс
-`PostgresIdentityCandidates(DataSource)`; `public static final int MAX_MATCHES = 50` (`IR/PostgresIdentityCandidates.java:195`).
+`PostgresIdentityCandidates(DataSource)`; `public static final int MAX_MATCHES = 50` (`IR/PostgresIdentityCandidates.java:33`).
 
 ## Поток `record(key, label, features)` 🟢 (`:239-264`)
 1. `family = LabelFamily.of(label)`; `own = features` отсортированы по `kind` (порядок объявления enum: `HOSTNAME`, `REPOSITORY_URL`, `NAME`, `OWNER`), затем по `value`.
@@ -22,7 +22,7 @@
 `SELECT ... FROM identity_candidate WHERE (left = key) OR (right = key) ORDER BY left..., right...`; `matched` разворачивается двумя `ARRAY(SELECT e->>'feature'/'value' ... ORDER BY o)`; `FeatureKind.valueOf`, `NodeLabel.valueOf` — незнакомое имя даёт `IllegalArgumentException` (не `IdentityStoreException`) 🟢.
 
 ## Решения и ограничения
-- Две блокировки (ключ, затем значения): без первой параллельные `record` одной записи упираются в PK `identity_feature`; без второй при READ COMMITTED две транзакции с одним значением не увидят друг друга и пара потеряется (`IR/PostgresIdentityCandidates.java:185-188,316`) 🟢. Слабые признаки не лочатся 🟢 (`:319-321`).
+- Две блокировки (ключ, затем значения): без первой параллельные `record` одной записи упираются в PK `identity_feature`; без второй при READ COMMITTED две транзакции с одним значением не увидят друг друга и пара потеряется (`IR/PostgresIdentityCandidates.java:23-26,84-85`) 🟢. Слабые признаки не лочатся 🟢 (`:157-159`).
 - Допущение PoC: при пропуске признака (>50) `matched` пары, найденной по другим признакам, перезаписывается без него; ранее созданный кандидат только по этому признаку остаётся нетронутым 🟡 (`:189-190,374-378`).
 - Кандидат не удаляется, когда признаки перестали совпадать (запись `forget`/смена значения) 🟡; `status` не меняется 🔴 (Q-01).
 - `label_family` в паре одинаков по построению (фильтр `FIND_OTHERS`); `NodeLabel.valueOf(label_family)` при чтении 🟢.

@@ -12,7 +12,7 @@
 | UC2-01 | Признаки по метке: `ComputeInstance` -> `HOSTNAME`; `Repository` -> `REPOSITORY_URL`; `ITSystem`, `Service`, `Team` -> `NAME`; остальные метки без признаков | Must | `IR/FeatureExtractor.java:50-57` 🟢 |
 | UC2-02 | `OWNER` только у `ITSystem`/`Service`: `gid` команды из первой `OWNED_BY` с `from == key`; нет `gid` команды в карте -> нет признака | Must | `:58-67` 🟢 |
 | UC2-03 | Нормализация значений (см. `../contracts.md` §3) делает формы одного URL/имени равными; пустой результат — признака нет | Must | `IR/FeatureNormalizer.java:21-62` 🟢 |
-| UC2-04 | Набор признаков ключа заменяется целиком при каждом `record` | Must | `IR/PostgresIdentityCandidates.java:333-350` 🟢 |
+| UC2-04 | Набор признаков ключа заменяется целиком при каждом `record` | Must | `IR/PostgresIdentityCandidates.java:171-188` 🟢 |
 | UC2-05 | Кандидат создаётся при совпадении сильного признака с другой записью того же `label_family`, без общего `gid` | Must | `:205-212,352-400` 🟢 |
 | UC2-06 | `score = min(1, сумма весов различных видов)`; `OWNER` добавляется к паре, найденной по сильному признаку, если у партнёра тот же `OWNER` | Must | `:383-398`; `IR/FeatureKind.java:38-47` 🟢 |
 | UC2-07 | Предохранитель `MAX_MATCHES = 50` | Must | `:195,374-378` 🟢 |

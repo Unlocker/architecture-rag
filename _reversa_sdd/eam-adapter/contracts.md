@@ -52,7 +52,7 @@
 
 Потребитель — `adapter-core` (`EventMapper`: событие `poll:<type>/<id>/v<ver>` / `snap:<runId>:…`, subject `platform/5101`, `solution/…`, `it-system/…`; raw в S3 — `AC/InboxWriter.java`) и далее `ingestion/normalizer` (`EamMapper`). Описание — `_reversa_sdd/data-dictionary.md` §P.4–P.5.
 
-Страница: `ChangePage(changes, nextCursor, hasMore, snapshotComplete)`; инвариант `snapshotComplete && hasMore` запрещён (`contracts/source-spi/.../ChangePage.java:63-68`) 🟢.
+Страница: `ChangePage(changes, nextCursor, hasMore, snapshotComplete)`; инвариант `snapshotComplete && hasMore` запрещён (`contracts/source-spi/.../ChangePage.java:20-25`) 🟢.
 
 ## 3. Форматы курсоров
 

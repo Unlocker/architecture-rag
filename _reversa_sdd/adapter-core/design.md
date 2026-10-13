@@ -49,7 +49,7 @@
 | `EventMapper` | public final, static | `toEvent`, `snapshotComplete`, `sourceUrn` (+ package-private `pollEventId`, `snapshotEventId`) | Формирование `CanonicalEvent` | `AC/EventMapper.java:26-109` 🟢 |
 | `InboxWriter` | package-private | `record(eventId, change, correlationId, syncRunId)`, `record(marker, syncRunId)`, static `rawJson`, `markerRawJson` | Запись в inbox | `AC/InboxWriter.java:21-71` 🟢 |
 | `RetryPolicy` | public record | `(maxAttempts, baseDelay, maxDelay)`, `defaults()`, `delay(attempt, failure, Random)` | Backoff | `AC/RetryPolicy.java:19-51` 🟢 |
-| `AdapterConfig` | public record | 8 полей, `of(...)`, `sourceUrn()` | Конфигурация | `AC/AdapterConfig.java:21-76` 🟢 |
+| `AdapterConfig` | public record | 8 полей, `of(...)`, `sourceUrn()` | Конфигурация | `AC/AdapterConfig.java:21-75` 🟢 |
 | `PollResult` | public record | `(Outcome outcome, long appended, String syncRunId)` | Итог цикла | `AC/PollResult.java:10-24` 🟢 |
 | `Sleeper` | public functional interface | `sleep(Duration) throws InterruptedException`; `THREAD` | Подмена паузы в тестах | `AC/Sleeper.java` 🟢 |
 | `Json` | public final | `parse`, `parseObject` (публичные); `write` — package-private | JSON | `AC/Json.java:16-277` 🟢 |

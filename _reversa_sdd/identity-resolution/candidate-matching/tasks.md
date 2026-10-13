@@ -15,11 +15,11 @@
   - Критерий готовности: `FeatureExtractorTest` (8 тестов); карта `gids` не меняется.
   - Уверенность: 🟢
 - [ ] T-U2-04 `PostgresIdentityCandidates.record` (локи, замена признаков, поиск, upsert).
-  - Origin: `IR/PostgresIdentityCandidates.java:239-264,316-427`
+  - Origin: `IR/PostgresIdentityCandidates.java:78-102,154-188,191-239,241-265`
   - Критерий готовности: сценарии 1-8 (`IdentityCandidateIT`).
   - Уверенность: 🟢
 - [ ] T-U2-05 `forget`, `candidatesOf`.
-  - Origin: `IR/PostgresIdentityCandidates.java:266-314`
+  - Origin: `IR/PostgresIdentityCandidates.java:105-120`
   - Критерий готовности: сценарий 7.
   - Уверенность: 🟢
 - [ ] T-U2-06 Миграция V4 (`identity_feature`, `identity_candidate`, индексы).

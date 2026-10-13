@@ -12,7 +12,7 @@
 ## Задачи
 
 - [ ] T-01 Записи `AdapterConfig`, `RetryPolicy`, `PollResult` с валидацией и значениями по умолчанию.
-  - Origin: `AC/AdapterConfig.java:21-76`, `AC/RetryPolicy.java:19-51`, `AC/PollResult.java:10-24`
+  - Origin: `AC/AdapterConfig.java:21-75`, `AC/RetryPolicy.java:19-51`, `AC/PollResult.java:10-24`
   - Критерий готовности: `of(...)` даёт 5 мин / 100 / 30 с / 6 ч / 5×(500 мс…30 с); невалидные значения → `IllegalArgumentException`; `toString` маскирует секрет и не печатает `retry`, `pollInterval`, `reconcileInterval`
   - Уверенность: 🟢
 - [ ] T-02 `Json`: парсер глубиной ≤ 64 с Long/Double, `parseObject`, детерминированный `write` с экранированием.

@@ -10,7 +10,7 @@
 
 - Выдать `gid` ключу один раз и навсегда; параллельные вызовы сходятся к одному значению 🟢 (`IR/IdentityMapping.java:8-14`, `IR/PostgresIdentityMapping.java:45-60,124-132`).
 - Применять approved crosswalk: общий `gid` двум ключам; разные уже назначенные `gid` дают `CrosswalkConflictException`, слияния нет 🟢 (`IR/PostgresIdentityMapping.java:80-122`).
-- Снимать признаки идентичности с команд события и хранить их текущий набор на ключ 🟢 (`IR/FeatureExtractor.java:43-69`, `IR/PostgresIdentityCandidates.java:239-264`).
+- Снимать признаки идентичности с команд события и хранить их текущий набор на ключ 🟢 (`IR/FeatureExtractor.java:43-69`, `IR/PostgresIdentityCandidates.java:78-102,171-188`).
 - Записывать кандидатов на совпадение со score; узлы не объединять, `gid` не менять 🟢 (`IR/IdentityCandidates.java:8-15`).
 - Хранить утверждения свойств каждой записи и вычислять конфликты «неавторитетное значение против мастера»; закрытый конфликт остаётся `RESOLVED` 🟢 (`IR/PostgresSourceConflicts.java:21-32,210-271`).
 - Поддерживать конфликты вида `RELATION` (ADR 0030/0031) через `assertRelation` 🟢 (`IR/SourceConflicts.java:30-48`).
@@ -24,17 +24,17 @@
 - BR-03. Crosswalk не сливает: ключи с разными `gid` дают исключение, состояние не меняется 🟢 (`IR/PostgresIdentityMapping.java:107-109,113-116`; IT `crosswalkOfKeysWithDifferentGidsIsRejectedAndChangesNothing`).
 - BR-04. Crosswalk идемпотентен и не зависит от порядка пары: `lo < hi` по `SourceKeys.compare` 🟢 (`IR/PostgresIdentityMapping.java:84-86`, `IR/SourceKeys.java:10-16`; IT `crosswalkIsIdempotentAndOrderInsensitive`).
 - BR-05. Score = `min(1.00, сумма весов различных видов совпавших признаков)`, шкала 2, `HALF_UP`; веса `HOSTNAME 0.6`, `REPOSITORY_URL 0.8`, `NAME 0.4`, `OWNER 0.2` 🟢 (`IR/FeatureKind.java:15-18,38-47`; тест `FeatureExtractorTest.ownerIsNotStrongAndScoreIsCappedSum`). Веса в коде, не в конфигурации 🟢; ADR числовых параметров не фиксирует 🟡 (`_reversa_sdd/adrs/retroactive-map.md:28`, К-6).
-- BR-06. Кандидат появляется только при совпадении хотя бы одного сильного признака (`HOSTNAME`, `REPOSITORY_URL`, `NAME`); `OWNER` сам пару не создаёт, лишь усиливает 🟢 (`IR/PostgresIdentityCandidates.java:353-400`; IT `sameOwnerWithDifferentNamesGivesNoCandidate`).
+- BR-06. Кандидат появляется только при совпадении хотя бы одного сильного признака (`HOSTNAME`, `REPOSITORY_URL`, `NAME`); `OWNER` сам пару не создаёт, лишь усиливает 🟢 (`IR/PostgresIdentityCandidates.java:191-239`; IT `sameOwnerWithDifferentNamesGivesNoCandidate`).
 - BR-07. Сравнение только точное по нормализованным значениям внутри семейства меток (`VIRTUAL_MACHINE`/`PHYSICAL_SERVER` и иные подтипы `ComputeInstance` = `COMPUTE_INSTANCE`; прочие метки сами по себе) 🟢 (`IR/LabelFamily.java:10-12`; IT `itSystemAndServiceWithSameNameAreNotCandidates`).
-- BR-08. Записи с общим `gid` кандидатов не дают 🟢 (`IR/PostgresIdentityCandidates.java:209-211`; IT `recordsLinkedByCrosswalkShareGidAndGiveNoCandidate`).
-- BR-09. Предохранитель: у сильного признака больше `MAX_MATCHES = 50` других записей — кандидаты по нему не создаются, WARN с видом, семейством и пределом, без значения 🟢 (`IR/PostgresIdentityCandidates.java:195,374-378`; IT `popularFeatureAboveLimitCreatesNoCandidates`).
-- BR-10. Повторное наблюдение идемпотентно: `first_seen_at` и `status` не меняются, `matched`, `score`, `updated_at` обновляются 🟢 (`IR/PostgresIdentityCandidates.java:216-223`; IT `replayKeepsOneCandidateAndFirstSeenAt`).
-- BR-11. `forget` удаляет признаки ключа, кандидаты остаются историей 🟢 (`IR/IdentityCandidates.java:27`, `IR/PostgresIdentityCandidates.java:266-282`; IT `tombstonedRecordDoesNotMatchLaterRecord`).
+- BR-08. Записи с общим `gid` кандидатов не дают 🟢 (`IR/PostgresIdentityCandidates.java:47-49`; IT `recordsLinkedByCrosswalkShareGidAndGiveNoCandidate`).
+- BR-09. Предохранитель: у сильного признака больше `MAX_MATCHES = 50` других записей — кандидаты по нему не создаются, WARN с видом, семейством и пределом, без значения 🟢 (`IR/PostgresIdentityCandidates.java:33,205,212-216`; IT `popularFeatureAboveLimitCreatesNoCandidates`).
+- BR-10. Повторное наблюдение идемпотентно: `first_seen_at` и `status` не меняются, `matched`, `score`, `updated_at` обновляются 🟢 (`IR/PostgresIdentityCandidates.java:54-61,241-265`; IT `replayKeepsOneCandidateAndFirstSeenAt`).
+- BR-11. `forget` удаляет признаки ключа, кандидаты остаются историей 🟢 (`IR/IdentityCandidates.java:27`, `IR/PostgresIdentityCandidates.java:105-120`; IT `tombstonedRecordDoesNotMatchLaterRecord`).
 - BR-12. Конфликт `PROPERTY` существует, только если у свойства есть авторитетное утверждение и неавторитетное с иным значением (точное равенство строк); мастер при нескольких авторитетных — первый по `(source, source_type, source_id)` 🟢 (`IR/PostgresSourceConflicts.java:41-47`; IT `differingNonAuthoritativeValueOpensOneConflict`, `onlyNonAuthoritativeAssertionsGiveNoConflict`).
 - BR-13. Результат не зависит от порядка прихода мастера и неавторитетного источника 🟢 (`IR/SourceConflicts.java:13-17`; IT `conflictDoesNotDependOnArrivalOrder`).
 - BR-14. Строка `source_conflict` не удаляется; перестав расходиться, получает `RESOLVED` + `resolved_at`, при новом расхождении снова `OPEN`, `opened_at` сохраняется, `resolved_at = NULL` 🟢 (`IR/PostgresSourceConflicts.java:48-58,61-63`; IT `equalValueResolvesAndReopeningKeepsOpenedAt`).
 - BR-15. `RELATION`: пустой `master` или равные значения закрывают строку, расхождение — upsert `OPEN`; `PROPERTY` и `RELATION` не трогают друг друга при пересчёте 🟢 (`IR/PostgresSourceConflicts.java:105-119,59-60`; IT `relationClosesWhenMasterUnknownAndNeverOpensWithoutIt`, `retractResolvesRelationAndPropertyRecomputeLeavesItAlone`).
-- BR-16. Значения источника (недоверенный текст) не логируются и не попадают в `SourceConflict.toString()` и в исключения 🟢 (`IR/SourceConflict.java:77-81`, `IR/PostgresIdentityCandidates.java:374-377`).
+- BR-16. Значения источника (недоверенный текст) не логируются и не попадают в `SourceConflict.toString()` и в исключения 🟢 (`IR/SourceConflict.java:77-81`, `IR/PostgresIdentityCandidates.java:212-214`).
 - BR-17. `identity_candidate.status` не выходит из `OPEN`, значений-перечисления нет 🔴 (`IR/IdentityCandidate.java:20`, `MIG/V4__identity_candidate.sql:31`; `_reversa_sdd/detective-gaps.md:22` Р-4).
 
 ## Функциональные требования
@@ -59,13 +59,13 @@
 
 | Тип | Требование | Evidence | Уверенность |
 |-----|-----------|----------|-------------|
-| Консистентность | Каждая публичная операция портов — одна транзакция (`setAutoCommit(false)`, `commit`, при `SQLException`/`RuntimeException` `rollback`); исключение прокидывается | `IR/PostgresIdentityMapping.java:47-59,87-100`; `IR/PostgresIdentityCandidates.java:243-263`; `IR/PostgresSourceConflicts.java:146-160` | 🟢 |
-| Конкурентность | Сериализация advisory-lock'ами `pg_advisory_xact_lock(hashtextextended(?, 0))` на ключи `key\|<SourceKey>`, `<семейство>\|<вид>\|<значение>` (сильные признаки), `conflict\|<gid>`; блокировка снимается с концом транзакции | `IR/PostgresIdentityCandidates.java:199,246-247,316-331`; `IR/PostgresSourceConflicts.java:35,162-167` | 🟢 |
-| Конкурентность | Нет взаимной блокировки в `record`: признаки отсортированы (`kind`, затем `value`), сначала лок самого ключа, затем значений | `IR/PostgresIdentityCandidates.java:242,316` | 🟢 |
+| Консистентность | Каждая публичная операция портов — одна транзакция (`setAutoCommit(false)`, `commit`, при `SQLException`/`RuntimeException` `rollback`); исключение прокидывается | `IR/PostgresIdentityMapping.java:47-59,87-100`; `IR/PostgresIdentityCandidates.java:78-102,105-120`; `IR/PostgresSourceConflicts.java:146-160` | 🟢 |
+| Конкурентность | Сериализация advisory-lock'ами `pg_advisory_xact_lock(hashtextextended(?, 0))` на ключи `key\|<SourceKey>`, `<семейство>\|<вид>\|<значение>` (сильные признаки), `conflict\|<gid>`; блокировка снимается с концом транзакции | `IR/PostgresIdentityCandidates.java:37,84-85,155-169`; `IR/PostgresSourceConflicts.java:35,162-167` | 🟢 |
+| Конкурентность | Нет взаимной блокировки в `record`: признаки отсортированы (`kind`, затем `value`), сначала лок самого ключа, затем значений | `IR/PostgresIdentityCandidates.java:80,84-85` | 🟢 |
 | Конкурентность | `gid` создаётся `INSERT ... ON CONFLICT DO NOTHING` и перечитывается: гонка даёт один `gid` | `IR/PostgresIdentityMapping.java:27-28,124-132`; IT `IdentityMappingIT.concurrentResolveConvergesToOneGid` | 🟢 |
-| Безопасность | SQL только через `PreparedStatement` с параметрами, конкатенации входа нет (константы SQL склеиваются только из литералов) | `IR/PostgresIdentityMapping.java:25-28,65`; `IR/PostgresIdentityCandidates.java:199-231`; `IR/PostgresSourceConflicts.java:36-71` | 🟢 |
-| Безопасность | Значения источников не попадают в логи, `toString`, сообщения исключений-причин для оператора | `IR/SourceConflict.java:77-81`; `IR/PostgresIdentityCandidates.java:374-377` | 🟢 |
-| Эксплуатация | Предел `MAX_MATCHES = 50`, запрос с `LIMIT 51` | `IR/PostgresIdentityCandidates.java:195,367` | 🟢 |
+| Безопасность | SQL только через `PreparedStatement` с параметрами, конкатенации входа нет (константы SQL склеиваются только из литералов) | `IR/PostgresIdentityMapping.java:25-28,65`; `IR/PostgresIdentityCandidates.java:37-61`; `IR/PostgresSourceConflicts.java:36-71` | 🟢 |
+| Безопасность | Значения источников не попадают в логи, `toString`, сообщения исключений-причин для оператора | `IR/SourceConflict.java:77-81`; `IR/PostgresIdentityCandidates.java:212-214` | 🟢 |
+| Эксплуатация | Предел `MAX_MATCHES = 50`, запрос с `LIMIT 51` | `IR/PostgresIdentityCandidates.java:33,205` | 🟢 |
 | Время | Метки времени пишутся `Timestamp.from(Instant.now())` в `timestamptz` | `IR/PostgresIdentityMapping.java:128`; `MIG/V2__identity_mapping.sql:8` | 🟢 |
 
 Таймаутов запросов, пула, retry на уровне модуля нет: повтор делает вызывающий (`EventProcessor.retry`) 🟢 (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:232-235,246-248`).

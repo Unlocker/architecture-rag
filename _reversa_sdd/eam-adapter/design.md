@@ -20,7 +20,7 @@
 | `EamApiCursor` | пакетный `record(Mode, int type, int page, int size, Instant from, Instant watermark)` | — | `EA/EamApiCursor.java:18` 🟢 |
 | `EamAdapterModule` | пустой `final class` | — | маркер, чтобы JAR не был пустым (`EA/EamAdapterModule.java:3`) 🟢 |
 
-`SourceConnector` (контракт `contracts/source-spi`): `system()`, `fetchChanges(String cursor, int limit)`, `fetchById(String sourceType, String sourceId)` — `contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java:81-103`. Оба коннектора возвращают `system() == EAM` (`EA/EamApiConnector.java:88-90`, `EA/CompositeEamConnector.java:45-47`) 🟢.
+`SourceConnector` (контракт `contracts/source-spi`): `system()`, `fetchChanges(String cursor, int limit)`, `fetchById(String sourceType, String sourceId)` — `contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceConnector.java:12-34`. Оба коннектора возвращают `system() == EAM` (`EA/EamApiConnector.java:88-90`, `EA/CompositeEamConnector.java:45-47`) 🟢.
 
 ### Конфигурация (снаружи модуля)
 
@@ -98,6 +98,6 @@
 - 🔴 Проверка прав сервисной учётки при подключении (200 на три списка, 403/404 на `buffers`; `docs/06-eam-integration.md` §«Решения», п. 8) в коде модуля не реализована. Q-1.
 - 🟡 Повреждённая `eam-api`-половина составного курсора (корректный base64, невалидный `S|I|W`) не восстанавливается: `EamApiCursor.parse` бросает `IllegalArgumentException`, `CompositeEamConnector` её не перехватывает (`stateOf` ловит только ошибки разбора составного формата) (`EA/CompositeEamConnector.java:53, 78-85`, `EA/EamApiConnector.java:98`). Q-4.
 - 🟡 `DateTimeParseException` из `Instant.parse` попадает в `cause` исключения «malformed ArchObject»; её `getMessage()` содержит разобранный текст, т.е. значение из источника может оказаться в логе стека (`EA/EamApiConnector.java:181, 184-186`). Комментарий в коде утверждает «причина без значения поля». Q-5.
-- 🟡 `SourceConnector.fetchById` по Javadoc возвращает `DELETE` для удалённого объекта (`contracts/source-spi/.../SourceConnector.java:96`), а `EamApiConnector` на 404 возвращает пусто (`EA/EamApiConnector.java:148-150`); `WebhookHandler` строит tombstone только из подписанного уведомления `DELETE` (`AC/WebhookHandler.java:91-106`). Для EAM webhook'ов нет, поэтому практического влияния нет.
+- 🟡 `SourceConnector.fetchById` по Javadoc возвращает `DELETE` для удалённого объекта (`contracts/source-spi/.../SourceConnector.java:26-28`), а `EamApiConnector` на 404 возвращает пусто (`EA/EamApiConnector.java:148-150`); `WebhookHandler` строит tombstone только из подписанного уведомления `DELETE` (`AC/WebhookHandler.java:91-106`). Для EAM webhook'ов нет, поэтому практического влияния нет.
 - 🟡 `EamAdapterContractTest` — «контрактный» тест **legacy**-пути (`HttpSourceConnector` + `StubSources.eam`), а не `EamApiConnector` (`ET/EamAdapterContractTest.java:30`); фабрика `create(config, EamApi, …)` в модуле юнит-тестом не покрыта, её проверяют только IT в `platform/integration-tests` (`EamApiSupport.java:31`, `EamApiProjectionIT`, `EamKeyMigrationIT`).
 - 🟡 Данные о `ownerTeam` и поля словарей — допущения (`docs/06-eam-integration.md` п. 9); на коннектор не влияют (он отдаёт `attrs` как есть).

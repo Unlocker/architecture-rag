@@ -18,7 +18,7 @@
 | | `retract(SourceKey, UUID gid)` | tombstone записи | `:50-54` 🟢 |
 | | `openConflicts(UUID gid)` | открытые конфликты | `:56-57` 🟢 |
 
-Реализации принимают `javax.sql.DataSource` в конструкторе; `PostgresSourceConflicts` ещё и `AuthorityMatrix` (оба `requireNonNull`) 🟢 (`IR/PostgresIdentityMapping.java:32`, `IR/PostgresIdentityCandidates.java:235`, `IR/PostgresSourceConflicts.java:76-79`). Сборка бинов: `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:54,59,64` (матрица `AuthorityMatrix.defaults()`) 🟢.
+Реализации принимают `javax.sql.DataSource` в конструкторе; `PostgresSourceConflicts` ещё и `AuthorityMatrix` (оба `requireNonNull`) 🟢 (`IR/PostgresIdentityMapping.java:32`, `IR/PostgresIdentityCandidates.java:73-75`, `IR/PostgresSourceConflicts.java:76-79`). Сборка бинов: `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:54,59,64` (матрица `AuthorityMatrix.defaults()`) 🟢.
 
 ## 2. Типы данных
 

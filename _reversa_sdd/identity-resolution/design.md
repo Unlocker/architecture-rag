@@ -64,27 +64,27 @@ ADR: [0019](../../docs/adr/0019-identity-resolution-no-auto-merge.md) (без au
 | PostgreSQL, а не граф, хранит mapping: rebuild графа даёт те же `gid` | `MIG/V2__identity_mapping.sql:1-2`; ADR 0019 | 🟢 |
 | JDBC без ORM, SQL строковыми константами | `IR/PostgresIdentityMapping.java:17-28` | 🟢 |
 | Порядок пары задаёт приложение (не CHECK в БД) | `MIG/V2__identity_mapping.sql:14`; `IR/SourceKeys.java:5` | 🟢 |
-| Advisory-lock вместо `SERIALIZABLE`/`SELECT FOR UPDATE`: при READ COMMITTED параллельные `record` не видят друг друга | `IR/PostgresIdentityCandidates.java:185-188` | 🟢 |
-| Веса и `MAX_MATCHES` — константы кода | `IR/FeatureKind.java:11`, `IR/PostgresIdentityCandidates.java:194-195` | 🟢 |
-| Допущение PoC: пропуск популярного признака перезаписывает `matched` без него | `IR/PostgresIdentityCandidates.java:189-190` | 🟢 |
+| Advisory-lock вместо `SERIALIZABLE`/`SELECT FOR UPDATE`: при READ COMMITTED параллельные `record` не видят друг друга | `IR/PostgresIdentityCandidates.java:23-26,84-85,155-161` | 🟢 |
+| Веса и `MAX_MATCHES` — константы кода | `IR/FeatureKind.java:11`, `IR/PostgresIdentityCandidates.java:33` | 🟢 |
+| Допущение PoC: пропуск популярного признака перезаписывает `matched` без него | `IR/PostgresIdentityCandidates.java:26-28,212-216` | 🟢 |
 | Сравнение конфликтов идёт по утверждениям всех записей `gid`, а не по графу | `IR/SourceConflicts.java:13-15` | 🟢 |
 | Единственный мастер на свойство в PoC; при нескольких — детерминированно по ключу записи | `IR/PostgresSourceConflicts.java:41-42` | 🟢 |
 | `status`/`kind` без CHECK и перечисления для кандидата | `MIG/V4__identity_candidate.sql:31` | 🟢 |
 
 ## Состояние
 
-Все данные — в таблицах PG (см. `contracts.md` §3). Таблицы изменяются только заменой набора записи (`DELETE`+`INSERT` в `identity_feature` и `property_assertion`) и upsert; физических `DELETE` в `identity_mapping`, `approved_crosswalk`, `identity_candidate`, `source_conflict` нет 🟢 (grep `DELETE` по модулю: `PostgresIdentityCandidates.java:200-201`, `PostgresSourceConflicts.java:36-37`). Машина состояний `source_conflict`: `OPEN <-> RESOLVED` ([`source-conflicts/design.md`](source-conflicts/design.md)); `identity_candidate.status` — только `OPEN` 🟢/🔴.
+Все данные — в таблицах PG (см. `contracts.md` §3). Таблицы изменяются только заменой набора записи (`DELETE`+`INSERT` в `identity_feature` и `property_assertion`) и upsert; физических `DELETE` в `identity_mapping`, `approved_crosswalk`, `identity_candidate`, `source_conflict` нет 🟢 (grep `DELETE` по модулю: `PostgresIdentityCandidates.java:38-39`, `PostgresSourceConflicts.java:36-37`). Машина состояний `source_conflict`: `OPEN <-> RESOLVED` ([`source-conflicts/design.md`](source-conflicts/design.md)); `identity_candidate.status` — только `OPEN` 🟢/🔴.
 
 ## Наблюдаемость
 
-Единственный лог модуля: `System.Logger` `WARNING` «identity candidates skipped: feature {0} of {1} matches more than {2} records» (вид, семейство, предел) 🟢 (`IR/PostgresIdentityCandidates.java:197,374-377`). Метрик и трейсов нет. Ошибки видны вызывающему как `IdentityStoreException` и переводят событие в `RETRYING` с кодами выше 🟢.
+Единственный лог модуля: `System.Logger` `WARNING` «identity candidates skipped: feature {0} of {1} matches more than {2} records» (вид, семейство, предел) 🟢 (`IR/PostgresIdentityCandidates.java:212-214`). Метрик и трейсов нет. Ошибки видны вызывающему как `IdentityStoreException` и переводят событие в `RETRYING` с кодами выше 🟢.
 
 ## Риски и 🔴
 
 - 🔴 Жизненный цикл `identity_candidate.status` не реализован; crosswalk не закрывает кандидата (`IR/IdentityCandidate.java:20`; `MIG/V4:31`).
 - 🟡 Crosswalk меняет `identity_mapping`, но не `property_assertion.gid`, `identity_feature`, `identity_candidate` и не перепроецирует граф: `property_assertion.gid` остаётся прежним до повторного `assertProperties` записи; граф исправится при следующем replay/rebuild (`IR/PostgresIdentityMapping.java:80-101` не обращается к другим таблицам; `_reversa_sdd/detective-gaps.md:41` П-12).
 - 🟡 Флаг `authoritative` в `property_assertion` вычислен в момент записи по матрице; смена матрицы пересчитается только при следующей записи (`IR/PostgresSourceConflicts.java:96`).
-- 🟡 Пропуск признака при >50 совпадениях не удаляет ранее созданных кандидатов по нему (`IR/PostgresIdentityCandidates.java:374-378`: `continue`, upsert затрагивает только найденные пары).
-- 🟡 Коллизия 64-битного хэша `hashtextextended` даёт лишнюю сериализацию, не потерю корректности (`IR/PostgresIdentityCandidates.java:199`).
+- 🟡 Пропуск признака при >50 совпадениях не удаляет ранее созданных кандидатов по нему (`IR/PostgresIdentityCandidates.java:212-216`: `continue`, upsert затрагивает только найденные пары).
+- 🟡 Коллизия 64-битного хэша `hashtextextended` даёт лишнюю сериализацию, не потерю корректности (`IR/PostgresIdentityCandidates.java:37,164-169`).
 - 🟡 `Set<Feature>` с двумя признаками одного вида нарушит PK `identity_feature` -> `IdentityStoreException("record failed")`; `FeatureExtractor` такого не создаёт (по одному на вид) (`IR/FeatureExtractor.java:51-55`, `MIG/V4:13`).
 - 🟡 `SourceConflict` не проверяет «`resolvedAt` не null только у `RESOLVED`» (`IR/SourceConflict.java:12-13` против `:49-60`).
