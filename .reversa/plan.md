@@ -72,10 +72,10 @@
 
 ## Fase 4: Geração 📝
 
-- [ ] **Redator** — Specs SDD por componente. Часть 1 ✅ (R.6a, UNLOCKER-271): 13 единиц — contracts/*, adapters/*, ingestion/{event-journal, normalizer, identity-resolution, graph-projector, ingestion-service} в `_reversa_sdd/<модуль>/`. Часть 2 (R.6b, UNLOCKER-272): access/*, platform/*
-- [ ] **Redator** — OpenAPI (se aplicável)
-- [ ] **Redator** — User Stories (se aplicável)
-- [ ] **Redator** — Code/Spec Matrix
+- [x] ✅ **Redator** — Specs SDD por componente. Часть 1 ✅ (R.6a, UNLOCKER-271): 13 единиц — contracts/*, adapters/*, ingestion/{event-journal, normalizer, identity-resolution, graph-projector, ingestion-service} в `_reversa_sdd/<модуль>/`. Часть 2 ✅ (R.6b, UNLOCKER-272): access/*, platform/* — 21/21, индекс `_reversa_sdd/index.md`
+- [x] ✅ **Redator** — OpenAPI (R.6b, UNLOCKER-272: `_reversa_sdd/openapi/*.yaml`)
+- [x] ✅ **Redator** — User Stories (R.6b, UNLOCKER-272: `_reversa_sdd/user-stories/`)
+- [x] ✅ **Redator** — Code/Spec Matrix (R.6b, UNLOCKER-272: `_reversa_sdd/traceability/code-spec-matrix.md`)
 
 ## Fase 5: Revisão ✅
 

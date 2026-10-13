@@ -1,0 +1,187 @@
+# Источник: _reversa_sdd/admin-console/contracts.md §1. Только фактические ручки; ссылки в x-source.
+openapi: 3.0.3
+info:
+  title: Arch RAG admin-console API
+  version: "0.1.0"
+  description: >
+    Read-only API консоли (только GET). Токен: issuer ARCHRAG_OIDC_ISSUER_URI, aud ARCHRAG_CONSOLE_RESOURCE_URI,
+    scope architecture.admin. Ошибки приложения: {error,message}; 401/403 формирует Spring Security без тела ApiError.
+servers:
+  - url: http://127.0.0.1:8090
+    description: loopback-публикация Compose (platform/docker/docker-compose.yml:292-293)
+security:
+  - bearer: [architecture.admin]
+paths:
+  /api/graph/stats:
+    get:
+      summary: Счётчики узлов и связей, время последнего обновления
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:56-65
+      responses:
+        "200": {description: Stats, content: {application/json: {schema: {$ref: "#/components/schemas/Stats"}}}}
+        "504": {$ref: "#/components/responses/Timeout"}
+  /api/graph/search:
+    get:
+      summary: Поиск активов
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:68-102
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 200}}
+        - {name: types, in: query, description: "повторы или запятая; allowlist SEARCHABLE_TYPES", schema: {type: array, items: {type: string}}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
+      responses:
+        "200": {description: SearchResponse, content: {application/json: {schema: {$ref: "#/components/schemas/SearchResponse"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "504": {$ref: "#/components/responses/Timeout"}
+  /api/graph/nodes/{gid}:
+    get:
+      summary: Карточка узла
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:105-124
+      parameters:
+        - {name: gid, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: NodeCard, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "504": {$ref: "#/components/responses/Timeout"}
+  /api/graph/nodes/{gid}/neighborhood:
+    get:
+      summary: Окрестность узла
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/GraphController.java:127-167
+      parameters:
+        - {name: gid, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: depth, in: query, schema: {type: integer, minimum: 1, maximum: 2, default: 1}}
+        - {name: relTypes, in: query, schema: {type: array, items: {type: string}}}
+      responses:
+        "200": {description: Neighborhood, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "504": {$ref: "#/components/responses/Timeout"}
+  /api/sync/sources:
+    get:
+      summary: Статус четырёх источников (eam, scm, cmdb, deploymap)
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:56-75
+      responses:
+        "200": {description: "[SourceStatus]", content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}
+        "504": {$ref: "#/components/responses/Timeout"}
+  /api/sync/events:
+    get:
+      summary: Журнал inbox_event, новые сверху
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:78-91
+      parameters:
+        - {name: source, in: query, schema: {type: string, enum: [eam, scm, cmdb, deploymap]}}
+        - {name: status, in: query, schema: {type: string, enum: [RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION]}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200": {description: Page of Event, content: {application/json: {schema: {$ref: "#/components/schemas/Page"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/sync/events/{source}/{eventId}:
+    get:
+      summary: Карточка события (eventId без "/")
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:97-110
+      parameters:
+        - {name: source, in: path, required: true, schema: {type: string, enum: [eam, scm, cmdb, deploymap]}}
+        - {name: eventId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: EventDetail, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/sync/dlq:
+    get:
+      summary: Записи DLQ
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:113-121
+      parameters:
+        - {name: source, in: query, schema: {type: string}}
+        - {name: replayed, in: query, schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        "200": {description: Page of DlqEntry, content: {application/json: {schema: {$ref: "#/components/schemas/Page"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/identity/conflicts:
+    get:
+      summary: Конфликты источников
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java:30-38
+      parameters:
+        - {name: status, in: query, schema: {type: string, pattern: "^[A-Za-z_]{1,64}$", default: OPEN}}
+        - {name: gid, in: query, schema: {type: string, format: uuid}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        "200": {description: Page of Conflict, content: {application/json: {schema: {$ref: "#/components/schemas/Page"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/identity/candidates:
+    get:
+      summary: Кандидаты идентичности
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java:41-49
+      parameters:
+        - {name: status, in: query, schema: {type: string, pattern: "^[A-Za-z_]{1,64}$", default: OPEN}}
+        - {name: labelFamily, in: query, schema: {type: string, pattern: "^[A-Za-z_]{1,64}$"}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        "200": {description: Page of Candidate, content: {application/json: {schema: {$ref: "#/components/schemas/Page"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/audit:
+    get:
+      summary: Аудит админских операций (admin_audit)
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java:25-39
+      parameters:
+        - {name: operation, in: query, schema: {type: string, pattern: "^[A-Za-z_]{1,64}$"}}
+        - {name: status, in: query, schema: {type: string, pattern: "^[A-Za-z_]{1,64}$"}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        "200": {description: Page of Audit, content: {application/json: {schema: {$ref: "#/components/schemas/Page"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /console-config.json:
+    get:
+      summary: Конфигурация OIDC-клиента для SPA (публично)
+      security: []
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/config/ConsoleConfigController.java:27-30
+      responses:
+        "200": {description: "{issuer, clientId, scope}", content: {application/json: {schema: {type: object, properties: {issuer: {type: string}, clientId: {type: string}, scope: {type: string}}}}}}
+  /actuator/health/{group}:
+    get:
+      summary: liveness/readiness (публично)
+      security: []
+      x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/security/ConsoleSecurityConfiguration.java:42-43
+      parameters:
+        - {name: group, in: path, required: true, schema: {type: string, enum: [liveness, readiness]}}
+      responses:
+        "200": {description: UP}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    BadRequest: {description: "Ошибка параметров, тело {error,message}", content: {application/json: {schema: {$ref: "#/components/schemas/ApiError"}}}}
+    NotFound: {description: "Не найдено", content: {application/json: {schema: {$ref: "#/components/schemas/ApiError"}}}}
+    Timeout: {description: "query_timeout", content: {application/json: {schema: {$ref: "#/components/schemas/ApiError"}}}}
+  schemas:
+    ApiError:
+      type: object
+      properties: {error: {type: string}, message: {type: string}}
+    Count:
+      type: object
+      properties: {name: {type: string}, count: {type: integer}}
+    Stats:
+      type: object
+      properties:
+        nodes: {type: array, items: {$ref: "#/components/schemas/Count"}}
+        relations: {type: array, items: {$ref: "#/components/schemas/Count"}}
+        lastUpdatedAt: {type: string, format: date-time, nullable: true}
+    SearchResponse:
+      type: object
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        truncated: {type: boolean}
+    Page:
+      type: object
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: integer, format: int64}
