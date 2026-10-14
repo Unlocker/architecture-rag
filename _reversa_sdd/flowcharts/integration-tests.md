@@ -101,12 +101,12 @@ flowchart TD
   MS --> F{"объект в missing set?"}
   F -- "в карантине (QUARANTINED)" --> KP["считается присутствующим → active"]
   F -- "создан webhook-ом в окне snapshot (high-water mark)" --> KP2["не удаляется этим прогоном"]
-  F -- "действительно пропал" --> TB["tombstone SourceRecord: active=false;\nузел закрывается, если нет других MASTER-assertions"]
+  F -- "действительно пропал" --> TB["tombstone SourceRecord: active=false;\nузел закрывается, если нет других активных assertions"]
   TB --> RC["снимаются assertions источника в PG,\nконфликты → RESOLVED, маркеры ASSERTS.conflicts сняты"]
   MK --> RP["повторный reconcile того же маркера → 0 tombstone"]
 ```
 
-Негативы «на середине загрузки» закреплены `ReconciliationIT.failureInTheMiddleOfSnapshotDeletesNothingAndRestartCompletesTheSameRun` и `JournalDispatcherIT.markerClaimingMoreObjectsThanJournalHoldsDeletesNothing`; в `SourceConflictIT:295-299` и `ExplainProvenanceIT:241-255` маркер подделан (событие `TYPE_ASSET_UPSERTED` / прямой вызов `Reconciler`) 🟡. Правило закрытия узла «нет активных MASTER-assertions» (`F4AcceptanceIT:432-433`) уже, чем текст ADR 0020 («других активных assertions», `docs/adr/0020-tombstone-instead-of-hard-delete.md:14`) 🟡.
+Негативы «на середине загрузки» закреплены `ReconciliationIT.failureInTheMiddleOfSnapshotDeletesNothingAndRestartCompletesTheSameRun` и `JournalDispatcherIT.markerClaimingMoreObjectsThanJournalHoldsDeletesNothing`; в `SourceConflictIT:295-299` и `ExplainProvenanceIT:241-255` маркер подделан (событие `TYPE_ASSET_UPSERTED` / прямой вызов `Reconciler`) 🟡. Правило закрытия узла «нет других активных assertions» (`F4AcceptanceIT.s7`) совпадает с текстом ADR 0020 🟢.
 
 ## Ожидание в сквозных тестах: `awaitTrue` и порядок `@Order` (`IT/F1AcceptanceIT.java:413-427`, `IT/SyncAcceptanceIT.java:524-538`, `IT/JournalDispatcherIT.java:282-293`) 🟢
 

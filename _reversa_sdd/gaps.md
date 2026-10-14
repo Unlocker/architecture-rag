@@ -82,7 +82,7 @@
 | 1 | Закрывать `SyncRun`, глубина хранения — параметр конфигурации | `GraphProjector.java:695-700` не закрывает; нет retention | задача кода |
 | 2 | ✅ Реализовано в UNLOCKER-281 | `closeDlq` в replay, `POST /admin/quarantine/release`, `archrag.dispatcher.max-attempts` (`RETRY_LIMIT_EXCEEDED`), `SUPERSEDED` удалён; кнопок в консоли нет (ADR 0026) | выполнено |
 | 3 | ✅ Реализовано в UNLOCKER-282 (вариант «б»: переносится только запись; история старого `gid` не сливается) | `POST /admin/identity/candidates/approve`: перенос mapping/assertions, `RESOLVED`, перепроекция из raw; кнопки в консоли нет (ADR 0026) | выполнено |
-| 4 | Реализация по ADR 0020 | узел закрывается по любым активным assertions; HWM после коммита Neo4j | задача кода (при необходимости отдельная) |
+| 4 | Реализация по ADR 0020 | узел закрывается по любым активным assertions; HWM после коммита Neo4j | ✅ UNLOCKER-283: код закрытия узла выровнен; HWM — уточнение ADR 0020 |
 | 5 | Удалить `CloseAssertion` | `canonical-model`, `graph-projector`, `normalizer` | задача кода; поправить `docs/06:82` |
 | 6 | ✅ Реализовано в UNLOCKER-279 | `Reconciler`: маркер без `objectCount` → карантин; `PARTIAL` → без удалений; порог массового закрытия `archrag.reconcile.max-missing-share` (0.5); tombstone вызывает `forget` | выполнено |
 | 7 | Истина — код | правка docs/ADR | задача архитектора (docs) |

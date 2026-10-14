@@ -429,8 +429,8 @@ class F4AcceptanceIT {
 
   @Test
   @Order(7)
-  void s7_tombstoneOfMasterClosesAssetEvenWithActiveSupplementary() {
-    // Фиксирует правило проектора: узел закрывается, когда не осталось активных MASTER-утверждений.
+  void s7_tombstoneOfMasterKeepsAssetCurrentWhileSupplementaryIsActive() {
+    // ADR 0020: узел закрывается только при отсутствии любых других активных assertions.
     assertThat(explain(masterGid, null).isCurrent()).isTrue();
 
     // eam-api не отдаёт tombstone: архивный объект пропадает из списка, и tombstone ставит reconcile после snapshot.
@@ -439,11 +439,11 @@ class F4AcceptanceIT {
         .isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     awaitIdle();
 
-    awaitTrue(() -> !explain(masterGid, null).isCurrent());
+    awaitTrue(() -> !record(explain(masterGid, null), "EAM").active());
     ExplainProvenanceResult r = explain(masterGid, null);
-    assertThat(r.deletedAt()).isNotBlank();
-    assertThat(record(r, "EAM").active()).isFalse();
     assertThat(record(r, "SCM").active()).isTrue();
+    assertThat(r.isCurrent()).isTrue();
+    assertThat(r.deletedAt()).isNullOrEmpty();
   }
 
   // ---- helpers -----------------------------------------------------------------------------

@@ -73,7 +73,7 @@ flowchart TD
   CMD -- UpsertNode --> UN["upsertNode → healPending → healAliases"]
   CMD -- DeferRelation --> DF["PendingRelations.store"]
   CMD -- UpsertRelation --> UR["upsertRelation (authority? иначе skippedRelations)"]
-  CMD -- Tombstone --> TS["tombstone: active=false, закрыть связи, архивировать узел без др. MASTER"]
+  CMD -- Tombstone --> TS["tombstone: active=false, закрыть связи, архивировать узел без др. активных assertions"]
   UN --> TAIL
   DF --> TAIL
   UR --> TAIL

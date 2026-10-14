@@ -188,8 +188,8 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> Текущий: первый MERGE по gid (isCurrent=true)
-    Текущий --> Архивный: tombstone последней активной MASTER-записи
-    Архивный --> Текущий: upsert MASTER-записи (isCurrent=true, REMOVE deletedAt)
+    Текущий --> Архивный: tombstone последней активной записи (любой авторитетности)
+    Архивный --> Текущий: upsert любой записи (isCurrent=true, REMOVE deletedAt)
 ```
 
 - Узел архивируется (`isCurrent=false`, `deletedAt = coalesce(deletedAt, $at)`) только если **нет другой активной записи с ребром `ASSERTS {authority: 'MASTER'}`** (`GraphProjector.java:543-548`) 🟢. SUPPLEMENTARY-запись узел не держит живым.

@@ -122,7 +122,7 @@
 | RF-01..RF-07 | Must | Критерии PoC 1–4, ловушки 6, 9, 14 |
 | RF-08 | Should | Разовая миграция UNLOCKER-255 |
 | Измерение polling «интервал + 5 с» | Won't | В `docs/00-vision.md:799` требуется, тестом не измеряется (`k2c` без замера; 🟢 [R.8: ответ владельца, вопрос 14] Q-35) |
-| Проверка checkpoint адаптера «после коммита Neo4j» | Won't | Косвенно (`ReconciliationIT.java:201-230`), 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 4)] Q-10 |
+| Проверка checkpoint адаптера «после коммита Neo4j» | Won't | Косвенно (`ReconciliationIT.java:201-230`), Q-10 🟢 [R.8: решение владельца, вопрос 4; UNLOCKER-283] |
 
 ## Rastreabilidade de Código
 
