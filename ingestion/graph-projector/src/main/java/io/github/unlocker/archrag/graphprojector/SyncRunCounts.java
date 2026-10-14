@@ -4,24 +4,27 @@ import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import java.util.Map;
 
 /**
- * Счётчики закрытого прогона {@code SyncRun}.
+ * Счётчики закрытого прогона {@code SyncRun}; считаются по журналу, маркер {@code snapshot-complete} в них не входит.
  *
- * @param fetched сколько объектов заявил адаптер ({@code objectCount} маркера)
+ * @param fetched все события прогона (в любом статусе)
  * @param applied события прогона в {@code PROJECTED}, {@code DUPLICATE}, {@code IGNORED_OLD_VERSION}
- * @param failed события прогона в {@code QUARANTINED}
+ * @param failed события прогона в {@code QUARANTINED} и {@code RETRYING}: не применены, и после закрытия прогона
+ *     счётчики уже не обновятся
  */
 public record SyncRunCounts(long fetched, long applied, long failed) {
 
   /**
-   * Считает счётчики по числу событий прогона в каждом статусе (без маркера). Значения присваиваются, а не
-   * накапливаются, поэтому повторное закрытие даёт тот же результат.
+   * Считает счётчики по числу событий прогона в каждом статусе. Значения присваиваются, а не накапливаются, поэтому
+   * повторное закрытие даёт тот же результат.
    */
-  public static SyncRunCounts of(long fetched, Map<ProcessingStatus, Long> byStatus) {
+  public static SyncRunCounts of(Map<ProcessingStatus, Long> byStatus) {
+    long fetched = byStatus.values().stream().mapToLong(Long::longValue).sum();
     long applied =
         count(byStatus, ProcessingStatus.PROJECTED)
             + count(byStatus, ProcessingStatus.DUPLICATE)
             + count(byStatus, ProcessingStatus.IGNORED_OLD_VERSION);
-    return new SyncRunCounts(fetched, applied, count(byStatus, ProcessingStatus.QUARANTINED));
+    long failed = count(byStatus, ProcessingStatus.QUARANTINED) + count(byStatus, ProcessingStatus.RETRYING);
+    return new SyncRunCounts(fetched, applied, failed);
   }
 
   private static long count(Map<ProcessingStatus, Long> byStatus, ProcessingStatus status) {

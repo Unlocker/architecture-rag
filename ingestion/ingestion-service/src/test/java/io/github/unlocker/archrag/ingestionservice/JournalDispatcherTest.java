@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -186,9 +185,9 @@ class JournalDispatcherTest {
     dispatcher.runOnce();
 
     var order = inOrder(syncRuns, journal);
-    order.verify(syncRuns).close("urn:corp:eam", "run-1", "marker", SyncRunStatus.FAILED, OptionalLong.empty());
+    order.verify(syncRuns).close("urn:corp:eam", "run-1", "marker", SyncRunStatus.FAILED);
     order.verify(journal).toDlq(eq("urn:corp:eam"), eq("marker"), eq(JournalDispatcher.MARKER_NO_RAW), anyString());
-    verify(syncRuns, never()).close(anyString(), anyString(), eq("noraw"), any(), any());
+    verify(syncRuns, never()).close(anyString(), anyString(), eq("noraw"), any());
   }
 
   @Test

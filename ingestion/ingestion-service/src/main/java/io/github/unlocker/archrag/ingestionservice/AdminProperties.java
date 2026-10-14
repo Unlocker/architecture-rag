@@ -9,15 +9,22 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * Настройки админского REST.
  *
  * @param allowedClients клиенты OIDC ({@code azp}), токены которых принимает админский REST; пустой список запрещён
+ * @param auditStaleAfter возраст записи {@code admin_audit} в {@code STARTED}, после которого операция считается
+ *     брошенной ({@code FAILED}, {@code error = 'abandoned'})
  * @param auditRetention сколько хранятся записи {@code admin_audit}; старше удаляет {@link HousekeepingJob}
  */
 @ConfigurationProperties("archrag.admin")
 public record AdminProperties(
-    @DefaultValue("archrag-demo") List<String> allowedClients, @DefaultValue("90d") Duration auditRetention) {
+    @DefaultValue("archrag-demo") List<String> allowedClients,
+    @DefaultValue("24h") Duration auditStaleAfter,
+    @DefaultValue("90d") Duration auditRetention) {
 
   public AdminProperties {
     if (allowedClients.isEmpty()) {
       throw new IllegalArgumentException("archrag.admin.allowed-clients must not be empty");
+    }
+    if (auditStaleAfter.isZero() || auditStaleAfter.isNegative()) {
+      throw new IllegalArgumentException("archrag.admin.audit-stale-after must be positive");
     }
     if (auditRetention.isZero() || auditRetention.isNegative()) {
       throw new IllegalArgumentException("archrag.admin.audit-retention must be positive");

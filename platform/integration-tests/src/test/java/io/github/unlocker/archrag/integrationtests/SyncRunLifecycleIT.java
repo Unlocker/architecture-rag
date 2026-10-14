@@ -134,7 +134,7 @@ class SyncRunLifecycleIT {
         io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode.EAM, run, SyncRunStatus.SUCCEEDED,
         Instant.now().plusSeconds(60), new SyncRunCounts(99, 99, 99));
     new SyncRunCloser(journal, writer, Clock.systemUTC())
-        .close(SOURCE, run, "snapshot-complete:" + run, SyncRunStatus.SUCCEEDED, java.util.OptionalLong.of(1));
+        .close(SOURCE, run, "snapshot-complete:" + run, SyncRunStatus.SUCCEEDED);
 
     assertThat(syncRun(run)).isEqualTo(before);
   }
@@ -160,12 +160,12 @@ class SyncRunLifecycleIT {
     var result = marker(run, null);
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
-    assertThat(syncRun(run)).containsEntry("status", "FAILED").containsEntry("fetched", 0L).containsEntry("applied", 1L);
+    assertThat(syncRun(run)).containsEntry("status", "FAILED").containsEntry("fetched", 1L).containsEntry("applied", 1L);
     assertThat(syncRun(run).get("endedAt")).isNotNull();
 
     // Выход из карантина: тот же прогон закрывается как SUCCEEDED.
     new SyncRunCloser(journal, writer, Clock.systemUTC())
-        .close(SOURCE, run, "snapshot-complete:" + run, SyncRunStatus.SUCCEEDED, java.util.OptionalLong.of(1));
+        .close(SOURCE, run, "snapshot-complete:" + run, SyncRunStatus.SUCCEEDED);
     assertThat(syncRun(run)).containsEntry("status", "SUCCEEDED").containsEntry("fetched", 1L);
   }
 
@@ -262,7 +262,8 @@ class SyncRunLifecycleIT {
   void auditOlderThanRetentionIsDeletedAndAbandonedStartedBecomesFailed() throws SQLException {
     audit("old-ok", "SUCCEEDED", "now() - interval '100 days'");
     audit("recent-ok", "SUCCEEDED", "now() - interval '1 day'");
-    audit("abandoned", "STARTED", "now() - interval '8 hours'");
+    audit("abandoned", "STARTED", "now() - interval '25 hours'");
+    audit("slow-op", "STARTED", "now() - interval '8 hours'");
     audit("running", "STARTED", "now() - interval '1 minute'");
 
     job(20, Duration.ofDays(90)).run();
@@ -272,7 +273,8 @@ class SyncRunLifecycleIT {
       byOp.put(rs.getString(1), rs.getString(2) + "/" + rs.getString(3));
     });
     assertThat(byOp)
-        .containsOnlyKeys("recent-ok", "abandoned", "running")
+        .containsOnlyKeys("recent-ok", "abandoned", "slow-op", "running")
+        .containsEntry("slow-op", "STARTED/null")
         .containsEntry("abandoned", "FAILED/abandoned")
         .containsEntry("running", "STARTED/null");
   }
@@ -291,7 +293,7 @@ class SyncRunLifecycleIT {
   private static HousekeepingJob job(int keep, Duration auditRetention) {
     return new HousekeepingJob(
         driver, journal, jdbc, new SyncRunProperties(Duration.ofHours(6), keep, Duration.ofHours(1), true),
-        new AdminProperties(List.of("c"), auditRetention), Clock.systemUTC());
+        new AdminProperties(List.of("c"), Duration.ofHours(24), auditRetention), Clock.systemUTC());
   }
 
   private static void audit(String operation, String status, String startedAtSql) {

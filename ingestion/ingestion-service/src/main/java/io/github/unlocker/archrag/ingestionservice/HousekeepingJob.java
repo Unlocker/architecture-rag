@@ -111,8 +111,7 @@ public class HousekeepingJob {
       // Журнал читается вне транзакции Neo4j: в повторяемой функции драйвера побочных эффектов быть не должно.
       String source = SOURCE_PREFIX + ((String) run.get("adapter")).toLowerCase(Locale.ROOT);
       Map<ProcessingStatus, Long> byStatus = journal.statusCounts(source, runId, "");
-      long fetched = byStatus.values().stream().mapToLong(Long::longValue).sum();
-      SyncRunCounts counts = SyncRunCounts.of(fetched, byStatus);
+      SyncRunCounts counts = SyncRunCounts.of(byStatus);
       Map<String, Object> params =
           Map.of("runId", runId, "now", now.atOffset(ZoneOffset.UTC), "fetched", counts.fetched(),
               "applied", counts.applied(), "failed", counts.failed());
@@ -140,7 +139,7 @@ public class HousekeepingJob {
   /** Переводит брошенные {@code STARTED} в {@code FAILED} и удаляет записи старше retention. */
   void cleanAudit() {
     Instant now = clock.instant();
-    Timestamp stale = Timestamp.from(now.minus(props.staleAfter()));
+    Timestamp stale = Timestamp.from(now.minus(admin.auditStaleAfter()));
     jdbc.update(
         "UPDATE admin_audit SET status = 'FAILED', error = 'abandoned', finished_at = ?"
             + " WHERE status = 'STARTED' AND started_at < ?",

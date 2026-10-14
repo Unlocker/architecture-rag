@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * Настройки жизненного цикла {@code SyncRun} и фоновой чистки ({@link HousekeepingJob}).
  *
- * @param staleAfter возраст {@code RUNNING}-прогона (и записи {@code admin_audit} в {@code STARTED}), после которого
+ * @param staleAfter возраст {@code RUNNING}-прогона, после которого
  *     адаптер считается умершим и прогон переводится в {@code FAILED}
  * @param keepPerSource сколько терминальных прогонов на адаптер хранится; более старые удаляются
  * @param housekeepingInterval пауза между проходами чистки

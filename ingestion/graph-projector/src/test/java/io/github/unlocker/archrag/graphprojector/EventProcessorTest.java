@@ -589,11 +589,11 @@ class EventProcessorTest {
           }
         },
         candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE, NormalizationWarnings.NONE,
-        (source, runId, markerId, status, fetched) -> {
+        (source, runId, markerId, status) -> {
           if (failClose) {
             throw new IllegalStateException("neo4j down");
           }
-          closes.add(runId + "/" + markerId + "/" + status + "/" + fetched);
+          closes.add(runId + "/" + markerId + "/" + status);
         });
   }
 
@@ -607,14 +607,14 @@ class EventProcessorTest {
     var result = runWith(withSyncRuns(), marker("r1", Map.of("syncRunId", "r1", "objectCount", 5L)));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
-    assertThat(closes).containsExactly("r1/snapshot-complete:r1/SUCCEEDED/OptionalLong[5]");
+    assertThat(closes).containsExactly("r1/snapshot-complete:r1/SUCCEEDED");
   }
 
   @Test
   void partialMarkerStillClosesSyncRunAsSucceeded() {
     runWith(withSyncRuns(), marker("r2", Map.of("syncRunId", "r2", "objectCount", 1L, "completeness", "PARTIAL")));
 
-    assertThat(closes).containsExactly("r2/snapshot-complete:r2/SUCCEEDED/OptionalLong[1]");
+    assertThat(closes).containsExactly("r2/snapshot-complete:r2/SUCCEEDED");
   }
 
   @Test
@@ -622,7 +622,7 @@ class EventProcessorTest {
     var result = runWith(withSyncRuns(), marker("r3", Map.of("syncRunId", "r3")));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
-    assertThat(closes).containsExactly("r3/snapshot-complete:r3/FAILED/OptionalLong.empty");
+    assertThat(closes).containsExactly("r3/snapshot-complete:r3/FAILED");
   }
 
   @Test
@@ -631,7 +631,7 @@ class EventProcessorTest {
 
     runWith(withSyncRuns(), marker("r4", Map.of("syncRunId", "r4", "objectCount", 2L)));
 
-    assertThat(closes).containsExactly("r4/snapshot-complete:r4/FAILED/OptionalLong[2]");
+    assertThat(closes).containsExactly("r4/snapshot-complete:r4/FAILED");
   }
 
   @Test

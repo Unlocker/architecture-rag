@@ -9,10 +9,9 @@ import org.junit.jupiter.api.Test;
 class SyncRunCountsTest {
 
   @Test
-  void appliedCountsProjectedDuplicateAndOldVersionFailedCountsQuarantined() {
+  void appliedCountsProjectedDuplicateAndOldVersionFailedCountsQuarantinedAndRetrying() {
     var counts =
         SyncRunCounts.of(
-            9,
             Map.of(
                 ProcessingStatus.PROJECTED, 4L,
                 ProcessingStatus.DUPLICATE, 2L,
@@ -21,11 +20,11 @@ class SyncRunCountsTest {
                 ProcessingStatus.RETRYING, 5L,
                 ProcessingStatus.RECEIVED, 6L));
 
-    assertThat(counts).isEqualTo(new SyncRunCounts(9, 7, 3));
+    assertThat(counts).isEqualTo(new SyncRunCounts(21, 7, 8));
   }
 
   @Test
   void runWithoutEventsHasZeroCounters() {
-    assertThat(SyncRunCounts.of(0, Map.of())).isEqualTo(new SyncRunCounts(0, 0, 0));
+    assertThat(SyncRunCounts.of(Map.of())).isEqualTo(new SyncRunCounts(0, 0, 0));
   }
 }

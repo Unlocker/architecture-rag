@@ -18,7 +18,6 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -163,8 +162,8 @@ public class JournalDispatcher {
       if (ref == null) {
         boolean marker = StoredEventReader.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
         if (marker) {
-          // Маркера без raw нечем разобрать: счётчик заявленных объектов неизвестен, прогон закрывается как FAILED.
-          syncRuns.close(entry.source(), entry.sourceId(), entry.eventId(), SyncRunStatus.FAILED, OptionalLong.empty());
+          // Маркера без raw нечем разобрать: прогон закрывается как FAILED.
+          syncRuns.close(entry.source(), entry.sourceId(), entry.eventId(), SyncRunStatus.FAILED);
         }
         return quarantine(entry, marker ? MARKER_NO_RAW : NO_RAW_PAYLOAD, "event has no raw payload");
       }

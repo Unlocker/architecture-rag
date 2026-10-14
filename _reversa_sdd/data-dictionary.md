@@ -578,7 +578,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `error` | text | да | класс исключения, ≤ 200 символов |
 | `started_at`, `finished_at` | timestamptz | нет / да | |
 
-Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`). Retention: `HousekeepingJob` переводит `STARTED` старше `archrag.sync-run.stale-after` в `FAILED` (`error='abandoned'`), затем удаляет записи старше `archrag.admin.audit-retention` (90d) по `started_at` (🟢 [UNLOCKER-280: реализовано] К-8).
+Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`). Retention: `HousekeepingJob` переводит `STARTED` старше `archrag.admin.audit-stale-after` (24h, не связан с таймаутом прогона адаптера) в `FAILED` (`error='abandoned'`), затем удаляет записи старше `archrag.admin.audit-retention` (90d) по `started_at` (🟢 [UNLOCKER-280: реализовано] К-8).
 
 ### Q.5.2 Роль БД `archrag_console_ro` (`V6__console_readonly_role.sql`)
 

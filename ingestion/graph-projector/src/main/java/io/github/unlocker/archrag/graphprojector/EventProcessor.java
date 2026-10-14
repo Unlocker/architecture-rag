@@ -327,7 +327,7 @@ public final class EventProcessor {
     }
     // Прогон закрывается до перехода маркера в PROJECTED: сбой записи в Neo4j оставляет маркер на повтор.
     try {
-      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.SUCCEEDED, objectCount);
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.SUCCEEDED);
     } catch (RuntimeException e) {
       return retry(event, "SYNC_RUN_CLOSE_FAILED", e.getClass().getSimpleName());
     }
@@ -661,7 +661,7 @@ public final class EventProcessor {
     if (TYPE_SNAPSHOT_COMPLETE.equals(event.type())) {
       // Единая точка: любой карантин маркера закрывает прогон как FAILED. Сбой записи уходит наружу до DLQ,
       // маркер остаётся необработанным и придёт на повтор.
-      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.FAILED, objectCount(event));
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.FAILED);
     }
     journal.toDlq(event.source(), event.id(), code, reason);
     return new ProcessingResult(ProcessingStatus.QUARANTINED, code, null);
