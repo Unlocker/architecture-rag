@@ -5,11 +5,16 @@ import { NodeCard } from '../../api/types';
 import { Badge, Loadable, text, Time } from '../../components/common';
 import { useAsync } from '../../hooks/useAsync';
 
-/** Актив считается устаревшим, если он текущий, но давно не виден источникам. */
+/**
+ * Актив считается устаревшим, если он текущий и: `lastSeenAt` отсутствует или не парсится, либо старше
+ * `STALE_AFTER_MS`, либо ни один источник не активен (`active !== true`, null считается неактивным).
+ * Семантика совпадает с MCP (`TraceDependenciesTool.java:187-190,228`). Закрытый узел не «устарел».
+ */
 export function isStale(card: NodeCard, now: number = Date.now()): boolean {
-  if (!card.isCurrent || !card.lastSeenAt) return false;
-  const seen = new Date(card.lastSeenAt).getTime();
-  return !Number.isNaN(seen) && now - seen > STALE_AFTER_MS;
+  if (!card.isCurrent) return false;
+  const seen = card.lastSeenAt ? new Date(card.lastSeenAt).getTime() : Number.NaN;
+  if (Number.isNaN(seen) || now - seen > STALE_AFTER_MS) return true;
+  return !card.sources.some((s) => s.active === true);
 }
 
 /** Блок «Исходный код» у Deployment: commit и репозиторий из Helm chart. URL внешний, поэтому текстом, без ссылки. */
