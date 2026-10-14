@@ -11,10 +11,6 @@
   - Origin: `CM/command/UpsertRelation.java:25-42`
   - Критерий готовности: сообщения IAE: `"<type> does not allow <from> -> <to>"`, `"validity is allowed only for temporal relation <type>"`, `"<type> requires identity properties <set>"`.
   - Уверенность: 🟢
-- [ ] T-02 — `CloseAssertion`: 5 NPE-проверок + `type.temporal()`; сообщение `"only temporal relations can be closed: <type>"`.
-  - Origin: `CM/command/CloseAssertion.java:12-21`
-  - Критерий готовности: `PART_OF` → IAE, `validTo=null` → NPE.
-  - Уверенность: 🟢
 - [ ] T-03 — `DeferRelation(UpsertRelation)` с NPE на `null`.
   - Origin: `CM/command/DeferRelation.java:12-16`
   - Критерий готовности: `DeferRelation(null)` → NPE.
@@ -34,8 +30,7 @@
 - [ ] TT-06 — `new UpsertRelation(..., properties=null, ...)` → NPE; `DeferRelation(null)` → NPE: ОТСУТСТВУЕТ 🔴.
 
 ## Порядок
-T-04 → T-01 → T-02/T-03 → тесты.
+T-04 → T-01 → T-03 → тесты.
 
 ## Открытые 🔴
-- Нужен ли производитель `CloseAssertion`? (см. [`../questions.md`](../questions.md) Q-3).
 - Допустим ли `validity == null` у темпоральных связей, и какой `validFrom` ставит проектор? (🟡, определяется в `graph-projector`).

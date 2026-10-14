@@ -108,7 +108,6 @@
 |---|---|---|
 | `UpsertNode` (`CM/command/UpsertNode.java:8`) | `record: SourceRecord`*, `data: NodeData`* | только `null` |
 | `UpsertRelation` (`CM/command/UpsertRelation.java:21`) | `type`*, `from`*, `fromLabel`*, `to`*, `toLabel`*, `properties`*, `validity` (нет), `assertedBy`* | `type.allows(fromLabel,toLabel)` (`:32-34`); `validity` только для temporal (`:35-37`); `properties` — `copyProperties`; включают все `identityProperties` (`:38-41`) |
-| `CloseAssertion` (`CM/command/CloseAssertion.java:9`) | `type`*, `from`*, `to`*, `validTo`*, `assertedBy`* | `type.temporal()` (`:18-20`) |
 | `TombstoneSourceRecord` (`CM/command/TombstoneSourceRecord.java:8`) | `key`*, `deletedAt`* | только `null`; «после полного snapshot» — только в Javadoc 🟡 |
 | `DeferRelation` (`CM/command/DeferRelation.java:12`) | `relation: UpsertRelation`* | только `null` |
 
@@ -538,7 +537,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 
 | Тип | Поля | Инварианты |
 |---|---|---|
-| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation`/`CloseAssertion` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
+| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
 | `ProjectionResult` (`GP/ProjectionResult.java:13-14`) | `outcome ∈ {APPLIED, NOOP_SAME_VERSION, IGNORED_OLD_VERSION}`, `skippedProperties`, `skippedRelations` | списки неизменяемы |
 | `ProcessingResult` (`GP/ProcessingResult.java:13`) | `status`, `errorCode?`, `projection?` | `status` обязателен |
 | `ConflictMarkers` (`GP/ConflictMarkers.java:22`) | `gid?`, `byRecord: Map<SourceKey, List<String>>` | непустые списки; маркеры без `gid` недопустимы; `none()` = «не менять» |

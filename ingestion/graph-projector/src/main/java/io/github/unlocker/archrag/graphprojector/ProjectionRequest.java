@@ -1,6 +1,5 @@
 package io.github.unlocker.archrag.graphprojector;
 
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -97,11 +96,6 @@ public record ProjectionRequest(
           requireGid(gids, r.to());
         }
         case DeferRelation d -> requireSame(key, d.relation().assertedBy(), "deferred relation assertedBy");
-        case CloseAssertion c -> {
-          requireSame(key, c.assertedBy(), "close assertedBy");
-          requireGid(gids, c.from());
-          requireGid(gids, c.to());
-        }
       }
     }
     if (tombstones == 1 && commands.size() != 1) {

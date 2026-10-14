@@ -1,6 +1,5 @@
 package io.github.unlocker.archrag.graphprojector;
 
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -640,10 +639,6 @@ public final class EventProcessor {
         case UpsertRelation r -> {
           endpoints.add(r.from());
           endpoints.add(r.to());
-        }
-        case CloseAssertion c -> {
-          endpoints.add(c.from());
-          endpoints.add(c.to());
         }
         // Отложенная связь gid не требует: неизвестный конец берётся из графа при достраивании.
         case DeferRelation d -> {}

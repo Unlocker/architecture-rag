@@ -38,4 +38,4 @@ T-04 → T-01 → T-02 → T-05 (в порядке `project-request` → `deferr
 
 ## Открытые 🔴
 
-Q-01 (`SUPERSEDED` недостижим), Q-02 (crosswalk не обновляет граф до replay), Q-03 (`CloseAssertion` без производителя), Q-04 (`SyncRun` всегда `RUNNING`), Q-05 (`objectCount` по умолчанию 0), Q-06 (дубли литералов), Q-08 (расхождения с docs/ADR) — [`questions.md`](questions.md). Решения: [`decisions.md`](decisions.md).
+Q-01 (`SUPERSEDED` недостижим), Q-02 (crosswalk не обновляет граф до replay), Q-03 (`CloseAssertion` удалён, UNLOCKER-284), Q-04 (`SyncRun` всегда `RUNNING`), Q-05 (`objectCount` по умолчанию 0), Q-06 (дубли литералов), Q-08 (расхождения с docs/ADR) — [`questions.md`](questions.md). Решения: [`decisions.md`](decisions.md).

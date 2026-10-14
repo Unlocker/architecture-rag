@@ -3,7 +3,6 @@ package io.github.unlocker.archrag.integrationtests;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
@@ -620,26 +619,6 @@ class GraphProjectorIT {
     var before = dump();
     assertThat(migration.migrate(now.plusSeconds(60))).isZero();
     assertThat(dump()).isEqualTo(before);
-  }
-
-  @Test
-  void closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent() {
-    String team = "t-" + uid();
-    String system = "its-" + uid();
-    upsert("eam", "TEAM", team, "1", Map.of("name", "Core"));
-    upsert("eam", "IT_SYSTEM", system, "1", Map.of("name", "Payments", "ownerTeam", team));
-    var sys = key(SourceSystemCode.EAM, "IT_SYSTEM", system);
-    var tm = key(SourceSystemCode.EAM, "TEAM", team);
-    var request = new ProjectionRequest(sys, new SourceVersion("2"), T2, null,
-        Map.of(sys, identity.resolve(sys), tm, identity.resolve(tm)),
-        List.of(new UpsertNode(new SourceRecord(sys, "2", "sha256:y", T2, true),
-                new io.github.unlocker.archrag.canonicalmodel.node.ITSystem("Payments", null, null, null)),
-            new CloseAssertion(RelationType.OWNED_BY, sys, tm, T2, sys)));
-
-    assertThat(projector.project(request).outcome()).isEqualTo(ProjectionOutcome.APPLIED);
-
-    var rel = single("MATCH (:ITSystem)-[r:OWNED_BY]->(:Team) RETURN r").get("r").asRelationship();
-    assertThat(rel.get("validTo").asZonedDateTime().toInstant()).isEqualTo(T2);
   }
 
   @Test
