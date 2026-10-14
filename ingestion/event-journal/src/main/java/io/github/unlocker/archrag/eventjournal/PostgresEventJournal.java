@@ -22,8 +22,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.sql.DataSource;
@@ -296,6 +298,26 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
       throw new JournalException("snapshotContents failed", e);
     }
     return new SnapshotContents(objects, events, first);
+  }
+
+  @Override
+  public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+    String sql = "SELECT status, count(*) FROM inbox_event WHERE source = ? AND sync_run_id = ? AND event_id <> ?"
+        + " GROUP BY status";
+    Map<ProcessingStatus, Long> counts = new EnumMap<>(ProcessingStatus.class);
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, syncRunId);
+      ps.setString(3, excludeEventId);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          counts.put(ProcessingStatus.valueOf(rs.getString(1)), rs.getLong(2));
+        }
+      }
+    } catch (SQLException e) {
+      throw new JournalException("statusCounts failed", e);
+    }
+    return counts;
   }
 
   @Override

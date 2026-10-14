@@ -81,6 +81,11 @@ test('health rules', () => {
   expect(health(sources[1])).toBe('bad');
   expect(health(sources[2])).toBe('warn');
   expect(health(sources[3])).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'RUNNING', endedAt: null, failed: null } }))).toBe('warn');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'FAILED' } }))).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'SUCCEEDED', failed: 0 } }))).toBe('ok');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'SUCCEEDED', failed: 3 } }))).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'RUNNING' }, eventsByStatus: { QUARANTINED: 1 } }))).toBe('bad');
 });
 
 test('lag raises the traffic light', () => {

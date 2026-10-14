@@ -79,6 +79,13 @@ final class InMemoryJournal implements EventJournal {
   }
 
   @Override
+  public java.util.Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+    return rows.values().stream()
+        .filter(r -> r.source().equals(source) && syncRunId.equals(r.syncRunId()) && !r.eventId().equals(excludeEventId))
+        .collect(Collectors.groupingBy(JournalEntry::status, Collectors.counting()));
+  }
+
+  @Override
   public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
     return rows.values().stream()
         .filter(r -> r.source().equals(source) && !r.receivedAt().isBefore(since))

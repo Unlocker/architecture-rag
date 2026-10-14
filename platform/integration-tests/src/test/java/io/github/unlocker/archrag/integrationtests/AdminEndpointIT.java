@@ -215,14 +215,17 @@ class AdminEndpointIT {
     return post(path, token("architecture.admin"), body);
   }
 
-  /** Канонический дамп графа: узлы и связи как отсортированные строки без elementId. */
+  /**
+   * Канонический дамп графа: узлы и связи как отсортированные строки без elementId. {@code SyncRun} в дамп не
+   * входит: итог прогона пишет маркер {@code snapshot-complete}, а replay/rebuild маркеры пропускают.
+   */
   private List<String> dump() {
     List<String> out = new ArrayList<>();
-    for (var r : driver.executableQuery("MATCH (n) RETURN labels(n) AS l, properties(n) AS p").execute().records()) {
+    for (var r : driver.executableQuery("MATCH (n) WHERE NOT n:SyncRun RETURN labels(n) AS l, properties(n) AS p").execute().records()) {
       out.add("N " + sorted(r.get("l").asList()) + " " + new java.util.TreeMap<>(r.get("p").asMap()));
     }
     for (var r : driver.executableQuery(
-        "MATCH (a)-[r]->(b) RETURN labels(a) AS al, properties(a) AS ap, type(r) AS t, properties(r) AS rp, labels(b) AS bl, properties(b) AS bp")
+        "MATCH (a)-[r]->(b) WHERE NOT a:SyncRun RETURN labels(a) AS al, properties(a) AS ap, type(r) AS t, properties(r) AS rp, labels(b) AS bl, properties(b) AS bp")
         .execute().records()) {
       out.add("R " + sorted(r.get("al").asList()) + new java.util.TreeMap<>(r.get("ap").asMap()) + " -" + r.get("t").asString()
           + new java.util.TreeMap<>(r.get("rp").asMap()) + "-> " + sorted(r.get("bl").asList())

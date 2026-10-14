@@ -66,7 +66,7 @@
 - [ ] TT-03: `access/admin-ui/src/App.test.tsx`, `access/admin-ui/src/useHashRoute.test.ts` — навигация, вход при отсутствии токена, ошибка входа, неизвестный hash
 - [ ] TT-04: `access/admin-ui/src/pages/GraphPage.test.tsx` (17 тестов), `access/admin-ui/src/pages/SyncPage.test.tsx` (16 тестов) — см. use case
 - [ ] TT-05: 🟢 [R.8: ответ владельца, вопрос 9] нет теста на дрейф констант и типов относительно бэкенда (Q-05) и на отсутствие не-`GET` вызовов (Q-11)
-- [ ] TT-06: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] нет теста достижимости веток светофора на реальных данных проектора (Q-01): `health()` проверяется на синтетических `SourceStatus` (`access/admin-ui/src/pages/SyncPage.test.tsx:79-90`)
+- [x] TT-06: 🟢 [UNLOCKER-280: реализовано] ветки светофора (`RUNNING` → warn, `FAILED` → bad, `SUCCEEDED` без `failed` → ok) покрыты в `SyncPage.test.tsx`; закрытие прогона на реальных данных — `SyncRunLifecycleIT`, `SyncConsoleIT`
 
 ## Tarefas de Migração de Dados
 

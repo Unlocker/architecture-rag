@@ -577,6 +577,89 @@ class EventProcessorTest {
     assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MASS_CLOSE_LIMIT);
   }
 
+  private final List<String> closes = new ArrayList<>();
+  private boolean failClose;
+
+  private EventProcessor withSyncRuns() {
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> true), identity, projection,
+        (source, run, eventId, count) -> {
+          if (rejectSnapshots) {
+            throw new SnapshotRejectedException(SnapshotRejectedException.MASS_CLOSE_LIMIT, "too many");
+          }
+        },
+        candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE, NormalizationWarnings.NONE,
+        (source, runId, markerId, status, fetched) -> {
+          if (failClose) {
+            throw new IllegalStateException("neo4j down");
+          }
+          closes.add(runId + "/" + markerId + "/" + status + "/" + fetched);
+        });
+  }
+
+  private ProcessingResult runWith(EventProcessor p, CanonicalEvent event) {
+    journal.append(event, RAW, "run-1");
+    return p.process(event, RAW);
+  }
+
+  @Test
+  void acceptedMarkerClosesSyncRunAsSucceeded() {
+    var result = runWith(withSyncRuns(), marker("r1", Map.of("syncRunId", "r1", "objectCount", 5L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(closes).containsExactly("r1/snapshot-complete:r1/SUCCEEDED/OptionalLong[5]");
+  }
+
+  @Test
+  void partialMarkerStillClosesSyncRunAsSucceeded() {
+    runWith(withSyncRuns(), marker("r2", Map.of("syncRunId", "r2", "objectCount", 1L, "completeness", "PARTIAL")));
+
+    assertThat(closes).containsExactly("r2/snapshot-complete:r2/SUCCEEDED/OptionalLong[1]");
+  }
+
+  @Test
+  void markerWithoutObjectCountClosesSyncRunAsFailed() {
+    var result = runWith(withSyncRuns(), marker("r3", Map.of("syncRunId", "r3")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(closes).containsExactly("r3/snapshot-complete:r3/FAILED/OptionalLong.empty");
+  }
+
+  @Test
+  void markerRejectedByReconciliationClosesSyncRunAsFailed() {
+    rejectSnapshots = true;
+
+    runWith(withSyncRuns(), marker("r4", Map.of("syncRunId", "r4", "objectCount", 2L)));
+
+    assertThat(closes).containsExactly("r4/snapshot-complete:r4/FAILED/OptionalLong[2]");
+  }
+
+  @Test
+  void closeFailureLeavesMarkerForRetryInsteadOfProjected() {
+    failClose = true;
+
+    var result = runWith(withSyncRuns(), marker("r5", Map.of("syncRunId", "r5", "objectCount", 2L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("SYNC_RUN_CLOSE_FAILED");
+  }
+
+  @Test
+  void closeFailureWhileQuarantiningMarkerDoesNotSwallowTheError() {
+    failClose = true;
+
+    assertThatThrownBy(() -> runWith(withSyncRuns(), marker("r6", Map.of("syncRunId", "r6"))))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(journal.entry("snapshot-complete:r6").status()).isNotEqualTo(ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void nonMarkerQuarantineDoesNotCloseSyncRun() {
+    runWith(withSyncRuns(), other("e-x", "architecture.unknown.v1", "urn:corp:schema:x:1", "X", "x1"));
+
+    assertThat(closes).isEmpty();
+  }
+
   @Test
   void partialMarkerIsPassedToReconciliationAsPartial() {
     run(marker("run-p", Map.of("syncRunId", "run-p", "objectCount", 1L, "completeness", "PARTIAL")));
@@ -661,6 +744,11 @@ class EventProcessorTest {
 
     @Override
     public SnapshotContents snapshotContents(String source, String syncRunId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
       throw new UnsupportedOperationException();
     }
 

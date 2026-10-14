@@ -520,12 +520,12 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `SourceSystem` | `code` (UNIQUE) | — | upsert, relation-only, tombstone |
 | `(:SourceSystem)-[:OWNS_RECORD]->(:SourceRecord)` | — | — | то же |
 | `(:SourceRecord)-[:ASSERTS]->(:<Canonical>)` | — | `confidence=1.0`, `authority ∈ {MASTER, SUPPLEMENTARY}`, `conflicts: list<string>` (имена свойств; снимается при отсутствии конфликта) | `UpsertNode`; `conflicts` — `writeConflictMarkers` |
-| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум) | если у события есть `syncRunId` (`:687-703`) |
+| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум); при закрытии `status`, `endedAt`, `fetched`, `applied`, `failed` (`SyncRunWriter`) | если у события есть `syncRunId` (`:687-703`) |
 | `(:SyncRun)-[:PROCESSED]->(:SourceRecord)` | — | — | то же |
 | `PendingRelation` | `key` (UNIQUE, SHA-256) | `type`, `fromLabel`, `toLabel`, `from{Source,Type,Id}`, `to{Source,Type,Id}`, `props` (JSON-строка), `validFrom?`, `validTo?`, `referrerVersion`, `eventTime` | `DeferRelation` (`GP/PendingRelations.java:53-80`) |
 | `(:SourceRecord)-[:DEFERS]->(:PendingRelation)` | — | — | то же |
 
-Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы, `:694`); `SyncRun.status` после создания не меняется 🟡 — кто его завершает, из кода ingestion не видно (проверить в R.3).
+Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы); 🟢 [UNLOCKER-280: реализовано] `SyncRun.status` и счётчики пишет закрытие прогона по маркеру `snapshot-complete` (`SyncRunWriter.close`, `SET`, `SUCCEEDED` финален), зависшие `RUNNING` и retention — `HousekeepingJob` (`archrag.sync-run.*`).
 
 ### Q.4.3 Канонический узел
 
@@ -578,7 +578,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `error` | text | да | класс исключения, ≤ 200 символов |
 | `started_at`, `finished_at` | timestamptz | нет / да | |
 
-Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`).
+Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`). Retention: `HousekeepingJob` переводит `STARTED` старше `archrag.sync-run.stale-after` в `FAILED` (`error='abandoned'`), затем удаляет записи старше `archrag.admin.audit-retention` (90d) по `started_at` (🟢 [UNLOCKER-280: реализовано] К-8).
 
 ### Q.5.2 Роль БД `archrag_console_ro` (`V6__console_readonly_role.sql`)
 

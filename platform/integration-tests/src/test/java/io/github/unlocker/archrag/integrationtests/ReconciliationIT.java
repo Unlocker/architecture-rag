@@ -501,6 +501,11 @@ class ReconciliationIT {
     }
 
     @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+      return delegate.statusCounts(source, syncRunId, excludeEventId);
+    }
+
+    @Override
     public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
       return delegate.objectsReceivedSince(source, since);
     }

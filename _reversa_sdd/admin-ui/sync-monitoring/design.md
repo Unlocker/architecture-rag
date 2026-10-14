@@ -46,7 +46,7 @@ REST: `GET /api/sync/sources`, `/api/sync/events`, `/api/sync/events/{source}/{e
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] Ветки `FAILED`/`failed > 0` в светофоре недостижимы (`SyncRun` не завершается) — Q-01.
+- 🟢 [UNLOCKER-280: реализовано] Ветки `FAILED`/`failed > 0` достижимы: `SyncRun` закрывается по маркеру `snapshot-complete` — Q-01.
 - 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] «Только открытые» в DLQ не отличается от «все» (`replayed_at` не пишется) — Q-02.
 - 🟡 `eventId` с `/` не открывается — Q-09; фикстуры UI-тестов расходятся с реальным форматом `source` — Q-18.
 - 🟡 Время и фильтры периода в локальной зоне — Q-17.

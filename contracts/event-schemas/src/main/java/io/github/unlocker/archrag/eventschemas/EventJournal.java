@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.eventschemas;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,4 +59,10 @@ public interface EventJournal {
 
   /** Объекты источника, по которым в журнал попало любое событие не раньше {@code since}. */
   Set<ObjectRef> objectsReceivedSince(String source, Instant since);
+
+  /**
+   * Сколько событий прогона {@code syncRunId} в каком статусе ({@code inbox_event.sync_run_id}), без события
+   * {@code excludeEventId} (маркер). Статусы без событий в карту не попадают. Основа счётчиков {@code SyncRun}.
+   */
+  Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId);
 }

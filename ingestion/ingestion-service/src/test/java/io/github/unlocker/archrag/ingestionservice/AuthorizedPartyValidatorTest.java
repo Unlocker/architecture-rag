@@ -39,9 +39,17 @@ class AuthorizedPartyValidatorTest {
     assertThat(validator.validate(jwt("")).hasErrors()).isTrue();
   }
 
+  private static final java.time.Duration RETENTION = java.time.Duration.ofDays(90);
+
+  @Test
+  void nonPositiveAuditRetentionIsRejectedByProperties() {
+    assertThatThrownBy(() -> new AdminProperties(List.of("a"), java.time.Duration.ZERO))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
   @Test
   void emptyAllowListIsRejectedByProperties() {
-    assertThatThrownBy(() -> new AdminProperties(List.of())).isInstanceOf(IllegalArgumentException.class);
-    assertThat(new AdminProperties(List.of("a")).allowedClients()).containsExactly("a");
+    assertThatThrownBy(() -> new AdminProperties(List.of(), RETENTION)).isInstanceOf(IllegalArgumentException.class);
+    assertThat(new AdminProperties(List.of("a"), RETENTION).allowedClients()).containsExactly("a");
   }
 }

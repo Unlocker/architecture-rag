@@ -11,6 +11,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
 import io.github.unlocker.archrag.canonicalmodel.node.Solution;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SyncRunStatus;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
@@ -117,6 +118,7 @@ public final class EventProcessor {
   private final DeploymentLookup lookup;
   private final EamLookup eamLookup;
   private final NormalizationWarnings warnings;
+  private final SyncRunClosing syncRuns;
 
   /** Без чтения графа для проверки системы EAM из chart: такие конфликты не открываются. */
   public EventProcessor(
@@ -166,6 +168,23 @@ public final class EventProcessor {
       DeploymentLookup lookup,
       EamLookup eamLookup,
       NormalizationWarnings warnings) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, eamLookup, warnings, SyncRunClosing.NONE);
+  }
+
+  /** @param syncRuns закрытие {@code SyncRun} по итогу маркера {@code snapshot-complete} */
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup,
+      NormalizationWarnings warnings,
+      SyncRunClosing syncRuns) {
+    this.syncRuns = Objects.requireNonNull(syncRuns, "syncRuns");
     this.warnings = Objects.requireNonNull(warnings, "warnings");
     this.lookup = Objects.requireNonNull(lookup, "lookup");
     this.eamLookup = Objects.requireNonNull(eamLookup, "eamLookup");
@@ -305,6 +324,12 @@ public final class EventProcessor {
       return quarantine(event, e.code(), e.getMessage());
     } catch (RuntimeException e) {
       return retry(event, "RECONCILIATION_TRIGGER_FAILED", e.getClass().getSimpleName());
+    }
+    // Прогон закрывается до перехода маркера в PROJECTED: сбой записи в Neo4j оставляет маркер на повтор.
+    try {
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.SUCCEEDED, objectCount);
+    } catch (RuntimeException e) {
+      return retry(event, "SYNC_RUN_CLOSE_FAILED", e.getClass().getSimpleName());
     }
     return finish(event, ProcessingStatus.PROJECTED, null);
   }
@@ -633,6 +658,11 @@ public final class EventProcessor {
   }
 
   private ProcessingResult quarantine(CanonicalEvent event, String code, String reason) {
+    if (TYPE_SNAPSHOT_COMPLETE.equals(event.type())) {
+      // Единая точка: любой карантин маркера закрывает прогон как FAILED. Сбой записи уходит наружу до DLQ,
+      // маркер остаётся необработанным и придёт на повтор.
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.FAILED, objectCount(event));
+    }
     journal.toDlq(event.source(), event.id(), code, reason);
     return new ProcessingResult(ProcessingStatus.QUARANTINED, code, null);
   }
