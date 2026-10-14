@@ -4,7 +4,7 @@
 
 ## Visão Geral
 
-Раздел «Синхронизация» (`#/sync`) показывает оператору состояние конвейера: вкладки «Источники» (светофор по четырём источникам), «Журнал событий» (inbox с фильтрами и карточкой события без payload) и «DLQ» (карантин с кодом и причиной). Данные читает консоль из PostgreSQL ролью `archrag_console_ro` и из графа (`SyncRun`); UI ничего не меняет — повтор, выход из карантина и reconcile выполняются через admin REST ingestion вне UI 🟢 (`access/admin-ui/src/pages/SyncPage.tsx:8-39`; `docs/adr/0026-admin-console-readonly-loopback.md:18`).
+Раздел «Синхронизация» (`#/sync`) показывает оператору состояние конвейера: вкладки «Источники» (светофор по пяти источникам (`manual` без адаптера: «нет данных»)), «Журнал событий» (inbox с фильтрами и карточкой события без payload) и «DLQ» (карантин с кодом и причиной). Данные читает консоль из PostgreSQL ролью `archrag_console_ro` и из графа (`SyncRun`); UI ничего не меняет — повтор, выход из карантина и reconcile выполняются через admin REST ingestion вне UI 🟢 (`access/admin-ui/src/pages/SyncPage.tsx:8-39`; `docs/adr/0026-admin-console-readonly-loopback.md:18`).
 
 ## Regras de Negócio
 
@@ -45,7 +45,7 @@
 
 ```gherkin
 # AC-01 (SyncPage.test.tsx «sources screen shows a traffic light per source…», «health rules»)
-Дано четыре источника: eam (норма, lag 125 с), scm (3 события QUARANTINED), cmdb (нет прогона и lastProjectedAt), deploymap (прогон FAILED, failed=2)
+Дано пять источников: eam (норма, lag 125 с), scm (3 события QUARANTINED), cmdb (нет прогона и lastProjectedAt), deploymap (прогон FAILED, failed=2), manual (нет прогона)
 Когда открыта вкладка «Источники»
 Тогда строки: «норма» и «2 мин»; «проблемы» с «QUARANTINED: 3»; «нет данных»; «проблемы»
 

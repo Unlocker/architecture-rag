@@ -24,7 +24,7 @@ export const RELATION_TYPES = [
   'DEPLOYED_FROM',
 ] as const;
 
-export const SOURCES = ['eam', 'scm', 'cmdb', 'deploymap'] as const;
+export const SOURCES = ['eam', 'scm', 'cmdb', 'deploymap', 'manual'] as const;
 
 export const EVENT_STATUSES = [
   'RECEIVED',

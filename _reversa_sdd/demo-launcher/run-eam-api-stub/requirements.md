@@ -16,7 +16,7 @@
 - Не `POST` → `405 {"error":"POST expected"}`; невалидный JSON, тело > 64 КиБ, `type` вне allowlist, `id` не целое (в том числе строка), `attrs` не объект или отсутствует → `400 {"error":"invalid request"}` без эха ввода 🟢 (platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:77-106; platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/EamApiControlTest.java:64-74).
 - `/api/**` заглушки остаётся только для чтения (изменяющие методы → `405`); `Authorization: Token <token>` обязателен (`401` без него) 🟢 (platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/EamApiControlTest.java:76-80; `platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiStub.java:31, 93-97`).
 - Управляющий вход не аутентифицируется и не публикуется; вызов — из контейнера 🟡 (platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:15-22; `platform/docker/README.md:51`).
-- Список допустимых `type` продублирован литералами и может разойтись с `EamApiSeed` 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] (platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:27; Q-03).
+- Список допустимых `type` берётся из `EamApiSeed.TYPES` 🟢 [UNLOCKER-287: реализовано] (platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/EamApiControl.java:27; Q-03).
 - Webhook у `eam-api-stub` нет: адаптер EAM узнаёт об изменениях только polling'ом 🟢 (platform/demo-launcher/src/main/java/io/github/unlocker/archrag/demolauncher/DemoLauncher.java:97-106; `docs/04-poc-measurements.md:10`).
 
 ## Requisitos Funcionais
@@ -76,7 +76,7 @@
 | Требование | MoSCoW | Justificativa |
 |-----------|--------|---------------|
 | RF-01..RF-05 | Must | `adapter-eam` читает эту заглушку; сценарии стенда меняют EAM через control |
-| Согласованность `TYPES` с `EamApiSeed` | Should | Сейчас не гарантирована (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] Q-03) |
+| Согласованность `TYPES` с `EamApiSeed` | Should | Гарантирована `EamStandTypesTest` (🟢 [UNLOCKER-287: реализовано] Q-03) |
 | Webhook от заглушки | Won't | У `eam-api` вебхуков нет |
 
 ## Rastreabilidade de Código

@@ -3,6 +3,7 @@ package io.github.unlocker.archrag.demolauncher;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.unlocker.archrag.adaptercore.Json;
+import io.github.unlocker.archrag.sourcestubs.EamApiSeed;
 import io.github.unlocker.archrag.sourcestubs.EamApiStore;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +25,7 @@ final class EamApiControl implements AutoCloseable {
 
   static final int MAX_BODY_BYTES = 64 * 1024;
 
-  private static final Set<String> TYPES = Set.of("platforms", "itproducts", "itsystems");
+  private static final Set<String> TYPES = EamApiSeed.TYPES;
 
   private final HttpServer server;
 

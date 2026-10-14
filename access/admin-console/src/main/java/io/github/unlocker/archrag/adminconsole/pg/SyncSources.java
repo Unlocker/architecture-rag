@@ -15,8 +15,8 @@ public final class SyncSources {
   /** Префикс URN источника в {@code inbox_event.source} и {@code consumer_checkpoint.source}. */
   public static final String URN_PREFIX = "urn:corp:";
 
-  /** Короткие коды источников в порядке отдачи. */
-  public static final List<String> CODES = List.of("eam", "scm", "cmdb", "deploymap");
+  /** Короткие коды источников в порядке отдачи; совпадают с {@code SourceSystemCode} в lowercase (тест). */
+  public static final List<String> CODES = List.of("eam", "scm", "cmdb", "deploymap", "manual");
 
   /** Статусы {@code inbox_event.status} ({@code ProcessingStatus}). */
   public static final List<String> STATUSES =
