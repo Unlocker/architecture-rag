@@ -8,6 +8,8 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.JournalKey;
 import io.github.unlocker.archrag.eventschemas.JournalQuery;
 import io.github.unlocker.archrag.eventschemas.JournalReader;
+import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
+import io.github.unlocker.archrag.eventschemas.UnknownEventException;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.ObjectRef;
@@ -171,13 +173,13 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
           ps.setString(2, eventId);
           try (ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
-              throw new IllegalArgumentException("unknown event " + fingerprint(source, eventId));
+              throw new UnknownEventException("unknown event " + fingerprint(source, eventId));
             }
             current = map(rs);
           }
         }
         if (current.status() != ProcessingStatus.QUARANTINED) {
-          throw new IllegalStateException("event " + fingerprint(source, eventId) + " is not quarantined");
+          throw new NotQuarantinedException("event " + fingerprint(source, eventId) + " is not quarantined");
         }
         // Отдельный SQL: update() прибавляет попытку при входе в RETRYING, а здесь счёт начинается заново.
         JournalEntry released;

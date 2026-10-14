@@ -2,6 +2,8 @@ package io.github.unlocker.archrag.ingestionservice;
 
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
+import io.github.unlocker.archrag.eventschemas.UnknownEventException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +24,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk, возврат события из карантина. Доступен только со scope
+ * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk, возврат события из карантина.
+ * Доступен только со scope
  * {@value SecurityConfiguration#ADMIN_SCOPE} и ролью {@value SecurityConfiguration#ADMIN_ROLE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
  * Операции синхронные, идут под {@link AdminLock} и пишутся в аудит ({@link AdminOperations}).
  */
@@ -125,9 +128,9 @@ public class AdminController {
             return new QuarantineReleaseResult(e.source(), e.eventId(), e.status().name(), e.attempts());
           },
           r -> Map.of("status", r.status(), "attempts", r.attempts())));
-    } catch (IllegalArgumentException e) {
+    } catch (UnknownEventException e) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "unknown event"));
-    } catch (IllegalStateException e) {
+    } catch (NotQuarantinedException e) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "event is not quarantined"));
     }
   }

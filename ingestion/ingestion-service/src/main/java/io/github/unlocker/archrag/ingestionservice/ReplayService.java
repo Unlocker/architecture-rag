@@ -26,7 +26,8 @@ import org.springframework.stereotype.Component;
  * ({@code eventId = replay:<replayId>:<исходный eventId>}) с исходными {@code payloadRef}, {@code syncRunId} и
  * {@code correlationId} и проходит через {@link EventProcessor}; повтор отсекает проверка версий. Повторный запуск с
  * тем же {@code replayId} идемпотентен (дедупликация {@code append}). Строки самих replay не переигрываются, маркеры
- * {@code snapshot-complete} пропускаются: reconciliation повторно не запускается. Строки журнала исходных событий не меняются; запись DLQ исходного события, копия которого обработана
+ * {@code snapshot-complete} пропускаются: reconciliation повторно не запускается.
+ * Строки журнала исходных событий не меняются; запись DLQ исходного события, копия которого обработана
  * (не {@code QUARANTINED} и не {@code RETRYING}), закрывается ({@code replayed_at}).
  *
  * <p>Ошибки raw storage и журнала не глушатся: replay прерывается, повтор безопасен.

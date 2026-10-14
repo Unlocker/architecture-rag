@@ -45,8 +45,8 @@ public interface EventJournal {
    * {@code attempts = 0} (обычный переход счётчик увеличивает) и закрывает открытую запись DLQ. Дальше событие берёт
    * диспетчер, как любой {@code RETRYING}; если оно упадёт снова, откроется новая запись DLQ.
    *
-   * @throws IllegalArgumentException если события нет
-   * @throws IllegalStateException если событие не в {@code QUARANTINED}
+   * @throws UnknownEventException если события нет
+   * @throws NotQuarantinedException если событие не в {@code QUARANTINED}
    */
   JournalEntry releaseFromQuarantine(String source, String eventId);
 

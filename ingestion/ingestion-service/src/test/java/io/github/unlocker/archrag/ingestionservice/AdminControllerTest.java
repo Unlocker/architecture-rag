@@ -16,8 +16,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.eventschemas.UnknownEventException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -157,8 +159,8 @@ class AdminControllerTest {
 
   @Test
   void releaseOfEventNotInQuarantineIs409AndUnknownEventIs404() throws Exception {
-    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenThrow(new IllegalStateException("x"));
-    when(journal.releaseFromQuarantine("urn:corp:eam", "e2")).thenThrow(new IllegalArgumentException("x"));
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenThrow(new NotQuarantinedException("x"));
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e2")).thenThrow(new UnknownEventException("x"));
 
     mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON)
             .content(RELEASE_BODY))
@@ -166,6 +168,15 @@ class AdminControllerTest {
     mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON)
             .content("{\"source\":\"urn:corp:eam\",\"eventId\":\"e2\"}"))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void releaseInfrastructureFailureIsNotMappedTo404Or409() throws Exception {
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenThrow(new IllegalStateException("admin lock failed"));
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> mvc.perform(post("/admin/quarantine/release")
+            .with(admin()).contentType(MediaType.APPLICATION_JSON).content(RELEASE_BODY)))
+        .hasCauseInstanceOf(IllegalStateException.class);
   }
 
   @Test
