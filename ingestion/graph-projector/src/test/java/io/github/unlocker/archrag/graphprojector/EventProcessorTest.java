@@ -472,6 +472,33 @@ class EventProcessorTest {
   }
 
   @Test
+  void retryLimitQuarantinesWithOriginalCodeInReason() {
+    projection.failure = new ServiceUnavailableException("down");
+    var event = upsert("e1", "5", Map.of("name", "core"));
+    var result = run(event);
+    for (int attempt = 1; attempt < EventProcessor.DEFAULT_MAX_ATTEMPTS - 1; attempt++) {
+      assertThat(result.status()).as("attempt " + attempt).isEqualTo(ProcessingStatus.RETRYING);
+      result = processor.process(event, RAW);
+    }
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(journal.entry("e1").attempts()).isEqualTo(EventProcessor.DEFAULT_MAX_ATTEMPTS - 1);
+
+    result = processor.process(event, RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(EventProcessor.RETRY_LIMIT_EXCEEDED);
+    assertThat(journal.entry("e1").errorReason()).startsWith("GRAPH_UNAVAILABLE");
+    assertThat(journal.history("e1")).endsWith(ProcessingStatus.RETRYING, ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void maxAttemptsMustBePositive() {
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new EventProcessor(journal, Normalizer.standard(k -> true),
+        identity, projection, ReconciliationTrigger.NOOP, candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE,
+        NormalizationWarnings.NONE, 0)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void normalizationErrorQuarantinesWithCodeAndNoWrite() {
     var result = run(upsert("e1", "5", Map.of()));
 
@@ -589,6 +616,7 @@ class EventProcessorTest {
           }
         },
         candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE, NormalizationWarnings.NONE,
+        EventProcessor.DEFAULT_MAX_ATTEMPTS,
         (source, runId, markerId, status) -> {
           if (failClose) {
             throw new IllegalStateException("neo4j down");
@@ -730,7 +758,7 @@ class EventProcessorTest {
       var updated =
           new JournalEntry(
               old.source(), old.eventId(), old.correlationId(), old.syncRunId(), old.sourceType(), old.sourceId(),
-              old.sourceVersion(), old.schemaVersion(), status, code, reason, old.attempts(), old.payloadRef(),
+              old.sourceVersion(), old.schemaVersion(), status, code, reason, old.attempts() + (status == ProcessingStatus.RETRYING ? 1 : 0), old.payloadRef(),
               old.receivedAt(), T);
       entries.put(eventId, updated);
       history.get(eventId).add(status);
@@ -740,6 +768,16 @@ class EventProcessorTest {
     @Override
     public JournalEntry toDlq(String source, String eventId, String errorCode, String reason) {
       return transition(source, eventId, ProcessingStatus.QUARANTINED, errorCode, reason);
+    }
+
+    @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
+      throw new UnsupportedOperationException();
     }
 
     @Override

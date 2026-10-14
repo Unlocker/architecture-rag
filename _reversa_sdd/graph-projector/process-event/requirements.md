@@ -9,7 +9,7 @@
 ## Правила
 
 - PE-01. Событие обязано быть в журнале; иначе `IllegalArgumentException`, состояние не меняется 🟢 (`GP/EventProcessor.java:186-189`).
-- PE-02. Для статуса из `{PROJECTED, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED}` возвращается `ProcessingResult(status, errorCode, null)` без каких-либо вызовов 🟢 (`GP/EventProcessor.java:99-105, 190-192`).
+- PE-02. Для статуса из `{PROJECTED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED}` возвращается `ProcessingResult(status, errorCode, null)` без каких-либо вызовов 🟢 (`GP/EventProcessor.java:99-105, 190-192`).
 - PE-03. Маршрут: `architecture.asset.upserted.v1` → `upsert`; `architecture.asset.deleted.v1` → `delete`; `architecture.sync.snapshot-complete.v1` → `snapshotComplete`; иное → `QUARANTINED`/`UNSUPPORTED_EVENT_TYPE` до нормализатора 🟢 (`GP/EventProcessor.java:193-198`).
 - PE-04. `upsert`/`delete` с неизвестным `source` → `QUARANTINED`/`UNKNOWN_SOURCE`; `delete` с `dataschema ≠ urn:corp:schema:asset-deleted:1` → `QUARANTINED`/`UNKNOWN_SCHEMA_VERSION` 🟢 (`GP/EventProcessor.java:203-205, 256-261`).
 - PE-05. Только для статуса `RECEIVED` до нормализации: версия равна применённой → `DUPLICATE`; ниже → `IGNORED_OLD_VERSION`; оба с checkpoint, граф не трогается 🟢 (`GP/EventProcessor.java:303-322`).
@@ -117,7 +117,7 @@
 | `delete` и `snapshot-complete` | Must | Единственные пути удаления |
 | Кандидаты и конфликты | Should | Диагностика, граф не меняют |
 | Сверки `eamSystemId`/`platformId` | Should | ADR 0030/0031 |
-| Выход из `QUARANTINED`, `SUPERSEDED` | Won't | Не реализованы (Q-01, Р-2) |
+| Выход из `QUARANTINED` из самого `process` | Won't | Выход — операция оператора `POST /admin/quarantine/release` (UNLOCKER-281); `SUPERSEDED` удалён (Q-01) |
 
 ## Трассировка
 

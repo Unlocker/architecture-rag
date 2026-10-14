@@ -75,7 +75,7 @@
 | `GRAPH_ERROR` (причина — имя класса) | `RETRYING` | прочие `Neo4jException` | `GP/EventProcessor.java:371-372` 🟢 |
 | `RECONCILIATION_TRIGGER_FAILED` (причина — имя класса) | `RETRYING` | любое `RuntimeException` из `ReconciliationTrigger.snapshotComplete` | `GP/EventProcessor.java:293-298` 🟢 |
 
-Конечные статусы, которые модуль выставляет: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`. `SUPERSEDED` входит в `FINISHED`, но не выставляется нигде 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-01 (`GP/EventProcessor.java:99-105`). Коды `ProjectionException` приходят в `errorCode` как есть (`GP/EventProcessor.java:359-360`).
+Конечные статусы, которые модуль выставляет: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`. Для события, исчерпавшего `max-attempts`, `retry` выставляет `QUARANTINED` с кодом `RETRY_LIMIT_EXCEEDED` 🟢 [UNLOCKER-281]. `SUPERSEDED` удалён (Q-01). Коды `ProjectionException` приходят в `errorCode` как есть (`GP/EventProcessor.java:359-360`).
 
 > `docs/02-data-model.md:273` перечисляет коды неполно (нет `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `RECONCILIATION_TRIGGER_FAILED`, `UNKNOWN_SCHEMA_VERSION`) 🟢 [R.8: ответ владельца, вопрос 7] Q-08.
 

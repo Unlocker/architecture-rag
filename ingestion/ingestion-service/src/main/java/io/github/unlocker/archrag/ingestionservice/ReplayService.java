@@ -6,6 +6,7 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.JournalKey;
 import io.github.unlocker.archrag.eventschemas.JournalQuery;
 import io.github.unlocker.archrag.eventschemas.JournalReader;
+import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
@@ -25,7 +26,9 @@ import org.springframework.stereotype.Component;
  * ({@code eventId = replay:<replayId>:<исходный eventId>}) с исходными {@code payloadRef}, {@code syncRunId} и
  * {@code correlationId} и проходит через {@link EventProcessor}; повтор отсекает проверка версий. Повторный запуск с
  * тем же {@code replayId} идемпотентен (дедупликация {@code append}). Строки самих replay не переигрываются, маркеры
- * {@code snapshot-complete} пропускаются: reconciliation повторно не запускается. Исходные строки журнала не меняются.
+ * {@code snapshot-complete} пропускаются: reconciliation повторно не запускается.
+ * Строки журнала исходных событий не меняются; запись DLQ исходного события, копия которого обработана
+ * (не {@code QUARANTINED} и не {@code RETRYING}), закрывается ({@code replayed_at}).
  *
  * <p>Ошибки raw storage и журнала не глушатся: replay прерывается, повтор безопасен.
  */
@@ -96,6 +99,11 @@ public class ReplayService {
         original.data());
     journal.append(replayed, ref, entry.syncRunId());
     ProcessingResult result = processor.process(replayed, ref);
+    if (result.status() != ProcessingStatus.QUARANTINED && result.status() != ProcessingStatus.RETRYING) {
+      // Копия отработала: запись DLQ исходного события разобрана. Строка inbox_event исходного остаётся QUARANTINED.
+      // Если копия снова в карантине или на повторе, у неё своя запись DLQ, а исходная остаётся открытой.
+      journal.closeDlq(entry.source(), entry.eventId());
+    }
     return result.status().name();
   }
 }

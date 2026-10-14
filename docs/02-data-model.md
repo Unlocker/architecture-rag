@@ -238,7 +238,7 @@ Sealed-интерфейс `GraphCommand` (`contracts/canonical-model/.../command
 
 ### 5.2. Статусы обработки
 
-Значения — enum `ProcessingStatus` (`contracts/event-schemas/.../ProcessingStatus.java`), переходы проверяет `canTransitionTo` под блокировкой строки (`SELECT ... FOR UPDATE`). Переход в себя допустим всегда. Конечные: `PROJECTED` (только в `SUPERSEDED`), `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION`; из `QUARANTINED` выход только через `RETRYING` (решение оператора).
+Значения — enum `ProcessingStatus` (`contracts/event-schemas/.../ProcessingStatus.java`), переходы проверяет `canTransitionTo` под блокировкой строки (`SELECT ... FOR UPDATE`). Переход в себя допустим всегда. Конечные: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`; из `QUARANTINED` выход только через `RETRYING` (решение оператора): `POST /admin/quarantine/release` обнуляет `attempts` и закрывает запись DLQ. Число переходов в `RETRYING` ограничено `archrag.dispatcher.max-attempts` (по умолчанию 10): после него `RETRYING → QUARANTINED` с кодом `RETRY_LIMIT_EXCEEDED`. Запись `dlq_entry` закрывается (`replayed_at`) при release и при replay исходного события, если копия обработана.
 
 ```mermaid
 stateDiagram-v2
@@ -247,7 +247,6 @@ stateDiagram-v2
     VALIDATED --> NORMALIZED
     NORMALIZED --> RESOLVED
     RESOLVED --> PROJECTED
-    PROJECTED --> SUPERSEDED
     RECEIVED --> DUPLICATE
     RECEIVED --> IGNORED_OLD_VERSION
     VALIDATED --> IGNORED_OLD_VERSION
@@ -270,7 +269,7 @@ stateDiagram-v2
     QUARANTINED --> RETRYING
 ```
 
-Коды ошибок, которые ставит `EventProcessor`: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `INVALID_COMMANDS`, `UNRESOLVED_ENDPOINT`, `GRAPH_UNAVAILABLE`, `GRAPH_REJECTED`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, а также коды `NormalizationException`. `RETRYING` — временные сбои (граф недоступен, конец связи ещё не пришёл), `QUARANTINED` — отказ по самому событию.
+Коды ошибок, которые ставит `EventProcessor`: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `INVALID_COMMANDS`, `UNRESOLVED_ENDPOINT`, `GRAPH_UNAVAILABLE`, `GRAPH_REJECTED`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RETRY_LIMIT_EXCEEDED`, а также коды `NormalizationException`. `RETRYING` — временные сбои (граф недоступен, конец связи ещё не пришёл), `QUARANTINED` — отказ по самому событию.
 
 ### 5.3. Checkpoints и cursor
 

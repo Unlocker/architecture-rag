@@ -28,7 +28,6 @@ public final class SyncSources {
           "PROJECTED",
           "QUARANTINED",
           "RETRYING",
-          "SUPERSEDED",
           "DUPLICATE",
           "IGNORED_OLD_VERSION");
 

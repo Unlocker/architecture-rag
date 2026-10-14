@@ -31,7 +31,7 @@
 
 ## 3. Статусы обработки
 
-Десять значений `ProcessingStatus` (порядок enum: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION`, `ES/ProcessingStatus.java:9-18`) — строковые имена пишутся в `inbox_event.status` (без `CHECK`, `database/business-rules.md:40`); переименование enum ломает данные и консоль/UI 🟡. Таблица переходов — [`design.md`](design.md).
+Девять значений `ProcessingStatus` (порядок enum: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, DUPLICATE, IGNORED_OLD_VERSION`, `ES/ProcessingStatus.java:9-18`) — строковые имена пишутся в `inbox_event.status` (без `CHECK`, `database/business-rules.md:40`); переименование enum ломает данные и консоль/UI 🟡. Таблица переходов — [`design.md`](design.md).
 
 ## 4. Коды ошибок
 

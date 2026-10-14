@@ -69,6 +69,16 @@ final class InMemoryJournal implements EventJournal {
   }
 
   @Override
+  public JournalEntry releaseFromQuarantine(String s, String id) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public boolean closeDlq(String s, String id) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public SnapshotContents snapshotContents(String source, String syncRunId) {
     var runRows = rows.values().stream()
         .filter(r -> r.source().equals(source) && r.eventId().startsWith("snap:" + syncRunId + ":")).toList();

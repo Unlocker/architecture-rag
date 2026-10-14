@@ -334,6 +334,86 @@ class AdminEndpointIT {
     assertThat(dump()).isEqualTo(before);
   }
 
+  /** Копия события eam из журнала под новым id, переведённая в карантин: её raw валиден, повтор пройдёт. */
+  private String quarantinedEamEvent() {
+    JournalQuery q = new JournalQuery("urn:corp:eam", null, null, true, null, 1);
+    StoredEvent stored = reader.read(q).getFirst();
+    CanonicalEvent original = events.toEvent(stored, rawStore.get(stored.entry().payloadRef()));
+    String id = "dlq-" + UUID.randomUUID();
+    CanonicalEvent copy = new CanonicalEvent(id, original.source(), original.type(), original.subject(), original.time(),
+        original.dataschema(), original.correlationid(), original.data());
+    journal.append(copy, stored.entry().payloadRef(), stored.entry().syncRunId());
+    journal.toDlq(copy.source(), id, "TEST_QUARANTINE", "put in quarantine by the test");
+    return id;
+  }
+
+  private long openDlq(String eventId) throws Exception {
+    return scalarLong("select count(*) from dlq_entry where event_id = ? and replayed_at is null", eventId);
+  }
+
+  @Test
+  void replayClosesDlqOfOriginalEventWhenCopyIsProcessed() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    assertThat(openDlq(id)).isEqualTo(1);
+
+    assertThat(admin("/admin/replay", "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(200);
+
+    assertThat(openDlq(id)).isZero();
+    assertThat(scalarLong("select count(*) from dlq_entry where event_id = ? and replayed_at is not null", id))
+        .isEqualTo(1);
+    // Исходная строка журнала остаётся в карантине: её обработала копия.
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void quarantineReleaseReturnsEventToRetryingClosesDlqAndAuditsIt() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    String body = "{\"source\":\"urn:corp:eam\",\"eventId\":\"" + id + "\"}";
+
+    var first = admin("/admin/quarantine/release", body);
+
+    assertThat(first.statusCode()).isEqualTo(200);
+    assertThat(first.body()).contains("\"status\":\"RETRYING\"").contains("\"attempts\":0");
+    var entry = journal.find("urn:corp:eam", id).orElseThrow();
+    assertThat(entry.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(entry.attempts()).isZero();
+    assertThat(openDlq(id)).isZero();
+    assertThat(scalarLong("select count(*) from admin_audit where operation = 'QUARANTINE_RELEASE'"
+        + " and status = 'SUCCEEDED' and actor = 'operator-1'")).isGreaterThanOrEqualTo(1);
+    // Дальше событие обрабатывается, как обычный RETRYING (диспетчер в этом тесте выключен, вызываем процессор).
+    Instant receivedAt = entry.receivedAt();
+    StoredEvent stored = reader.read(new JournalQuery("urn:corp:eam", receivedAt, receivedAt.plusSeconds(1), false, null, 100))
+        .stream()
+        .filter(e -> e.entry().eventId().equals(id)).findFirst().orElseThrow();
+    var result = processor.process(events.toEvent(stored, rawStore.get(stored.entry().payloadRef())),
+        stored.entry().payloadRef());
+    assertThat(result.status()).isIn(ProcessingStatus.PROJECTED, ProcessingStatus.IGNORED_OLD_VERSION);
+
+    // Повторный вызов: событие уже не в карантине.
+    assertThat(admin("/admin/quarantine/release", body).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void quarantineReleaseRejectsUnknownEventBadInputAndMissingRole() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    String body = "{\"source\":\"urn:corp:eam\",\"eventId\":\"" + id + "\"}";
+
+    assertThat(admin("/admin/quarantine/release", "{\"source\":\"urn:corp:eam\",\"eventId\":\"nope\"}").statusCode())
+        .isEqualTo(404);
+    assertThat(admin("/admin/quarantine/release", "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(400);
+    assertThat(post("/admin/quarantine/release", null, body).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/quarantine/release", token("architecture.read"), body).statusCode()).isEqualTo(403);
+    String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+        "architecture.admin");
+    assertThat(post("/admin/quarantine/release", noRole, body).statusCode()).isEqualTo(403);
+    // Ни один отказ не тронул событие.
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(openDlq(id)).isEqualTo(1);
+  }
+
   @Test
   void replayOfEmptyRangeDoesNothing() throws Exception {
     seed();

@@ -61,6 +61,7 @@ archrag:
     batch-size: ${ARCHRAG_DISPATCHER_BATCH_SIZE:100}
     retry-delay: ${ARCHRAG_DISPATCHER_RETRY_DELAY:30s}
     shutdown-timeout: ${ARCHRAG_DISPATCHER_SHUTDOWN_TIMEOUT:30s}
+    max-attempts: ${ARCHRAG_DISPATCHER_MAX_ATTEMPTS:10}
 
 management:
   # Метрики уходят в otel-collector по OTLP (E5.3); выключено по умолчанию, включает compose-флаг.

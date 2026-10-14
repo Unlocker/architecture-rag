@@ -94,6 +94,7 @@ class SyncRunLifecycleIT {
             projector,
             projector,
             (source, warnings) -> {},
+            EventProcessor.DEFAULT_MAX_ATTEMPTS,
             new SyncRunCloser(journal, writer, Clock.systemUTC()));
   }
 

@@ -114,11 +114,12 @@ public class IngestionServiceConfiguration {
       Reconciler reconciliation,
       IdentityCandidates candidates,
       SourceConflicts conflicts,
+      DispatcherProperties dispatcher,
       IngestionMetrics metrics,
       SyncRunClosing syncRuns) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector, projector, metrics::recordWarnings, syncRuns);
+        projector, projector, metrics::recordWarnings, dispatcher.maxAttempts(), syncRuns);
   }
 
   /** Закрытие {@code SyncRun} по итогу маркера {@code snapshot-complete} (UNLOCKER-280). */

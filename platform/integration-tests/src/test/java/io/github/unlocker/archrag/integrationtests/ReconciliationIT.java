@@ -486,6 +486,16 @@ class ReconciliationIT {
     }
 
     @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      return delegate.releaseFromQuarantine(s, id);
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
+      return delegate.closeDlq(s, id);
+    }
+
+    @Override
     public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
       return delegate.loadCheckpoint(consumer, source);
     }
