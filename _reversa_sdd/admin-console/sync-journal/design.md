@@ -28,7 +28,7 @@ sequenceDiagram
   S-->>B: [SourceStatus x4]
 ```
 
-1. `sources`: три чтения PostgreSQL и одно графа, затем сборка по `SyncSources.CODES` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:58-74`) 🟢.
+1. `sources`: три чтения PostgreSQL и одно графа, затем сборка по `SyncSources.CODES` (пять кодов = `SourceSystemCode` в lowercase, включая `manual`; `SyncSourcesTest`; `canonical-model` — test-зависимость) (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:58-74`) 🟢.
 2. `events`: `PageRequest.of` → проверка `from < to` → `repository.events(toStored(source), status(status), from, to, page)` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:86-90`) 🟢.
 3. `event`: `toStored(source)` → `eventsById(eventId, stored)` → первый → `errorReason` → `dlqOfEvent` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:99-109`) 🟢.
 4. `dlq`: `repository.dlq(toStored(source), replayed, page)` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:119-120`) 🟢.

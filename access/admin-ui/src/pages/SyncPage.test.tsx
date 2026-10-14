@@ -24,6 +24,7 @@ const sources = [
   source('scm', { eventsByStatus: { ...zero, QUARANTINED: 3 } }),
   source('cmdb', { lastSyncRun: null, lastProjectedAt: null, lagSeconds: null }),
   source('deploymap', { lastSyncRun: { ...run, status: 'FAILED', failed: 2 } }),
+  source('manual', { lastSyncRun: null, lastProjectedAt: null, lagSeconds: null }),
 ];
 const event = {
   source: 'urn:corp:eam', eventId: 'e-1', type: 'asset.upserted', subject: 's', sourceType: 'System', sourceId: 'S-1',
@@ -67,13 +68,15 @@ test('sources screen shows a traffic light per source with run, lag and counters
 
   const table = await screen.findByRole('table', { name: 'Источники синхронизации' });
   const rows = within(table).getAllByRole('row').slice(1);
-  expect(rows).toHaveLength(4);
+  expect(rows).toHaveLength(5);
   expect(within(rows[0]).getByText('норма')).toBeTruthy();
   expect(within(rows[0]).getByText('2 мин')).toBeTruthy();
   expect(within(rows[1]).getByText('проблемы')).toBeTruthy();
   expect(rows[1].textContent).toContain('QUARANTINED: 3');
   expect(within(rows[2]).getByText('нет данных')).toBeTruthy();
   expect(within(rows[3]).getByText('проблемы')).toBeTruthy();
+  expect(within(rows[4]).getByText('нет данных')).toBeTruthy();
+  expect(within(rows[4]).getByText('manual')).toBeTruthy();
 });
 
 test('health rules', () => {

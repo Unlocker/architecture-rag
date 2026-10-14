@@ -28,7 +28,7 @@
 ## Альтернативные потоки
 - Любая ошибка типа поля/значения → `INVALID_PAYLOAD` (см. `Payload`); пустое `name` → `MISSING_REQUIRED_FIELD`.
 - Нарушения модели (`platformId ≤ 0`) → `IllegalArgumentException` → `INVALID_PAYLOAD` (фикс. текст) 🟢.
-- `criticality()` для плоского/`SERVICE_DEPENDENCY`: `Criticality.valueOf(upper)`, ошибка → `INVALID_PAYLOAD "field has unknown value: criticality"` (`:120-126`).
+- `legacyCriticality()` для плоского/`SERVICE_DEPENDENCY`: `Criticality.valueOf(upper)`, ошибка → `null`; `unmappedCriticality()` ставит warning `UNMAPPED_CRITICALITY` и возвращает сырое значение (`criticalityRaw` узла или свойство связи) (К-10, UNLOCKER-287).
 
 ## Зависимости
 `Payload`, `CommandSink`, `ScmMapper.SERVICE` (константа), `canonical-model` (узлы `Platform/Solution/ITSystem/Team`, `RelationType`, `Validity`, `Criticality`). Правила и решения: `docs/06-eam-integration.md` (раздел «Нормализация и связи», «Решения» 2, 3, допущение 9), ADR 0031.

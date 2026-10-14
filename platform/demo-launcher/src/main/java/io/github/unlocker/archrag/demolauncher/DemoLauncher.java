@@ -8,6 +8,7 @@ import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
 import io.github.unlocker.archrag.eamadapter.EamAdapter;
+import io.github.unlocker.archrag.eamadapter.EamApiConnector;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.scmadapter.ScmAdapter;
@@ -115,6 +116,9 @@ public final class DemoLauncher {
     AdapterConfig adapterConfig = new AdapterConfig(config.system(), config.sourceUrl(), config.webhookSecret(),
         AdapterConfig.DEFAULT_REPLAY_WINDOW, 100, config.pollInterval(), config.reconcileInterval(),
         RetryPolicy.defaults());
+    if (config.eamApi() != null) {
+      verifyEamAccess(config.eamApi());
+    }
     try (var store = S3RawPayloadStore.create(config.s3Endpoint(), config.s3AccessKey(), config.s3SecretKey(),
         config.s3Bucket())) {
       store.ensureBucket();
@@ -134,6 +138,21 @@ public final class DemoLauncher {
         } finally {
           health.stop(0);
         }
+      }
+    }
+  }
+
+  /**
+   * Проверка подключения EAM при старте (п. 8 {@code docs/06-eam-integration.md}). Источник недоступен: WARN и запуск
+   * продолжается, polling ретраит сам. Отказ в доступе или лишние права: {@link IllegalStateException}, адаптер не
+   * стартует. Токен и тела ответов в лог не попадают.
+   */
+  static void verifyEamAccess(EamAdapter.EamApi api) {
+    try (var connector = new EamApiConnector(api.baseUri(), api.token(), 1)) {
+      switch (connector.verifyAccess()) {
+        case VERIFIED -> LOG.log(System.Logger.Level.INFO, "eam access verified: " + api.baseUri());
+        case UNAVAILABLE -> LOG.log(System.Logger.Level.WARNING,
+            "eam access check skipped, source unavailable: " + api.baseUri());
       }
     }
   }

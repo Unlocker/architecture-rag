@@ -52,6 +52,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
     </dependency>
+    <!-- Только для теста согласованности SyncSources.CODES с SourceSystemCode; в runtime связи нет. -->
+    <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>canonical-model</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

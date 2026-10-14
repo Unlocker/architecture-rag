@@ -335,7 +335,9 @@ class SyncConsoleIT {
   void sourcesShowCheckpointCountsLastProjectedLagAndLatestSyncRun() {
     JsonNode sources = ok("/api/sync/sources");
 
-    assertThat(sources).hasSize(4);
+    assertThat(sources).hasSize(5);
+    assertThat(sources.get(4).get("source").asString()).isEqualTo("manual");
+    assertThat(sources.get(4).get("lastSyncRun").isNull()).isTrue();
     JsonNode eam = sources.get(0);
     assertThat(eam.get("source").asString()).isEqualTo("eam");
     assertThat(eam.get("checkpoints").get(0).get("cursor").asString()).isEqualTo("eam-3");
