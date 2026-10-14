@@ -63,7 +63,7 @@ public class CrosswalkService {
     return result;
   }
 
-  private static SourceKey key(CrosswalkItem.KeyDto dto) {
+  static SourceKey key(CrosswalkItem.KeyDto dto) {
     return new SourceKey(SourceSystemCode.valueOf(dto.source()), dto.sourceType(), dto.sourceId());
   }
 

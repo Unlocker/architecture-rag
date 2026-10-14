@@ -181,6 +181,9 @@ export interface Candidate {
   status: string;
   firstSeenAt: string;
   updatedAt: string;
+  /** Заполнены у подтверждённого кандидата (RESOLVED). */
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
 }
 
 export interface Audit {

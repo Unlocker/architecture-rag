@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -54,6 +55,7 @@ class AdminControllerTest {
   @MockitoBean ReplayService replay;
   @MockitoBean RebuildService rebuild;
   @MockitoBean CrosswalkService crosswalk;
+  @MockitoBean CandidateApprovalService candidateApproval;
   @MockitoBean AdapterControlClient adapters;
   @MockitoBean EventJournal journal;
 
@@ -91,7 +93,12 @@ class AdminControllerTest {
 
   private static final String REPLAY_BODY = "{\"source\":\"urn:corp:eam\"}";
   private static final String RELEASE_BODY = "{\"source\":\"urn:corp:eam\",\"eventId\":\"e1\"}";
+  private static final String APPROVE_BODY =
+      "{\"left\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"1\"},"
+          + "\"right\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"2\"},"
+          + "\"survivor\":\"RIGHT\",\"reason\":\"same host\"}";
   private static final String[][] ENDPOINTS = {
+      {"/admin/identity/candidates/approve", APPROVE_BODY},
       {"/admin/replay", REPLAY_BODY},
       {"/admin/rebuild?confirm=true", ""},
       {"/admin/crosswalks", "[]"},
@@ -104,7 +111,7 @@ class AdminControllerTest {
     for (String[] e : ENDPOINTS) {
       mvc.perform(post(e[0]).contentType(MediaType.APPLICATION_JSON).content(e[1])).andExpect(status().isUnauthorized());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
+    verifyNoInteractions(replay, rebuild, crosswalk, candidateApproval, adapters, operations, journal);
   }
 
   @Test
@@ -113,7 +120,7 @@ class AdminControllerTest {
       mvc.perform(post(e[0]).with(otherScope()).contentType(MediaType.APPLICATION_JSON).content(e[1]))
           .andExpect(status().isForbidden());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
+    verifyNoInteractions(replay, rebuild, crosswalk, candidateApproval, adapters, operations, journal);
   }
 
   @Test
@@ -124,7 +131,7 @@ class AdminControllerTest {
             .andExpect(status().isForbidden());
       }
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
+    verifyNoInteractions(replay, rebuild, crosswalk, candidateApproval, adapters, operations, journal);
   }
 
   @Test
@@ -232,6 +239,60 @@ class AdminControllerTest {
         .andExpect(status().isOk()).andExpect(jsonPath("$[0].status").value("CONFLICT"));
     mvc.perform(post("/admin/crosswalks").with(admin()).contentType(MediaType.APPLICATION_JSON).content("[]"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void candidateApprovalPassesSubjectAndSurvivorAndAuditsIt() throws Exception {
+    UUID gid = UUID.randomUUID();
+    UUID previous = UUID.randomUUID();
+    when(candidateApproval.approve(any())).thenReturn(
+        new CandidateApprovalResult(CandidateApprovalResult.Status.REPROJECTED, gid, previous, true));
+
+    mvc.perform(post("/admin/identity/candidates/approve").with(admin()).contentType(MediaType.APPLICATION_JSON)
+            .content(APPROVE_BODY))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("REPROJECTED"))
+        .andExpect(jsonPath("$.gid").value(gid.toString()))
+        .andExpect(jsonPath("$.previousRetired").value(true));
+
+    var captor = org.mockito.ArgumentCaptor.forClass(io.github.unlocker.archrag.identityresolution.CandidateApproval.class);
+    verify(candidateApproval).approve(captor.capture());
+    assertThat(captor.getValue().approvedBy()).isEqualTo("alice");
+    assertThat(captor.getValue().survivor()).isEqualTo(io.github.unlocker.archrag.identityresolution.CandidateApproval.Survivor.RIGHT);
+    assertThat(captor.getValue().survivorKey().sourceId()).isEqualTo("2");
+    assertThat(captor.getValue().movedKey().sourceId()).isEqualTo("1");
+    verify(operations).run(eq("IDENTITY_APPROVE"), eq("alice"), any(), eq(null), any(), any());
+  }
+
+  @Test
+  void candidateApprovalMapsUnknownTo404OpenlessTo409AndReprojectionFailureTo500() throws Exception {
+    when(candidateApproval.approve(any()))
+        .thenThrow(new io.github.unlocker.archrag.identityresolution.CandidateNotFoundException("x"))
+        .thenThrow(new io.github.unlocker.archrag.identityresolution.CandidateNotOpenException("x"))
+        .thenThrow(new ReprojectionException("NO_RAW_EVENT", "no raw"));
+
+    for (int expected : new int[] {404, 409, 500}) {
+      mvc.perform(post("/admin/identity/candidates/approve").with(admin()).contentType(MediaType.APPLICATION_JSON)
+              .content(APPROVE_BODY))
+          .andExpect(status().is(expected));
+    }
+  }
+
+  @Test
+  void candidateApprovalRejectsBadParametersWithoutCallingTheService() throws Exception {
+    String key = "{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"1\"}";
+    for (String body : List.of(
+        "{}",
+        "{\"left\":" + key + ",\"right\":" + key + ",\"survivor\":\"LEFT\",\"reason\":\"r\"}",
+        APPROVE_BODY.replace("RIGHT", "BOTH"),
+        APPROVE_BODY.replace("\"survivor\":\"RIGHT\",", ""),
+        APPROVE_BODY.replace("same host", " "),
+        APPROVE_BODY.replace("CMDB", "NOPE"))) {
+      mvc.perform(post("/admin/identity/candidates/approve").with(admin()).contentType(MediaType.APPLICATION_JSON)
+              .content(body))
+          .andExpect(status().isBadRequest());
+    }
+    verifyNoInteractions(candidateApproval);
   }
 
   @Test

@@ -15,8 +15,10 @@ import io.github.unlocker.archrag.graphprojector.SyncRunClosing;
 import io.github.unlocker.archrag.graphprojector.SyncRunWriter;
 import io.github.unlocker.archrag.graphprojector.TemporalRelationMigration;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
+import io.github.unlocker.archrag.identityresolution.CandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.PostgresCandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
@@ -61,6 +63,11 @@ public class IngestionServiceConfiguration {
   IdentityCandidates identityCandidates(
       DataSource dataSource, PostgresEventJournal migrated, IngestionMetrics metrics) {
     return new PostgresIdentityCandidates(dataSource, metrics::recordCandidatesOverflow);
+  }
+
+  @Bean
+  CandidateApprovals candidateApprovals(DataSource dataSource, PostgresEventJournal migrated) {
+    return new PostgresCandidateApprovals(dataSource);
   }
 
   @Bean

@@ -28,6 +28,7 @@ import io.github.unlocker.archrag.normalizer.DeploymentLookup;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.normalizer.UnresolvedReference;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -248,6 +249,51 @@ public final class EventProcessor {
       case TYPE_SNAPSHOT_COMPLETE -> snapshotComplete(event, entry);
       default -> quarantine(event, "UNSUPPORTED_EVENT_TYPE", "event type is not supported");
     };
+  }
+
+  /**
+   * Заново проецирует применённую версию записи на её новый {@code gid} (запись перенесена
+   * подтверждением кандидата, {@code IdentityMapping} уже отдаёт {@code gid} выжившего). Журнальный статус события и
+   * checkpoint не трогаются: исходное событие давно в конечном статусе. Проверка версии обходится
+   * ({@link Relocation}), утверждения свойств и конфликты нового {@code gid} пересчитываются как для обычного
+   * события; кандидаты не пересчитываются. Ошибки не глушатся: ничего не откладывается в {@code RETRYING}, сбой
+   * уходит вызывающему (админская операция фиксирует {@code FAILED}).
+   *
+   * @param event событие из raw: тип {@code architecture.asset.upserted.v1}
+   * @param fromGid прежний {@code gid} записи
+   * @param retireSource на прежнем {@code gid} ключей не осталось: его узел закрывается
+   * @param at момент закрытия прежних узла и связей
+   * @throws ProjectionException если нормализация отвергла событие или конец связи не найден
+   * @throws IdentityStoreException при отказе хранилища
+   */
+  public ProjectionResult reproject(
+      CanonicalEvent event, RawPayloadRef raw, UUID fromGid, boolean retireSource, Instant at) {
+    SourceSystemCode source = sourceCode(event.source());
+    if (source == null || !CanonicalEvent.TYPE_ASSET_UPSERTED.equals(event.type())) {
+      throw new IllegalArgumentException("only an upserted event of a known source can be reprojected");
+    }
+    AssetEventData data = event.data();
+    SourceKey key = new SourceKey(source, data.sourceType(), data.sourceId());
+    NormalizationResult normalized = normalizer.normalize(event, raw);
+    if (normalized instanceof NormalizationResult.Quarantined q) {
+      throw new ProjectionException(q.errorCode(), q.reason());
+    }
+    var result = (NormalizationResult.Normalized) normalized;
+    List<GraphCommand> commands = new ArrayList<>(result.commands());
+    result.unresolved().stream().map(UnresolvedReference::relation).distinct().map(DeferRelation::new).forEach(commands::add);
+    Map<SourceKey, UUID> gids = resolveGids(key, commands);
+    ConflictMarkers markers = assertProperties(key, commands, gids);
+    markers = assertSystemRelation(key, commands, gids, markers);
+    markers = assertSystemPlatform(key, commands, gids, markers);
+    Relocation relocation = new Relocation(fromGid, gids.get(key), retireSource, at);
+    ProjectionResult projected =
+        projection.project(
+            new ProjectionRequest(
+                key, data.sourceVersion(), event.time(), null, gids, commands, markers,
+                PARTIAL.equals(data.payload().get(COMPLETENESS_KEY)), relocation));
+    recheckServiceDeployments(key, commands);
+    recheckSolutionSystems(key, commands);
+    return projected;
   }
 
   private ProcessingResult upsert(CanonicalEvent event, RawPayloadRef raw, JournalEntry entry) {

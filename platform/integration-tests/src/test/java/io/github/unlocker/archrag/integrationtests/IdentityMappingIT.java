@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventjournal.JournalMigrations;
+import io.github.unlocker.archrag.identityresolution.CandidateApproval;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
 import io.github.unlocker.archrag.identityresolution.CrosswalkConflictException;
+import io.github.unlocker.archrag.identityresolution.PostgresCandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import java.time.Instant;
 import java.util.Set;
@@ -168,6 +170,71 @@ class IdentityMappingIT {
         }
       }
     }
+  }
+
+  private static void insertCandidate(SourceKey lo, SourceKey hi, String status) throws Exception {
+    try (var c = dataSource().getConnection();
+        var ps = c.prepareStatement("insert into identity_candidate (left_source, left_type, left_id, right_source,"
+            + " right_type, right_id, label_family, matched, score, status, first_seen_at, updated_at)"
+            + " values (?,?,?,?,?,?,'IT_SYSTEM','[]'::jsonb,0.5,?,now(),now())")) {
+      ps.setString(1, lo.source().name());
+      ps.setString(2, lo.sourceType());
+      ps.setString(3, lo.sourceId());
+      ps.setString(4, hi.source().name());
+      ps.setString(5, hi.sourceType());
+      ps.setString(6, hi.sourceId());
+      ps.setString(7, status);
+      ps.executeUpdate();
+    }
+  }
+
+  @Test
+  void candidateStatusIsLimitedToOpenAndResolved() throws Exception {
+    var a = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "chk-a-" + UUID.randomUUID());
+    var b = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "chk-b-" + UUID.randomUUID());
+
+    insertCandidate(a, b, "RESOLVED");
+    assertThatThrownBy(() -> insertCandidate(a, new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "chk-c-" + UUID.randomUUID()), "DONE"))
+        .hasMessageContaining("ck_identity_candidate_status");
+  }
+
+  @Test
+  void approvingCandidateMovesOnlyTheKeyAndLeavesCrosswalkOfDifferentGidsRejected() throws Exception {
+    var a = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "mv-a-" + UUID.randomUUID());
+    var b = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "mv-b-" + UUID.randomUUID());
+    UUID gidA = mapping.resolve(a);
+    UUID gidB = mapping.resolve(b);
+    insertCandidate(a, b, "OPEN");
+    // Без кандидата перенос невозможен, обычный approve разных gid по-прежнему конфликт.
+    assertThatThrownBy(() -> mapping.approve(crosswalk(a, b))).isInstanceOf(CrosswalkConflictException.class);
+
+    var relocation = new PostgresCandidateApprovals(dataSource()).approve(
+        new CandidateApproval(a, b, CandidateApproval.Survivor.LEFT, "admin", "same system", Instant.parse("2026-10-14T09:00:00Z")));
+
+    assertThat(relocation.changesGid()).isTrue();
+    assertThat(relocation.fromGid()).isEqualTo(gidB);
+    assertThat(relocation.intoGid()).isEqualTo(gidA);
+    assertThat(relocation.sourceGidEmpty()).isTrue();
+    assertThat(mapping.find(b)).contains(gidA);
+    assertThat(mapping.keysOf(gidA)).containsExactlyInAnyOrder(a, b);
+    assertThat(mapping.keysOf(gidB)).isEmpty();
+    assertThat(crosswalkRows(a)).isEqualTo(1);
+  }
+
+  @Test
+  void approvingCandidateKeepsOldGidWhenOtherKeysRemain() throws Exception {
+    var a = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "keep-a-" + UUID.randomUUID());
+    var b = new SourceKey(SourceSystemCode.EAM, "IT_SYSTEM", "keep-b-" + UUID.randomUUID());
+    var c = new SourceKey(SourceSystemCode.SCM, "CATALOG_SYSTEM", "keep-c-" + UUID.randomUUID());
+    mapping.resolve(a);
+    UUID gidB = mapping.approve(crosswalk(b, c));
+    insertCandidate(a, b, "OPEN");
+
+    var relocation = new PostgresCandidateApprovals(dataSource()).approve(
+        new CandidateApproval(a, b, CandidateApproval.Survivor.LEFT, "admin", "same system", Instant.parse("2026-10-14T09:00:00Z")));
+
+    assertThat(relocation.sourceGidEmpty()).isFalse();
+    assertThat(mapping.keysOf(gidB)).containsExactly(c);
   }
 
   private static int crosswalkRows(SourceKey key) throws Exception {

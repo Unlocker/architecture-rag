@@ -4,6 +4,9 @@ import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
 import io.github.unlocker.archrag.eventschemas.UnknownEventException;
+import io.github.unlocker.archrag.identityresolution.CandidateApproval;
+import io.github.unlocker.archrag.identityresolution.CandidateNotFoundException;
+import io.github.unlocker.archrag.identityresolution.CandidateNotOpenException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,7 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk, возврат события из карантина.
+ * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk, подтверждение кандидата, возврат события из карантина.
  * Доступен только со scope
  * {@value SecurityConfiguration#ADMIN_SCOPE} и ролью {@value SecurityConfiguration#ADMIN_ROLE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
  * Операции синхронные, идут под {@link AdminLock} и пишутся в аудит ({@link AdminOperations}).
@@ -35,12 +38,14 @@ public class AdminController {
 
   static final int MAX_CROSSWALK_ITEMS = 1000;
   static final int MAX_EVENT_ID_LENGTH = 500;
+  static final int MAX_REASON_LENGTH = 500;
   private static final Pattern SOURCE = Pattern.compile("[A-Za-z0-9:._-]{1,200}");
 
   private final AdminOperations operations;
   private final ReplayService replay;
   private final RebuildService rebuild;
   private final CrosswalkService crosswalk;
+  private final CandidateApprovalService candidateApproval;
   private final AdapterControlClient adapters;
   private final EventJournal journal;
 
@@ -49,12 +54,14 @@ public class AdminController {
       ReplayService replay,
       RebuildService rebuild,
       CrosswalkService crosswalk,
+      CandidateApprovalService candidateApproval,
       AdapterControlClient adapters,
       EventJournal journal) {
     this.operations = operations;
     this.replay = replay;
     this.rebuild = rebuild;
     this.crosswalk = crosswalk;
+    this.candidateApproval = candidateApproval;
     this.adapters = adapters;
     this.journal = journal;
   }
@@ -174,6 +181,75 @@ public class AdminController {
       throw new BadRequestException("items must contain 1.." + MAX_CROSSWALK_ITEMS + " elements");
     }
     return operations.locked(() -> crosswalk.load(items, jwt.getSubject()));
+  }
+
+  /**
+   * Тело подтверждения кандидата на совпадение.
+   *
+   * @param left ключ одной записи пары
+   * @param right ключ другой записи пары (порядок ключей роли не играет, сторона задаётся {@code survivor})
+   * @param survivor {@code LEFT} или {@code RIGHT}: запись этой стороны остаётся на своём {@code gid}
+   * @param reason причина подтверждения (обязательна, до {@value #MAX_REASON_LENGTH} символов)
+   */
+  public record CandidateApproveRequest(CrosswalkItem.KeyDto left, CrosswalkItem.KeyDto right, String survivor, String reason) {}
+
+  /**
+   * Подтверждает кандидата на совпадение: запись второй стороны переносится на {@code gid} выжившей и сразу
+   * перепроецируется (история прежнего {@code gid} не сливается). {@code 404} — кандидата нет, {@code 409} — он уже
+   * {@code RESOLVED}. Обычный {@code /crosswalks} для ключей с разными {@code gid} по-прежнему даёт {@code CONFLICT}.
+   */
+  @PostMapping("/identity/candidates/approve")
+  public ResponseEntity<Object> approveCandidate(
+      @RequestBody CandidateApproveRequest request, @AuthenticationPrincipal Jwt jwt) {
+    CandidateApproval approval = candidateApproval(request, jwt.getSubject());
+    Map<String, Object> audited = new LinkedHashMap<>();
+    audited.put("left", request.left().toString());
+    audited.put("right", request.right().toString());
+    audited.put("survivor", approval.survivor().name());
+    audited.put("reason", request.reason().length() <= 200 ? request.reason() : request.reason().substring(0, 200));
+    try {
+      return ResponseEntity.ok(operations.run(
+          "IDENTITY_APPROVE",
+          jwt.getSubject(),
+          audited,
+          null,
+          () -> candidateApproval.approve(approval),
+          r -> {
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("status", r.status().name());
+            summary.put("gid", r.gid().toString());
+            summary.put("previousGid", r.previousGid().toString());
+            summary.put("previousRetired", r.previousRetired());
+            return summary;
+          }));
+    } catch (CandidateNotFoundException e) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "unknown candidate"));
+    } catch (CandidateNotOpenException e) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "candidate is not open"));
+    }
+  }
+
+  private static CandidateApproval candidateApproval(CandidateApproveRequest request, String approvedBy) {
+    if (request.left() == null || request.right() == null || request.survivor() == null || request.reason() == null
+        || request.reason().isBlank() || request.reason().length() > MAX_REASON_LENGTH) {
+      throw new BadRequestException("left, right, survivor and reason (1.." + MAX_REASON_LENGTH + " characters) are required");
+    }
+    try {
+      return new CandidateApproval(
+          CrosswalkService.key(request.left()),
+          CrosswalkService.key(request.right()),
+          CandidateApproval.Survivor.valueOf(request.survivor()),
+          approvedBy,
+          request.reason(),
+          Instant.now());
+    } catch (IllegalArgumentException | NullPointerException e) {
+      throw new BadRequestException("keys must be distinct source keys and survivor must be LEFT or RIGHT");
+    }
+  }
+
+  @ExceptionHandler(ReprojectionException.class)
+  ResponseEntity<Map<String, String>> reprojectionFailed(ReprojectionException e) {
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "reprojection failed", "code", e.code()));
   }
 
   @ExceptionHandler(BadRequestException.class)

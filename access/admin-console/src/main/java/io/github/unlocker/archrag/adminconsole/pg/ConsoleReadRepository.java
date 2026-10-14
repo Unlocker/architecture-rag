@@ -207,7 +207,7 @@ public class ConsoleReadRepository {
     return page(
         "identity_candidate",
         "left_source, left_type, left_id, right_source, right_type, right_id, label_family, matched::text AS matched,"
-            + " score, status, first_seen_at, updated_at",
+            + " score, status, first_seen_at, updated_at, resolved_at, resolved_by",
         where,
         "score DESC, updated_at DESC, left_source, left_type, left_id, right_source, right_type, right_id",
         page,
@@ -224,7 +224,9 @@ public class ConsoleReadRepository {
                 rs.getDouble("score"),
                 rs.getString("status"),
                 instant(rs, "first_seen_at"),
-                instant(rs, "updated_at")));
+                instant(rs, "updated_at"),
+                instant(rs, "resolved_at"),
+                rs.getString("resolved_by")));
   }
 
   // --- аудит ---

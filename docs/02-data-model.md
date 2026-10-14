@@ -355,6 +355,6 @@ stateDiagram-v2
 | `SyncRun` | `endedAt`, счётчики | проектор пишет `runId`, `adapter`, `status`, `startedAt`; остальное — в модели, но не в графе | инкремент внутри повторяемой транзакции удваивался бы при повторе |
 | Статусы обработки | `RECEIVED -> ... -> PROJECTED`, `DUPLICATE`/`IGNORED_OLD_VERSION` из `RECEIVED` | то же, плюс `IGNORED_OLD_VERSION` из любого шага до `PROJECTED` и `RETRYING` → любой шаг | версия сравнивается с графом, а не только с журналом; см. [ADR 0006](adr/0006-postgres-inbox-event-backbone.md) |
 | Поля inbox | `source cursor` в каждой стадии | курсор — в отдельной `consumer_checkpoint`; в `inbox_event` нет колонки cursor | checkpoint на `(consumer, source)` |
-| Conflict, IdentityCandidate | сущности и ручные решения | таблицы `source_conflict` (виды `PROPERTY`/`RELATION`) и `identity_candidate` есть, ручных решений нет | E3, UNLOCKER-174/175; ADR 0030 |
+| Conflict, IdentityCandidate | сущности и ручные решения | таблицы `source_conflict` (виды `PROPERTY`/`RELATION`) и `identity_candidate` (`OPEN`/`RESOLVED`; оператор подтверждает кандидата через `POST /admin/identity/candidates/approve`, UNLOCKER-282) есть, ручного закрытия конфликта нет | E3, UNLOCKER-174/175; ADR 0030 |
 | Объекты raw | «raw snapshots/events» в объектном хранилище | один формат: raw события/маркера по ключу `raw/<source>/<sha256>` | отдельного snapshot-формата нет |
 | Жизненный цикл `SyncRun.status` | — | при создании `RUNNING`; перевод в `SUCCEEDED`/`FAILED` в проекторе не реализован | пробел |

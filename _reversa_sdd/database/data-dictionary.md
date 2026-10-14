@@ -89,10 +89,10 @@ NODE KEY, existence-constraints и vector-индекс (Community; `ingestion/gr
 Свойства данных 🟢/🟡:
 
 - `DELETE` встречается только для `identity_feature` и `property_assertion` (замена набора записи целиком, `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:39`, `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:37`). Остальные таблицы только растут: `inbox_event`, `dlq_entry`, `admin_audit`, `identity_candidate`, `source_conflict` не чистятся, retention-политики нет 🟡.
-- CHECK-ограничений нет ни в одной таблице. Допустимость `status` (`inbox_event`, `identity_candidate`, `source_conflict`), `kind` (`source_conflict`) и `operation` (`admin_audit`) держит код, не БД 🟡.
+- CHECK-ограничение только одно — `ck_identity_candidate_status` (V8); в остальных таблицах CHECK нет. Допустимость `status` (`inbox_event`, `identity_candidate`, `source_conflict`), `kind` (`source_conflict`) и `operation` (`admin_audit`) держит код, не БД 🟡.
 - Триггеров, функций, процедур и представлений в миграциях нет (единственный блок — `DO $$` в V6, см. [`procedures.md`](procedures.md)) 🟢.
 - `dlq_entry.replayed_at` читается и фильтруется (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:158`, `ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:142`), но ни один код не пишет в неё значение: `UPDATE dlq_entry` в репозитории нет 🔴 (подтверждено поиском по `ingestion`, `access`, `adapters`; в тестах значение вставляется вручную, `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/IngestionMetricsIT.java:86`).
-- `identity_candidate.status` получает только значение по умолчанию `'OPEN'`; перехода в другое состояние нет в коде 🔴 (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:55-61`).
+- `identity_candidate.status`: `'OPEN'` по умолчанию, `'RESOLVED'` ставит `PostgresCandidateApprovals.approve` вместе с `resolved_at`/`resolved_by`; CHECK `ck_identity_candidate_status` (V8) 🟢 [UNLOCKER-282: реализовано]. Прежняя ссылка: (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:55-61`).
 
 ## 3. Flyway: порядок применения и владельцы версий
 
@@ -107,6 +107,7 @@ NODE KEY, existence-constraints и vector-индекс (Community; `ingestion/gr
 | V5 | `V5__source_conflict.sql` | `ingestion/identity-resolution` | — |
 | V6 | `V6__console_readonly_role.sql` | `ingestion/ingestion-service` | V1 (`inbox_event`, `consumer_checkpoint`, `dlq_entry`), V3 (`admin_audit`), V4 (`identity_candidate`), V5 (`source_conflict`) |
 | V7 | `V7__source_conflict_kind.sql` | `ingestion/identity-resolution` | V5 (`ALTER TABLE source_conflict`) |
+| V8 | `V8__identity_candidate_resolution.sql` | `ingestion/identity-resolution` | V4 (`ALTER TABLE identity_candidate`: `resolved_at`, `resolved_by`, CHECK статуса) |
 
 **Кто и когда применяет.**
 

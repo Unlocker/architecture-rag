@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 1 | Событие журнала | `inbox_event.status` | 10 значений `ProcessingStatus` | `EventProcessor`, `JournalDispatcher`, `Reconciler` |
 | 2 | Запись DLQ | `dlq_entry` (+ `replayed_at`) | «открыта» / «разобрана» | `PostgresEventJournal.toDlq` (открытие); `closeDlq` из `ReplayService` и `releaseFromQuarantine` из `POST /admin/quarantine/release` (закрытие) 🟢 [UNLOCKER-281] |
-| 3 | Кандидат на совпадение | `identity_candidate.status` | `OPEN` | только значение по умолчанию 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] |
+| 3 | Кандидат на совпадение | `identity_candidate.status` (+ `resolved_at`, `resolved_by`) | `OPEN`, `RESOLVED` (CHECK, V8) | `PostgresIdentityCandidates.record` (создание `OPEN`; повтор статус не трогает); `PostgresCandidateApprovals.approve` из `POST /admin/identity/candidates/approve` (`OPEN → RESOLVED`) 🟢 [UNLOCKER-282] |
 | 4 | Конфликт источников | `source_conflict.status` | `OPEN`, `RESOLVED` | `PostgresSourceConflicts` |
 | 5 | Запись источника | `SourceRecord.active` | активна / tombstone | `GraphProjector` |
 | 6 | Канонический узел | `isCurrent`, `deletedAt` | текущий / архивный | `GraphProjector` |
