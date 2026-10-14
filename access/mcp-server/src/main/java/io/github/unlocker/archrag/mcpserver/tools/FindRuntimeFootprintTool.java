@@ -59,14 +59,15 @@ public class FindRuntimeFootprintTool {
       @McpToolParam(description = "gid узла ITSystem (UUID)") String systemGid,
       @McpToolParam(description = "Код окружения для фильтра, например PROD; без него все", required = false)
           String environment) {
+    String gid;
     try {
-      UUID.fromString(systemGid == null ? "" : systemGid);
+      gid = UUID.fromString(systemGid == null ? "" : systemGid.strip()).toString();
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("systemGid must be a UUID");
     }
     String env = environment == null || environment.isBlank() ? null : environment.strip();
     Map<String, Object> params = new HashMap<>();
-    params.put("systemGid", systemGid);
+    params.put("systemGid", gid);
     params.put("environment", env);
     // budget = null: исполнитель берёт потолки QueryLimits (limits.*) целиком, как get_asset с ResultBudget.
     QueryResult result = graph.execute(RuntimeTemplates.RUNTIME_FOOTPRINT_ID, params, null);

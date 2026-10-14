@@ -108,6 +108,18 @@ class FindRuntimeFootprintToolTest {
   }
 
   @Test
+  void upperCaseAndPaddedGidIsNormalizedLikeLowerCase() {
+    when(graph.execute(any(), any(), any())).thenReturn(result(false, row(system(FRESH), null, null, null, null)));
+
+    tool.findRuntimeFootprint("  " + GID.toUpperCase() + " ", null);
+
+    Map<String, Object> expected = new HashMap<>();
+    expected.put("systemGid", GID.toLowerCase());
+    expected.put("environment", null);
+    verify(graph).execute(eq("runtime_footprint"), eq(expected), isNull());
+  }
+
+  @Test
   void noRowsMeansAssetNotFound() {
     when(graph.execute(any(), any(), any())).thenReturn(result(false));
     assertThatThrownBy(() -> tool.findRuntimeFootprint(GID, null))

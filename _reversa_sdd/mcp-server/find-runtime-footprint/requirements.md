@@ -9,7 +9,7 @@ Tool `find_runtime_footprint` отвечает на вопрос «где раз
 ## Regras de Negócio
 
 - `systemGid` должен быть UUID; иначе `systemGid must be a UUID` (значение не эхоится) 🟢 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:62-66).
-- `systemGid` не нормализуется (`strip`/`lowercase`/`toString` не применяются): в шаблон уходит исходная строка; `null` → пустая строка → ошибка 🟡 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:62-70; Q-06).
+- `systemGid` нормализуется: `strip`, `UUID.fromString`, `toString()` (нижний регистр); в шаблон уходит нормализованное значение; `null`, пустая строка и не-UUID → `systemGid must be a UUID` без эха ввода 🟢 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java; Q-06).
 - `environment`: `null`/пустой = все окружения; иначе `strip` и точное сравнение с кодом окружения 🟢 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:67; access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/RuntimeTemplates.java:13-30).
 - Бюджет не задаётся: `budget = null`, исполнитель берёт потолки `QueryLimits` целиком 🟢 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:71-72; access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/GraphQueryExecutor.java:67).
 - Нет строк (неизвестный gid, закрытый узел, не `ITSystem`) → `asset not found` 🟢 (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:73-75; platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/RuntimeFootprintIT.java:259-267).
@@ -88,7 +88,7 @@ Tool `find_runtime_footprint` отвечает на вопрос «где раз
 |-----------|--------|---------------|
 | RF-01, RF-02, RF-04..RF-06 | Must | Основной сценарий F2 |
 | RF-03 | Should | Источник кода из Helm chart (ADR 0029) |
-| Нормализация `systemGid` | Won't | Не реализована (🟡 Q-06) |
+| Нормализация `systemGid` | Must | Реализована (🟢 Q-06) |
 
 ## Rastreabilidade de Código
 

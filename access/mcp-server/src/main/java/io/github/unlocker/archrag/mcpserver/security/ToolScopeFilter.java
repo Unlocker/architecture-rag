@@ -18,6 +18,8 @@ import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,7 +34,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Работает только на {@code POST /mcp}. Тело читается не более {@code max-request-bytes} и
  * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется
- * (fail-closed). Отказы пишутся в аудит. Роль {@code archrag-reader} на все методы MCP проверяет цепочка Spring Security до этого фильтра.
+ * (fail-closed). Отказы (403, а также 400/413 до разбора тела) пишутся в аудит ровно одной
+ * записью. Роль {@code archrag-reader} на все методы MCP проверяет цепочка Spring Security до
+ * этого фильтра.
  */
 final class ToolScopeFilter extends OncePerRequestFilter {
 
@@ -57,7 +61,8 @@ final class ToolScopeFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    if (!isSupportedCharset(request.getCharacterEncoding())) {
+    if (!isSupportedCharset(request)) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }
@@ -65,6 +70,7 @@ final class ToolScopeFilter extends OncePerRequestFilter {
     byte[] body =
         request.getInputStream().readNBytes((int) Math.min(limit, Integer.MAX_VALUE - 1) + 1);
     if (body.length > limit) {
+      auditor.rejected(ToolDecision.REJECTED_TOO_LARGE);
       response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
       return;
     }
@@ -72,10 +78,12 @@ final class ToolScopeFilter extends OncePerRequestFilter {
     try {
       json = mapper.readTree(body);
     } catch (JacksonException e) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }
     if (json == null || !json.isObject()) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }
@@ -97,7 +105,18 @@ final class ToolScopeFilter extends OncePerRequestFilter {
     chain.doFilter(new BufferedRequest(request, body), response);
   }
 
-  private static boolean isSupportedCharset(String name) {
+  private static boolean isSupportedCharset(HttpServletRequest request) {
+    // Tomcat молча отбрасывает неизвестную кодировку (getCharacterEncoding() == null),
+    // поэтому Content-Type разбирается заново: неизвестный charset даёт InvalidMediaTypeException.
+    String contentType = request.getContentType();
+    if (contentType != null) {
+      try {
+        MediaType.parseMediaType(contentType);
+      } catch (InvalidMediaTypeException e) {
+        return false;
+      }
+    }
+    String name = request.getCharacterEncoding();
     if (name == null) {
       return true;
     }
