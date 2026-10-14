@@ -31,3 +31,4 @@
 | `../tech-debt.md:71` (Н-16) | порог «устарел» продублирован, якорь `access/admin-ui/src/api/constants.ts:27-27` | в строке 27 — `SOURCES`; порог — `STALE_AFTER_MS`, `access/admin-ui/src/api/constants.ts:56` (матрица, строка 43, указывает верно) |
 | `../code-analysis.md` §X4.1 | в SyncPage-светофоре ветка `FAILED`/`failed > 0` описана как рабочая | ветка не срабатывает на данных проектора (Q-01); описание алгоритма верно, достижимость не оценена |
 | `docs/adr/0026-admin-console-readonly-loopback.md:21` | «в `sessionStorage` остаётся лишь одноразовое `state`/`code_verifier`» | в коде хранилище состояния не задано явно (Q-08) |
+| Q-12 | ⏸ Отложено (решение архитектора, UNLOCKER-282): кнопки «Подтвердить» кандидата в консоли нет; подтверждение идёт через `POST /admin/identity/candidates/approve` (admin REST), консоль read-only по ADR 0026. Кнопка потребует отдельной задачи с правкой ADR 0026 | `_reversa_sdd/admin-ui/identity-audit/design.md` | ⏸ |

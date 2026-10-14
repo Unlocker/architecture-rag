@@ -306,6 +306,27 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
   }
 
   @Override
+  public Optional<StoredEvent> projectedUpsert(String source, String sourceType, String sourceId, SourceVersion version) {
+    String sql = "SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE source = ? AND source_type = ?"
+        + " AND source_id = ? AND source_version = ? AND status = 'PROJECTED' AND type = ? AND payload_key IS NOT NULL"
+        + " ORDER BY received_at DESC, event_id DESC LIMIT 1";
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, sourceType);
+      ps.setString(3, sourceId);
+      ps.setString(4, version.value());
+      ps.setString(5, CanonicalEvent.TYPE_ASSET_UPSERTED);
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next()
+            ? Optional.of(new StoredEvent(map(rs), rs.getString("type"), rs.getString("subject")))
+            : Optional.empty();
+      }
+    } catch (SQLException e) {
+      throw new JournalException("projectedUpsert failed", e);
+    }
+  }
+
+  @Override
   public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
     try (Connection c = dataSource.getConnection();
         PreparedStatement ps = c.prepareStatement(

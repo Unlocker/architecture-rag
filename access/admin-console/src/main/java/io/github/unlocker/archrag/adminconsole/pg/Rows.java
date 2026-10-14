@@ -63,7 +63,10 @@ public final class Rows {
       Instant resolvedAt,
       String kind) {}
 
-  /** Запись {@code identity_candidate}; {@code matched} — массив {@code {feature, value}}. */
+  /**
+   * Запись {@code identity_candidate}; {@code matched} — массив {@code {feature, value}}. {@code resolvedAt} и
+   * {@code resolvedBy} заполнены у {@code RESOLVED} (подтверждённого оператором), у {@code OPEN} пусты.
+   */
   public record Candidate(
       String leftSource,
       String leftType,
@@ -76,7 +79,9 @@ public final class Rows {
       double score,
       String status,
       Instant firstSeenAt,
-      Instant updatedAt) {}
+      Instant updatedAt,
+      Instant resolvedAt,
+      String resolvedBy) {}
 
   /** Запись {@code admin_audit} ({@code request} — параметры операции, не данные источника); {@code result} длиннее лимита не отдаётся ({@code resultTruncated}). */
   public record Audit(

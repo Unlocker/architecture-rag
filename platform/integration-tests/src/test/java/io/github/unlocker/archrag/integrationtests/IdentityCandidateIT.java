@@ -16,10 +16,12 @@ import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
+import io.github.unlocker.archrag.identityresolution.CandidateApproval;
 import io.github.unlocker.archrag.identityresolution.Crosswalk;
 import io.github.unlocker.archrag.identityresolution.Feature;
 import io.github.unlocker.archrag.identityresolution.FeatureKind;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
+import io.github.unlocker.archrag.identityresolution.PostgresCandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
@@ -61,6 +63,8 @@ class IdentityCandidateIT {
   static PostgresIdentityCandidates candidates;
   static final List<FeatureKind> overflowed = new java.util.concurrent.CopyOnWriteArrayList<>();
   static EventProcessor processor;
+  static PGSimpleDataSource pg;
+  static PostgresCandidateApprovals approvals;
 
   @BeforeAll
   static void setUp() {
@@ -71,6 +75,8 @@ class IdentityCandidateIT {
     ds.setUser(POSTGRES.getUsername());
     ds.setPassword(POSTGRES.getPassword());
     JournalMigrations.apply(ds);
+    pg = ds;
+    approvals = new PostgresCandidateApprovals(ds);
     journal = new PostgresEventJournal(ds);
     identity = new PostgresIdentityMapping(ds);
     candidates = new PostgresIdentityCandidates(ds, overflowed::add);
@@ -284,5 +290,62 @@ class IdentityCandidateIT {
     host(uid(), "VIRTUAL_MACHINE", "calm-" + uid(), "1");
 
     assertThat(overflowed).isEmpty();
+  }
+
+  @Test
+  void approvedCandidateIsResolvedWithResolvedFieldsAndStaysResolvedOnReplay() throws Exception {
+    String a = uid();
+    String b = uid();
+    String hostname = "resolved-" + uid();
+    host(a, "VIRTUAL_MACHINE", hostname, "1");
+    host(b, "VIRTUAL_MACHINE", hostname, "1");
+    var ka = key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", a);
+    var kb = key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", b);
+    Instant approvedAt = Instant.parse("2026-10-14T09:00:00Z");
+    assertThat(candidateRow(a)).containsExactly("OPEN", null, null);
+
+    approvals.approve(new CandidateApproval(kb, ka, CandidateApproval.Survivor.RIGHT, "operator-1", "same host", approvedAt));
+
+    assertThat(candidateRow(a)).containsExactly("RESOLVED", approvedAt.toString(), "operator-1");
+    assertThat(gid(kb)).isEqualTo(gid(ka));
+    // Повтор события не открывает кандидата заново и не меняет resolved_*.
+    assertThat(host(a, "VIRTUAL_MACHINE", hostname, "2")).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(candidateRow(a)).containsExactly("RESOLVED", approvedAt.toString(), "operator-1");
+    assertThat(candidates.candidatesOf(ka)).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("RESOLVED"));
+  }
+
+  @Test
+  void openCandidateHasNoResolvedFieldsAndRejectsRepeatedApproval() throws Exception {
+    String a = uid();
+    String b = uid();
+    String hostname = "twice-" + uid();
+    host(a, "VIRTUAL_MACHINE", hostname, "1");
+    host(b, "VIRTUAL_MACHINE", hostname, "1");
+    var ka = key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", a);
+    var kb = key(SourceSystemCode.CMDB, "COMPUTE_INSTANCE", b);
+    var approval = new CandidateApproval(ka, kb, CandidateApproval.Survivor.LEFT, "operator-1", "same host", T1);
+    approvals.approve(approval);
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> approvals.approve(approval))
+        .isInstanceOf(io.github.unlocker.archrag.identityresolution.CandidateNotOpenException.class);
+  }
+
+  /** {@code status}, {@code resolved_at} (ISO) и {@code resolved_by} кандидата записи. */
+  private static List<String> candidateRow(String id) throws Exception {
+    try (var c = pg.getConnection();
+        var ps = c.prepareStatement(
+            "SELECT status, resolved_at, resolved_by FROM identity_candidate WHERE left_id = ? OR right_id = ?")) {
+      ps.setString(1, id);
+      ps.setString(2, id);
+      try (var rs = ps.executeQuery()) {
+        assertThat(rs.next()).isTrue();
+        var at = rs.getTimestamp(2);
+        List<String> row = new java.util.ArrayList<>();
+        row.add(rs.getString(1));
+        row.add(at == null ? null : at.toInstant().toString());
+        row.add(rs.getString(3));
+        return row;
+      }
+    }
   }
 }

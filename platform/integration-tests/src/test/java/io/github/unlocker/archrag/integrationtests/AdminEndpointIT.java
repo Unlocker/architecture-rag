@@ -455,6 +455,76 @@ class AdminEndpointIT {
     assertThat(admin("/admin/crosswalks", body).body()).contains("\"index\":0,\"status\":\"APPLIED\"");
   }
 
+  /** Событие CMDB {@code COMPUTE_INSTANCE} с raw в S3 (формат адаптера), обработанное процессором. */
+  private void cmdbHost(String id, String hostname) {
+    String raw = "{\"operation\":\"UPSERT\",\"completeness\":\"COMPLETE\",\"updatedAt\":\"2026-10-01T10:00:00Z\","
+        + "\"payload\":{\"hostname\":\"" + hostname + "\",\"kind\":\"VIRTUAL_MACHINE\"}}";
+    var ref = rawStore.put("urn:corp:cmdb", raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    var event = new CanonicalEvent("e-" + UUID.randomUUID(), "urn:corp:cmdb", CanonicalEvent.TYPE_ASSET_UPSERTED,
+        "COMPUTE_INSTANCE/" + id, Instant.parse("2026-10-01T10:00:00Z"), "urn:corp:schema:asset-upserted:1", null,
+        new io.github.unlocker.archrag.eventschemas.AssetEventData("COMPUTE_INSTANCE", id,
+            new io.github.unlocker.archrag.eventschemas.SourceVersion("1"),
+            Map.of("hostname", hostname, "kind", "VIRTUAL_MACHINE", "_completeness", "COMPLETE")));
+    journal.append(event, ref, null);
+    assertThat(processor.process(event, ref).status()).isEqualTo(ProcessingStatus.PROJECTED);
+  }
+
+  private static String approveBody(String left, String right, String survivor) {
+    return "{\"left\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"" + left + "\"},"
+        + "\"right\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"" + right + "\"},"
+        + (survivor == null ? "" : "\"survivor\":\"" + survivor + "\",") + "\"reason\":\"same host\"}";
+  }
+
+  /** Другие записи, утверждающие тот же узел, что и запись {@code sourceId} (сама запись в результат не входит). */
+  private List<String> coAssertersOf(String sourceId) {
+    return driver.executableQuery(
+            "MATCH (:SourceRecord {source: 'CMDB', sourceType: 'COMPUTE_INSTANCE', sourceId: $id})-[:ASSERTS]->(n)"
+                + "<-[:ASSERTS]-(o:SourceRecord) RETURN o.sourceId AS id ORDER BY id")
+        .withParameters(Map.of("id", sourceId)).execute().records().stream().map(r -> r.get("id").asString()).toList();
+  }
+
+  @Test
+  void candidateApprovalMovesRecordReprojectsAuditsAndSurvivesRebuild() throws Exception {
+    seed();
+    String a = "ap-a-" + UUID.randomUUID();
+    String b = "ap-b-" + UUID.randomUUID();
+    String hostname = "approve-" + UUID.randomUUID() + ".corp";
+    cmdbHost(a, hostname);
+    cmdbHost(b, hostname);
+    String body = approveBody(a, b, "LEFT");
+
+    // Защита: токен, scope, параметры, неизвестный кандидат.
+    assertThat(post("/admin/identity/candidates/approve", null, body).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/identity/candidates/approve", token("architecture.read"), body).statusCode()).isEqualTo(403);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, b, null)).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, b, "BOTH")).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, a, "LEFT")).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, "no-such-" + UUID.randomUUID(), "LEFT")).statusCode())
+        .isEqualTo(404);
+    assertThat(coAssertersOf(b)).isEmpty();
+
+    var ok = admin("/admin/identity/candidates/approve", body);
+
+    assertThat(ok.statusCode()).isEqualTo(200);
+    assertThat(ok.body()).contains("\"status\":\"REPROJECTED\"").contains("\"previousRetired\":true");
+    // Запись b сразу утверждает узел a (рядом с ней a); прежний узел b закрыт и указывает на выжившего.
+    assertThat(coAssertersOf(b)).containsExactly(a);
+    assertThat(driver.executableQuery("MATCH (n) WHERE n.mergedInto IS NOT NULL AND n.isCurrent = false RETURN count(n) AS c")
+        .execute().records().get(0).get("c").asLong()).isGreaterThanOrEqualTo(1);
+    assertThat(scalarLong("select count(*) from admin_audit where operation = 'IDENTITY_APPROVE' and status = 'SUCCEEDED'"
+        + " and actor = 'operator-1'")).isEqualTo(1);
+    assertThat(scalarLong("select count(*) from identity_candidate where status = 'RESOLVED' and resolved_by = 'operator-1'"
+        + " and (left_id = ? or right_id = ?)", a, a)).isEqualTo(1);
+    // Повтор: кандидат уже закрыт.
+    assertThat(admin("/admin/identity/candidates/approve", body).statusCode()).isEqualTo(409);
+
+    // Rebuild воспроизводит результат: gid берётся из identity_mapping, отдельной логики нет.
+    assertThat(admin("/admin/rebuild?confirm=true", null).statusCode()).isEqualTo(200);
+    assertThat(coAssertersOf(b)).containsExactly(a);
+    assertThat(driver.executableQuery("MATCH (n) WHERE n.mergedInto IS NOT NULL RETURN count(n) AS c").execute().records()
+        .get(0).get("c").asLong()).isZero();
+  }
+
   @Test
   void tokenForForeignAudienceIsUnauthorized() throws Exception {
     String foreign = tokenFor("https://other.test/api", "architecture.admin");

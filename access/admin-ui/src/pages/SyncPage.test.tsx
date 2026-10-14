@@ -238,6 +238,23 @@ test('identity status filter requests RESOLVED history', async () => {
   await waitFor(() => expect(mock.get).toHaveBeenCalledWith('/api/identity/candidates?status=RESOLVED&page=0&size=50'));
 });
 
+test('identity history shows who and when closed a RESOLVED candidate, OPEN list has no such columns', async () => {
+  const resolved = { leftSource: 'cmdb', leftType: 'CI', leftId: 'L2', rightSource: 'cmdb', rightType: 'CI', rightId: 'R2', labelFamily: 'ComputeInstance', matched: [{ feature: 'hostname', value: 'app-01' }], score: 0.6, status: 'RESOLVED', firstSeenAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-14T09:00:00Z', resolvedAt: '2026-10-14T09:00:00Z', resolvedBy: 'operator-1' };
+  const mock = api({
+    '/api/identity/candidates': (path) => page(path.includes('status=RESOLVED') ? [resolved] : []),
+  });
+  open(mock, 'Identity');
+  expect(await screen.findByText('Кандидатов с таким статусом нет')).toBeTruthy();
+  expect(screen.queryByText('Кем')).toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Статус кандидатов'), { target: { value: 'RESOLVED' } });
+
+  const table = await screen.findByRole('table', { name: 'Кандидаты identity' });
+  expect(within(table).getByText('Кем')).toBeTruthy();
+  expect(within(table).getByText('operator-1')).toBeTruthy();
+  expect(within(table).getByText('hostname=app-01')).toBeTruthy();
+});
+
 test('audit shows empty state', async () => {
   open(api({ '/api/audit': () => page([]) }), 'Аудит');
 

@@ -48,7 +48,7 @@ CHECK и FK нет ни в одной таблице; допустимость `
 `source, source_type, source_id, feature, value, label_family` text, `updated_at timestamptz`, NOT NULL; PK `(source, source_type, source_id, feature)` (один признак каждого вида на ключ); индекс `ix_identity_feature_lookup (feature, label_family, value)`. Набор ключа заменяется целиком (DELETE + INSERT) 🟢.
 
 ### `identity_candidate` (`MIG/V4__identity_candidate.sql:21-37`)
-`left_*`, `right_*` (по три text), `label_family text`, `matched jsonb` (массив `{"feature","value"}` в порядке признаков), `score numeric(3,2)`, `status text DEFAULT 'OPEN'`, `first_seen_at`, `updated_at` timestamptz; PK по шести ключевым колонкам; индекс `ix_identity_candidate_right`. Читается консолью (`GRANT SELECT` в V6) 🟢.
+`left_*`, `right_*` (по три text), `label_family text`, `matched jsonb` (массив `{"feature","value"}` в порядке признаков), `score numeric(3,2)`, `status text DEFAULT 'OPEN'` с CHECK `IN ('OPEN','RESOLVED')` (V8), `first_seen_at`, `updated_at` timestamptz, `resolved_at` timestamptz NULL и `resolved_by text` NULL (V8, заполнены у `RESOLVED`); PK по шести ключевым колонкам; индекс `ix_identity_candidate_right`. Читается консолью (`GRANT SELECT` в V6) 🟢.
 
 ### `property_assertion` (`MIG/V5__source_conflict.sql:6-19`)
 PK `(source, source_type, source_id, property)`; `gid uuid`, `label text`, `value text` (enum -> `name`, `Instant` -> UTC ISO, строится вызывающим: `String.valueOf(value)` в `EventProcessor.java:407-408`), `authoritative boolean`, `asserted_at timestamptz`; индекс `ix_property_assertion_gid (gid, property)`. Консоль не имеет прав 🟢.

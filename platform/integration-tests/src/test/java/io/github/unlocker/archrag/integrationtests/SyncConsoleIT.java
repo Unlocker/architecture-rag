@@ -100,6 +100,10 @@ class SyncConsoleIT {
     st.execute("INSERT INTO identity_candidate (left_source, left_type, left_id, right_source, right_type, right_id,"
         + " label_family, matched, score, first_seen_at, updated_at) VALUES ('EAM','system','1','CMDB','ci','9',"
         + " 'ITSystem', '[{\"feature\":\"name\",\"value\":\"pay\"}]'::jsonb, 0.90, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')");
+    st.execute("INSERT INTO identity_candidate (left_source, left_type, left_id, right_source, right_type, right_id,"
+        + " label_family, matched, score, status, first_seen_at, updated_at, resolved_at, resolved_by) VALUES"
+        + " ('EAM','system','2','CMDB','ci','8', 'ITSystem', '[]'::jsonb, 0.80, 'RESOLVED', '2026-01-01T00:00:00Z',"
+        + " '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', 'operator-1')");
     st.execute("INSERT INTO source_conflict (gid, property, dissent_source, dissent_type, dissent_id, dissent_value,"
         + " master_value, master_source, master_type, master_id, status, opened_at, updated_at) VALUES"
         + " ('11111111-1111-1111-1111-111111111111','criticality','CMDB','ci','9','LOW','HIGH','EAM','system','1',"
@@ -374,6 +378,11 @@ class SyncConsoleIT {
     assertThat(candidates.get("total").asLong()).isEqualTo(1);
     assertThat(candidates.get("items").get(0).get("matched").get(0).get("feature").asString()).isEqualTo("name");
     assertThat(candidates.get("items").get(0).get("score").asDouble()).isEqualTo(0.9);
+    assertThat(candidates.get("items").get(0).path("resolvedBy").isString()).isFalse();
+    JsonNode history = ok("/api/identity/candidates?status=RESOLVED");
+    assertThat(history.get("total").asLong()).isEqualTo(1);
+    assertThat(history.get("items").get(0).get("resolvedBy").asString()).isEqualTo("operator-1");
+    assertThat(history.get("items").get(0).get("resolvedAt").asString()).startsWith("2026-01-03T00:00:00");
     assertThat(ok("/api/identity/candidates?status=REJECTED").get("total").asLong()).isZero();
   }
 
