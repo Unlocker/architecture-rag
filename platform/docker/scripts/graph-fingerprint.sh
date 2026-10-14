@@ -10,14 +10,17 @@
 # Свойства, которые проектор ставит временем обработки, а не данными источника, в отпечаток не входят: replay
 # проходит заново и даёт другое время (fetchedAt и lastSeenAt берутся у события, но SyncRun.startedAt/status и
 # отметки наблюдения зависят от порядка обработки). Список ниже — единственное место, где это зафиксировано.
-# `status`, `validFrom`, `validTo`, `deletedAt` — данные графа и сравниваются; исключается только SyncRun.status (процессное).
+# `status`, `validFrom`, `validTo`, `deletedAt` — данные графа и сравниваются; у SyncRun исключаются процессные status,
+# endedAt, fetched, applied, failed: итог прогона пишет маркер snapshot-complete, а replay маркеры пропускает (UNLOCKER-280).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-EXCLUDED="['fetchedAt','lastSeenAt','firstSeenAt','observedAt','startedAt','finishedAt','_lock']"
+EXCLUDED="['fetchedAt','lastSeenAt','firstSeenAt','observedAt','startedAt','finishedAt','endedAt','_lock']"
+SYNC_RUN_EXCLUDED="['status','fetched','applied','failed']"
 
 out=$(cypher --format plain <<CYPHER
 :param excluded => $EXCLUDED;
+:param syncRunExcluded => $SYNC_RUN_EXCLUDED;
 MATCH (n) UNWIND labels(n) AS l RETURN 'NODELABEL' AS kind, l AS a, count(*) AS b ORDER BY l;
 MATCH ()-[r]->() RETURN 'RELTYPE' AS kind, type(r) AS a, count(*) AS b ORDER BY a;
 MATCH (n)
@@ -30,7 +33,7 @@ RETURN 'REL' AS kind, sk + ' ' + t + ' ' + ek AS a, '' AS b ORDER BY a;
 MATCH (n)
 WITH n, coalesce(n.gid, n.runId, n.code, n.source + '/' + n.sourceType + '/' + n.sourceId) AS k
 UNWIND keys(n) AS p
-WITH k, p, n[p] AS v, n WHERE NOT p IN \$excluded AND NOT (p = 'status' AND 'SyncRun' IN labels(n))
+WITH k, p, n[p] AS v, n WHERE NOT p IN \$excluded AND NOT (p IN \$syncRunExcluded AND 'SyncRun' IN labels(n))
 WITH k, p, CASE WHEN v IS :: LIST<ANY> THEN reduce(s = '', x IN v | s + toString(x) + ',') ELSE toString(v) END AS sv
 ORDER BY k, p
 RETURN 'NODEPROP' AS kind, k + '.' + p AS a, sv AS b;

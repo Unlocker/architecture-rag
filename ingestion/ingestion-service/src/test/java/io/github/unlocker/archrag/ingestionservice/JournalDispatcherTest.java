@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SyncRunStatus;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
@@ -24,6 +25,7 @@ import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.ProcessingResult;
+import io.github.unlocker.archrag.graphprojector.SyncRunClosing;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,13 +57,14 @@ class JournalDispatcherTest {
   private final AdminLock.Lease lease = mock(AdminLock.Lease.class);
   private final List<StoredEvent> journalRows = new ArrayList<>();
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+  private final SyncRunClosing syncRuns = mock(SyncRunClosing.class);
   private final IngestionMetrics metrics = new IngestionMetrics(registry, mock(JdbcTemplate.class));
   private JournalDispatcher dispatcher;
 
   @BeforeEach
   void setUp() {
     dispatcher = new JournalDispatcher(reader, journal, rawStore, events, processor, lock,
-        Clock.fixed(NOW, ZoneOffset.UTC), 2, RETRY_DELAY, metrics);
+        Clock.fixed(NOW, ZoneOffset.UTC), 2, RETRY_DELAY, metrics, syncRuns);
     when(lock.tryAcquire()).thenReturn(Optional.of(lease));
     // keyset по списку журнальных строк, страницы по 2
     when(reader.pending(any(), any(), anyInt())).thenAnswer(inv -> {
@@ -170,6 +173,21 @@ class JournalDispatcherTest {
     verify(journal).toDlq(eq("urn:corp:eam"), eq("noraw"), eq(JournalDispatcher.NO_RAW_PAYLOAD), anyString());
     verify(journal).toDlq(eq("urn:corp:eam"), eq("marker"), eq(JournalDispatcher.MARKER_NO_RAW), anyString());
     verify(processor, never()).process(any(), any());
+  }
+
+  @Test
+  void markerWithoutRawClosesSyncRunAsFailedBeforeDlq() {
+    add("marker", "run-1", MARKER, false);
+    add("noraw", "A", UPSERT, false);
+    when(journal.toDlq(anyString(), anyString(), anyString(), anyString()))
+        .thenAnswer(inv -> entryWith(inv.getArgument(1), ProcessingStatus.QUARANTINED));
+
+    dispatcher.runOnce();
+
+    var order = inOrder(syncRuns, journal);
+    order.verify(syncRuns).close("urn:corp:eam", "run-1", "marker", SyncRunStatus.FAILED);
+    order.verify(journal).toDlq(eq("urn:corp:eam"), eq("marker"), eq(JournalDispatcher.MARKER_NO_RAW), anyString());
+    verify(syncRuns, never()).close(anyString(), anyString(), eq("noraw"), any());
   }
 
   @Test

@@ -101,7 +101,7 @@
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] `health()` в «Источниках» содержит ветки «последний прогон `FAILED`» и «`failed > 0`», недостижимые при текущем проекторе: `SyncRun.status` всегда `RUNNING`, счётчики не обновляются — Q-01.
+- 🟢 [UNLOCKER-280: реализовано] `health()` в «Источниках»: `RUNNING` — «идёт прогон» (`warn`), `FAILED` или `failed > 0` — `bad`, `SUCCEEDED` без `failed` — `ok`; прогон закрывает `EventProcessor` по маркеру (Q-01). Показывается `endedAt`.
 - 🟢 [UNLOCKER-281: реализовано] Вкладка DLQ по умолчанию просит `replayed=false`: после UNLOCKER-281 `replayed_at` заполняют replay и release, фильтр работает (Q-02). Кнопок replay/release в консоли нет: отложено по ADR 0026.
 - 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] Фильтр кандидатов `RESOLVED` пуст: `identity_candidate.status` не выходит из `OPEN` — Q-03.
 - 🟢 [R.8: ответ владельца, вопрос 9] Порог «устарел» 7 суток не связан с `archrag.query.stale-after`; allowlist'ы продублированы без теста — Q-04, Q-05.

@@ -10,6 +10,9 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
+import io.github.unlocker.archrag.graphprojector.SyncRunCloser;
+import io.github.unlocker.archrag.graphprojector.SyncRunClosing;
+import io.github.unlocker.archrag.graphprojector.SyncRunWriter;
 import io.github.unlocker.archrag.graphprojector.TemporalRelationMigration;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
@@ -112,10 +115,25 @@ public class IngestionServiceConfiguration {
       IdentityCandidates candidates,
       SourceConflicts conflicts,
       DispatcherProperties dispatcher,
-      IngestionMetrics metrics) {
+      IngestionMetrics metrics,
+      SyncRunClosing syncRuns) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector, projector, metrics::recordWarnings, dispatcher.maxAttempts());
+        projector, projector, metrics::recordWarnings, dispatcher.maxAttempts(), syncRuns);
+  }
+
+  /** Закрытие {@code SyncRun} по итогу маркера {@code snapshot-complete} (UNLOCKER-280). */
+  @Bean
+  SyncRunClosing syncRunClosing(EventJournal journal, Driver driver) {
+    return new SyncRunCloser(journal, new SyncRunWriter(driver), Clock.systemUTC());
+  }
+
+  /** Зависшие прогоны и retention {@code SyncRun} и {@code admin_audit}. */
+  @Bean
+  @ConditionalOnProperty(name = "archrag.sync-run.enabled", havingValue = "true", matchIfMissing = true)
+  HousekeepingJob housekeepingJob(
+      Driver driver, EventJournal journal, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin, PostgresEventJournal migrated) {
+    return new HousekeepingJob(driver, journal, jdbc, props, admin, Clock.systemUTC());
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */
@@ -135,9 +153,10 @@ public class IngestionServiceConfiguration {
       EventProcessor processor,
       AdminLock lock,
       DispatcherProperties props,
-      IngestionMetrics metrics) {
+      IngestionMetrics metrics,
+      SyncRunClosing syncRuns) {
     return new JournalDispatcher(
         reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay(),
-        metrics);
+        metrics, syncRuns);
   }
 }

@@ -15,7 +15,7 @@
 | 7 | Темпоральная связь | `validFrom`, `validTo` | открыта / закрыта | `GraphProjector` |
 | 8 | Отложенная связь | узел `PendingRelation` | отложена / достроена | `GraphProjector`, `PendingRelations` |
 | 9 | Прогон snapshot | checkpoint `<код>-snapshot` | `run:<id>` / `done:<id>` | `Poller` |
-| 10 | Прогон `SyncRun` в графе | `SyncRun.status` | только `RUNNING` | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] дальше не переходит |
+| 10 | Прогон `SyncRun` в графе | `SyncRun.status` | `RUNNING` → `SUCCEEDED` / `FAILED` | 🟢 [UNLOCKER-280: реализовано] закрывает `EventProcessor` по маркеру, зависшие — `HousekeepingJob` |
 | 11 | Админская операция | `admin_audit.status` | `STARTED`, `SUCCEEDED`, `FAILED` | `AdminOperations` |
 
 ---
@@ -256,8 +256,11 @@ stateDiagram-v2
 
 ## 10. `SyncRun` в графе
 
-- `SyncRunStatus` определяет `RUNNING`, `SUCCEEDED`, `FAILED` (`contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/SyncRunStatus.java:4-6`), но проектор создаёт узел с `status = 'RUNNING'` (`GraphProjector.java:695-700`) и никогда не меняет его: ни `endedAt`, ни `SUCCEEDED`/`FAILED` не пишутся 🔴. Счётчики умышленно не ведутся (инкремент в повторяемой транзакции удваивался бы, `GraphProjector.java:694`).
-- Следствие: «успешный/упавший прогон» из графа узнать нельзя; рабочий источник правды о прогоне — журнал (`syncRunId`) и checkpoint `<код>-snapshot`.
+- 🟢 [UNLOCKER-280: реализовано] `SyncRunStatus`: `RUNNING` → `SUCCEEDED` | `FAILED`. Проектор (`GraphProjector.linkSyncRun`) по-прежнему только создаёт узел `RUNNING` и пишет `startedAt` (минимум по времени событий); счётчики он не трогает (инкремент внутри повторяемой транзакции удваивался бы).
+- Закрывает прогон `EventProcessor` через `SyncRunCloser` → `SyncRunWriter.close` (отдельная write-транзакция Neo4j): `SUCCEEDED` — маркер `snapshot-complete` принят (включая `PARTIAL`: удаления пропущены, snapshot принят); `FAILED` — маркер ушёл в карантин (`EventProcessor.quarantine`, а также `MARKER_NO_RAW` в `JournalDispatcher`). Закрытие выполняется до перевода маркера в `PROJECTED`: сбой записи в Neo4j даёт `RETRYING` (`SYNC_RUN_CLOSE_FAILED`), при карантине ошибка уходит наружу и маркер остаётся на повтор.
+- `SUCCEEDED` финален (`WHERE s.status <> 'SUCCEEDED'`); `FAILED` перезаписывается в `SUCCEEDED` при повторной обработке маркера. Счётчики присваиваются по журналу (`inbox_event.sync_run_id`, без маркера): `fetched` = все события прогона (`objectCount` маркера в счётчик не идёт), `applied` = `PROJECTED`/`DUPLICATE`/`IGNORED_OLD_VERSION`, `failed` = `QUARANTINED` + `RETRYING` (после закрытия `SUCCEEDED` счётчики не обновятся). Одна формула для закрытия по маркеру и по таймауту (`SyncRunCounts.of`). Повтор закрытия счётчики не меняет. Узла нет (прогон без событий) — создаётся с `adapter` и `startedAt = endedAt`.
+- Зависший `RUNNING` (адаптер умер, маркера нет): `HousekeepingJob` (`@Scheduled`, `ingestion-service`) переводит прогон со `startedAt` старше `archrag.sync-run.stale-after` (6h) в `FAILED` с `endedAt = now` и счётчиками из журнала (та же формула); запись условная (`status = 'RUNNING'`), поздний маркер не затирается. Чистка отключается `archrag.sync-run.enabled=false`. `startedAt` берётся из времени событий, поэтому snapshot старых записей может стать `FAILED` раньше маркера; поздний маркер переведёт его в `SUCCEEDED`.
+- Retention: та же задача оставляет `archrag.sync-run.keep-per-source` (20) последних терминальных прогонов на адаптер, остальные удаляет `DETACH DELETE` пачками по 10 (рёбра `PROCESSED` уходят с узлом); `RUNNING` не удаляется.
 
 ---
 

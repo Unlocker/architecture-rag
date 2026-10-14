@@ -7,14 +7,21 @@ import { useAsync } from '../../hooks/useAsync';
 
 const PROBLEM_STATUSES = ['QUARANTINED', 'RETRYING'];
 
-/** Светофор источника: красный — проблемные события, упавший прогон или большой lag; жёлтый — нет данных или заметный lag. */
+/**
+ * Светофор источника: красный — проблемные события, упавший прогон или большой lag; жёлтый — идёт прогон
+ * (RUNNING), нет данных или заметный lag.
+ */
 export function health(s: SourceStatus): 'ok' | 'warn' | 'bad' {
   const problems = PROBLEM_STATUSES.some((st) => (s.eventsByStatus[st] ?? 0) > 0);
   const failedRun = s.lastSyncRun?.status === 'FAILED' || (s.lastSyncRun?.failed ?? 0) > 0;
   const lag = s.lagSeconds ?? 0;
   if (problems || failedRun || lag > LAG_BAD_SECONDS) return 'bad';
-  if (s.lastProjectedAt === null || s.lastSyncRun === null || lag > LAG_WARN_SECONDS) return 'warn';
+  if (s.lastProjectedAt === null || s.lastSyncRun === null || running(s) || lag > LAG_WARN_SECONDS) return 'warn';
   return 'ok';
+}
+
+function running(s: SourceStatus): boolean {
+  return s.lastSyncRun?.status === 'RUNNING';
 }
 
 function formatLag(seconds: number | null): string {
@@ -55,12 +62,19 @@ export function SourcesTab() {
                   <tr key={s.source}>
                     <td>{s.source}</td>
                     <td>
-                      <Badge kind={h}>{h === 'ok' ? 'норма' : h === 'warn' ? 'нет данных' : 'проблемы'}</Badge>
+                      <Badge kind={h}>{h === 'ok' ? 'норма' : h === 'warn' ? (running(s) ? 'идёт прогон' : 'нет данных') : 'проблемы'}</Badge>
                     </td>
                     <td>
                       {run ? (
                         <>
-                          {run.status ?? '—'} <Time value={run.startedAt} /> (fetched {run.fetched ?? '—'}, applied{' '}
+                          {run.status ?? '—'} <Time value={run.startedAt} />
+                          {run.endedAt ? (
+                            <>
+                              {' → '}
+                              <Time value={run.endedAt} />
+                            </>
+                          ) : null}{' '}
+                          (fetched {run.fetched ?? '—'}, applied{' '}
                           {run.applied ?? '—'}, failed {run.failed ?? '—'})
                         </>
                       ) : (

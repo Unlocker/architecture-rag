@@ -65,6 +65,9 @@
 | `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `ARCHRAG_OIDC_ISSUER_URI` | нет | | `:15` |
 | `...jwt.audiences` | `ARCHRAG_ADMIN_RESOURCE_URI` | нет | без значения сервис не стартует | `:17` |
 | `archrag.admin.allowed-clients` | `ARCHRAG_ADMIN_ALLOWED_CLIENTS` | `archrag-demo` | не пусто | `:22`, `AdminProperties.java:13` |
+| `archrag.admin.audit-stale-after` | `ARCHRAG_ADMIN_AUDIT_STALE_AFTER` | `24h` | > 0; `STARTED` старше → `FAILED`/`abandoned` (UNLOCKER-280) | `AdminProperties.java` |
+| `archrag.admin.audit-retention` | `ARCHRAG_ADMIN_AUDIT_RETENTION` | `90d` | > 0; записи `admin_audit` старше удаляются | `AdminProperties.java` |
+| `archrag.sync-run.stale-after/keep-per-source/housekeeping-interval/enabled` | `ARCHRAG_SYNC_RUN_STALE_AFTER/_KEEP_PER_SOURCE/_HOUSEKEEPING_INTERVAL/_ENABLED` | `6h` / `20` / `1h` / `true` | положительные; `enabled=false` отключает `HousekeepingJob` | `SyncRunProperties.java` |
 | `archrag.neo4j.uri/username/password` | `ARCHRAG_NEO4J_URI`, `ARCHRAG_NEO4J_USER`, `ARCHRAG_NEO4J_PASSWORD` | нет | учётные данные writer | `:24-26` |
 | `archrag.s3.endpoint/access-key/secret-key/bucket` | `ARCHRAG_S3_ENDPOINT`, `ARCHRAG_S3_ACCESS_KEY`, `ARCHRAG_S3_SECRET_KEY`, `ARCHRAG_S3_BUCKET` | нет | | `:28-31` |
 | `archrag.adapters.{eam,scm,cmdb,deploymap}.control-url` | `ARCHRAG_EAM_CONTROL_URL`, `ARCHRAG_SCM_CONTROL_URL`, `ARCHRAG_CMDB_CONTROL_URL`, `ARCHRAG_DEPLOYMAP_CONTROL_URL` | пусто = источник не настроен | полный URL `/control/snapshot` | `:33-41` |

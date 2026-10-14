@@ -692,7 +692,8 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
     Map<String, Object> params = new HashMap<>(keyParams(request.key()));
     params.put("runId", request.syncRunId());
     params.put("at", NodeProperties.utc(request.eventTime()));
-    // Счётчики SyncRun не трогаем: инкремент внутри повторяемой транзакции удваивался бы при повторе.
+    // Счётчики SyncRun не трогаем: их пишет закрытие прогона (SyncRunWriter), инкремент внутри повторяемой
+    // транзакции удваивался бы при повторе.
     tx.run(
             "MATCH (r:SourceRecord " + RECORD_KEY + ") "
                 + "MERGE (s:SyncRun {runId: $runId}) "

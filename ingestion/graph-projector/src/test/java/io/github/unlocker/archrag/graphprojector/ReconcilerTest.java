@@ -418,6 +418,11 @@ class ReconcilerTest {
     }
 
     @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
       this.since = since;
       return touched;
