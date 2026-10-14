@@ -75,7 +75,7 @@ flowchart TD
 
 ## Поток `snapshot-complete`
 
-`→VALIDATED→NORMALIZED→RESOLVED`; `reconciliation.snapshotComplete(event.source(), event.data().sourceId(), event.id(), objectCount(event))`; `RuntimeException e` → `retry(RECONCILIATION_TRIGGER_FAILED, e.getClass().getSimpleName())`; иначе `finish(PROJECTED, null)` (`GP/EventProcessor.java:289-300`). Идемпотентность и работа `Reconciler` — [`../reconcile-missing-set/design.md`](../reconcile-missing-set/design.md). `objectCount(event)` = `payload["objectCount"]` как `Number.longValue()`, иначе `0` (`GP/EventProcessor.java:629-631`) 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] Q-05.
+`→VALIDATED→NORMALIZED→RESOLVED`; `reconciliation.snapshotComplete(event.source(), event.data().sourceId(), event.id(), objectCount(event))`; `RuntimeException e` → `retry(RECONCILIATION_TRIGGER_FAILED, e.getClass().getSimpleName())`; иначе `finish(PROJECTED, null)` (`GP/EventProcessor.java:289-300`). Идемпотентность и работа `Reconciler` — [`../reconcile-missing-set/design.md`](../reconcile-missing-set/design.md). `objectCount(event)` = `payload["objectCount"]` как `Number.longValue()`, иначе `0` (`GP/EventProcessor.java:629-631`; на момент анализа). Теперь маркер без валидного `objectCount` уходит в `QUARANTINED` (`SNAPSHOT_OBJECT_COUNT_MISSING`, `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:384-387`) 🟢 (реализовано — UNLOCKER-279) Q-05.
 
 ## Получение `gid` и узлы под crosswalk
 
@@ -91,4 +91,4 @@ flowchart TD
 
 ## Риски и пробелы
 
-🟢 Q-01 (`SUPERSEDED` удалён, UNLOCKER-281; `retry` эскалирует в `QUARANTINED` с `RETRY_LIMIT_EXCEEDED` по `max-attempts`); 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] [`../questions.md`](../questions.md) Q-05 (маркер без `objectCount`); 🟡 Q-10 (кандидаты до проверки версии на retry), Q-11 (маркер повторяется бесконечно), Q-15 (PG-утверждения vs граф при частичной записи), Q-16 (ограничения сверок). Порядок побочных эффектов при падении между шагами: PG-кандидаты и утверждения записаны, граф — нет → событие `RETRYING`, повтор перезапишет их идемпотентно 🟢 (`GP/EventProcessor.java:234, 247`).
+🟢 Q-01 (`SUPERSEDED` удалён, UNLOCKER-281; `retry` эскалирует в `QUARANTINED` с `RETRY_LIMIT_EXCEEDED` по `max-attempts`); 🟢 [`../questions.md`](../questions.md) Q-05 (маркер без `objectCount` → `QUARANTINED`, 🟢 (реализовано — UNLOCKER-279)); 🟡 Q-10 (кандидаты до проверки версии на retry), Q-11 (маркер повторяется бесконечно), Q-15 (PG-утверждения vs граф при частичной записи), Q-16 (ограничения сверок). Порядок побочных эффектов при падении между шагами: PG-кандидаты и утверждения записаны, граф — нет → событие `RETRYING`, повтор перезапишет их идемпотентно 🟢 (`GP/EventProcessor.java:234, 247`).

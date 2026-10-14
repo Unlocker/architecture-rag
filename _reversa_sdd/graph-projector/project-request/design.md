@@ -115,4 +115,4 @@ SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END
 
 ## Риски и пробелы
 
-🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] [`../questions.md`](../questions.md) Q-04 (`SyncRun`); 🟡 Q-09 (пустой узел от неавторитетной записи), Q-13 (tombstone с применённой версией; tombstone неизвестной записи), Q-14 (`EPOCH`), Q-16 (ограничения замещения), Q-17 (допущение одного писателя). Сам по себе `GraphProjector` в модуле юнит-тестами не покрыт — только IT с Docker 🟡.
+🟢 (реализовано — UNLOCKER-280) [`../questions.md`](../questions.md) Q-04 (`SyncRun` закрывается по `snapshot-complete`); 🟡 Q-09 (пустой узел от неавторитетной записи), Q-13 (tombstone с применённой версией; tombstone неизвестной записи), Q-14 (`EPOCH`), Q-16 (ограничения замещения), Q-17 (допущение одного писателя). Сам по себе `GraphProjector` в модуле юнит-тестами не покрыт — только IT с Docker 🟡.

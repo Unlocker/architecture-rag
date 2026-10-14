@@ -133,14 +133,14 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> OPEN: record (DEFAULT 'OPEN')
     OPEN --> OPEN: повтор record обновляет matched, score, updated_at
-    OPEN --> [*]: 🟡 решение принято, UNLOCKER-276 п. 3, переходов в другое состояние в коде нет
+    OPEN --> RESOLVED: подтверждение оператора, UNLOCKER-282
 ```
 
 - Создание: `INSERT ... ON CONFLICT (...) DO UPDATE SET matched, score, updated_at`; `status` и `first_seen_at` при повторе не трогаются (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresIdentityCandidates.java:54-61`) 🟢.
 - Поле `IdentityCandidate.status` — просто `String` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:14-22`), перечисления значений нет 🟢.
 - Кандидат не исчезает, когда признаки перестали совпадать: `forget` удаляет `identity_feature` записи, но не `identity_candidate` (`PostgresIdentityCandidates.java:105-120`) 🟡.
 - Кандидат не приводит к объединению: единственный путь к общему `gid` — approved crosswalk, который оператор загружает вручную (`CrosswalkService.java:35-64`), причём обратной связи «crosswalk подтвердил кандидата» нет, статус остаётся `OPEN` 🔴.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] `APPROVED`/`REJECTED`/`MERGED` в коде не определены; жизненный цикл кандидата не завершён (вопрос R.3 о нём остаётся открытым: решения владельца в `docs/adr/` нет, ADR 0019 говорит только «кандидаты порождают лишь запись»).
+- 🟢 (реализовано — UNLOCKER-282) Кандидат закрывается подтверждением оператора: `OPEN → RESOLVED` с `resolved_at`/`resolved_by` (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresCandidateApprovals.java:45`, `POST /admin/identity/candidates/approve`). `APPROVED`/`REJECTED`/`MERGED` в коде по-прежнему не определены, ADR 0019 запрещает автоматическое объединение.
 
 ---
 

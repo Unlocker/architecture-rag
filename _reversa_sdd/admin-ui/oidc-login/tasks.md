@@ -41,4 +41,4 @@
 T-01 → T-02 → T-03 → T-04 → T-06 → T-05.
 
 ## Lacunas Pendentes (🔴)
-Явных 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 16)] для use case нет; 🟡 — [`../questions.md`](../questions.md) Q-06, Q-07, Q-08, Q-13, Q-14.
+Явных 🟡 для use case нет (метка R.8 п. 16 закрыта: 🟢 (реализовано — UNLOCKER-288)); 🟡 — [`../questions.md`](../questions.md) Q-06, Q-07, Q-08, Q-13, Q-14.

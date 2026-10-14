@@ -78,7 +78,7 @@ erDiagram
 
 | № | Что | Ссылки |
 |---|---|---|
-| 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Э-1 | `dlq_entry.replayed_at` присутствует в схеме, но кодом не изменяется (Р-3); `identity_candidate.status` закрывается подтверждением оператора (🟢 UNLOCKER-282, Р-4) | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:47-48`; [`detective-gaps.md`](detective-gaps.md) §2 |
+| 🟢 (реализовано — UNLOCKER-281) Э-1 | `dlq_entry.replayed_at` присутствует в схеме и заполняется `EventJournal.closeDlq` (Р-3); `identity_candidate.status` закрывается подтверждением оператора (🟢 UNLOCKER-282, Р-4) | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:47-48`; [`detective-gaps.md`](detective-gaps.md) §2 |
 | 🟢 [UNLOCKER-280: реализовано] Э-2 | `SyncRun` создаётся `RUNNING`; `endedAt`, итог и счётчики пишет закрытие прогона по маркеру (`SyncRunWriter`), зависшие и retention — `HousekeepingJob` (Р-5) | `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:695-700` |
 | 🟡 Э-3 | `inbox_event.status` без `CHECK`: допустимые значения держит только `ProcessingStatus` в Java | `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:13-13`; `database/data-dictionary.md` §3 |
 | 🟡 Э-4 | Свойства, пропущенные в частичной записи, исчезают из `property_assertion`, но остаются в графе (конфликт «рассасывается» без изменения графа) | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresSourceConflicts.java:81-103`; `_reversa_sdd/code-analysis.md:619-619` |

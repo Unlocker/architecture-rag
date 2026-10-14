@@ -59,6 +59,6 @@
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 2, 11)] Q-01: негативы безопасности консоли, `crosswalks`, `reconcile` неполны. 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 2, 11)] Q-07, Q-08: тесты закрепляют недостижимые в проде состояния (`SyncRun SUCCEEDED`, `replayedAt`). 🟡 Q-32: статус `OK` в фикстуре `admin_audit`.
+- Q-01: негативы безопасности консоли, `crosswalks`, `reconcile` неполны (🟡 [R.8: решение принято, реализация — UNLOCKER-290; закрыто частично, см. `requirements.md`]). Q-07, Q-08: состояния `SyncRun SUCCEEDED` и `replayedAt` теперь достижимы в проде (🟢 (реализовано — UNLOCKER-280, 281)), фикстуры консоли по-прежнему вставляют их напрямую. 🟡 Q-32: статус `OK` в фикстуре `admin_audit`.
 - 🟡 `AdminEndpointIT`: общий ленивый `seed()`; пустой `@BeforeAll noop()` с Javadoc, описывающим `seed()` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/AdminEndpointIT.java:119-121`).
 - 🟡 П-9: один scope `architecture.admin` на консоль и admin REST (принято владельцем 2026-10-08), П-10 — ролей нет, П-19 — аудит чтений консоли только лог (retention не определён).

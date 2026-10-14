@@ -20,7 +20,7 @@
 - **F4, tombstone:** удаление SCM-записи (supplementary) через инкрементальный путь оставляет актив текущим (`isCurrent`, `deletedAt = null`), снимает конфликт (`NONE`) и находится поиском; tombstone **мастера** (объект eam-api архивирован, reconcile после snapshot) при активной записи SCM актив не закрывает (`isCurrent`, `deletedAt` пуст) — правило «закрыт, когда нет никаких других активных assertions» 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F4AcceptanceIT.java:375-401, 432-448`); 🟢 [R.8: решение владельца, вопрос 4; UNLOCKER-283] Q-05.
 - **Ошибки tools** не содержат стектрейса и эха значения: `isError = true`, текст не пуст, не содержит `"\tat "` и `"Exception"` 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:337-346`).
 - **Доступ:** сырой `POST /mcp` с `tools/call` без токена → 401; со scope `architecture.other` → 403 с `WWW-Authenticate`, содержащим `insufficient_scope`; проверен tool класса: `search_assets` (F1), `find_runtime_footprint` (F2), `trace_dependencies` (F3), `explain_provenance` (F4) 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F1AcceptanceIT.java:349-359`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Не проверено: `stale = true` (Q-06); неверный audience/issuer, просроченный и подделанный токен, `tools/list` без scope, отдельно `get_asset` и `ping` (Q-01, Q-12); полный набор `tool-scopes` из `application.yml` (Q-25).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-290; ответ владельца: вопросы 14; закрыто частично: роли admin/reader, отказы по audience/issuer/exp в `McpSecurityTest` и `AdminEndpointIT`, в приёмочных IT и F2 (дубль `@Order(2)`) не добавлено] Не проверено: `stale = true` (Q-06); неверный audience/issuer, просроченный и подделанный токен, `tools/list` без scope, отдельно `get_asset` и `ping` (Q-01, Q-12); полный набор `tool-scopes` из `application.yml` (Q-25).
 
 ## Requisitos Funcionais
 
@@ -121,7 +121,7 @@
 |-----------|--------|---------------|
 | RF-01..RF-05 | Must | Критерий PoC 5 и 7 |
 | RF-06 | Should | Критерий 9, пороги ориентировочные |
-| `stale=true`, audience/exp, `tools/list` без scope | Won't | Не реализовано (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11); ответ владельца: вопросы 14] Q-01, Q-06, Q-12) |
+| `stale=true`, audience/exp, `tools/list` без scope | Won't | Не реализовано (🟡 [R.8: решение принято, реализация — UNLOCKER-290; ответ владельца: вопросы 14; закрыто частично: роли admin/reader, отказы по audience/issuer/exp в `McpSecurityTest` и `AdminEndpointIT`, в приёмочных IT и F2 (дубль `@Order(2)`) не добавлено] Q-01, Q-06, Q-12) |
 
 ## Rastreabilidade de Código
 

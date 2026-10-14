@@ -77,7 +77,7 @@
 - Связи №1/№6/№7: формат raw JSON и типы событий `deleted`/`snapshot-complete` — вне модуля; он хранит байты 🟢.
 - ADR: [0006](../../docs/adr/0006-postgres-inbox-event-backbone.md) (PostgreSQL inbox за портами), [0007](../../docs/adr/0007-s3-raw-storage-seaweedfs.md) (S3-совместимое хранилище, SeaweedFS в тестах/на стенде), [0020](../../docs/adr/0020-tombstone-instead-of-hard-delete.md) (tombstone пишется в журнал и S3 — реализует `Reconciler`, не модуль) 🟡.
 
-- Спецификации потребителей журнала: [`graph-projector`](../graph-projector/design.md) (`EventProcessor`, `Reconciler`, переходы статусов) и [`ingestion-service`](../ingestion-service/design.md) (диспетчер, replay/rebuild, метрики). Открытые 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-2 (`QUARANTINED`), R-3 (`SUPERSEDED`), R-4 (лимит попыток) продолжены в [`graph-projector/questions.md`](../graph-projector/questions.md) (Q-01) и [`ingestion-service/questions.md`](../ingestion-service/questions.md) (Q-01, Q-02).
+- Спецификации потребителей журнала: [`graph-projector`](../graph-projector/design.md) (`EventProcessor`, `Reconciler`, переходы статусов) и [`ingestion-service`](../ingestion-service/design.md) (диспетчер, replay/rebuild, метрики). Бывшие открытые R-2 (`QUARANTINED`), R-3 (`SUPERSEDED`), R-4 (лимит попыток) закрыты в 🟢 (реализовано — UNLOCKER-281) (release из карантина, удаление `SUPERSEDED`, `RETRY_LIMIT_EXCEEDED` по `archrag.dispatcher.max-attempts`); продолжены в [`graph-projector/questions.md`](../graph-projector/questions.md) (Q-01) и [`ingestion-service/questions.md`](../ingestion-service/questions.md) (Q-01, Q-02).
 
 ## Решения дизайна
 

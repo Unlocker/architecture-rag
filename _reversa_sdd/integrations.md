@@ -103,7 +103,7 @@ Keycloak 26.4 в режиме `start-dev`, realm `archrag` импортируе�
 |---|---|---|---|---|
 | I-11 | Метрики `mcp-server` и `ingestion` → `otel-collector` → Prometheus → Grafana (`127.0.0.1:3000`) | ← наружу | OTLP/HTTP `:4318`, выключено по умолчанию, включается `ARCHRAG_OBSERVABILITY=true` и профилем `observability` | `platform/docker/docker-compose.yml:200-201`; `platform/docker/docker-compose.yml:235-236`; `access/mcp-server/src/main/resources/application.yml:55-61` 🟢 |
 
-Метрики ingestion: `archrag.ingestion.events{source,status}`, gauge отставания `archrag.ingestion.sync.lag` и `archrag.ingestion.dlq.open` (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] второй не уменьшается, пока `dlq_entry.replayed_at` не заполняется, Р-3); у MCP — `archrag.mcp.tool.call` и `archrag.mcp.tool.rows` 🟢 (`_reversa_sdd/code-analysis.md:685-685`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java:29-33`). Аудит-логи — отдельные логгеры `archrag.audit.mcp` и `archrag.audit.console`; у консоли в аудит не попадают 401/403 из Spring Security 🟡.
+Метрики ingestion: `archrag.ingestion.events{source,status}`, gauge отставания `archrag.ingestion.sync.lag` и `archrag.ingestion.dlq.open` (второй считает записи с `replayed_at IS NULL` и уменьшается после разбора записи, Р-3, 🟢 (реализовано — UNLOCKER-281)); у MCP — `archrag.mcp.tool.call` и `archrag.mcp.tool.rows` 🟢 (`_reversa_sdd/code-analysis.md:685-685`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditor.java:29-33`). Аудит-логи — отдельные логгеры `archrag.audit.mcp` и `archrag.audit.console`; у консоли в аудит не попадают 401/403 из Spring Security 🟡.
 
 ## 8. Открытые вопросы по интеграциям
 

@@ -55,7 +55,7 @@ sequenceDiagram
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `replayed_at` не заполняется: фильтр DLQ «открытые» бесполезен (Q-03).
+- 🟢 (реализовано — UNLOCKER-281) `replayed_at` заполняет `EventJournal.closeDlq` (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`): фильтр DLQ «открытые» (`replayed=false`) исключает разобранные записи (Q-03).
 - 🔴 События с `/` в `eventId` без карточки (Q-04).
 - 🟡 Пустые `fetched/applied/failed/endedAt` у `lastSyncRun` (Q-10).
 - 🟡 Копии таблиц кодов и статусов (Q-08).
