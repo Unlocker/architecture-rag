@@ -23,3 +23,25 @@
 - Консоль (`access/admin-console`) явно зависит от `canonical-model` и `event-schemas`; зависимости от `ingestion/*` по-прежнему нет.
 - **Откат.** Revert PR; формат данных не затронут.
 - **Затронутый код:** `contracts/*`, `adapters/adapter-core`, `ingestion/*`, `access/admin-console`, `access/mcp-server`.
+
+## Совместимость `identity_feature` при смене `repositoryUrl`
+
+`FeatureNormalizer.repositoryUrl` (признак `REPOSITORY_URL`) делегирует в `GitUrls.matchKey` (UNLOCKER-292). Парсер один, поэтому часть значений в `identity_feature` меняется. Две политики сравнения остаются по решению владельца: признак кандидата сравнивается без учёта регистра пути (`matchKey`), алиас для deploy map (`GitUrls.normalize`) — с учётом.
+
+Совпадают с прежними: https/http, `.git`, завершающий `/`, смешанный регистр, `user@`, scp с `git@`, порт у http(s), пробелы по краям. Расходятся шесть классов (фиксирует `RepositoryUrlCompatibilityTest`):
+
+| Вход | Было | Стало |
+|---|---|---|
+| `ssh://git@host:2222/a/b` (порт ssh) | `host:2222/a/b` | `host/a/b` |
+| `https://host` (URL без пути) | `host` | признака нет |
+| `host:a/b`, `host:2222/a/b` (scp без `user@`) | `host:a/b`, `host:2222/a/b` | `host/a/b`, `host/2222/a/b` |
+| `host/a/b` (строка без схемы) | `host/a/b` | признака нет |
+| `https://git_srv/a/b` (хост, который `java.net.URI` не разбирает) | `git_srv/a/b` | признака нет |
+| `https://host/a/my repo` (пробел в пути) | `host/a/my repo` | признака нет |
+
+**Пересчёт: replay, без Flyway-миграции.** `identity_feature` производная: `EventProcessor.recordCandidates` на каждый upsert заменяет признаки ключа целиком, tombstone вызывает `forget`. SQL не повторит разбор `GitUrls`, а простое удаление `REPOSITORY_URL` оставит кандидатов без признака до прихода новых событий. Журнал не чистится (`HousekeepingJob` трогает только `SyncRun` и `admin_audit`), поэтому replay покрывает все ключи.
+
+- После выкладки выполнить `POST /admin/replay` по каждому источнику, который даёт записи `Repository` (по `FeatureExtractor`; сейчас как минимум `urn:corp:scm`), на всё окно журнала. Полный `POST /admin/rebuild?confirm=true` тоже подходит, но тяжелее.
+- До replay кандидаты по `REPOSITORY_URL` между старыми и новыми значениями могут не находиться.
+- Ранее найденные `identity_candidate` не удаляются и статус не меняют (ADR-0019).
+- Нового кода пересчёта нет: используются существующие эндпоинты replay/rebuild.
