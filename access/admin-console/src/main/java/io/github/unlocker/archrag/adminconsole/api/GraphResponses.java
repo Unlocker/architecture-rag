@@ -43,6 +43,8 @@ public final class GraphResponses {
    *
    * @param properties свойства узла без служебных; времена в ISO-8601 UTC
    * @param sources записи источников с параметрами ребра {@code ASSERTS}, активные первыми
+   * @param stale узел текущий и устарел по правилу {@code Staleness}; закрытый узел не устаревает
+   * @param staleAfter порог устаревания, ISO-8601 Duration
    */
   public record NodeCard(
       String gid,
@@ -52,7 +54,9 @@ public final class GraphResponses {
       String lastSeenAt,
       String deletedAt,
       boolean isCurrent,
-      List<Map<String, Object>> sources) {}
+      List<Map<String, Object>> sources,
+      boolean stale,
+      String staleAfter) {}
 
   /** Узел окрестности; {@code distance} — число шагов от центра (0 у самого узла). */
   public record GraphNode(String gid, String type, String name, boolean isCurrent, int distance) {}

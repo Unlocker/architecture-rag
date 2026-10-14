@@ -237,6 +237,7 @@ services:
       ARCHRAG_MCP_RESOURCE_URI: https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp
       ARCHRAG_NEO4J_READER_URI: bolt+ssc://neo4j:7687
       ARCHRAG_NEO4J_READER_USERNAME: archrag_reader
+      ARCHRAG_QUERY_STALE_AFTER: ${ARCHRAG_QUERY_STALE_AFTER:-P7D}
       MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: ${ARCHRAG_OBSERVABILITY:-false}
       MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
     # Только reader-пароль; ни writer-пароля, ни PostgreSQL/S3 у MCP нет.
@@ -288,6 +289,7 @@ services:
       ARCHRAG_CONSOLE_RESOURCE_URI: urn:archrag:console
       ARCHRAG_NEO4J_READER_URI: bolt+ssc://neo4j:7687
       ARCHRAG_NEO4J_READER_USERNAME: archrag_reader
+      ARCHRAG_QUERY_STALE_AFTER: ${ARCHRAG_QUERY_STALE_AFTER:-P7D}
       ARCHRAG_CONSOLE_PG_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?}
     secrets:
       - { source: neo4j_reader_password, target: ARCHRAG_NEO4J_READER_PASSWORD }

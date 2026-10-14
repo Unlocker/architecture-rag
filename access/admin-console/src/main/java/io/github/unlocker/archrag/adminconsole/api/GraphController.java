@@ -11,6 +11,7 @@ import io.github.unlocker.archrag.adminconsole.api.GraphResponses.Stats;
 import io.github.unlocker.archrag.adminconsole.graph.GraphReads;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.graphquerycore.ResultBudget;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.ConsoleTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.FulltextQuery;
@@ -47,9 +48,11 @@ public class GraphController {
       Set.of("gid", "isCurrent", "firstSeenAt", "lastSeenAt", "deletedAt");
 
   private final GraphReads reads;
+  private final Staleness staleness;
 
-  GraphController(GraphReads reads) {
+  GraphController(GraphReads reads, Staleness staleness) {
     this.reads = reads;
+    this.staleness = staleness;
   }
 
   /** Число узлов по меткам, связей по типам и время последнего обновления. */
@@ -112,15 +115,21 @@ public class GraphController {
     }
     Map<String, Object> row = card.rows().getFirst();
     QueryResult provenance = reads.execute(AssetTemplates.EXPLAIN_PROVENANCE.id(), params, budget);
+    boolean current = Boolean.TRUE.equals(row.get("isCurrent"));
+    String lastSeenAt = (String) row.get("lastSeenAt");
+    List<Map<String, Object>> sources = records(provenance);
+    boolean anyActive = sources.stream().anyMatch(s -> Boolean.TRUE.equals(s.get("active")));
     return new NodeCard(
         (String) row.get("gid"),
         (String) row.get("type"),
         properties(row),
         (String) row.get("firstSeenAt"),
-        (String) row.get("lastSeenAt"),
+        lastSeenAt,
         (String) row.get("deletedAt"),
-        Boolean.TRUE.equals(row.get("isCurrent")),
-        records(provenance));
+        current,
+        sources,
+        current && staleness.isStale(lastSeenAt, anyActive),
+        staleness.staleAfter().toString());
   }
 
   /** Окрестность узла глубиной 1 или 2 в пределах бюджета узлов; при превышении {@code truncated=true}. */

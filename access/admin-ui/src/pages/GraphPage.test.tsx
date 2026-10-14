@@ -3,8 +3,6 @@ import cytoscape from 'cytoscape';
 import { ApiError } from '../api/apiClient';
 import { Handler, mockApi, withApi } from '../testing/mockApi';
 import { GraphPage } from './GraphPage';
-import { isStale } from './graph/AssetCard';
-import { NodeCard } from '../api/types';
 
 jest.mock('cytoscape', () => {
   const cy = { on: jest.fn(), destroy: jest.fn() };
@@ -28,6 +26,8 @@ const card = {
   lastSeenAt: '2026-01-02T00:00:00Z',
   deletedAt: null,
   isCurrent: true,
+  stale: false,
+  staleAfter: 'P7D',
   sources: [
     { source: 'eam', sourceType: 'System', sourceId: 'S-1', sourceVersion: '12', fetchedAt: '2026-01-02T00:00:00Z', contentHash: 'h', active: true, deletedAt: null, authority: 'MASTER', confidence: 1, conflicts: null },
     { source: 'scm', sourceType: 'Repo', sourceId: 'R-1', sourceVersion: '3', fetchedAt: '2026-01-01T00:00:00Z', contentHash: 'h2', active: false, deletedAt: '2026-01-03T00:00:00Z', authority: 'HIGH', confidence: 0.5, conflicts: ['owner'] },
@@ -175,21 +175,23 @@ test('neighborhood relation filter offers DEPLOYED_FROM', async () => {
   expect(screen.getByLabelText('DEPLOYED_FROM')).toBeTruthy();
 });
 
-test('card marks closed and stale assets', () => {
-  const base = card as unknown as NodeCard;
-  const fresh = Date.parse('2026-01-03T00:00:00Z');
-  const old = Date.parse('2026-02-01T00:00:00Z');
-  const src = (active: boolean | null) => ({ ...base.sources[0], active });
-  expect(isStale(base, fresh)).toBe(false);
-  expect(isStale(base, old)).toBe(true);
-  expect(isStale({ ...base, isCurrent: false }, old)).toBe(false);
-  expect(isStale({ ...base, lastSeenAt: null }, fresh)).toBe(true);
-  expect(isStale({ ...base, lastSeenAt: 'not-a-date' }, fresh)).toBe(true);
-  expect(isStale({ ...base, sources: [src(false)] }, fresh)).toBe(true);
-  expect(isStale({ ...base, sources: [src(null)] }, fresh)).toBe(true);
-  expect(isStale({ ...base, sources: [] }, fresh)).toBe(true);
-  expect(isStale({ ...base, sources: [src(false), src(true)] }, fresh)).toBe(false);
-  expect(isStale({ ...base, isCurrent: false, sources: [] }, fresh)).toBe(false);
+test('card shows the stale badge only when the server says stale', async () => {
+  await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : { ...card, stale: true }) }));
+  await screen.findByRole('table', { name: 'Свойства' });
+  expect(screen.getByText('устарел')).toBeTruthy();
+});
+
+test('card without server stale flag has no stale badge', async () => {
+  await openCard(api());
+  await screen.findByRole('table', { name: 'Свойства' });
+  expect(screen.queryByText('устарел')).toBeNull();
+});
+
+test('closed card shows the closed badge and no stale badge', async () => {
+  await openCard(api({ '/api/graph/nodes/': (p) => (p.includes('/neighborhood') ? hood(false) : { ...card, isCurrent: false, stale: false }) }));
+  await screen.findByRole('table', { name: 'Свойства' });
+  expect(screen.getByText('закрыт')).toBeTruthy();
+  expect(screen.queryByText('устарел')).toBeNull();
 });
 
 test('asset card shows error when asset is not found', async () => {

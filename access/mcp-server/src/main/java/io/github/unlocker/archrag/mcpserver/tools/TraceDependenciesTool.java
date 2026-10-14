@@ -2,15 +2,12 @@ package io.github.unlocker.archrag.mcpserver.tools;
 
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
-import io.github.unlocker.archrag.mcpserver.graph.StalenessProperties;
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -56,14 +53,12 @@ public class TraceDependenciesTool {
 
   private final GraphQueries queries;
   private final QueryLimits limits;
-  private final StalenessProperties staleness;
-  private final Clock clock;
+  private final Staleness staleness;
 
-  TraceDependenciesTool(GraphQueries queries, QueryLimits limits, StalenessProperties staleness, Clock clock) {
+  TraceDependenciesTool(GraphQueries queries, QueryLimits limits, Staleness staleness) {
     this.queries = queries;
     this.limits = limits;
     this.staleness = staleness;
-    this.clock = clock;
   }
 
   /**
@@ -184,15 +179,9 @@ public class TraceDependenciesTool {
     return List.copyOf(requested);
   }
 
-  /** Старше порога: ровно на пороге ещё свежо; не заданное время считается устаревшим. */
-  private boolean isStale(String timestamp, Instant threshold) {
-    return timestamp == null || OffsetDateTime.parse(timestamp).toInstant().isBefore(threshold);
-  }
-
   @SuppressWarnings("unchecked")
   private TraceDependenciesResult assemble(String gid, String mode, String direction, String environment, QueryResult result) {
     Duration staleAfter = staleness.staleAfter();
-    Instant threshold = clock.instant().minus(staleAfter);
     Map<String, TraceDependenciesResult.NodeRef> nodes = new LinkedHashMap<>();
     Map<TraceDependenciesResult.RelationKey, TraceDependenciesResult.RelationRef> relations = new LinkedHashMap<>();
     List<TraceDependenciesResult.TracePath> paths = new ArrayList<>();
@@ -209,7 +198,7 @@ public class TraceDependenciesTool {
             k -> {
               String lastSeenAt = (String) n.get("lastSeenAt");
               return new TraceDependenciesResult.NodeRef(
-                  nodeGid, (String) n.get("label"), (String) n.get("name"), lastSeenAt, isStale(lastSeenAt, threshold),
+                  nodeGid, (String) n.get("label"), (String) n.get("name"), lastSeenAt, staleness.isStale(lastSeenAt),
                   conflicts((List<Map<String, Object>>) n.get("conflicts")));
             });
       }
@@ -225,7 +214,7 @@ public class TraceDependenciesTool {
               return new TraceDependenciesResult.RelationRef(
                   key.type(), key.from(), key.to(), (String) r.get("validFrom"),
                   (String) r.get("assertedBySource"), (String) r.get("assertedByType"), (String) r.get("assertedById"),
-                  fetchedAt, active, !Boolean.TRUE.equals(active) || isStale(fetchedAt, threshold));
+                  fetchedAt, active, staleness.isStale(fetchedAt, Boolean.TRUE.equals(active)));
             });
       }
       paths.add(new TraceDependenciesResult.TracePath(pathNodeGids, pathRelations));
