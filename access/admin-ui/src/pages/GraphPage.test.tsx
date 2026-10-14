@@ -177,9 +177,19 @@ test('neighborhood relation filter offers DEPLOYED_FROM', async () => {
 
 test('card marks closed and stale assets', () => {
   const base = card as unknown as NodeCard;
-  expect(isStale(base, Date.parse('2026-01-03T00:00:00Z'))).toBe(false);
-  expect(isStale(base, Date.parse('2026-02-01T00:00:00Z'))).toBe(true);
-  expect(isStale({ ...base, isCurrent: false }, Date.parse('2026-02-01T00:00:00Z'))).toBe(false);
+  const fresh = Date.parse('2026-01-03T00:00:00Z');
+  const old = Date.parse('2026-02-01T00:00:00Z');
+  const src = (active: boolean | null) => ({ ...base.sources[0], active });
+  expect(isStale(base, fresh)).toBe(false);
+  expect(isStale(base, old)).toBe(true);
+  expect(isStale({ ...base, isCurrent: false }, old)).toBe(false);
+  expect(isStale({ ...base, lastSeenAt: null }, fresh)).toBe(true);
+  expect(isStale({ ...base, lastSeenAt: 'not-a-date' }, fresh)).toBe(true);
+  expect(isStale({ ...base, sources: [src(false)] }, fresh)).toBe(true);
+  expect(isStale({ ...base, sources: [src(null)] }, fresh)).toBe(true);
+  expect(isStale({ ...base, sources: [] }, fresh)).toBe(true);
+  expect(isStale({ ...base, sources: [src(false), src(true)] }, fresh)).toBe(false);
+  expect(isStale({ ...base, isCurrent: false, sources: [] }, fresh)).toBe(false);
 });
 
 test('asset card shows error when asset is not found', async () => {

@@ -13,7 +13,7 @@
 - Если сервер вернул `truncated = true`, над таблицей показывается «Результат обрезан лимитом.» (`role="status"`); пустой список → «Ничего не найдено» 🟢 (`access/admin-ui/src/pages/graph/AssetSearch.tsx:56-60`).
 - Клик по имени результата выбирает `gid`; ниже показываются карточка и окрестность этого актива 🟢 (`access/admin-ui/src/pages/graph/AssetSearch.tsx:74-76`; `access/admin-ui/src/pages/GraphPage.tsx:15-20`).
 - Карточка: тип и `gid`; таблица свойств (значение через `text()`, объекты — `JSON.stringify`, пустое — «—»); блок «Жизненный цикл» (`isCurrent` с бейджем «закрыт», если `false`, и бейджем «устарел», если `isStale`; `firstSeenAt`, `lastSeenAt`, `deletedAt`); таблица «Происхождение» 🟢 (`access/admin-ui/src/pages/graph/AssetCard.tsx:40-115`; `access/admin-ui/src/components/common.tsx:65-69`).
-- `isStale`: актив текущий (`isCurrent`), `lastSeenAt` есть и старше `STALE_AFTER_MS` (7 суток) на момент `now`; закрытый или без `lastSeenAt` — не «устарел» 🟢 (`access/admin-ui/src/pages/graph/AssetCard.tsx:9-13`; `access/admin-ui/src/api/constants.ts:56`).
+- `isStale` (как в MCP, `TraceDependenciesTool.java:187-190,228`): актив текущий (`isCurrent`) и (`lastSeenAt` отсутствует или не разбирается, либо старше `STALE_AFTER_MS` (7 суток) на момент `now`, либо ни у одного источника нет `active === true`; `active: null` и пустой `sources` считаются неактивными); закрытый узел не «устарел» 🟢 [UNLOCKER-286, вопрос 19] (`access/admin-ui/src/pages/graph/AssetCard.tsx:8-17`; `access/admin-ui/src/api/constants.ts:56`). Равенство порога `archrag.query.stale-after` проверяет `access/admin-ui/src/api/constants.test.ts` (формат `PnD`).
 - Блок «Исходный код» показывается только у `Deployment` с непустой строкой `properties.sourceCommit`: короткий (7 символов) и полный commit и `repositoryUrl` текстом, без ссылки 🟢 (`access/admin-ui/src/pages/graph/AssetCard.tsx:15-28`).
 - Запись источника в «Происхождении»: «источник / тип / id», версия, `fetchedAt`, `authority`, статус «tombstone» (если `active === false` или есть `deletedAt`) либо «активна», бейдж «расхождения: …» при непустых `conflicts` 🟢 (`access/admin-ui/src/pages/graph/AssetCard.tsx:90-110`).
 - Окрестность: глубина 1 (по умолчанию) или 2; чекбоксы типов связей (`RELATION_TYPES`); пустой выбор = все типы (параметр не отправляется); `truncated` → баннер «Окрестность показана не полностью…» (`role="status"`) 🟢 (`access/admin-ui/src/pages/graph/NeighborhoodView.tsx:12-18, 23-37, 41-45`).
@@ -77,8 +77,8 @@
 Тогда видны «tombstone», «активна», «расхождения: owner»
 Дано GET /api/graph/nodes/{gid} вернул 404
 Тогда в карточке «Ошибка запроса (HTTP 404)»
-Дано isCurrent=true, lastSeenAt старше 7 суток
-Тогда isStale = true; для isCurrent=false — false
+Дано isCurrent=true и (lastSeenAt старше 7 суток, или отсутствует/не дата, или все источники active=false/null, или sources пуст)
+Тогда isStale = true; если есть хотя бы один активный источник и lastSeenAt свежий — false; для isCurrent=false — false
 
 # AC-05 (GraphPage.test.tsx «deployment card shows short and full commit…», «…short commit shows it whole», «card without commit has no source code block»)
 Дано Deployment с sourceCommit из 40 символов и repositoryUrl

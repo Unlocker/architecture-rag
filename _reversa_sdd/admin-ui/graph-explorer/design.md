@@ -10,7 +10,7 @@
 | `GraphSummary` | `() -> JSX` | `useAsync(api.stats)`; кнопка «Обновить» = `reload` | `access/admin-ui/src/pages/graph/GraphSummary.tsx:7-61` 🟢 |
 | `AssetSearch` | `({onSelect}) -> JSX` | форма: поле `q` (`maxLength 200`), чекбоксы `ASSET_TYPES`, таблица результатов | `access/admin-ui/src/pages/graph/AssetSearch.tsx:10-92` 🟢 |
 | `AssetCard` | `({gid}) -> JSX` | `useAsync(api.node(gid), [gid])` | `access/admin-ui/src/pages/graph/AssetCard.tsx:31-121` 🟢 |
-| `isStale` | `(NodeCard, now = Date.now()) -> boolean` | `isCurrent && lastSeenAt && now - lastSeenAt > STALE_AFTER_MS` | `access/admin-ui/src/pages/graph/AssetCard.tsx:9-13` 🟢 |
+| `isStale` | `(NodeCard, now = Date.now()) -> boolean` | `isCurrent && (lastSeenAt нет/не дата || now - lastSeenAt > STALE_AFTER_MS || нет источника с active === true)` | `access/admin-ui/src/pages/graph/AssetCard.tsx:8-17` 🟢 [UNLOCKER-286, вопрос 19] |
 | `NeighborhoodView` | `({gid, onSelect}) -> JSX` | состояние `depth`, `relTypes`; `useAsync(api.neighborhood(gid, depth, relTypes), [gid, depth, relTypes])` | `access/admin-ui/src/pages/graph/NeighborhoodView.tsx:10-52` 🟢 |
 | `GraphCanvas` | `({data, onSelect}) -> JSX` | Cytoscape на `<div class="graph-canvas">`; пересоздаётся при смене `data` | `access/admin-ui/src/components/GraphCanvas.tsx:10-69` 🟢 |
 
