@@ -39,7 +39,7 @@ final class InboxWriter {
   }
 
   /**
-   * Записывает маркер snapshot вместе с raw {@code {syncRunId, objectCount, updatedAt}}: {@code objectCount} нужен
+   * Записывает маркер snapshot вместе с raw {@code {syncRunId, objectCount, completeness, updatedAt}}: {@code objectCount} нужен
    * reconciliation, чтобы не удалять объекты при неполном журнале.
    */
   JournalEntry record(CanonicalEvent marker, String syncRunId) {
@@ -52,6 +52,7 @@ final class InboxWriter {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("syncRunId", marker.data().payload().get("syncRunId"));
     m.put("objectCount", marker.data().payload().get("objectCount"));
+    m.put(EventMapper.COMPLETENESS_FIELD, marker.data().payload().get(EventMapper.COMPLETENESS_FIELD));
     m.put("updatedAt", marker.time());
     return Json.write(m);
   }

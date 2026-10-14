@@ -139,8 +139,8 @@ flowchart LR
 | `StoredEventReader` (RF-12) | Must | Без него нет ни диспетчера, ни replay |
 | Reconcile-прокси (RF-07) | Should | Ручной триггер snapshot; удаления делает `Reconciler` |
 | Метрики (RF-11) | Should | Дашборд PoC, не влияет на корректность |
-| Эскалация `RETRYING` → `QUARANTINED` по числу попыток | Won't | Не реализовано (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-01) |
-| Выход из `QUARANTINED` через REST | Won't | Нет в коде (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Q-02) |
+| Эскалация `RETRYING` → `QUARANTINED` по числу попыток | Must | Реализовано (🟢 (реализовано — UNLOCKER-281) Q-01; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:100`) |
+| Выход из `QUARANTINED` через REST | Must | Реализовано (🟢 (реализовано — UNLOCKER-281) Q-02; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:115`) |
 
 ## Зависит от / Связанные спецификации
 

@@ -74,14 +74,19 @@ public final class EamMapper implements CanonicalMapper {
           mapArchObject(input, sink);
           return;
         }
+        Optional<String> rawCriticality = p.optional("criticality");
+        Criticality legacyCriticality = rawCriticality.map(EamMapper::legacyCriticality).orElse(null);
+        String unmappedCriticality = unmappedCriticality(rawCriticality, legacyCriticality, sink);
         sink.add(
             new UpsertNode(
                 input.record(),
                 new ITSystem(
                     p.required("name"),
                     p.optional("status").orElse(null),
-                    p.optional("criticality").map(EamMapper::criticality).orElse(null),
-                    p.optional("description").orElse(null))));
+                    legacyCriticality,
+                    p.optional("description").orElse(null),
+                    null,
+                    unmappedCriticality)));
         p.optional("ownerTeam")
             .ifPresent(
                 team ->
@@ -101,7 +106,16 @@ public final class EamMapper implements CanonicalMapper {
         Map<String, Object> props = new LinkedHashMap<>();
         p.optional("kind").ifPresent(v -> props.put("kind", v));
         p.optional("protocol").ifPresent(v -> props.put("protocol", v));
-        p.optional("criticality").ifPresent(v -> props.put("criticality", criticality(v).name()));
+        Optional<String> rawCriticality = p.optional("criticality");
+        Criticality criticality = rawCriticality.map(EamMapper::legacyCriticality).orElse(null);
+        if (criticality != null) {
+          props.put("criticality", criticality.name());
+        } else {
+          String unmapped = unmappedCriticality(rawCriticality, null, sink);
+          if (unmapped != null) {
+            props.put("criticalityRaw", unmapped);
+          }
+        }
         sink.link(
             RelationType.DEPENDS_ON,
             new SourceKey(SourceSystemCode.SCM, ScmMapper.SERVICE, p.required("from")),
@@ -117,12 +131,26 @@ public final class EamMapper implements CanonicalMapper {
     }
   }
 
-  private static Criticality criticality(String value) {
+  /** Критичность legacy-записей ({@link Criticality}, без учёта регистра); вне словаря — {@code null}, а не карантин. */
+  private static Criticality legacyCriticality(String value) {
     try {
       return Criticality.valueOf(value.toUpperCase(Locale.ROOT));
     } catch (IllegalArgumentException e) {
-      throw new NormalizationException("INVALID_PAYLOAD", "field has unknown value: criticality");
+      return null;
     }
+  }
+
+  /**
+   * Необязательное словарное поле вне словаря: предупреждение {@code UNMAPPED_CRITICALITY}, значение {@code null},
+   * сырое значение возвращается для сохранения. В журнал уходит только код (источник недоверенный).
+   */
+  private static String unmappedCriticality(Optional<String> raw, Criticality mapped, CommandSink sink) {
+    if (mapped != null || raw.isEmpty()) {
+      return null;
+    }
+    sink.warn("UNMAPPED_CRITICALITY");
+    LOG.log(System.Logger.Level.DEBUG, "EAM record has a criticality value outside the dictionary");
+    return raw.get();
   }
 
   /** Таблица критичности EAM -> {@link Criticality} (допущение 2 {@code docs/06}); значения вне таблицы не угадываются. */
@@ -160,12 +188,8 @@ public final class EamMapper implements CanonicalMapper {
       default -> {
         Optional<String> rawCriticality = attrs.optional("criticality");
         Criticality criticality = rawCriticality.map(v -> CRITICALITY.get(v.toUpperCase(Locale.ROOT))).orElse(null);
-        String unmapped = criticality == null ? rawCriticality.orElse(null) : null;
-        if (unmapped != null) {
-          // Неизвестное значение словаря не отбрасывается: сырое значение сохраняется для разбора, в журнал — только код.
-          sink.warn("UNMAPPED_CRITICALITY");
-          LOG.log(System.Logger.Level.DEBUG, "EAM IT_SYSTEM has a criticality value outside the dictionary");
-        }
+        // Неизвестное значение словаря не отбрасывается: сырое значение сохраняется для разбора, в журнал — только код.
+        String unmapped = unmappedCriticality(rawCriticality, criticality, sink);
         sink.add(
             new UpsertNode(
                 input.record(),

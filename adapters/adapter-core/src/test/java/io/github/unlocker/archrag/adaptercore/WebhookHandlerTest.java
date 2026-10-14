@@ -3,6 +3,7 @@ package io.github.unlocker.archrag.adaptercore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.sourcespi.ChangeOperation;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
@@ -173,7 +174,7 @@ class WebhookHandlerTest {
 
     assertThat(deliver(e)).isEqualTo(202);
 
-    assertThat(journal.eventList().getFirst().type()).isEqualTo(EventMapper.TYPE_ASSET_DELETED);
+    assertThat(journal.eventList().getFirst().type()).isEqualTo(CanonicalEvent.TYPE_ASSET_DELETED);
   }
 
   @Test
@@ -184,7 +185,7 @@ class WebhookHandlerTest {
     assertThat(deliver(gone)).isEqualTo(202);
 
     var e = journal.eventList().getFirst();
-    assertThat(e.type()).isEqualTo(EventMapper.TYPE_ASSET_DELETED);
+    assertThat(e.type()).isEqualTo(CanonicalEvent.TYPE_ASSET_DELETED);
     assertThat(e.data().sourceVersion().value()).isEqualTo("5");
     assertThat(deliver(gone)).isEqualTo(202);
     assertThat(journal.rows).hasSize(1);

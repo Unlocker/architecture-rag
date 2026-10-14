@@ -16,7 +16,7 @@
 | Порт | умолчание Spring (8080); `server.port` не задан; наружу — через nginx `location = /mcp` | `docs/03-interfaces.md:29`; `platform/docker/proxy/nginx.conf:18-26` |
 | Версия MCP-протокола | не фиксируется кодом сервера, согласует MCP SDK Spring AI | `docs/03-interfaces.md:55` 🟡 |
 
-Методы JSON-RPC: `initialize`, `tools/list`, `tools/call` (и прочие, предоставляемые SDK); scope проверяется только для `tools/call`. Ответ `tools/call`: `result.content[0].text` — JSON-строка `record`-результата; ошибка валидации/выполнения — `result.isError=true`, HTTP `200` 🟢 (`access/mcp-server/src/test/java/io/github/unlocker/archrag/mcpserver/SearchAssetsMcpTest.java:121-128`).
+Методы JSON-RPC: `initialize`, `tools/list`, `tools/call` (и прочие, предоставляемые SDK); роль `archrag-reader` требуется для всех методов, scope проверяется только для `tools/call` (UNLOCKER-290). Ответ `tools/call`: `result.content[0].text` — JSON-строка `record`-результата; ошибка валидации/выполнения — `result.isError=true`, HTTP `200` 🟢 (`access/mcp-server/src/test/java/io/github/unlocker/archrag/mcpserver/SearchAssetsMcpTest.java:121-128`).
 
 ### 1.2 Матрица tool → scope → шаблон 🟢
 

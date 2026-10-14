@@ -429,8 +429,8 @@ class F4AcceptanceIT {
 
   @Test
   @Order(7)
-  void s7_tombstoneOfMasterClosesAssetEvenWithActiveSupplementary() {
-    // Фиксирует правило проектора: узел закрывается, когда не осталось активных MASTER-утверждений.
+  void s7_tombstoneOfMasterKeepsAssetCurrentWhileSupplementaryIsActive() {
+    // ADR 0020: узел закрывается только при отсутствии любых других активных assertions.
     assertThat(explain(masterGid, null).isCurrent()).isTrue();
 
     // eam-api не отдаёт tombstone: архивный объект пропадает из списка, и tombstone ставит reconcile после snapshot.
@@ -439,11 +439,11 @@ class F4AcceptanceIT {
         .isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     awaitIdle();
 
-    awaitTrue(() -> !explain(masterGid, null).isCurrent());
+    awaitTrue(() -> !record(explain(masterGid, null), "EAM").active());
     ExplainProvenanceResult r = explain(masterGid, null);
-    assertThat(r.deletedAt()).isNotBlank();
-    assertThat(record(r, "EAM").active()).isFalse();
     assertThat(record(r, "SCM").active()).isTrue();
+    assertThat(r.isCurrent()).isTrue();
+    assertThat(r.deletedAt()).isNullOrEmpty();
   }
 
   // ---- helpers -----------------------------------------------------------------------------
@@ -503,7 +503,8 @@ class F4AcceptanceIT {
   /** Admin API ingestion-сервиса с токеном {@code architecture.admin}, подписанным тестовым ключом. */
   private HttpResponse<String> adminPost(String path, String body) throws Exception {
     var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now())
-        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin");
+        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin")
+        .claim("realm_access", java.util.Map.of("roles", java.util.List.of("archrag-console-admin")));
     String token = new NimbusJwtEncoder(new ImmutableSecret<>(KEY))
         .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build())).getTokenValue();
     var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))

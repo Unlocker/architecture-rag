@@ -69,6 +69,16 @@ final class InMemoryJournal implements EventJournal {
   }
 
   @Override
+  public JournalEntry releaseFromQuarantine(String s, String id) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public boolean closeDlq(String s, String id) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public SnapshotContents snapshotContents(String source, String syncRunId) {
     var runRows = rows.values().stream()
         .filter(r -> r.source().equals(source) && r.eventId().startsWith("snap:" + syncRunId + ":")).toList();
@@ -76,6 +86,13 @@ final class InMemoryJournal implements EventJournal {
         runRows.stream().map(r -> new ObjectRef(r.sourceType(), r.sourceId())).collect(Collectors.toSet()),
         runRows.size(),
         runRows.stream().map(JournalEntry::receivedAt).min(Comparator.naturalOrder()).orElse(null));
+  }
+
+  @Override
+  public java.util.Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+    return rows.values().stream()
+        .filter(r -> r.source().equals(source) && syncRunId.equals(r.syncRunId()) && !r.eventId().equals(excludeEventId))
+        .collect(Collectors.groupingBy(JournalEntry::status, Collectors.counting()));
   }
 
   @Override

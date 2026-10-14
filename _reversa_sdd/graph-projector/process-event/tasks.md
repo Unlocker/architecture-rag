@@ -14,7 +14,7 @@
   Origin: `GP/VersionDecision.java:20-38`, `GP/EventProcessor.java:303-344`. Критерий готовности: AC-02, AC-03, `retriedOlderVersionDoesNotOverwriteAssertionsOfNewerOne`. Уверенность: 🟢.
 - [ ] **T-05. Путь `upsert`.** Шаги 1–10 из [`design.md`](design.md) в указанном порядке; `DeferRelation` на различные `UnresolvedReference.relation()`; `warnings.record` только при непустом списке.
   Origin: `GP/EventProcessor.java:201-252`. Критерий готовности: AC-01, `unresolvedReferenceReachesProjectorAsDeferredRelationOnce`, `relationOnlyEventIsProjectedNotQuarantined`. Уверенность: 🟢.
-- [ ] **T-06. `resolveGids`.** Первым — `identity.resolve(key)`; концы `UpsertRelation`/`CloseAssertion` — `identity.find`, иначе `ProjectionException(UNRESOLVED_ENDPOINT)`; исчерпывающий `switch` по `GraphCommand`.
+- [ ] **T-06. `resolveGids`.** Первым — `identity.resolve(key)`; концы `UpsertRelation` — `identity.find`, иначе `ProjectionException(UNRESOLVED_ENDPOINT)`; исчерпывающий `switch` по `GraphCommand`.
   Origin: `GP/EventProcessor.java:568-601`. Критерий готовности: событие с конечной точкой без `gid` → `RETRYING`/`UNRESOLVED_ENDPOINT`, `gid` не создан. Уверенность: 🟢.
 - [ ] **T-07. Кандидаты и утверждения.** `recordCandidates`, `assertProperties`, `assertSystemRelation`, `assertSystemPlatform`, `retractProperties`; все вне Neo4j; `IdentityStoreException` → `RETRYING` с кодами `IDENTITY_CANDIDATE_FAILED`/`SOURCE_CONFLICT_FAILED`.
   Origin: `GP/EventProcessor.java:231-249, 394-453, 494-527, 563-566`. Критерий готовности: AC-09, AC-10, `assertsPropertiesBeforeGraphWriteAndPassesMarkersToProjector`. Уверенность: 🟢.
@@ -23,7 +23,7 @@
 - [ ] **T-09. Перепроверки.** `recheckServiceDeployments`, `recheckSolutionSystems` (маркеры не пишутся).
   Origin: `GP/EventProcessor.java:455-484, 529-561`. Критерий готовности: `serviceEventRechecksItsDeploymentsAfterGraphWrite`, `solutionEventRechecksAllItsSystemsAfterGraphWrite`, `solutionEventDoesNotRecheckOnOldVersionOrTombstone`. Уверенность: 🟢.
 - [ ] **T-10. Путь `delete` и `snapshotComplete`.** Как в [`design.md`](design.md); `objectCount` по умолчанию `0`.
-  Origin: `GP/EventProcessor.java:254-300, 629-631`. Критерий готовности: AC-06, AC-07, AC-08. Уверенность: 🟢 (проверка полноты — 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] Q-05).
+  Origin: `GP/EventProcessor.java:254-300, 629-631`. Критерий готовности: AC-06, AC-07, AC-08. Уверенность: 🟢 (проверка полноты — 🟢 (реализовано — UNLOCKER-279) Q-05).
 - [ ] **T-11. Статусы и checkpoint.** `advance`, `finish`, `retry`, `quarantine`; `CONSUMER = "projector"`.
   Origin: `GP/EventProcessor.java:84, 603-627`. Критерий готовности: `upsertWalksStatusesStepByStepAndSavesCheckpointAfterWrite`, AC-04 (checkpoint не двигается). Уверенность: 🟢.
 

@@ -28,7 +28,7 @@ Webhook приходит из внешней по отношению к граф
 ## Последствия
 
 - **Положительные:** граница доверия — ответ источника, а не тело запроса; повтор уведомления даёт `DUPLICATE` ([ADR 0033](0033-source-version-numeric-idempotency.md)).
-- **Отрицательные / ограничения:** источник должен поддерживать `fetchById`; `/control/snapshot` на том же сервере аутентификации не имеет, это известное ограничение, целевая авторизация — в UNLOCKER-276, п. 11 ([ADR 0035](0035-reconcile-tombstone-via-journal.md)).
+- **Отрицательные / ограничения:** источник должен поддерживать `fetchById`; `/control/snapshot` на том же сервере защищён отдельно от HMAC webhook: проверяются JWT и роль `archrag-console-admin`, без настроенного валидатора контекст не создаётся (UNLOCKER-290; `adapters/adapter-core/.../WebhookServer.java:61-66`, `:77-92`, [ADR 0035](0035-reconcile-tombstone-via-journal.md)).
 - **Затронутый код:** `contracts/source-spi` (`WebhookSignature`), `adapters/adapter-core` (`WebhookHandler`, `WebhookServer`).
 
 ## Связанные ADR

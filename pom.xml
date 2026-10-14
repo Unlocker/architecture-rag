@@ -29,6 +29,8 @@
     <spring-ai.version>2.0.1</spring-ai.version>
     <testcontainers.version>2.0.5</testcontainers.version>
     <aws-sdk.version>2.55.11</aws-sdk.version>
+    <!-- Spring Boot BOM её не ведёт; версия та же, что приходит транзитивно через Spring Security. При апгрейде Boot сверять с версией из spring-security-oauth2-jose. -->
+    <nimbus-jose-jwt.version>10.9.1</nimbus-jose-jwt.version>
 
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
@@ -68,6 +70,11 @@
         <version>${spring-ai.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.nimbusds</groupId>
+        <artifactId>nimbus-jose-jwt</artifactId>
+        <version>${nimbus-jose-jwt.version}</version>
       </dependency>
 
       <!-- Внутренние модули: версия одна на весь reactor. -->

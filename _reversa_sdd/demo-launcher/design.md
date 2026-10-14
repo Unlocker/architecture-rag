@@ -70,7 +70,7 @@
 - 🟡 `URI.create(...)` на `S3_ENDPOINT`, `SOURCE_URL`, `EAM_API_URL`, `WEBHOOK_TARGET` может процитировать значение в сообщении (Q-04).
 - 🔴 `DemoLauncher.main`, `runAdapter`, `/health` не покрыты тестами (Q-05).
 - 🟡 Порт 8091 и размер страницы polling (100) зашиты в код; `ARCHRAG_STUB_PORT` служит и портом `stub`, и портом `eam-api-stub` (Q-06).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] `EamApiControl.TYPES` дублирует литералами типы из `EamApiSeed` (Q-03).
+- 🟢 [UNLOCKER-287: реализовано] `EamApiControl.TYPES` = `EamApiSeed.TYPES` (литерала нет); `EamStandTypesTest` сверяет их с `EamApiConnector.READ_TYPES` и `SOLUTION_TYPE` (Q-03). `DemoLauncher.verifyEamAccess` проверяет права EAM при старте адаптера.
 - 🟡 `StubWebhookSender` не закрывается при остановке заглушки (Q-07).
 
 ## Зависит от / Связанные спецификации

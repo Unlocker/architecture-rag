@@ -179,15 +179,35 @@ class NormalizerTest {
   }
 
   @Test
-  void eamServiceDependencyRejectsMissingEndAndUnknownCriticality() {
+  void eamServiceDependencyRejectsMissingEnd() {
     var noTo = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
         fields("from", "svc-payments-api"));
     assertThat(normalizer.normalize(noTo, RAW)).isInstanceOfSatisfying(Quarantined.class,
         q -> assertThat(q.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD"));
-    var bad = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
-        fields("from", "a", "to", "b", "criticality", "SECRET-VALUE"));
-    assertThat(normalizer.normalize(bad, RAW)).isInstanceOfSatisfying(Quarantined.class,
-        q -> assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD"));
+  }
+
+  @Test
+  void eamServiceDependencyUnknownCriticalityWarnsAndKeepsRawValue() {
+    known.add(PAY);
+    known.add(LEDGER);
+    var e = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "SERVICE_DEPENDENCY", "d",
+        fields("from", "svc-payments-api", "to", "svc-ledger-api", "criticality", "SECRET-VALUE"));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(n.warnings()).containsExactly("UNMAPPED_CRITICALITY");
+    assertThat(n.commands()).anySatisfy(c -> assertThat(c).isInstanceOfSatisfying(UpsertRelation.class, r ->
+        assertThat(r.properties()).doesNotContainKey("criticality")
+            .containsEntry("criticalityRaw", "SECRET-VALUE")));
+  }
+
+  @Test
+  void eamLegacyItSystemUnknownCriticalityWarnsAndIsNotQuarantined() {
+    var e = event("urn:corp:eam", "urn:corp:schema:asset-upserted:1", "IT_SYSTEM", "s",
+        fields("name", "N", "criticality", "SECRET-VALUE"));
+    var n = normalized(normalizer.normalize(e, RAW));
+    assertThat(n.warnings()).containsExactly("UNMAPPED_CRITICALITY");
+    var data = (io.github.unlocker.archrag.canonicalmodel.node.ITSystem) of(n, UpsertNode.class).get(0).data();
+    assertThat(data.criticality()).isNull();
+    assertThat(data.criticalityRaw()).isEqualTo("SECRET-VALUE");
   }
 
   @Test
@@ -358,6 +378,12 @@ class NormalizerTest {
   }
 
   @Test
+  void manualSourceIsQuarantinedAsUnknown() {
+    var e = event("urn:corp:manual", "urn:corp:schema:asset-upserted:1", "TEAM", "t", fields("name", "N"));
+    assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("UNKNOWN_SOURCE");
+  }
+
+  @Test
   void unknownSourceIsQuarantined() {
     var e = event("urn:corp:hr", "urn:corp:schema:asset-upserted:1", "TEAM", "t", fields("name", "N"));
     assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("UNKNOWN_SOURCE");
@@ -385,7 +411,7 @@ class NormalizerTest {
   }
 
   @Test
-  void partialRecordDoesNotEmitNullsOrCloseAssertions() {
+  void partialRecordDoesNotEmitNullsOrResets() {
     var scm = StubSources.scm(CLOCK);
     scm.upsertPartial("SERVICE", "svc-payments-api",
         fields("name", "payments-api", "language", null, "systemCode", null, "repositoryId", null));

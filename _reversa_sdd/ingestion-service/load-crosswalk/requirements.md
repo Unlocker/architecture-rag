@@ -15,7 +15,7 @@
 - Слияние двух существующих разных `gid` не делается (E3); узлы под новый `gid` переписывает следующий replay/rebuild 🟢 (Javadoc `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java:17-20`).
 - Операция идёт под `AdminLock` (`operations.locked`), но без общей записи аудита: на каждый элемент создаётся своя запись `CROSSWALK` 🟢 (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:122`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java:45`).
 - Аудит элемента: `request = {index, left, right, reason≤200}` (`left`/`right` — `KeyDto.toString()`); итог `{status, gid}`; `SUCCEEDED` только при `APPLIED`, `CONFLICT`/`INVALID` пишутся как `FAILED` с `error = NULL` 🟢 (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkService.java:59-63, 71-79`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] `identity_candidate.status` crosswalk не меняет (кандидат остаётся `OPEN`) — уже отмечено в `../../code-analysis.md:561`; см. Q-10.
+- `identity_candidate.status` обычный crosswalk не меняет (кандидат остаётся `OPEN`); закрывает кандидата отдельная операция `POST /admin/identity/candidates/approve` 🟢 [UNLOCKER-282: реализовано]; см. Q-10.
 
 ## Requisitos Funcionais
 

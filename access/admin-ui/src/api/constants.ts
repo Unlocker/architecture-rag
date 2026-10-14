@@ -1,43 +1,16 @@
+import allowlists from './allowlists.json';
+
 /**
- * Allowlist'ы API консоли. Продублированы из AssetTemplates / ConsoleTemplates / SyncSources:
- * UI не зависит от Java-модулей, а бэкенд всё равно отвергает неизвестные значения (400).
+ * Allowlist'ы API консоли лежат в allowlists.json. Их равенство AssetTemplates / ConsoleTemplates / SyncSources
+ * проверяет AdminUiAllowlistsContractTest в admin-console; бэкенд всё равно отвергает неизвестные значения (400).
  */
-export const ASSET_TYPES = [
-  'ITSystem',
-  'Service',
-  'Repository',
-  'Team',
-  'Environment',
-  'Deployment',
-  'ComputeInstance',
-] as const;
+export const ASSET_TYPES: readonly string[] = allowlists.ASSET_TYPES;
 
-export const RELATION_TYPES = [
-  'DECOMPOSED_INTO',
-  'IMPLEMENTED_IN',
-  'HAS_DEPLOYMENT',
-  'IN_ENVIRONMENT',
-  'RUNS_ON',
-  'DEPENDS_ON',
-  'OWNED_BY',
-  'HOSTED_ON',
-  'DEPLOYED_FROM',
-] as const;
+export const RELATION_TYPES: readonly string[] = allowlists.RELATION_TYPES;
 
-export const SOURCES = ['eam', 'scm', 'cmdb', 'deploymap'] as const;
+export const SOURCES: readonly string[] = allowlists.SOURCES;
 
-export const EVENT_STATUSES = [
-  'RECEIVED',
-  'VALIDATED',
-  'NORMALIZED',
-  'RESOLVED',
-  'PROJECTED',
-  'QUARANTINED',
-  'RETRYING',
-  'SUPERSEDED',
-  'DUPLICATE',
-  'IGNORED_OLD_VERSION',
-] as const;
+export const EVENT_STATUSES: readonly string[] = allowlists.EVENT_STATUSES;
 
 /** Цвет узла по метке (графа и бейджей). */
 export const LABEL_COLORS: Record<string, string> = {
@@ -51,9 +24,6 @@ export const LABEL_COLORS: Record<string, string> = {
 };
 
 export const DEFAULT_LABEL_COLOR = '#bcbd22';
-
-/** Актив, не виденный дольше этого срока, помечается как устаревший. */
-export const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Период автообновления раздела «Источники». */
 export const SOURCES_REFRESH_MS = 30_000;

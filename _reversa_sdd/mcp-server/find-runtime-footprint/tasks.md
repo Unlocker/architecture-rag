@@ -36,7 +36,7 @@
 - [ ] TT-01: `FindRuntimeFootprintToolTest` (access/mcp-server/src/test/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintToolTest.java:101-229)
 - [ ] TT-02: `FindRuntimeFootprintMcpTest` — схема входа, ошибка без эха, отказ без scope (access/mcp-server/src/test/java/io/github/unlocker/archrag/mcpserver/FindRuntimeFootprintMcpTest.java:43-87)
 - [ ] TT-03: `RuntimeFootprintIT`, `F2AcceptanceIT` (S1-S7), `DeployedFromIT`, `DeploymentCommitReadIT` (platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/RuntimeFootprintIT.java:107-277; platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/F2AcceptanceIT.java:247-440)
-- [ ] TT-04: 🔴 нет теста на `systemGid` с пробелами/верхним регистром (поведение не нормализуется, Q-06)
+- [x] TT-04: тест `systemGid` с пробелами/верхним регистром (`FindRuntimeFootprintToolTest.upperCaseAndPaddedGidIsNormalizedLikeLowerCase`, Q-06)
 
 ## Ordem Sugerida
 1. T-05 → 2. T-04 → 3. T-03 → 4. T-01, T-02 → 5. T-06.

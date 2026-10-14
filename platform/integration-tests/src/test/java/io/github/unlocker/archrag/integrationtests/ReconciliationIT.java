@@ -23,6 +23,7 @@ import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
+import io.github.unlocker.archrag.graphprojector.SnapshotRejectedException;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
@@ -84,6 +85,7 @@ class ReconciliationIT {
 
   static PostgresIdentityMapping identityMapping;
   static PostgresSourceConflicts conflictStore;
+  static PostgresIdentityCandidates candidates;
 
   @BeforeAll
   static void setUp() {
@@ -98,11 +100,12 @@ class ReconciliationIT {
     journal = new RecordingJournal(pgJournal);
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
     identityMapping = new PostgresIdentityMapping(ds);
+    candidates = new PostgresIdentityCandidates(ds);
     conflictStore = new PostgresSourceConflicts(ds, AuthorityMatrix.defaults());
     processor = new EventProcessor(journal, Normalizer.standard(projector::isActive),
         identityMapping, projector,
-        new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore),
-        new PostgresIdentityCandidates(ds), conflictStore);
+        new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore, candidates),
+        candidates, conflictStore);
   }
 
   @BeforeEach
@@ -248,6 +251,7 @@ class ReconciliationIT {
   @Test
   void reprocessingTheSameMarkerChangesNothing() {
     String gone = "gone-" + uid();
+    eam.upsert("TEAM", "keep-" + uid(), team("Keep"));
     eam.upsert("TEAM", gone, team("Gone"));
     poller.pollOnce();
     drain();
@@ -256,7 +260,7 @@ class ReconciliationIT {
     drain();
     assertThat(active(gone)).isFalse();
     var projector = new GraphProjector(driver, AuthorityMatrix.defaults());
-    var reconciler = new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore);
+    var reconciler = new Reconciler(pgJournal, new NoopRawStore(), projector, Clock.systemUTC(), identityMapping, conflictStore, candidates);
 
     var again = reconciler.reconcile(SOURCE, r.syncRunId(), "snapshot-complete:" + r.syncRunId(), 0);
 
@@ -292,6 +296,110 @@ class ReconciliationIT {
     assertThat(done.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     assertThat(active(fresh)).isTrue();
     assertThat(active(a)).isTrue();
+  }
+
+  private long scalar(String sql, Object... args) throws Exception {
+    try (var c = java.sql.DriverManager.getConnection(
+            POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var ps = c.prepareStatement(sql)) {
+      for (int i = 0; i < args.length; i++) {
+        ps.setObject(i + 1, args[i]);
+      }
+      try (var rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getLong(1);
+      }
+    }
+  }
+
+  @Test
+  void markerWithoutObjectCountIsQuarantinedAndClosesNothing() throws Exception {
+    String a = "a-" + uid();
+    String b = "b-" + uid();
+    eam.upsert("TEAM", a, team("A"));
+    eam.upsert("TEAM", b, team("B"));
+    poller.pollOnce();
+    drain();
+    String run = "bad-" + uid();
+    var marker = new CanonicalEvent("snapshot-complete:" + run, SOURCE, CanonicalEvent.TYPE_SNAPSHOT_COMPLETE,
+        "sync-run/" + run, Instant.now(), "urn:corp:schema:snapshot-complete:1", run,
+        new AssetEventData("SYNC_RUN", run, new SourceVersion("1"), Map.of("syncRunId", run)));
+    var ref = new RawPayloadRef("raw/m", "sha256:m");
+    journal.append(marker, ref, run);
+
+    var result = processor.process(marker, ref);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT);
+    assertThat(scalar("select count(*) from dlq_entry where event_id = ? and error_code = ?",
+            marker.id(), SnapshotRejectedException.MISSING_OBJECT_COUNT)).isEqualTo(1);
+    assertThat(active(a)).isTrue();
+    assertThat(active(b)).isTrue();
+  }
+
+  @Test
+  void partialSnapshotClosesNothing() {
+    String keep = "keep-" + uid();
+    String gone = "gone-" + uid();
+    eam.upsert("TEAM", keep, team("Keep"));
+    eam.upsert("TEAM", gone, team("Gone"));
+    poller.pollOnce();
+    drain();
+    eam.suppressWebhooks(true);
+    eam.delete("TEAM", gone);
+    eam.upsertPartial("TEAM", keep, team("Keep"));
+
+    PollResult r = poller.snapshotOnce();
+    drain();
+
+    assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
+    assertThat(statusOf("snapshot-complete:" + r.syncRunId(), r.syncRunId())).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(active(gone)).isTrue();
+    assertThat(active(keep)).isTrue();
+  }
+
+  @Test
+  void massCloseOverTheShareQuarantinesTheMarkerAndClosesNothing() throws Exception {
+    List<String> ids = new ArrayList<>();
+    for (int i = 0; i < 4; i++) {
+      ids.add("m" + i + "-" + uid());
+      eam.upsert("TEAM", ids.get(i), team("M" + i));
+    }
+    poller.pollOnce();
+    drain();
+    eam.suppressWebhooks(true);
+    for (int i = 1; i < 4; i++) {
+      eam.delete("TEAM", ids.get(i));
+    }
+
+    PollResult r = poller.snapshotOnce();
+    drain();
+
+    String markerId = "snapshot-complete:" + r.syncRunId();
+    assertThat(statusOf(markerId, r.syncRunId())).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(scalar("select count(*) from dlq_entry where event_id = ? and error_code = ?",
+            markerId, SnapshotRejectedException.MASS_CLOSE_LIMIT)).isEqualTo(1);
+    ids.forEach(id -> assertThat(active(id)).isTrue());
+  }
+
+  @Test
+  void reconcileForgetsIdentityFeaturesOfClosedRecordsOnly() throws Exception {
+    String keep = "keep-" + uid();
+    String gone = "gone-" + uid();
+    eam.upsert("TEAM", keep, team("Keep " + uid()));
+    eam.upsert("TEAM", gone, team("Gone " + uid()));
+    poller.pollOnce();
+    drain();
+    assertThat(scalar("select count(*) from identity_feature where source_id = ?", gone)).isPositive();
+    eam.suppressWebhooks(true);
+    eam.delete("TEAM", gone);
+
+    poller.snapshotOnce();
+    drain();
+
+    assertThat(active(gone)).isFalse();
+    assertThat(scalar("select count(*) from identity_feature where source_id = ?", gone)).isZero();
+    assertThat(scalar("select count(*) from identity_feature where source_id = ?", keep)).isPositive();
   }
 
   /** Отдаёт {@code okCalls} страниц, дальше всегда 503. */
@@ -378,6 +486,16 @@ class ReconciliationIT {
     }
 
     @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      return delegate.releaseFromQuarantine(s, id);
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
+      return delegate.closeDlq(s, id);
+    }
+
+    @Override
     public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
       return delegate.loadCheckpoint(consumer, source);
     }
@@ -390,6 +508,11 @@ class ReconciliationIT {
     @Override
     public SnapshotContents snapshotContents(String source, String syncRunId) {
       return delegate.snapshotContents(source, syncRunId);
+    }
+
+    @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+      return delegate.statusCounts(source, syncRunId, excludeEventId);
     }
 
     @Override

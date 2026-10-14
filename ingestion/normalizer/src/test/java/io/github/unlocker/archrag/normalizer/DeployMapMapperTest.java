@@ -193,6 +193,16 @@ class DeployMapMapperTest {
   }
 
   @Test
+  void unknownEnvironmentClassIsQuarantinedWithoutLeakingValue() {
+    var e = event("urn:corp:deploymap", "urn:corp:schema:asset-upserted:1", "ENVIRONMENT", "env-1",
+        Map.of("name", "Sandbox", "class", "SECRET-CLASS"));
+    assertThat(normalizer.normalize(e, RAW)).isInstanceOfSatisfying(Quarantined.class, q -> {
+      assertThat(q.errorCode()).isEqualTo("INVALID_PAYLOAD");
+      assertThat(q.reason()).doesNotContain("SECRET-CLASS");
+    });
+  }
+
+  @Test
   void unknownFormatIsQuarantined() {
     Map<String, Object> payload = payloadV1("svc-payments-api", goodAnnotations());
     payload.put("format", "deploymap-poc-9");

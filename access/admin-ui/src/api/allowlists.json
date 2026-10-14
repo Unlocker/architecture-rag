@@ -1,0 +1,40 @@
+{
+  "ASSET_TYPES": [
+    "ITSystem",
+    "Service",
+    "Repository",
+    "Team",
+    "Environment",
+    "Deployment",
+    "ComputeInstance"
+  ],
+  "RELATION_TYPES": [
+    "DECOMPOSED_INTO",
+    "IMPLEMENTED_IN",
+    "HAS_DEPLOYMENT",
+    "IN_ENVIRONMENT",
+    "RUNS_ON",
+    "DEPENDS_ON",
+    "OWNED_BY",
+    "DEPLOYED_FROM",
+    "HOSTED_ON"
+  ],
+  "SOURCES": [
+    "eam",
+    "scm",
+    "cmdb",
+    "deploymap",
+    "manual"
+  ],
+  "EVENT_STATUSES": [
+    "RECEIVED",
+    "VALIDATED",
+    "NORMALIZED",
+    "RESOLVED",
+    "PROJECTED",
+    "QUARANTINED",
+    "RETRYING",
+    "DUPLICATE",
+    "IGNORED_OLD_VERSION"
+  ]
+}

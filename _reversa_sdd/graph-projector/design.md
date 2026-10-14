@@ -80,7 +80,7 @@ flowchart LR
 | §2 № 12 | `AuthorityMatrix.defaults()` создаётся отдельно для `GraphProjector` и `SourceConflicts` (`IS/IngestionServiceConfiguration.java:64, 86`) | 🟢 |
 
 Соседние спецификации и их 🔴, с которыми согласован модуль (подробно — [`questions.md`](questions.md) §«Сквозные»):
-[`../identity-resolution/questions.md`](../identity-resolution/questions.md) Q-03 (approve не обновляет граф до replay), [`../event-journal/questions.md`](../event-journal/questions.md) R-2/R-3/R-4 (выход из `QUARANTINED`, `SUPERSEDED`, лимит попыток), [`../canonical-model/questions.md`](../canonical-model/questions.md) Q-1 (`SyncRun` остаётся `RUNNING`) и Q-3 (`CloseAssertion`), [`../normalizer/questions.md`](../normalizer/questions.md) Q-03 (закрытие связей).
+[`../identity-resolution/questions.md`](../identity-resolution/questions.md) Q-03 (approve не обновляет граф до replay), [`../event-journal/questions.md`](../event-journal/questions.md) R-2/R-3/R-4 (выход из `QUARANTINED`, `SUPERSEDED`, лимит попыток), [`../canonical-model/questions.md`](../canonical-model/questions.md) Q-1 (`SyncRun` остаётся `RUNNING`), [`../normalizer/questions.md`](../normalizer/questions.md) Q-03 (закрытие связей).
 
 ## Поток данных и порядок побочных эффектов
 

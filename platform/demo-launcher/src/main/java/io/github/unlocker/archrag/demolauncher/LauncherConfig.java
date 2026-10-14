@@ -32,6 +32,10 @@ public final class LauncherConfig {
   static final String WEBHOOK_TARGET = "ARCHRAG_WEBHOOK_TARGET";
   static final String EAM_MODE = "ARCHRAG_EAM_MODE";
   static final String EAM_API_URL = "ARCHRAG_EAM_API_URL";
+  static final String CONTROL_ISSUER = "ARCHRAG_CONTROL_OIDC_ISSUER_URI";
+  static final String CONTROL_JWKS_URI = "ARCHRAG_CONTROL_OIDC_JWKS_URI";
+  static final String CONTROL_AUDIENCE = "ARCHRAG_CONTROL_AUDIENCE";
+  static final String CONTROL_ROLE = "archrag-console-admin";
   static final String EAM_MODE_LEGACY = "legacy";
   static final String EAM_MODE_API = "eam-api";
 
@@ -43,6 +47,8 @@ public final class LauncherConfig {
    * @param webhookPort порт webhook и {@code /control/snapshot}; внутри compose-сети, наружу публикуется только
    *     {@code /webhook} через proxy
    * @param healthPort порт {@code GET /health}
+   * @param control проверка токена для {@code /control/snapshot} или {@code null}, если issuer/JWKS/audience не заданы
+   *     полностью: тогда {@code /control/snapshot} не поднимается (fail closed)
    * @param eamApi адрес и токен {@code eam-api} для адаптера EAM в режиме {@code ARCHRAG_EAM_MODE=eam-api}; {@code null}
    *     в режиме {@code legacy} (по умолчанию) и для остальных источников
    */
@@ -61,6 +67,7 @@ public final class LauncherConfig {
       int healthPort,
       Duration pollInterval,
       Duration reconcileInterval,
+      ControlAuth control,
       EamAdapter.EamApi eamApi) {
 
     @Override
@@ -69,6 +76,15 @@ public final class LauncherConfig {
           + ", healthPort=" + healthPort + ", eamApi=" + eamApi + ", secrets=***]";
     }
   }
+
+  /**
+   * Параметры проверки токена администратора на {@code /control/snapshot}; роль {@value #CONTROL_ROLE} зашита.
+   *
+   * @param issuer ожидаемый {@code iss}
+   * @param jwksUri адрес JWKS издателя
+   * @param audience обязательный {@code aud} (audience админского REST)
+   */
+  public record ControlAuth(String issuer, URI jwksUri, String audience) {}
 
   /**
    * Настройки заглушки источника.
@@ -121,7 +137,22 @@ public final class LauncherConfig {
     }
     return new Adapter(system, pgUrl, pgUser, pgPassword, URI.create(s3Endpoint), s3AccessKey, s3SecretKey, s3Bucket,
         URI.create(sourceUrl), secret, port(env, WEBHOOK_PORT, 8080), port(env, HEALTH_PORT, 8090),
-        seconds(env, POLL_INTERVAL_SECONDS, 30), seconds(env, RECONCILE_INTERVAL_SECONDS, 6 * 3600), eamApi);
+        seconds(env, POLL_INTERVAL_SECONDS, 30), seconds(env, RECONCILE_INTERVAL_SECONDS, 6 * 3600), controlAuth(env), eamApi);
+  }
+
+  /** Все три параметра обязательны для {@code /control/snapshot}; неполный набор даёт {@code null}. */
+  private static ControlAuth controlAuth(Map<String, String> env) {
+    String issuer = env.get(CONTROL_ISSUER);
+    String jwks = env.get(CONTROL_JWKS_URI);
+    String audience = env.get(CONTROL_AUDIENCE);
+    if (blank(issuer) || blank(jwks) || blank(audience)) {
+      return null;
+    }
+    return new ControlAuth(issuer.strip(), URI.create(jwks.strip()), audience.strip());
+  }
+
+  private static boolean blank(String v) {
+    return v == null || v.isBlank();
   }
 
   /** {@code ARCHRAG_EAM_MODE}: {@code legacy} (по умолчанию) либо {@code eam-api}; во втором нужны URL и токен. */

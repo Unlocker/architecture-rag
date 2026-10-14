@@ -8,6 +8,8 @@ import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import io.github.unlocker.archrag.eventschemas.JournalKey;
 import io.github.unlocker.archrag.eventschemas.JournalQuery;
 import io.github.unlocker.archrag.eventschemas.JournalReader;
+import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
+import io.github.unlocker.archrag.eventschemas.UnknownEventException;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.eventschemas.ObjectRef;
@@ -22,8 +24,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.sql.DataSource;
@@ -160,6 +164,71 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
   }
 
   @Override
+  public JournalEntry releaseFromQuarantine(String source, String eventId) {
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      try {
+        JournalEntry current;
+        try (PreparedStatement ps = c.prepareStatement(
+            "SELECT " + COLUMNS + " FROM inbox_event WHERE source = ? AND event_id = ? FOR UPDATE")) {
+          ps.setString(1, source);
+          ps.setString(2, eventId);
+          try (ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+              throw new UnknownEventException("unknown event " + fingerprint(source, eventId));
+            }
+            current = map(rs);
+          }
+        }
+        if (current.status() != ProcessingStatus.QUARANTINED) {
+          throw new NotQuarantinedException("event " + fingerprint(source, eventId) + " is not quarantined");
+        }
+        // Отдельный SQL: update() прибавляет попытку при входе в RETRYING, а здесь счёт начинается заново.
+        JournalEntry released;
+        try (PreparedStatement ps = c.prepareStatement("UPDATE inbox_event SET status = ?, error_code = NULL,"
+            + " error_reason = NULL, attempts = 0, updated_at = ? WHERE source = ? AND event_id = ?"
+            + " RETURNING " + COLUMNS)) {
+          ps.setString(1, ProcessingStatus.RETRYING.name());
+          ps.setTimestamp(2, Timestamp.from(Instant.now()));
+          ps.setString(3, source);
+          ps.setString(4, eventId);
+          try (ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            released = map(rs);
+          }
+        }
+        closeDlq(c, source, eventId);
+        c.commit();
+        return released;
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    } catch (SQLException e) {
+      throw new JournalException("releaseFromQuarantine failed", e);
+    }
+  }
+
+  @Override
+  public boolean closeDlq(String source, String eventId) {
+    try (Connection c = dataSource.getConnection()) {
+      return closeDlq(c, source, eventId);
+    } catch (SQLException e) {
+      throw new JournalException("closeDlq failed", e);
+    }
+  }
+
+  private static boolean closeDlq(Connection c, String source, String eventId) throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(
+        "UPDATE dlq_entry SET replayed_at = ? WHERE source = ? AND event_id = ? AND replayed_at IS NULL")) {
+      ps.setTimestamp(1, Timestamp.from(Instant.now()));
+      ps.setString(2, source);
+      ps.setString(3, eventId);
+      return ps.executeUpdate() > 0;
+    }
+  }
+
+  @Override
   public List<StoredEvent> read(JournalQuery q) {
     // Условия собираются из фиксированных фрагментов, значения идут только параметрами.
     StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE true");
@@ -237,6 +306,27 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
   }
 
   @Override
+  public Optional<StoredEvent> projectedUpsert(String source, String sourceType, String sourceId, SourceVersion version) {
+    String sql = "SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE source = ? AND source_type = ?"
+        + " AND source_id = ? AND source_version = ? AND status = 'PROJECTED' AND type = ? AND payload_key IS NOT NULL"
+        + " ORDER BY received_at DESC, event_id DESC LIMIT 1";
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, sourceType);
+      ps.setString(3, sourceId);
+      ps.setString(4, version.value());
+      ps.setString(5, CanonicalEvent.TYPE_ASSET_UPSERTED);
+      try (ResultSet rs = ps.executeQuery()) {
+        return rs.next()
+            ? Optional.of(new StoredEvent(map(rs), rs.getString("type"), rs.getString("subject")))
+            : Optional.empty();
+      }
+    } catch (SQLException e) {
+      throw new JournalException("projectedUpsert failed", e);
+    }
+  }
+
+  @Override
   public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
     try (Connection c = dataSource.getConnection();
         PreparedStatement ps = c.prepareStatement(
@@ -296,6 +386,26 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
       throw new JournalException("snapshotContents failed", e);
     }
     return new SnapshotContents(objects, events, first);
+  }
+
+  @Override
+  public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+    String sql = "SELECT status, count(*) FROM inbox_event WHERE source = ? AND sync_run_id = ? AND event_id <> ?"
+        + " GROUP BY status";
+    Map<ProcessingStatus, Long> counts = new EnumMap<>(ProcessingStatus.class);
+    try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, source);
+      ps.setString(2, syncRunId);
+      ps.setString(3, excludeEventId);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          counts.put(ProcessingStatus.valueOf(rs.getString(1)), rs.getLong(2));
+        }
+      }
+    } catch (SQLException e) {
+      throw new JournalException("statusCounts failed", e);
+    }
+    return counts;
   }
 
   @Override

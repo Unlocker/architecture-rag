@@ -43,7 +43,7 @@ CI (`.github/workflows/ci.yml`) гоняет три параллельных job
 
 Модули (`<group>/<module>`; пакеты `io.github.unlocker.archrag.<module без дефисов>`):
 
-- `contracts/` — общий слой без бизнес-логики: `canonical-model` (типы узлов/связей, `GraphCommand`, authority matrix), `event-schemas`, `source-spi` (интерфейсы мастер-систем).
+- `contracts/` — общий слой без бизнес-логики: `canonical-model` (типы узлов/связей, `GraphCommand`, authority matrix), `event-schemas`, `source-spi` (интерфейсы мастер-систем). Зависимость `event-schemas` и `source-spi` от `canonical-model` штатная; `canonical-model` ни от чего проектного не зависит, остальные зависимости между `contracts/*` не допускаются.
 - `adapters/` — запись: `adapter-core` (Poller/webhook/retry/`InboxWriter` — общий каркас) и конкретные `eam-`, `scm-`, `asset-`, `deploymap-adapter`. Адаптер только забирает данные источника (polling + webhook) и кладёт сырые события в inbox.
 - `ingestion/` — `event-journal` (PostgreSQL inbox как event backbone в PoC, Kafka — production; raw-снимки в S3/SeaweedFS), `normalizer`, `identity-resolution` (deterministic mapping/crosswalk + candidate matching/конфликты), `graph-projector` (идемпотентная проекция в Neo4j), `ingestion-service` (запускает конвейер; админский эндпоинт replay/rebuild/reconcile — не через MCP и не через внешний ingress).
 - `access/` — чтение: `graph-query-core` (реестр шаблонов запросов, `ResultBudget`/`QueryLimits`/таймауты — ограничения на обходы) и `mcp-server` (Spring AI MCP: tools `search_assets`, `get_asset`, `find_runtime_footprint`, `trace_dependencies(mode=trace|impact)`; OIDC/JWT-безопасность и `ToolScopeFilter`; аудит вызовов через `ToolCallAuditAspect`).
@@ -51,7 +51,8 @@ CI (`.github/workflows/ci.yml`) гоняет три параллельных job
 
 Ключевые инварианты:
 
+- Общие значения (типы и схемы событий, коды и URN источников, статусы) Java-код берёт из `contracts/*` (`CanonicalEvent`, `SourceSystemCode`, `ProcessingStatus`), не-Java потребитель защищён контрактным тестом, дубль без защиты не допускается (ADR 0041).
 - Запись и чтение разделены: `graph-projector` пишет под учёткой `neo4j` (writer), `mcp-server` читает только под `archrag_reader`. В Neo4j Community нет ролей — read-only и domain-фильтрацию обеспечивает приложение (`GraphReaderConfiguration`, `init-reader.sh`).
 - Мастер каждой связи/сущности определяется authority matrix (напр. `DEPENDS_ON` — EAM, `Deployment` — deploy map + Helm); в `SourceRecord` поле называется `source`, не `key`.
 - `trace_dependencies` принимает `maxDepth` 1..6 и отклоняет остальное ошибкой (без clamp).
-- Секреты на стенде раздаются как Docker secrets из `.env`; наружу публикуется только TLS reverse-proxy (Keycloak OIDC для токенов).
+- Секреты на стенде раздаются как Docker secrets из `.env`; наружу публикуется только TLS reverse-proxy (Keycloak OIDC для токенов). Кроме него, на `127.0.0.1` хоста стенда Compose публикует Keycloak, админ-консоль и (профиль) Grafana: loopback — свойство стенда, сервисы сами `server.address` не задают (ADR 0026).

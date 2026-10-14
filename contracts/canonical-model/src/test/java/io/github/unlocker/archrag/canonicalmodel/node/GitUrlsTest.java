@@ -104,4 +104,35 @@ class GitUrlsTest {
     assertThat(once).isEqualTo(expected);
     assertThat(GitUrls.normalize(once)).isEqualTo(once);
   }
+
+  @ParameterizedTest
+  @CsvSource({
+    "https://Git.Example.org/Pay/Payments-API.git/,git.example.org/pay/payments-api",
+    "git@git.example.org:Pay/payments-api.git,git.example.org/pay/payments-api",
+    "ssh://git@git.example.org:2222/pay/payments-api,git.example.org/pay/payments-api",
+    "http://git.example.org:8080/Pay/api,git.example.org:8080/pay/api",
+    "https://user:secret@git.example.org/pay/api,git.example.org/pay/api"
+  })
+  void matchKeyIsSchemelessLowerCase(String raw, String expected) {
+    assertThat(GitUrls.matchKey(raw)).isEqualTo(expected);
+  }
+
+  @Test
+  void matchKeyConvergesAcrossSchemesAndCase() {
+    assertThat(GitUrls.matchKey("http://GIT.example.org/Pay/Api"))
+        .isEqualTo(GitUrls.matchKey("git@git.example.org:pay/api.git"));
+  }
+
+  @Test
+  void normalizeKeepsPathCaseWhileMatchKeyDoesNot() {
+    assertThat(GitUrls.normalize("https://h/Pay/Api")).isEqualTo("https://h/Pay/Api");
+    assertThat(GitUrls.matchKey("https://h/Pay/Api")).isEqualTo("h/pay/api");
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"garbage", "https://git.example.org", "ftp://h/a/b"})
+  void matchKeyRejectsUnrecognized(String raw) {
+    assertThatThrownBy(() -> GitUrls.matchKey(raw)).isInstanceOf(IllegalArgumentException.class);
+  }
 }

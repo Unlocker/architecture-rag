@@ -4,12 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.unlocker.archrag.adminconsole.AdminConsoleApplication;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SyncRunStatus;
 import io.github.unlocker.archrag.eventjournal.JournalMigrations;
+import io.github.unlocker.archrag.graphprojector.SyncRunCounts;
+import io.github.unlocker.archrag.graphprojector.SyncRunWriter;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -66,10 +71,16 @@ class SyncConsoleIT {
       system.run("CREATE USER `console-reader` SET PASSWORD 'reader-pass' CHANGE NOT REQUIRED").consume();
     }
     Neo4jSchema.apply(admin);
+    // Прогоны создаются как у проектора (RUNNING) и закрываются штатным SyncRunWriter, а не засеваются терминальными.
     admin.executableQuery(
-            "CREATE (:SyncRun {runId: 'run-old', adapter: 'EAM', status: 'FAILED', startedAt: datetime('2026-01-01T00:00:00Z')}) "
-                + "CREATE (:SyncRun {runId: 'run-new', adapter: 'EAM', status: 'SUCCEEDED', startedAt: datetime('2026-01-02T00:00:00Z')})")
+            "CREATE (:SyncRun {runId: 'run-old', adapter: 'EAM', status: 'RUNNING', startedAt: datetime('2026-01-01T00:00:00Z')}) "
+                + "CREATE (:SyncRun {runId: 'run-new', adapter: 'EAM', status: 'RUNNING', startedAt: datetime('2026-01-02T00:00:00Z')})")
         .execute();
+    var writer = new SyncRunWriter(admin);
+    writer.close(SourceSystemCode.EAM, "run-old", SyncRunStatus.FAILED, Instant.parse("2026-01-01T01:00:00Z"),
+        new SyncRunCounts(5, 4, 1));
+    writer.close(SourceSystemCode.EAM, "run-new", SyncRunStatus.SUCCEEDED, Instant.parse("2026-01-02T01:00:00Z"),
+        new SyncRunCounts(5, 5, 0));
 
     jwt = new McpTestJwt();
     console = startConsole();
@@ -89,6 +100,10 @@ class SyncConsoleIT {
     st.execute("INSERT INTO identity_candidate (left_source, left_type, left_id, right_source, right_type, right_id,"
         + " label_family, matched, score, first_seen_at, updated_at) VALUES ('EAM','system','1','CMDB','ci','9',"
         + " 'ITSystem', '[{\"feature\":\"name\",\"value\":\"pay\"}]'::jsonb, 0.90, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z')");
+    st.execute("INSERT INTO identity_candidate (left_source, left_type, left_id, right_source, right_type, right_id,"
+        + " label_family, matched, score, status, first_seen_at, updated_at, resolved_at, resolved_by) VALUES"
+        + " ('EAM','system','2','CMDB','ci','8', 'ITSystem', '[]'::jsonb, 0.80, 'RESOLVED', '2026-01-01T00:00:00Z',"
+        + " '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', 'operator-1')");
     st.execute("INSERT INTO source_conflict (gid, property, dissent_source, dissent_type, dissent_id, dissent_value,"
         + " master_value, master_source, master_type, master_id, status, opened_at, updated_at) VALUES"
         + " ('11111111-1111-1111-1111-111111111111','criticality','CMDB','ci','9','LOW','HIGH','EAM','system','1',"
@@ -324,7 +339,9 @@ class SyncConsoleIT {
   void sourcesShowCheckpointCountsLastProjectedLagAndLatestSyncRun() {
     JsonNode sources = ok("/api/sync/sources");
 
-    assertThat(sources).hasSize(4);
+    assertThat(sources).hasSize(5);
+    assertThat(sources.get(4).get("source").asString()).isEqualTo("manual");
+    assertThat(sources.get(4).get("lastSyncRun").isNull()).isTrue();
     JsonNode eam = sources.get(0);
     assertThat(eam.get("source").asString()).isEqualTo("eam");
     assertThat(eam.get("checkpoints").get(0).get("cursor").asString()).isEqualTo("eam-3");
@@ -334,6 +351,7 @@ class SyncConsoleIT {
     assertThat(eam.get("lagSeconds").asLong()).isPositive();
     assertThat(eam.get("lastSyncRun").get("runId").asString()).isEqualTo("run-new");
     assertThat(eam.get("lastSyncRun").get("status").asString()).isEqualTo("SUCCEEDED");
+    assertThat(eam.get("lastSyncRun").get("endedAt").asString()).isEqualTo("2026-01-02T01:00:00Z");
     JsonNode deploymap = sources.get(3);
     assertThat(deploymap.get("source").asString()).isEqualTo("deploymap");
     assertThat(deploymap.get("eventsByStatus").get("PROJECTED").asLong()).isZero();
@@ -360,6 +378,11 @@ class SyncConsoleIT {
     assertThat(candidates.get("total").asLong()).isEqualTo(1);
     assertThat(candidates.get("items").get(0).get("matched").get(0).get("feature").asString()).isEqualTo("name");
     assertThat(candidates.get("items").get(0).get("score").asDouble()).isEqualTo(0.9);
+    assertThat(candidates.get("items").get(0).path("resolvedBy").isString()).isFalse();
+    JsonNode history = ok("/api/identity/candidates?status=RESOLVED");
+    assertThat(history.get("total").asLong()).isEqualTo(1);
+    assertThat(history.get("items").get(0).get("resolvedBy").asString()).isEqualTo("operator-1");
+    assertThat(history.get("items").get(0).get("resolvedAt").asString()).startsWith("2026-01-03T00:00:00");
     assertThat(ok("/api/identity/candidates?status=REJECTED").get("total").asLong()).isZero();
   }
 

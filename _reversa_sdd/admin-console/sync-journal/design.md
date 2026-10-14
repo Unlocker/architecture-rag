@@ -28,7 +28,7 @@ sequenceDiagram
   S-->>B: [SourceStatus x4]
 ```
 
-1. `sources`: три чтения PostgreSQL и одно графа, затем сборка по `SyncSources.CODES` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:58-74`) 🟢.
+1. `sources`: три чтения PostgreSQL и одно графа, затем сборка по `SyncSources.CODES` (пять кодов = `SourceSystemCode` в lowercase, включая `manual`; `SyncSourcesTest`; `canonical-model` — test-зависимость) (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:58-74`) 🟢.
 2. `events`: `PageRequest.of` → проверка `from < to` → `repository.events(toStored(source), status(status), from, to, page)` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:86-90`) 🟢.
 3. `event`: `toStored(source)` → `eventsById(eventId, stored)` → первый → `errorReason` → `dlqOfEvent` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:99-109`) 🟢.
 4. `dlq`: `repository.dlq(toStored(source), replayed, page)` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:119-120`) 🟢.
@@ -55,7 +55,7 @@ sequenceDiagram
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `replayed_at` не заполняется: фильтр DLQ «открытые» бесполезен (Q-03).
+- 🟢 (реализовано — UNLOCKER-281) `replayed_at` заполняет `EventJournal.closeDlq` (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`): фильтр DLQ «открытые» (`replayed=false`) исключает разобранные записи (Q-03).
 - 🔴 События с `/` в `eventId` без карточки (Q-04).
 - 🟡 Пустые `fetched/applied/failed/endedAt` у `lastSyncRun` (Q-10).
 - 🟡 Копии таблиц кодов и статусов (Q-08).

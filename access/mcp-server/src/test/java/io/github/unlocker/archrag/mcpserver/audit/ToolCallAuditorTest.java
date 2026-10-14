@@ -75,6 +75,16 @@ class ToolCallAuditorTest {
   }
 
   @Test
+  void rejectedUsesUnknownToolTagAndIsCountedOnce() {
+    auditor.rejected(ToolDecision.REJECTED_TOO_LARGE);
+
+    var timer = meters.get(ToolCallAuditor.OBSERVATION).timer();
+    assertThat(timer.getId().getTag("tool")).isEqualTo("unknown");
+    assertThat(timer.getId().getTag("decision")).isEqualTo("REJECTED_TOO_LARGE");
+    assertThat(timer.count()).isEqualTo(1);
+  }
+
+  @Test
   void sanitizeReplacesControlCharsAndTruncates() {
     assertThat(ToolCallAuditor.sanitize("a\nb\rc")).isEqualTo("a?b?c");
     assertThat(ToolCallAuditor.sanitize("a\u2028b\u2029c\u0085d")).isEqualTo("a?b?c?d");

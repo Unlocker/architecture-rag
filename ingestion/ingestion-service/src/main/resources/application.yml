@@ -20,6 +20,10 @@ archrag:
   admin:
     # Клиенты (azp), токены которых принимает admin REST; консольный клиент сюда не входит.
     allowed-clients: ${ARCHRAG_ADMIN_ALLOWED_CLIENTS:archrag-demo}
+    # Возраст STARTED-записи admin_audit, после которого операция считается брошенной (FAILED/abandoned).
+    audit-stale-after: ${ARCHRAG_ADMIN_AUDIT_STALE_AFTER:24h}
+    # Сколько хранятся записи admin_audit; старше удаляет фоновая чистка.
+    audit-retention: ${ARCHRAG_ADMIN_AUDIT_RETENTION:90d}
   neo4j:
     uri: ${ARCHRAG_NEO4J_URI}
     username: ${ARCHRAG_NEO4J_USER}
@@ -39,6 +43,17 @@ archrag:
       control-url: ${ARCHRAG_CMDB_CONTROL_URL:}
     deploymap:
       control-url: ${ARCHRAG_DEPLOYMAP_CONTROL_URL:}
+  # Reconcile: доля активных записей источника, которую missing set может закрыть; больше — маркер в карантин.
+  reconcile:
+    max-missing-share: ${ARCHRAG_RECONCILE_MAX_MISSING_SHARE:0.5}
+  # Жизненный цикл SyncRun: зависший RUNNING старше stale-after становится FAILED, терминальных прогонов
+  # на адаптер хранится keep-per-source.
+  sync-run:
+    stale-after: ${ARCHRAG_SYNC_RUN_STALE_AFTER:6h}
+    keep-per-source: ${ARCHRAG_SYNC_RUN_KEEP_PER_SOURCE:20}
+    housekeeping-interval: ${ARCHRAG_SYNC_RUN_HOUSEKEEPING_INTERVAL:1h}
+    # false отключает фоновую чистку (детерминированные IT).
+    enabled: ${ARCHRAG_SYNC_RUN_ENABLED:true}
   # Диспетчер журнала: RECEIVED/RETRYING → EventProcessor. Один поток, один экземпляр сервиса.
   dispatcher:
     enabled: ${ARCHRAG_DISPATCHER_ENABLED:true}
@@ -46,6 +61,7 @@ archrag:
     batch-size: ${ARCHRAG_DISPATCHER_BATCH_SIZE:100}
     retry-delay: ${ARCHRAG_DISPATCHER_RETRY_DELAY:30s}
     shutdown-timeout: ${ARCHRAG_DISPATCHER_SHUTDOWN_TIMEOUT:30s}
+    max-attempts: ${ARCHRAG_DISPATCHER_MAX_ATTEMPTS:10}
 
 management:
   # Метрики уходят в otel-collector по OTLP (E5.3); выключено по умолчанию, включает compose-флаг.

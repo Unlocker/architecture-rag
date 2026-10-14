@@ -4,8 +4,10 @@ import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.ConsoleTemplates;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import org.neo4j.driver.AuthTokens;
@@ -22,7 +24,11 @@ import org.springframework.context.annotation.Configuration;
  * создаётся лениво: соединение открывается при первом запросе. В реестре только шаблоны чтения.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({GraphReaderProperties.class, GraphReaderProperties.Limits.class})
+@EnableConfigurationProperties({
+  GraphReaderProperties.class,
+  GraphReaderProperties.Limits.class,
+  StalenessProperties.class
+})
 public class GraphReaderConfiguration {
 
   @Bean(destroyMethod = "close")
@@ -49,6 +55,16 @@ public class GraphReaderConfiguration {
     templates.add(AssetTemplates.GET_ASSET);
     templates.add(AssetTemplates.EXPLAIN_PROVENANCE);
     return QueryTemplateRegistry.of(templates, limits);
+  }
+
+  @Bean
+  Clock clock() {
+    return Clock.systemUTC();
+  }
+
+  @Bean
+  Staleness staleness(StalenessProperties properties, Clock clock) {
+    return new Staleness(properties.staleAfter(), clock);
   }
 
   @Bean

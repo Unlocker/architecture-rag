@@ -12,8 +12,8 @@
 
 ## Дополнительно
 - Промежуточные статусы (`VALIDATED`, `NORMALIZED`, `RESOLVED`) остаются после прерванной обработки и подхватываются `JournalReader.pending` наравне с `RETRYING` (`ES/JournalReader.java:17-20`) 🟢.
-- `EventProcessor` считает `PROJECTED, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED` завершёнными и повторно не обрабатывает (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:99-105,190-192`) 🟢.
+- `EventProcessor` считает `PROJECTED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED` завершёнными и повторно не обрабатывает (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:99-105,190-192`) 🟢.
 
 ## Риски
-- 🔴 R-02: `SUPERSEDED` недостижим. 🔴 R-03: нет операции оператора для `QUARANTINED → RETRYING`.
+- 🟢 R-02: `SUPERSEDED` удалён (UNLOCKER-281). 🟢 R-03: операция оператора для `QUARANTINED → RETRYING` — `POST /admin/quarantine/release`.
 - 🟡 Статусы продублированы в консоли и UI (`SyncSources.java:19-31`; matrix §3).

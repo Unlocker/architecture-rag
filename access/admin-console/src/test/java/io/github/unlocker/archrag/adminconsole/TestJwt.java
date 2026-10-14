@@ -48,12 +48,25 @@ final class TestJwt {
     registry.add("archrag.console.resource-uri", () -> RESOURCE);
   }
 
-  /** Валидный токен с заданными scopes (может быть пустым). */
+  /** Realm-роль, которую выдаёт {@link #token(String...)}. */
+  static final String ROLE = "archrag-console-admin";
+
+  /** Валидный токен с заданными scopes (может быть пустым) и ролью {@link #ROLE}. */
   static String token(String... scopes) {
     return token(List.of(scopes), RESOURCE, ISSUER, Instant.now().plus(Duration.ofMinutes(5)));
   }
 
+  /** Валидный токен с заданными scopes и произвольным набором realm-ролей (может быть пустым). */
+  static String tokenWithRoles(List<String> roles, String... scopes) {
+    return token(List.of(scopes), roles, RESOURCE, ISSUER, Instant.now().plus(Duration.ofMinutes(5)));
+  }
+
   static String token(List<String> scopes, String audience, String issuer, Instant expiresAt) {
+    return token(scopes, List.of(ROLE), audience, issuer, expiresAt);
+  }
+
+  static String token(
+      List<String> scopes, List<String> roles, String audience, String issuer, Instant expiresAt) {
     try {
       var claims =
           new JWTClaimsSet.Builder()
@@ -63,6 +76,7 @@ final class TestJwt {
               .issueTime(Date.from(Instant.now().minusSeconds(60)))
               .expirationTime(Date.from(expiresAt))
               .claim("scope", String.join(" ", scopes))
+              .claim("realm_access", java.util.Map.of("roles", roles))
               .build();
       var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
       jwt.sign(new RSASSASigner((RSAPrivateKey) KEYS.getPrivate()));

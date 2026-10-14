@@ -53,6 +53,6 @@
 
 ## Riscos e Lacunas
 
-- 🟡 `systemGid` не нормализуется, в отличие от трёх других tools (Q-06).
+- 🟢 `systemGid` нормализуется так же, как в трёх других tools (Q-06).
 - 🟡 Произведение service × deployment × compute упирается в `max-nodes` (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:24-26).
 - 🟡 `(Map<String, Object>) row.get("system")` и аналогичные приведения без проверки типов: форма строки целиком определяется шаблоном (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:253-256).

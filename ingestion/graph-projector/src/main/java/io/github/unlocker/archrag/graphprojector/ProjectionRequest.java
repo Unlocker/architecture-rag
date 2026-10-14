@@ -1,6 +1,5 @@
 package io.github.unlocker.archrag.graphprojector;
 
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -33,6 +32,10 @@ import java.util.UUID;
  * @param syncRunId прогон синхронизации или {@code null}
  * @param gids {@code gid} по ключам источника
  * @param conflicts полный набор открытых конфликтов {@code gid} записи или {@link ConflictMarkers#none()}
+ * @param partial запись имеет полноту {@code PARTIAL}: список её связей неполон, поэтому связи того же типа, не
+ *     названные в запросе, не закрываются (замещающая семантика отключена); утверждения запроса применяются как обычно
+ * @param relocation перенос записи на другой {@code gid} или {@code null}; допустим только для запроса без tombstone,
+ *     {@code gid} записи в {@code gids} равен {@link Relocation#into()}
  */
 public record ProjectionRequest(
     SourceKey key,
@@ -41,7 +44,34 @@ public record ProjectionRequest(
     String syncRunId,
     Map<SourceKey, UUID> gids,
     List<GraphCommand> commands,
-    ConflictMarkers conflicts) {
+    ConflictMarkers conflicts,
+    boolean partial,
+    Relocation relocation) {
+
+  /** Запрос без переноса записи ({@code relocation = null}). */
+  public ProjectionRequest(
+      SourceKey key,
+      SourceVersion version,
+      Instant eventTime,
+      String syncRunId,
+      Map<SourceKey, UUID> gids,
+      List<GraphCommand> commands,
+      ConflictMarkers conflicts,
+      boolean partial) {
+    this(key, version, eventTime, syncRunId, gids, commands, conflicts, partial, null);
+  }
+
+  /** Запрос полной записи ({@code partial = false}). */
+  public ProjectionRequest(
+      SourceKey key,
+      SourceVersion version,
+      Instant eventTime,
+      String syncRunId,
+      Map<SourceKey, UUID> gids,
+      List<GraphCommand> commands,
+      ConflictMarkers conflicts) {
+    this(key, version, eventTime, syncRunId, gids, commands, conflicts, false);
+  }
 
   /** Запрос без изменения маркеров конфликтов. */
   public ProjectionRequest(
@@ -82,15 +112,14 @@ public record ProjectionRequest(
           requireGid(gids, r.to());
         }
         case DeferRelation d -> requireSame(key, d.relation().assertedBy(), "deferred relation assertedBy");
-        case CloseAssertion c -> {
-          requireSame(key, c.assertedBy(), "close assertedBy");
-          requireGid(gids, c.from());
-          requireGid(gids, c.to());
-        }
       }
     }
     if (tombstones == 1 && commands.size() != 1) {
       throw new IllegalArgumentException("a tombstone request must not carry other commands");
+    }
+    if (relocation != null
+        && (tombstones != 0 || !relocation.into().equals(gids.get(key)))) {
+      throw new IllegalArgumentException("relocation requires a non-tombstone request on the target gid");
     }
     if (!conflicts.isNone() && tombstones == 0 && !conflicts.gid().equals(gids.get(key))) {
       throw new IllegalArgumentException("conflict markers must belong to the gid of the request record");

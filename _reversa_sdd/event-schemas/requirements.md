@@ -101,14 +101,14 @@
 | RF-09 `CanonicalEventPublisher` | Should | в рантайме нет реализаций; задел под Kafka (ADR 0006) |
 | RF-10, RF-11 | Should | малые DTO, нет тестов |
 | Объявление констант `deleted` / `snapshot-complete` в контракте | Could | предложение R.2a, в коде не реализовано |
-| Статус `SUPERSEDED` как рабочий | Won't (сейчас) | ни один код не переводит в него (Р-1) |
+| Статус `SUPERSEDED` | Удалён (UNLOCKER-281) | ни один код не переводил в него (Р-1) |
 
 ## Открытые вопросы и расхождения (🔴)
 
 | ID | Что | Evidence |
 |----|-----|----------|
 | R-01 | Типы `architecture.asset.deleted.v1`, `architecture.sync.snapshot-complete.v1` и их `dataschema` не вынесены в контракт; литералы продублированы в `EventMapper.java:29-32`, `EventProcessor.java:92-94`, `StoredEventReader.java:34`, `ReplayService.java:37` | `ES/CanonicalEvent.java:31`; `tech-debt.md` Н-5; `traceability/spec-impact-matrix.md` §2 № 1 |
-| R-02 | `SUPERSEDED` недостижим: определён и перечислен в `FINISHED`, но никто не переводит в него | `ES/ProcessingStatus.java:16,39`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:99-105`; `detective-gaps.md` Р-1 |
+| R-02 | 🟢 `SUPERSEDED` удалён (UNLOCKER-281); раньше был определён и перечислен в `FINISHED`, но никто не переводил в него | `ES/ProcessingStatus.java:16,39`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:99-105`; `detective-gaps.md` Р-1 |
 | R-03 | Выхода из `QUARANTINED` через оператора нет: переход `QUARANTINED → RETRYING` разрешён контрактом, но админский REST его не реализует, `EventProcessor` пропускает `QUARANTINED` как конечный (`FINISHED`) | `ES/ProcessingStatus.java:38`; `EventProcessor.java:99-105,190-192`; `detective-gaps.md` Р-2 |
 | R-04 | Структура id `snap:<syncRunId>:<type>/<id>/v<version>` и префикс `reconcile:` не зафиксированы константами контракта; в контракте только `REPLAY_PREFIX`; литерал `"snap:"` дублируется в `PostgresEventJournal.java:284` и `EventMapper.java:104` | `ES/JournalQuery.java:22`, `ES/EventJournal.java:53` |
 | R-05 | Расхождение `sourceVersion`: `SourceChange.sourceVersion` — `long`, в контракте журнала — до 40 цифр; значения выше `Long.MAX_VALUE` в `source-spi` невыразимы | `.reversa/context/modules.json` (запись `source-spi`, `SourceChange.java:27`) 🟡 |

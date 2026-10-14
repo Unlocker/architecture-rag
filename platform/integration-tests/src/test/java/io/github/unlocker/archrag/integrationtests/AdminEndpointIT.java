@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.integrationtests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.unlocker.archrag.adaptercore.ControlTokenValidator;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
@@ -214,14 +215,17 @@ class AdminEndpointIT {
     return post(path, token("architecture.admin"), body);
   }
 
-  /** Канонический дамп графа: узлы и связи как отсортированные строки без elementId. */
+  /**
+   * Канонический дамп графа: узлы и связи как отсортированные строки без elementId. {@code SyncRun} в дамп не
+   * входит: итог прогона пишет маркер {@code snapshot-complete}, а replay/rebuild маркеры пропускают.
+   */
   private List<String> dump() {
     List<String> out = new ArrayList<>();
-    for (var r : driver.executableQuery("MATCH (n) RETURN labels(n) AS l, properties(n) AS p").execute().records()) {
+    for (var r : driver.executableQuery("MATCH (n) WHERE NOT n:SyncRun RETURN labels(n) AS l, properties(n) AS p").execute().records()) {
       out.add("N " + sorted(r.get("l").asList()) + " " + new java.util.TreeMap<>(r.get("p").asMap()));
     }
     for (var r : driver.executableQuery(
-        "MATCH (a)-[r]->(b) RETURN labels(a) AS al, properties(a) AS ap, type(r) AS t, properties(r) AS rp, labels(b) AS bl, properties(b) AS bp")
+        "MATCH (a)-[r]->(b) WHERE NOT a:SyncRun RETURN labels(a) AS al, properties(a) AS ap, type(r) AS t, properties(r) AS rp, labels(b) AS bl, properties(b) AS bp")
         .execute().records()) {
       out.add("R " + sorted(r.get("al").asList()) + new java.util.TreeMap<>(r.get("ap").asMap()) + " -" + r.get("t").asString()
           + new java.util.TreeMap<>(r.get("rp").asMap()) + "-> " + sorted(r.get("bl").asList())
@@ -330,6 +334,86 @@ class AdminEndpointIT {
     assertThat(dump()).isEqualTo(before);
   }
 
+  /** Копия события eam из журнала под новым id, переведённая в карантин: её raw валиден, повтор пройдёт. */
+  private String quarantinedEamEvent() {
+    JournalQuery q = new JournalQuery("urn:corp:eam", null, null, true, null, 1);
+    StoredEvent stored = reader.read(q).getFirst();
+    CanonicalEvent original = events.toEvent(stored, rawStore.get(stored.entry().payloadRef()));
+    String id = "dlq-" + UUID.randomUUID();
+    CanonicalEvent copy = new CanonicalEvent(id, original.source(), original.type(), original.subject(), original.time(),
+        original.dataschema(), original.correlationid(), original.data());
+    journal.append(copy, stored.entry().payloadRef(), stored.entry().syncRunId());
+    journal.toDlq(copy.source(), id, "TEST_QUARANTINE", "put in quarantine by the test");
+    return id;
+  }
+
+  private long openDlq(String eventId) throws Exception {
+    return scalarLong("select count(*) from dlq_entry where event_id = ? and replayed_at is null", eventId);
+  }
+
+  @Test
+  void replayClosesDlqOfOriginalEventWhenCopyIsProcessed() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    assertThat(openDlq(id)).isEqualTo(1);
+
+    assertThat(admin("/admin/replay", "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(200);
+
+    assertThat(openDlq(id)).isZero();
+    assertThat(scalarLong("select count(*) from dlq_entry where event_id = ? and replayed_at is not null", id))
+        .isEqualTo(1);
+    // Исходная строка журнала остаётся в карантине: её обработала копия.
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void quarantineReleaseReturnsEventToRetryingClosesDlqAndAuditsIt() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    String body = "{\"source\":\"urn:corp:eam\",\"eventId\":\"" + id + "\"}";
+
+    var first = admin("/admin/quarantine/release", body);
+
+    assertThat(first.statusCode()).isEqualTo(200);
+    assertThat(first.body()).contains("\"status\":\"RETRYING\"").contains("\"attempts\":0");
+    var entry = journal.find("urn:corp:eam", id).orElseThrow();
+    assertThat(entry.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(entry.attempts()).isZero();
+    assertThat(openDlq(id)).isZero();
+    assertThat(scalarLong("select count(*) from admin_audit where operation = 'QUARANTINE_RELEASE'"
+        + " and status = 'SUCCEEDED' and actor = 'operator-1'")).isGreaterThanOrEqualTo(1);
+    // Дальше событие обрабатывается, как обычный RETRYING (диспетчер в этом тесте выключен, вызываем процессор).
+    Instant receivedAt = entry.receivedAt();
+    StoredEvent stored = reader.read(new JournalQuery("urn:corp:eam", receivedAt, receivedAt.plusSeconds(1), false, null, 100))
+        .stream()
+        .filter(e -> e.entry().eventId().equals(id)).findFirst().orElseThrow();
+    var result = processor.process(events.toEvent(stored, rawStore.get(stored.entry().payloadRef())),
+        stored.entry().payloadRef());
+    assertThat(result.status()).isIn(ProcessingStatus.PROJECTED, ProcessingStatus.IGNORED_OLD_VERSION);
+
+    // Повторный вызов: событие уже не в карантине.
+    assertThat(admin("/admin/quarantine/release", body).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void quarantineReleaseRejectsUnknownEventBadInputAndMissingRole() throws Exception {
+    seed();
+    String id = quarantinedEamEvent();
+    String body = "{\"source\":\"urn:corp:eam\",\"eventId\":\"" + id + "\"}";
+
+    assertThat(admin("/admin/quarantine/release", "{\"source\":\"urn:corp:eam\",\"eventId\":\"nope\"}").statusCode())
+        .isEqualTo(404);
+    assertThat(admin("/admin/quarantine/release", "{\"source\":\"urn:corp:eam\"}").statusCode()).isEqualTo(400);
+    assertThat(post("/admin/quarantine/release", null, body).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/quarantine/release", token("architecture.read"), body).statusCode()).isEqualTo(403);
+    String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+        "architecture.admin");
+    assertThat(post("/admin/quarantine/release", noRole, body).statusCode()).isEqualTo(403);
+    // Ни один отказ не тронул событие.
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(openDlq(id)).isEqualTo(1);
+  }
+
   @Test
   void replayOfEmptyRangeDoesNothing() throws Exception {
     seed();
@@ -369,6 +453,76 @@ class AdminEndpointIT {
         .isGreaterThanOrEqualTo(4);
     // Повтор того же crosswalk идемпотентен.
     assertThat(admin("/admin/crosswalks", body).body()).contains("\"index\":0,\"status\":\"APPLIED\"");
+  }
+
+  /** Событие CMDB {@code COMPUTE_INSTANCE} с raw в S3 (формат адаптера), обработанное процессором. */
+  private void cmdbHost(String id, String hostname) {
+    String raw = "{\"operation\":\"UPSERT\",\"completeness\":\"COMPLETE\",\"updatedAt\":\"2026-10-01T10:00:00Z\","
+        + "\"payload\":{\"hostname\":\"" + hostname + "\",\"kind\":\"VIRTUAL_MACHINE\"}}";
+    var ref = rawStore.put("urn:corp:cmdb", raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    var event = new CanonicalEvent("e-" + UUID.randomUUID(), "urn:corp:cmdb", CanonicalEvent.TYPE_ASSET_UPSERTED,
+        "COMPUTE_INSTANCE/" + id, Instant.parse("2026-10-01T10:00:00Z"), "urn:corp:schema:asset-upserted:1", null,
+        new io.github.unlocker.archrag.eventschemas.AssetEventData("COMPUTE_INSTANCE", id,
+            new io.github.unlocker.archrag.eventschemas.SourceVersion("1"),
+            Map.of("hostname", hostname, "kind", "VIRTUAL_MACHINE", "_completeness", "COMPLETE")));
+    journal.append(event, ref, null);
+    assertThat(processor.process(event, ref).status()).isEqualTo(ProcessingStatus.PROJECTED);
+  }
+
+  private static String approveBody(String left, String right, String survivor) {
+    return "{\"left\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"" + left + "\"},"
+        + "\"right\":{\"source\":\"CMDB\",\"sourceType\":\"COMPUTE_INSTANCE\",\"sourceId\":\"" + right + "\"},"
+        + (survivor == null ? "" : "\"survivor\":\"" + survivor + "\",") + "\"reason\":\"same host\"}";
+  }
+
+  /** Другие записи, утверждающие тот же узел, что и запись {@code sourceId} (сама запись в результат не входит). */
+  private List<String> coAssertersOf(String sourceId) {
+    return driver.executableQuery(
+            "MATCH (:SourceRecord {source: 'CMDB', sourceType: 'COMPUTE_INSTANCE', sourceId: $id})-[:ASSERTS]->(n)"
+                + "<-[:ASSERTS]-(o:SourceRecord) RETURN o.sourceId AS id ORDER BY id")
+        .withParameters(Map.of("id", sourceId)).execute().records().stream().map(r -> r.get("id").asString()).toList();
+  }
+
+  @Test
+  void candidateApprovalMovesRecordReprojectsAuditsAndSurvivesRebuild() throws Exception {
+    seed();
+    String a = "ap-a-" + UUID.randomUUID();
+    String b = "ap-b-" + UUID.randomUUID();
+    String hostname = "approve-" + UUID.randomUUID() + ".corp";
+    cmdbHost(a, hostname);
+    cmdbHost(b, hostname);
+    String body = approveBody(a, b, "LEFT");
+
+    // Защита: токен, scope, параметры, неизвестный кандидат.
+    assertThat(post("/admin/identity/candidates/approve", null, body).statusCode()).isEqualTo(401);
+    assertThat(post("/admin/identity/candidates/approve", token("architecture.read"), body).statusCode()).isEqualTo(403);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, b, null)).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, b, "BOTH")).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, a, "LEFT")).statusCode()).isEqualTo(400);
+    assertThat(admin("/admin/identity/candidates/approve", approveBody(a, "no-such-" + UUID.randomUUID(), "LEFT")).statusCode())
+        .isEqualTo(404);
+    assertThat(coAssertersOf(b)).isEmpty();
+
+    var ok = admin("/admin/identity/candidates/approve", body);
+
+    assertThat(ok.statusCode()).isEqualTo(200);
+    assertThat(ok.body()).contains("\"status\":\"REPROJECTED\"").contains("\"previousRetired\":true");
+    // Запись b сразу утверждает узел a (рядом с ней a); прежний узел b закрыт и указывает на выжившего.
+    assertThat(coAssertersOf(b)).containsExactly(a);
+    assertThat(driver.executableQuery("MATCH (n) WHERE n.mergedInto IS NOT NULL AND n.isCurrent = false RETURN count(n) AS c")
+        .execute().records().get(0).get("c").asLong()).isGreaterThanOrEqualTo(1);
+    assertThat(scalarLong("select count(*) from admin_audit where operation = 'IDENTITY_APPROVE' and status = 'SUCCEEDED'"
+        + " and actor = 'operator-1'")).isEqualTo(1);
+    assertThat(scalarLong("select count(*) from identity_candidate where status = 'RESOLVED' and resolved_by = 'operator-1'"
+        + " and (left_id = ? or right_id = ?)", a, a)).isEqualTo(1);
+    // Повтор: кандидат уже закрыт.
+    assertThat(admin("/admin/identity/candidates/approve", body).statusCode()).isEqualTo(409);
+
+    // Rebuild воспроизводит результат: gid берётся из identity_mapping, отдельной логики нет.
+    assertThat(admin("/admin/rebuild?confirm=true", null).statusCode()).isEqualTo(200);
+    assertThat(coAssertersOf(b)).containsExactly(a);
+    assertThat(driver.executableQuery("MATCH (n) WHERE n.mergedInto IS NOT NULL RETURN count(n) AS c").execute().records()
+        .get(0).get("c").asLong()).isZero();
   }
 
   @Test
@@ -437,7 +591,8 @@ class AdminEndpointIT {
     var eam = StubSources.eam(Clock.systemUTC());
     try (var server = new StubSourceServer(eam);
         var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
-      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), EAM_CONTROL_PORT));
+      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), EAM_CONTROL_PORT),
+          new ControlTokenValidator(ADMIN_RESOURCE, URI.create(JWT.jwkSetUri()), ADMIN_RESOURCE, McpTestJwt.ADMIN_ROLE));
       long markers = scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'");
 
       var r = admin("/admin/reconcile/eam", null);
@@ -448,6 +603,39 @@ class AdminEndpointIT {
           .isEqualTo(markers + 1);
       assertThat(scalarLong("select count(*) from admin_audit where operation = 'RECONCILE' and status = 'SUCCEEDED'"))
           .isGreaterThanOrEqualTo(1);
+    }
+  }
+
+  @Test
+  void adminRoleIsRequiredInAdditionToScope() throws Exception {
+    seed();
+    String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+        "architecture.admin");
+    assertThat(post("/admin/reconcile/eam", noRole, null).statusCode()).isEqualTo(403);
+    assertThat(post("/admin/rebuild?confirm=true", noRole, null).statusCode()).isEqualTo(403);
+  }
+
+  @Test
+  void controlSnapshotRejectsMissingTokenAndMissingRoleButAcceptsAdmin() throws Exception {
+    seed();
+    var eam = StubSources.eam(Clock.systemUTC());
+    try (var server = new StubSourceServer(eam);
+        var adapter = eamApi.adapter(server.baseUri(), "s", journal, rawStore)) {
+      int controlPort = freePort();
+      adapter.startWebhook(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), controlPort),
+          new ControlTokenValidator(ADMIN_RESOURCE, URI.create(JWT.jwkSetUri()), ADMIN_RESOURCE, McpTestJwt.ADMIN_ROLE));
+      long markers = scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'");
+      URI uri = URI.create("http://127.0.0.1:" + controlPort + "/control/snapshot");
+
+      assertThat(http.send(HttpRequest.newBuilder(uri).POST(HttpRequest.BodyPublishers.noBody()).build(),
+          HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+      String noRole = JWT.tokenWithRoles(List.of(McpTestJwt.READER_ROLE), "archrag-demo", "operator-1", ADMIN_RESOURCE,
+          "architecture.admin");
+      assertThat(http.send(HttpRequest.newBuilder(uri).header("Authorization", "Bearer " + noRole)
+          .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString()).statusCode())
+          .isEqualTo(403);
+      assertThat(scalarLong("select count(*) from inbox_event where type = 'architecture.sync.snapshot-complete.v1'"))
+          .isEqualTo(markers);
     }
   }
 

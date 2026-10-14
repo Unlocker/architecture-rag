@@ -38,7 +38,7 @@
 ## `StoredEventReader.toEvent` (порядок шагов)
 
 1. Разбор `new String(raw, UTF_8)` в `JsonNode`; `JacksonException` → `IllegalArgumentException("raw payload is not valid JSON")`; не объект → `"raw payload is not a JSON object"` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/StoredEventReader.java:46-54`).
-2. Тип `architecture.sync.snapshot-complete.v1` → `marker(...)`: `objectCount` обязателен, целый и `>= 0`; payload = `{syncRunId = entry.sourceId(), objectCount: Long}`; `time` из `updatedAt` (`:55-57, 88-106`).
+2. Тип `architecture.sync.snapshot-complete.v1` → `marker(...)`: `objectCount` целый и `>= 0` попадает в payload, иначе поля в payload нет (UNLOCKER-279: карантин `SNAPSHOT_OBJECT_COUNT_MISSING` ставит `EventProcessor`, а не `INVALID_RAW_PAYLOAD`); payload = `{syncRunId = entry.sourceId(), objectCount: Long}`; `time` из `updatedAt` (`:55-57, 88-106`).
 3. `delete = "DELETE".equals(raw.operation)`; `time = Instant.parse(raw.updatedAt)` (ошибка/`null` → `"raw payload has no valid updatedAt"`) (`:58-59, 108-115`).
 4. Не `DELETE`: `payload` (если объект) → `Map`, поля со значением `null` отбрасываются (только верхний уровень); `completeness` обязателен (иначе `"raw payload has no completeness"`), кладётся как `_completeness` (`:60-76`). Любое иное значение `operation` трактуется как upsert 🟡.
 5. `CanonicalEvent(entry.eventId, entry.source, stored.type, stored.subject, time, entry.schemaVersion, entry.correlationId, AssetEventData(entry.sourceType, entry.sourceId, SourceVersion(entry.sourceVersion.value), payload))` (`:77-85`).
@@ -67,7 +67,7 @@
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Нет лимита повторов; бесконечный `RETRYING`/исключение — Q-01.
+- 🟢 (реализовано — UNLOCKER-281) Лимит повторов: `archrag.dispatcher.max-attempts`, после него `QUARANTINED` / `RETRY_LIMIT_EXCEEDED` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:100`) — Q-01.
 - 🟡 После `stop()` повторный `start()` не возобновляет работу (`stopped` необратим) — Q-09.
 - 🟡 Замок берётся на страницу из `batchSize` событий; длинная страница удерживает админские операции (они получают 409) — Q-06.
 - 🟡 Ссылка Н-2 в `../../tech-debt.md:57` на `JournalDispatcher.java:100` указывает на `tryAcquire`, а не на место повтора (повтор — `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:119-121, 156-162` и `PostgresEventJournal.java:209-217`).

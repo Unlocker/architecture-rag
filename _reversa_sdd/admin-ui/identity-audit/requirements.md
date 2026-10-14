@@ -16,7 +16,7 @@
 - Пустые списки: «Конфликтов с таким статусом нет», «Кандидатов с таким статусом нет», «Операций нет» 🟢 (`access/admin-ui/src/pages/sync/IdentityTab.tsx:20, 72`; `access/admin-ui/src/pages/sync/AuditTab.tsx:16`).
 - Сервер по умолчанию подставляет `status = OPEN`; UI всегда шлёт статус явно 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java:29, 37, 40, 48`; `access/admin-ui/src/api/endpoints.ts:65-68`).
 - UI не передаёт фильтры `gid`, `labelFamily` (identity) и `operation`, `status`, `from`, `to` (audit), хотя бэкенд их поддерживает 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/IdentityController.java:30-35, 41-46`; `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/AuditController.java:25-32`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] `identity_candidate.status` не выходит из `OPEN`: селектор `RESOLVED` для кандидатов всегда пуст, операции закрытия у оператора нет (Q-03).
+- 🟢 [UNLOCKER-282: реализовано] `identity_candidate.status` выходит из `OPEN` по подтверждению оператора (`POST /admin/identity/candidates/approve`): селектор `RESOLVED` показывает историю с колонками «Закрыт»/«Кем»; кнопки подтверждения в консоли нет (ADR 0026: консоль read-only, `azp` консоли не пускает в admin REST) — решение за архитектором (Q-03).
 - 🟡 Аудит, который видит оператор, — только `admin_audit` ingestion (replay/rebuild/reconcile/crosswalk); чтения самой консоли пишутся в лог сервера и в UI не видны (Q-15).
 
 ## Requisitos Funcionais

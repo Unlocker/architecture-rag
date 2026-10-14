@@ -17,7 +17,7 @@
 - Дубликат и устаревшую версию решает `EventProcessor`, не диспетчер 🟢 (Javadoc `:34`).
 - Каждое обработанное событие считается метрикой `archrag.ingestion.events` (`null` → `ERROR`) 🟢 (`:133-137`).
 - `stop()` прерывает проход между событиями; дорабатывается текущее 🟢 (`:88-91, 99, 109-111`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Предела числа повторов нет (Q-01); `RECEIVED`, на котором процессор бросает исключение, берётся в каждый проход (нет гейта по `updated_at` для `RECEIVED`) 🟡.
+- 🟢 (реализовано — UNLOCKER-281) Предел числа повторов задаёт `archrag.dispatcher.max-attempts` (Q-01); `RECEIVED`, на котором процессор бросает исключение, по-прежнему берётся в каждый проход (нет гейта по `updated_at` для `RECEIVED`) 🟡.
 
 ## Requisitos Funcionais
 
@@ -75,7 +75,7 @@
 # AC-06 (StoredEventReaderContractTest.*)
 Дано raw, записанный EventMapper адаптера (upsert/partial/delete/marker)
 Когда StoredEventReader.toEvent собирает событие
-Тогда оно равно EventMapper.toEvent; marker без objectCount отклоняется (snapshotMarkerWithoutObjectCountIsRejected)
+Тогда оно равно EventMapper.toEvent; marker без валидного objectCount читается без этого поля, и `EventProcessor` уводит его в карантин `SNAPSHOT_OBJECT_COUNT_MISSING` (UNLOCKER-279; `snapshotMarkerWithoutObjectCountIsReadWithoutTheFieldSoThatEventProcessorQuarantinesIt`, IT `markerWithoutObjectCountInRawGoesToDlqWithSpecificCodeAndClosesNothing`)
 ```
 
 Интеграционно: `JournalDispatcherIT.eventsAppendedToJournalReachGraphWithoutManualCall`, `brokenEventIsQuarantinedWithDlqAndFollowingEventsAreProjected`, `markerWithoutRawGoesToDlq` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/JournalDispatcherIT.java:122, 137, 219`) 🟢.

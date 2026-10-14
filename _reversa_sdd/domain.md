@@ -16,7 +16,7 @@
 | Кандидат (`identity_candidate`) | подозрение «две записи — один объект»; только запись, узлы не объединяются | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:9-14` 🟢 |
 | Конфликт (`source_conflict`) | расхождение значения неавторитетной записи с авторитетной | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/SourceConflict.java:8-23` 🟢 |
 | Дельта / snapshot | инкрементальное чтение по курсору и полное чтение с маркером `snapshot-complete` | `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:19-31` 🟢 |
-| `GraphCommand` | единственный вход проектора: `UpsertNode`, `UpsertRelation`, `DeferRelation`, `TombstoneSourceRecord`, `CloseAssertion` | `EventProcessor.java:568-586` 🟢 |
+| `GraphCommand` | единственный вход проектора: `UpsertNode`, `UpsertRelation`, `DeferRelation`, `TombstoneSourceRecord` | `EventProcessor.java:568-586` 🟢 |
 
 ---
 
@@ -117,7 +117,7 @@
 | Повтор пережил новую версию | `RETRYING`-событие перепроверяется до записи в PostgreSQL | `EventProcessor.java:324-344` 🟢 |
 | `eventId` конструкции | polling `poll:<type>/<id>/v<ver>`, snapshot `snap:<run>:<type>/<id>/v<ver>`, маркер `snapshot-complete:<run>`, replay `replay:<id>:<eventId>`, reconcile `reconcile:<run>:<type>/<id>` | `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java:99, 104`; `ReplayService.java:88-89`; `Reconciler.java:158` 🟢 |
 | Checkpoint только после коммита | `finish` → `saveCheckpoint("projector", source, eventId)` после перехода в конечный статус; при `RETRYING`/`QUARANTINED` не сдвигается | `EventProcessor.java:612-617` 🟢 |
-| Курсор poller'а | сдвигается после `append` всей страницы **в журнал** (не после проекции) | `Poller.java:22-25, 136` 🟢 / см. 🟡 в [`detective-gaps.md`](detective-gaps.md), П-7 |
+| Курсор poller'а | сдвигается после `append` всей страницы **в журнал** (не после проекции) | `Poller.java:22-25, 136` 🟢; уточнение ADR 0020 от 2026-10-14 ([`detective-gaps.md`](detective-gaps.md), П-7) |
 
 Для каждого объекта `(source, sourceType, sourceId)` порядок обработки сохраняется: диспетчер пропускает более поздние события объекта, если предыдущее ушло в `RETRYING` или упало (`JournalDispatcher.java:111-121`) 🟢.
 
@@ -129,7 +129,7 @@
 2. **Источник не отдал объект в полном snapshot:** `Reconciler` по маркеру `snapshot-complete` помечает tombstone только активные записи, которые (а) не вошли в прогон по журналу и (б) не затронуты никаким событием с начала прогона. Если событий прогона в журнале меньше `objectCount` маркера, бросается `IllegalStateException`, ничего не удаляется, маркер уйдёт в `RETRYING` (`Reconciler.java:100-142`; `EventProcessor.java:293-298`) 🟢.
 3. **Tombstone `Reconciler` пишется в журнал до записи в граф** событием `reconcile:<run>:<type>/<id>` с raw в S3, чтобы replay и rebuild воспроизводили удаления; повтор доводит строку до конечного статуса (`Reconciler.java:45-48, 156-194`) 🟢. В ADR этого нет — [`adrs/candidates.md`](adrs/candidates.md), К-5.
 4. **Tombstone с версией записи:** `Reconciler` берёт уже применённую версию; если объект успели обновить, проекция вернёт `IGNORED_OLD_VERSION` и новое состояние не удалится (`Reconciler.java:42-43, 130-135`) 🟢.
-5. **Канонический узел** архивируется, только если нет других активных MASTER-утверждений (`GraphProjector.java:543-548`), см. [`state-machines.md`](state-machines.md), §6. Рёбра закрываются через `validTo` (ADR 0028).
+5. **Канонический узел** архивируется, только если нет других активных утверждений любой авторитетности (`GraphProjector.closeNode`), см. [`state-machines.md`](state-machines.md), §6. Рёбра закрываются через `validTo` (ADR 0028).
 6. **Retention.** `inbox_event`, `dlq_entry`, `admin_audit`, S3 raw не чистятся — сознательный выбор PoC (`_reversa_sdd/database/business-rules.md`, §3) 🟡; политики архивации нет (ADR 0020, «Последствия»).
 7. 🟡 Ручной запуск `POST /admin/reconcile/{source}` не повторяет «missing set», а запускает *новый полный snapshot* в adapter-сервисе (`AdminController.java:94-115`; коммит `9656ce5`), поэтому «безопасность удаления» зависит от полноты нового snapshot, а не от какого-то сохранённого списка.
 
@@ -188,7 +188,7 @@
 |---|---|---|
 | Какие связи темпоральны | 10 из 15 типов; `PART_OF`, `HOSTED_ON` и служебные нет | `RelationType.java:13-27` 🟢 |
 | Начало интервала | `validFrom` источника, иначе время события; повторное утверждение закрытой связи открывает её заново | `GraphProjector.java:567-575` 🟢 |
-| Закрытие | версия записи замещает свои связи; tombstone и `CloseAssertion` закрывают явно; `validTo = max(validFrom, момент)` | `GraphProjector.java:519-545, 611-645, 668-690` 🟢 |
+| Закрытие | версия записи замещает свои связи; tombstone закрывает явно; `validTo = max(validFrom, момент)` | `GraphProjector.java:519-545, 611-645, 668-690` 🟢 |
 | Чтение «сейчас» | шаблоны `graph-query-core` берут связи с `validTo IS NULL` | ADR 0028; `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/RuntimeTemplates.java` 🟡 |
 | Свежесть фактов | `stale-after = P7D`: `lastSeenAt` старше порога → `stale` в ответе MCP | `access/mcp-server/src/main/resources/application.yml:43-44`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:80` 🟢 |
 | Миграция живого графа | `TemporalRelationMigration` при старте ingestion-service: `validFrom = coalesce(validFrom, firstSeenAt записи)`, иначе время миграции | ADR 0028; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/TemporalRelationMigration.java` 🟡 |

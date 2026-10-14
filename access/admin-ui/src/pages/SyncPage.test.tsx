@@ -7,7 +7,7 @@ import { health } from './sync/SourcesTab';
 
 const zero = {
   RECEIVED: 0, VALIDATED: 0, NORMALIZED: 0, RESOLVED: 0, PROJECTED: 0,
-  QUARANTINED: 0, RETRYING: 0, SUPERSEDED: 0, DUPLICATE: 0, IGNORED_OLD_VERSION: 0,
+  QUARANTINED: 0, RETRYING: 0, DUPLICATE: 0, IGNORED_OLD_VERSION: 0,
 };
 const run = { runId: 'r1', startedAt: '2026-10-01T10:00:00Z', endedAt: null, status: 'SUCCEEDED', fetched: 10, applied: 9, failed: 0 };
 const source = (name: string, extra: Partial<SourceStatus> = {}): SourceStatus => ({
@@ -24,6 +24,7 @@ const sources = [
   source('scm', { eventsByStatus: { ...zero, QUARANTINED: 3 } }),
   source('cmdb', { lastSyncRun: null, lastProjectedAt: null, lagSeconds: null }),
   source('deploymap', { lastSyncRun: { ...run, status: 'FAILED', failed: 2 } }),
+  source('manual', { lastSyncRun: null, lastProjectedAt: null, lagSeconds: null }),
 ];
 const event = {
   source: 'urn:corp:eam', eventId: 'e-1', type: 'asset.upserted', subject: 's', sourceType: 'System', sourceId: 'S-1',
@@ -67,13 +68,15 @@ test('sources screen shows a traffic light per source with run, lag and counters
 
   const table = await screen.findByRole('table', { name: 'Источники синхронизации' });
   const rows = within(table).getAllByRole('row').slice(1);
-  expect(rows).toHaveLength(4);
+  expect(rows).toHaveLength(5);
   expect(within(rows[0]).getByText('норма')).toBeTruthy();
   expect(within(rows[0]).getByText('2 мин')).toBeTruthy();
   expect(within(rows[1]).getByText('проблемы')).toBeTruthy();
   expect(rows[1].textContent).toContain('QUARANTINED: 3');
   expect(within(rows[2]).getByText('нет данных')).toBeTruthy();
   expect(within(rows[3]).getByText('проблемы')).toBeTruthy();
+  expect(within(rows[4]).getByText('нет данных')).toBeTruthy();
+  expect(within(rows[4]).getByText('manual')).toBeTruthy();
 });
 
 test('health rules', () => {
@@ -81,6 +84,11 @@ test('health rules', () => {
   expect(health(sources[1])).toBe('bad');
   expect(health(sources[2])).toBe('warn');
   expect(health(sources[3])).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'RUNNING', endedAt: null, failed: null } }))).toBe('warn');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'FAILED' } }))).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'SUCCEEDED', failed: 0 } }))).toBe('ok');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'SUCCEEDED', failed: 3 } }))).toBe('bad');
+  expect(health(source('x', { lastSyncRun: { ...run, status: 'RUNNING' }, eventsByStatus: { QUARANTINED: 1 } }))).toBe('bad');
 });
 
 test('lag raises the traffic light', () => {
@@ -228,6 +236,23 @@ test('identity status filter requests RESOLVED history', async () => {
 
   await waitFor(() => expect(mock.get).toHaveBeenCalledWith('/api/identity/conflicts?status=RESOLVED&page=0&size=50'));
   await waitFor(() => expect(mock.get).toHaveBeenCalledWith('/api/identity/candidates?status=RESOLVED&page=0&size=50'));
+});
+
+test('identity history shows who and when closed a RESOLVED candidate, OPEN list has no such columns', async () => {
+  const resolved = { leftSource: 'cmdb', leftType: 'CI', leftId: 'L2', rightSource: 'cmdb', rightType: 'CI', rightId: 'R2', labelFamily: 'ComputeInstance', matched: [{ feature: 'hostname', value: 'app-01' }], score: 0.6, status: 'RESOLVED', firstSeenAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-14T09:00:00Z', resolvedAt: '2026-10-14T09:00:00Z', resolvedBy: 'operator-1' };
+  const mock = api({
+    '/api/identity/candidates': (path) => page(path.includes('status=RESOLVED') ? [resolved] : []),
+  });
+  open(mock, 'Identity');
+  expect(await screen.findByText('Кандидатов с таким статусом нет')).toBeTruthy();
+  expect(screen.queryByText('Кем')).toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Статус кандидатов'), { target: { value: 'RESOLVED' } });
+
+  const table = await screen.findByRole('table', { name: 'Кандидаты identity' });
+  expect(within(table).getByText('Кем')).toBeTruthy();
+  expect(within(table).getByText('operator-1')).toBeTruthy();
+  expect(within(table).getByText('hostname=app-01')).toBeTruthy();
 });
 
 test('audit shows empty state', async () => {

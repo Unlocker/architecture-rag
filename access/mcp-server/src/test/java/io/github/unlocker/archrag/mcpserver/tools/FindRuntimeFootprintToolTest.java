@@ -11,8 +11,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
-import io.github.unlocker.archrag.mcpserver.graph.StalenessProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,7 +34,8 @@ class FindRuntimeFootprintToolTest {
   private final GraphQueries graph = mock(GraphQueries.class);
   private final FindRuntimeFootprintTool tool =
       new FindRuntimeFootprintTool(
-          graph, new StalenessProperties(Duration.ofDays(7)), Clock.fixed(NOW, ZoneOffset.UTC));
+          graph,
+          new Staleness(Duration.ofDays(7), Clock.fixed(NOW, ZoneOffset.UTC)));
 
   private static Map<String, Object> node(String gid, String seen, Map<String, Object> extra) {
     Map<String, Object> m = new HashMap<>(extra);
@@ -105,6 +106,18 @@ class FindRuntimeFootprintToolTest {
           .hasMessage("systemGid must be a UUID");
     }
     verifyNoInteractions(graph);
+  }
+
+  @Test
+  void upperCaseAndPaddedGidIsNormalizedLikeLowerCase() {
+    when(graph.execute(any(), any(), any())).thenReturn(result(false, row(system(FRESH), null, null, null, null)));
+
+    tool.findRuntimeFootprint("  " + GID.toUpperCase() + " ", null);
+
+    Map<String, Object> expected = new HashMap<>();
+    expected.put("systemGid", GID.toLowerCase());
+    expected.put("environment", null);
+    verify(graph).execute(eq("runtime_footprint"), eq(expected), isNull());
   }
 
   @Test
@@ -199,6 +212,18 @@ class FindRuntimeFootprintToolTest {
     assertThat(r.environment()).isNull();
     assertThat(r.services()).hasSize(1);
     assertThat(r.services().get(0).deployments()).isEmpty();
+  }
+
+  @Test
+  void unparseableLastSeenAtIsStaleWithoutException() {
+    Map<String, Object> svc = node("s1", "not-a-date", Map.of("name", "billing-api"));
+    when(graph.execute(any(), any(), any()))
+        .thenReturn(result(false, row(system("garbage"), svc, null, null, null)));
+
+    FindRuntimeFootprintResult r = tool.findRuntimeFootprint(GID, null);
+
+    assertThat(r.systemStale()).isTrue();
+    assertThat(r.services().get(0).stale()).isTrue();
   }
 
   @Test

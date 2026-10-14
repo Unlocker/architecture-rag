@@ -33,7 +33,7 @@
   - Origin: [`../questions.md`](../questions.md) Q-03, Q-34; `platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:875-913`
   - Критерий готовности: AC-11
   - Уверенность: 🔴
-- [ ] T-08: 🟡 дополнить `PlatformInvariantIT` непокрытыми пунктами ADR 0031 и усилить тавтологичные тесты (`closeAssertion…`, `migrationsAreIdempotent`, `repeatedVerIsNoOp…`)
+- [ ] T-08: 🟡 дополнить `PlatformInvariantIT` непокрытыми пунктами ADR 0031 и усилить тавтологичные тесты (`migrationsAreIdempotent`, `repeatedVerIsNoOp…`)
   - Origin: [`../questions.md`](../questions.md) Q-16, Q-27
   - Критерий готовности: каждый тест падает при регрессии, которую называет
   - Уверенность: 🟡

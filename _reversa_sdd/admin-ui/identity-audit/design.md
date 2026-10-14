@@ -40,6 +40,6 @@ REST консоли: `GET /api/identity/conflicts`, `/candidates`, `GET /api/aud
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] Кандидаты `RESOLVED` недостижимы: статус не выходит из `OPEN` — Q-03.
+- 🟢 [UNLOCKER-282: реализовано] Кандидаты `RESOLVED` достижимы через `POST /admin/identity/candidates/approve` (admin REST ingestion); в истории «Кандидаты» при `RESOLVED` показываются «Закрыт» (`resolvedAt`) и «Кем» (`resolvedBy`), тест `SyncPage.test.tsx`. Кнопки «Подтвердить» в UI нет: консоль read-only (ADR 0026) — вопрос архитектору.
 - 🟡 Закрыть конфликт вручную нельзя (П-22), поэтому `OPEN`-конфликты копятся без операции разбора — `../../detective-gaps.md:51`.
 - 🟡 Аудит чтений консоли не виден в UI и существует только как лог — Q-15.

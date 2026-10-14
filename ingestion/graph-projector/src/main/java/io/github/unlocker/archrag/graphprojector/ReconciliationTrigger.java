@@ -17,4 +17,12 @@ public interface ReconciliationTrigger {
    * @param objectCount сколько событий записал адаптер в прогон; меньше найденного в журнале быть не может
    */
   void snapshotComplete(String source, String syncRunId, String eventId, long objectCount);
+
+  /**
+   * То же для прогона с известной полнотой: {@code partial} — маркер заявил {@code PARTIAL}, удалять по такому
+   * прогону нельзя. По умолчанию делегирует в метод без полноты; {@link Reconciler} переопределяет.
+   */
+  default void snapshotComplete(String source, String syncRunId, String eventId, long objectCount, boolean partial) {
+    snapshotComplete(source, syncRunId, eventId, objectCount);
+  }
 }

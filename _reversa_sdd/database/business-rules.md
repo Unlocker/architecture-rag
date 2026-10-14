@@ -45,4 +45,4 @@
 | Один `gid` на пару, подтверждённую crosswalk | `approved_crosswalk` не ограничивает `gid` | `CrosswalkConflictException` в `PostgresIdentityMapping` 🟢 |
 | Retention: `inbox_event`, `dlq_entry`, `admin_audit`, S3 raw не чистятся | сознательный выбор PoC | `docs/02-data-model.md:335` 🟡 |
 | `dlq_entry.replayed_at` | в коде нет записи значения | 🔴 см. [`data-dictionary.md`, §2](data-dictionary.md#2-postgresql-инвентарь-таблиц) |
-| `identity_candidate.status` кроме `OPEN` | в коде нет перехода | 🔴 то же |
+| `identity_candidate.status` кроме `OPEN` | `RESOLVED` ставит `PostgresCandidateApprovals.approve`, CHECK в V8 | 🟢 [UNLOCKER-282: реализовано] |

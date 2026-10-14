@@ -86,7 +86,7 @@ Flyway применяет миграции из `classpath:db/migration` одн�
 | `PROCESSED` | `SyncRun` → `SourceRecord` | — | нет | пишет проектор |
 | `DEFERS` | `SourceRecord` → `PendingRelation` | — | нет | служебная, пишет проектор; в `RelationType` нет |
 
-На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта). Структурные связи `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` тоже темпоральные ([ADR 0028](adr/0028-structural-relations-temporal.md), уточняет 0020): новая версия записи закрывает не подтверждённые ею рёбра, tombstone закрывает рёбра записи. Живой граф, где у них нет `validFrom`, догоняет `TemporalRelationMigration` при старте ingestion-сервиса (`validFrom = firstSeenAt записи-источника`, иначе время миграции); rebuild из журнала миграции не требует. `DEPLOYED_FROM` тоже темпоральна, и её свойство `commit` входит в identity связи (`RelationType.identityProperties()`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)): проектор сравнивает тройку `(from, to, commit)`, поэтому смена commit у развёртывания открывает новое ребро, а прежнее закрывается (`validTo`). Нетемпоральными остаются только `PART_OF`, `HOSTED_ON` и служебные связи проектора.
+На каждой бизнес-связи проектор хранит утверждающую запись: `assertedBySource`, `assertedByType`, `assertedById`. Временные связи (`temporal=true`) дополнительно несут `validFrom` (datetime) и `validTo` (`null` = открыта). Структурные связи `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN` тоже темпоральные ([ADR 0028](adr/0028-structural-relations-temporal.md), уточняет 0020): новая версия записи закрывает не подтверждённые ею рёбра, tombstone закрывает рёбра записи. Живой граф, где у них нет `validFrom`, догоняет `TemporalRelationMigration` при старте ingestion-сервиса (`validFrom = firstSeenAt записи-источника`, иначе время миграции); rebuild из журнала миграции не требует. `DEPLOYED_FROM` тоже темпоральна, и её свойство `commit` входит в identity связи (`RelationType.identityProperties()`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)): проектор сравнивает тройку `(from, to, commit)`, поэтому смена commit у развёртывания открывает новое ребро, а прежнее закрывается (`validTo`). Нетемпоральными остаются только `PART_OF`, `HOSTED_ON` и служебные связи проектора. Для `PART_OF` и `HOSTED_ON` это намеренно (`RelationType`: `temporal=false`): структура инфраструктуры в PoC не наполняется (`PART_OF`) или не строится нормализатором (`HOSTED_ON`, [ADR 0011](adr/0011-namespace-cluster-modeled-not-populated.md)), поэтому истории `validFrom`/`validTo` у них нет; при наполнении потребуется отдельное решение.
 
 **Привязка развёртывания к репозиторию** (`DeployMapMapper`, формат `deploymap-poc-1`, [ADR 0029](adr/0029-helm-chart-system-repo-commit.md)). Нормализованный `repositoryUrl` ищется среди `Repository` через порт `DeploymentLookup`. Репозиторий найден — `DEPLOYED_FROM {commit}` ведёт на него. Репозитория ещё нет — связь откладывается (`DeferRelation`) на alias-ключ `SourceKey(SCM, REPOSITORY_URL, url)` (`LookupKeys.repositoryUrl`); записи с таким ключом нет, проектор достраивает связь при проекции записи SCM `REPOSITORY` с тем же `url`. `HAS_DEPLOYMENT` строится к сервису репозитория: сначала `service` из payload, если он среди сервисов репозитория; затем единственный сервис репозитория; затем `service` из payload как есть (отложенная связь при неизвестном ключе); иначе связи нет и пишется предупреждение `DEPLOYMENT_SERVICE_UNRESOLVED`. Коды карантина записи: `MISSING_REQUIRED_FIELD` (нет `chartMeta` или одной из трёх аннотаций), `INVALID_PAYLOAD` (commit не 40 hex в нижнем регистре, `archrag.io/eam-system-id` не положительное целое, `archrag.io/git-repo-url` не распознан, неизвестный `format`); причина называет аннотацию, но не значение. `eamSystemId` (целочисленный `id` EAM, как ключ `ITSystem`) маппер только сохраняет на узле; сравнение с системой сервиса и конфликт `RELATION` делает `EventProcessor` ([ADR 0030](adr/0030-deployment-system-conflict.md), раздел 5.5).
 
@@ -167,8 +167,8 @@ erDiagram
 
 | Объект | Авторитетный источник | Явные правила свойств | Где в коде |
 |---|---|---|---|
-| `ITSystem` | EAM | `criticality`, `eamCode` → EAM | `AuthorityMatrix.poc()` |
-| `Solution`, `Platform` | EAM | — | то же |
+| `ITSystem` | EAM | `criticality`, `eamCode`, `platformId` → EAM (ADR [0031](adr/0031-it-system-platform-invariant.md)) | `AuthorityMatrix.defaults()` |
+| `Solution`, `Platform` | EAM | `Solution.platformId` → EAM | то же |
 | `Team` | EAM | — | то же |
 | `Service` | SCM | `language` → SCM | то же |
 | `Repository` | SCM | `url` → SCM | то же |
@@ -203,7 +203,6 @@ Sealed-интерфейс `GraphCommand` (`contracts/canonical-model/.../command
 |---|---|---|---|---|
 | `UpsertNode` | `SourceRecord record`, `NodeData data` | `MERGE` узла по `gid` и корневой метке; `SET n += props` только для свойств, по которым источник авторитетен; `null` не пишется; обновляет `SourceRecord` (`sourceVersion`, `contentHash`, `fetchedAt`, `active=true`, снимает `deletedAt`); `ASSERTS {confidence=1.0, authority}`; `firstSeenAt`/`lastSeenAt`; достраивает отложенные связи с этим концом | повтор с той же версией ничего не пишет (`SAME`) | неавторитетные свойства возвращаются в `skippedProperties` |
 | `UpsertRelation` | `type`, `from`/`to` (`SourceKey`) и их метки, `properties`, `validity`, `assertedBy` | если источник не авторитетен для типа — пропуск (`skippedRelations`); иначе `MERGE` связи между узлами, найденными по `gid`; `SET rel += props`, `assertedBy*`; для временных: открытая связь сохраняет `validFrom`, новая или закрытая открывается заново, `validTo = validity.validTo` | `MERGE` по паре узлов и типу; повтор не создаёт дубль | конец связи не найден — `ProjectionException(UNRESOLVED_ENDPOINT)` → `RETRYING`; конструктор отвергает недопустимые метки и `validity` у нетемпоральных |
-| `CloseAssertion` | `type` (только temporal), `from`, `to`, `validTo`, `assertedBy` | закрывает открытую связь, утверждённую этой записью: `validTo = max(validFrom, validTo)` | нет подходящей открытой связи — ничего не меняется | неавторитетный источник — тихий пропуск (без записи в `skippedRelations`) |
 | `TombstoneSourceRecord` | `SourceKey key`, `deletedAt` | `active=false`, `deletedAt`; закрывает открытые временные связи записи; закрывает узел, если нет других активных MASTER-утверждений. Только после `snapshot-complete` или события `asset.deleted` | повтор с равной версией по уже неактивной записи — `SAME` | запрос с tombstone не должен содержать других команд (`ProjectionRequest`) |
 | `DeferRelation` | `UpsertRelation relation` | сохраняет `(:PendingRelation)` с ключом SHA-256; когда проецируется второй конец, связь строится как `UpsertRelation` и узел удаляется | ключ детерминирован, повтор перезаписывает | gid для неизвестного конца не нужен |
 
@@ -238,7 +237,7 @@ Sealed-интерфейс `GraphCommand` (`contracts/canonical-model/.../command
 
 ### 5.2. Статусы обработки
 
-Значения — enum `ProcessingStatus` (`contracts/event-schemas/.../ProcessingStatus.java`), переходы проверяет `canTransitionTo` под блокировкой строки (`SELECT ... FOR UPDATE`). Переход в себя допустим всегда. Конечные: `PROJECTED` (только в `SUPERSEDED`), `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION`; из `QUARANTINED` выход только через `RETRYING` (решение оператора).
+Значения — enum `ProcessingStatus` (`contracts/event-schemas/.../ProcessingStatus.java`), переходы проверяет `canTransitionTo` под блокировкой строки (`SELECT ... FOR UPDATE`). Переход в себя допустим всегда. Конечные: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`; из `QUARANTINED` выход только через `RETRYING` (решение оператора): `POST /admin/quarantine/release` обнуляет `attempts` и закрывает запись DLQ. Число переходов в `RETRYING` ограничено `archrag.dispatcher.max-attempts` (по умолчанию 10): после него `RETRYING → QUARANTINED` с кодом `RETRY_LIMIT_EXCEEDED`. Запись `dlq_entry` закрывается (`replayed_at`) при release и при replay исходного события, если копия обработана.
 
 ```mermaid
 stateDiagram-v2
@@ -247,7 +246,6 @@ stateDiagram-v2
     VALIDATED --> NORMALIZED
     NORMALIZED --> RESOLVED
     RESOLVED --> PROJECTED
-    PROJECTED --> SUPERSEDED
     RECEIVED --> DUPLICATE
     RECEIVED --> IGNORED_OLD_VERSION
     VALIDATED --> IGNORED_OLD_VERSION
@@ -270,7 +268,7 @@ stateDiagram-v2
     QUARANTINED --> RETRYING
 ```
 
-Коды ошибок, которые ставит `EventProcessor`: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `INVALID_COMMANDS`, `UNRESOLVED_ENDPOINT`, `GRAPH_UNAVAILABLE`, `GRAPH_REJECTED`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, а также коды `NormalizationException`. `RETRYING` — временные сбои (граф недоступен, конец связи ещё не пришёл), `QUARANTINED` — отказ по самому событию.
+Коды ошибок, которые ставит `EventProcessor`: `UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `INVALID_COMMANDS`, `UNRESOLVED_ENDPOINT`, `GRAPH_UNAVAILABLE`, `GRAPH_REJECTED`, `GRAPH_CLIENT_ERROR`, `GRAPH_ERROR`, `RETRY_LIMIT_EXCEEDED`, `UNKNOWN_SCHEMA_VERSION`, `SNAPSHOT_OBJECT_COUNT_MISSING` и `SNAPSHOT_MASS_CLOSE_LIMIT` (`SnapshotRejectedException`), а также коды `NormalizationException`. Сбои побочных хранилищ дают `RETRYING` с кодами `IDENTITY_CANDIDATE_FAILED`, `SOURCE_CONFLICT_FAILED`, `RECONCILIATION_TRIGGER_FAILED` и `SYNC_RUN_CLOSE_FAILED`. До `EventProcessor` строку журнала может перевести в `QUARANTINED` `JournalDispatcher`: `INVALID_RAW_PAYLOAD`, `NO_RAW_PAYLOAD` и `MARKER_NO_RAW` (маркер `snapshot-complete` без raw). `RETRYING` — временные сбои (граф недоступен, конец связи ещё не пришёл), `QUARANTINED` — отказ по самому событию.
 
 ### 5.3. Checkpoints и cursor
 
@@ -357,6 +355,6 @@ stateDiagram-v2
 | `SyncRun` | `endedAt`, счётчики | проектор пишет `runId`, `adapter`, `status`, `startedAt`; остальное — в модели, но не в графе | инкремент внутри повторяемой транзакции удваивался бы при повторе |
 | Статусы обработки | `RECEIVED -> ... -> PROJECTED`, `DUPLICATE`/`IGNORED_OLD_VERSION` из `RECEIVED` | то же, плюс `IGNORED_OLD_VERSION` из любого шага до `PROJECTED` и `RETRYING` → любой шаг | версия сравнивается с графом, а не только с журналом; см. [ADR 0006](adr/0006-postgres-inbox-event-backbone.md) |
 | Поля inbox | `source cursor` в каждой стадии | курсор — в отдельной `consumer_checkpoint`; в `inbox_event` нет колонки cursor | checkpoint на `(consumer, source)` |
-| Conflict, IdentityCandidate | сущности и ручные решения | таблицы `source_conflict` (виды `PROPERTY`/`RELATION`) и `identity_candidate` есть, ручных решений нет | E3, UNLOCKER-174/175; ADR 0030 |
+| Conflict, IdentityCandidate | сущности и ручные решения | таблицы `source_conflict` (виды `PROPERTY`/`RELATION`) и `identity_candidate` (`OPEN`/`RESOLVED`; оператор подтверждает кандидата через `POST /admin/identity/candidates/approve`, UNLOCKER-282) есть, ручного закрытия конфликта нет | E3, UNLOCKER-174/175; ADR 0030 |
 | Объекты raw | «raw snapshots/events» в объектном хранилище | один формат: raw события/маркера по ключу `raw/<source>/<sha256>` | отдельного snapshot-формата нет |
 | Жизненный цикл `SyncRun.status` | — | при создании `RUNNING`; перевод в `SUCCEEDED`/`FAILED` в проекторе не реализован | пробел |

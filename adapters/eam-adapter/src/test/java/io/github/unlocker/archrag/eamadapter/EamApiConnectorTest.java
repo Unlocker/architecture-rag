@@ -293,6 +293,68 @@ class EamApiConnectorTest {
   }
 
   @Test
+  void verifyAccessPassesAgainstStubWhichClosesBuffers() {
+    assertThat(connector.verifyAccess()).isEqualTo(EamApiConnector.AccessCheck.VERIFIED);
+  }
+
+  @Test
+  void verifyAccessAsksThreeListsWithOneItemAndThenBuffers() throws Exception {
+    List<String> uris = new ArrayList<>();
+    try (Fake fake = new Fake(ex -> {
+      uris.add(ex.getRequestURI().toString());
+      reply(ex, ex.getRequestURI().getPath().equals("/api/buffers/") ? 403 : 200, "[]", null);
+    })) {
+      EamApiConnector c = connector(fake.uri(), TOKEN, 100);
+      assertThat(c.verifyAccess()).isEqualTo(EamApiConnector.AccessCheck.VERIFIED);
+      assertThat(uris).containsExactly("/api/itproducts/?page=1&page_size=1", "/api/itsystems/?page=1&page_size=1",
+          "/api/platforms/?page=1&page_size=1", "/api/buffers/");
+      c.close();
+    }
+  }
+
+  @Test
+  void verifyAccessFailsClosedWhenListIsForbiddenWithoutLeakingToken() throws Exception {
+    try (Fake fake = new Fake(ex -> reply(ex, 403, "secret-body", null))) {
+      EamApiConnector c = connector(fake.uri(), TOKEN, 100);
+      assertThatThrownBy(c::verifyAccess).isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("403").hasMessageNotContaining(TOKEN).hasMessageNotContaining("secret-body");
+      c.close();
+    }
+  }
+
+  @Test
+  void verifyAccessFailsClosedWhenBuffersIsOpen() throws Exception {
+    try (Fake fake = new Fake(ex -> reply(ex, 200, "[]", null))) {
+      EamApiConnector c = connector(fake.uri(), TOKEN, 100);
+      assertThatThrownBy(c::verifyAccess).isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("/api/buffers/").hasMessageContaining("excess permissions");
+      c.close();
+    }
+  }
+
+  @Test
+  void verifyAccessAcceptsNotFoundOnBuffers() throws Exception {
+    try (Fake fake = new Fake(ex -> reply(ex, ex.getRequestURI().getPath().equals("/api/buffers/") ? 404 : 200, "[]", null))) {
+      EamApiConnector c = connector(fake.uri(), TOKEN, 100);
+      assertThat(c.verifyAccess()).isEqualTo(EamApiConnector.AccessCheck.VERIFIED);
+      c.close();
+    }
+  }
+
+  @Test
+  void verifyAccessReportsUnavailableOnServerErrorAndRejectsWrongToken() throws Exception {
+    try (Fake fake = new Fake(ex -> reply(ex, 503, "{}", null))) {
+      EamApiConnector c = connector(fake.uri(), TOKEN, 100);
+      assertThat(c.verifyAccess()).isEqualTo(EamApiConnector.AccessCheck.UNAVAILABLE);
+      c.close();
+    }
+    EamApiConnector wrong = connector(stub.baseUri(), "wrong", 100);
+    assertThatThrownBy(wrong::verifyAccess).isInstanceOf(IllegalStateException.class).hasMessageContaining("401")
+        .hasMessageNotContaining("wrong");
+    wrong.close();
+  }
+
+  @Test
   void malformedCursorIsRejected() {
     assertThatThrownBy(() -> connector.fetchChanges("garbage", 10)).isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> connector.fetchChanges("S,9,1,10,2026-01-01T00:00:00Z", 10))

@@ -64,7 +64,7 @@ erDiagram
 - **Confidence:** 🟢
 
 ### D5. Tombstone вместо hard delete; удаление только после `snapshot-complete`; структурные связи темпоральны
-- **Evidence:** ADR [0020](../docs/adr/0020-tombstone-instead-of-hard-delete.md), [0028](../docs/adr/0028-structural-relations-temporal.md); `TombstoneSourceRecord`, `CloseAssertion` в `canonical-model`.
+- **Evidence:** ADR [0020](../docs/adr/0020-tombstone-instead-of-hard-delete.md), [0028](../docs/adr/0028-structural-relations-temporal.md); `TombstoneSourceRecord` в `canonical-model`.
 - **Implication:** граф хранит историю; checkpoint двигается только после коммита Neo4j.
 - **Confidence:** 🟢
 

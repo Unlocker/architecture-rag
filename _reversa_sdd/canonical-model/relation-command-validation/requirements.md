@@ -4,7 +4,7 @@
 
 ## Обзор
 
-Создание команд `UpsertRelation`, `CloseAssertion`, `DeferRelation` проверяет структурную допустимость связи (пара меток по `RelationType`), темпоральность и свойства. Это единственный барьер перед проектором: нормализатор, нарушивший инвариант, получает исключение, которое он превращает в `INVALID_PAYLOAD` 🟡 (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java:80` — перехват `IllegalArgumentException`; прочие вызовы `catch (IllegalArgumentException)` в мапперах).
+Создание команд `UpsertRelation`, `DeferRelation` проверяет структурную допустимость связи (пара меток по `RelationType`), темпоральность и свойства. Это единственный барьер перед проектором: нормализатор, нарушивший инвариант, получает исключение, которое он превращает в `INVALID_PAYLOAD` 🟡 (`ingestion/normalizer/src/main/java/io/github/unlocker/archrag/normalizer/Normalizer.java:80` — перехват `IllegalArgumentException`; прочие вызовы `catch (IllegalArgumentException)` в мапперах).
 
 ## Правила
 
@@ -13,7 +13,6 @@
 - `properties` не `null`; ключи — непустой текст; значения — `String|Boolean|Long|Integer|Double(конечный)|Instant|List<те же, без вложенности>`; результат неизменяем, не зависит от входной карты 🟢 (`CM/Invariants.java:49-77`).
 - Все `identityProperties` типа присутствуют среди ключей `properties` 🟢 (`CM/command/UpsertRelation.java:39-41`); сейчас это только `commit` у `DEPLOYED_FROM` (`CM/relation/RelationType.java:20`).
 - Имена свойств `DEPENDS_ON` (`kind`/`protocol`/`criticality`) здесь не проверяются 🟢 (`CM/command/UpsertRelation.java:18-19`).
-- `CloseAssertion` допускается только для `type.temporal() == true` 🟢 (`CM/command/CloseAssertion.java:18-20`).
 - Значения `Validity` — `validFrom ≤ validTo` (равенство допустимо), `validTo == null` — открыта 🟢 (`CM/relation/Validity.java:10-15`).
 
 ## Функциональные требования
@@ -26,7 +25,6 @@
 | RF-04 | Свойства копируются неизменяемо: последующее изменение исходной карты/списка не влияет на команду; `put` в `properties()` → `UnsupportedOperationException` 🟢 | Must | `GraphCommandTest.propertiesValidatedAndImmutable` |
 | RF-05 | Нехватка identity-свойства → IAE `"<TYPE> requires identity properties [<names>]"` 🟢 | Must | прямого теста нет 🔴 (сам набор покрыт `RelationTypeTest.deployedFromIsTemporalAndIdentifiedByCommit`) |
 | RF-06 | `null` в обязательных полях (`type, from, fromLabel, to, toLabel, assertedBy`, а также `properties`) → NPE 🟢 | Must | не покрыт для `UpsertRelation` напрямую 🟡 |
-| RF-07 | `CloseAssertion` для нетемпорального типа → IAE `"only temporal relations can be closed: <TYPE>"`; `validTo == null` → NPE 🟢 | Should | `GraphCommandTest.closeAssertionOnlyTemporal` |
 | RF-08 | `DeferRelation(null)` → NPE; `DeferRelation` оборачивает уже валидный `UpsertRelation` 🟢 | Should | нет теста конструктора 🔴 |
 | RF-09 | `RelationType.allows` учитывает подтипы (RUNS_ON принимает `VIRTUAL_MACHINE`, `PHYSICAL_SERVER`, `COMPUTE_INSTANCE`, `NAMESPACE`; `HOSTED_ON` не принимает `COMPUTE_INSTANCE` как источник) 🟢 | Must | `RelationTypeTest.runsOnTargets`, `hostedOnOnlyVmToPhysical` |
 
@@ -69,10 +67,6 @@
 Тогда IllegalArgumentException "DEPLOYED_FROM requires identity properties [commit]"
 # теста нет 🔴 (TT-05 в tasks.md)
 
-Дано CloseAssertion(PART_OF, ...)
-Когда конструктор
-Тогда IllegalArgumentException
-# CT/command/GraphCommandTest.java:81
 ```
 
 ## MoSCoW
@@ -81,7 +75,6 @@
 |---|---|---|
 | RF-01…RF-04, RF-09 | Must | Каждая связь проходит через `UpsertRelation` (`ingestion/normalizer/.../CommandSink.java`) |
 | RF-05, RF-06 | Must | Защита идентичности `DEPLOYED_FROM` (ADR 0029) |
-| RF-07 | Should | Нет производителя в `main` (🔴-3 модуля) |
 | RF-08 | Should | Единственный производитель — `EventProcessor.java:223` |
 
 ## Трассировка
@@ -89,7 +82,6 @@
 | Файл | Класс | Покрытие |
 |---|---|---|
 | `CM/command/UpsertRelation.java` | `UpsertRelation` | 🟢 |
-| `CM/command/CloseAssertion.java` | `CloseAssertion` | 🟢 |
 | `CM/command/DeferRelation.java` | `DeferRelation` | 🟢 |
 | `CM/relation/RelationType.java`, `Validity.java` | допустимость связи | 🟢 |
 | `CM/Invariants.java` | `copyProperties` | 🟢 |

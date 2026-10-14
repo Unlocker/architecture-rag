@@ -1,6 +1,5 @@
 package io.github.unlocker.archrag.graphprojector;
 
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -11,6 +10,7 @@ import io.github.unlocker.archrag.canonicalmodel.node.ITSystem;
 import io.github.unlocker.archrag.canonicalmodel.node.Solution;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceKey;
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SyncRunStatus;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.eventschemas.AssetEventData;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
@@ -28,6 +28,7 @@ import io.github.unlocker.archrag.normalizer.DeploymentLookup;
 import io.github.unlocker.archrag.normalizer.NormalizationResult;
 import io.github.unlocker.archrag.normalizer.Normalizer;
 import io.github.unlocker.archrag.normalizer.UnresolvedReference;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import org.neo4j.driver.exceptions.ClientException;
@@ -89,17 +91,19 @@ public final class EventProcessor {
   static final String SYSTEM_PROPERTY = "eamSystemId";
   /** Свойство узла, несущее платформу ИТ-системы и решения; имя {@code RELATION}-конфликта (ADR 0031). */
   static final String PLATFORM_PROPERTY = "platformId";
-  static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
-  static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
-  static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
+  private static final String COMPLETENESS_KEY = "_completeness";
+  private static final String PARTIAL = "PARTIAL";
   private static final String IT_SYSTEM_TYPE = "IT_SYSTEM";
   private static final String SOLUTION_TYPE = "SOLUTION";
-  private static final String SOURCE_PREFIX = "urn:corp:";
+
+  /** Код карантина для события, исчерпавшего лимит повторов. */
+  public static final String RETRY_LIMIT_EXCEEDED = "RETRY_LIMIT_EXCEEDED";
+  /** Лимит повторов по умолчанию; в сервисе задаётся {@code archrag.dispatcher.max-attempts}. */
+  public static final int DEFAULT_MAX_ATTEMPTS = 10;
 
   private static final Set<ProcessingStatus> FINISHED =
       Set.of(
           ProcessingStatus.PROJECTED,
-          ProcessingStatus.SUPERSEDED,
           ProcessingStatus.DUPLICATE,
           ProcessingStatus.IGNORED_OLD_VERSION,
           ProcessingStatus.QUARANTINED);
@@ -114,6 +118,8 @@ public final class EventProcessor {
   private final DeploymentLookup lookup;
   private final EamLookup eamLookup;
   private final NormalizationWarnings warnings;
+  private final SyncRunClosing syncRuns;
+  private final int maxAttempts;
 
   /** Без чтения графа для проверки системы EAM из chart: такие конфликты не открываются. */
   public EventProcessor(
@@ -163,6 +169,49 @@ public final class EventProcessor {
       DeploymentLookup lookup,
       EamLookup eamLookup,
       NormalizationWarnings warnings) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, eamLookup, warnings,
+        DEFAULT_MAX_ATTEMPTS);
+  }
+
+  /** @param maxAttempts сколько раз событие может уйти в {@code RETRYING}; после этого оно попадает в карантин */
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup,
+      NormalizationWarnings warnings,
+      int maxAttempts) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, eamLookup, warnings,
+        maxAttempts, SyncRunClosing.NONE);
+  }
+
+  /**
+   * @param maxAttempts сколько раз событие может уйти в {@code RETRYING}; после этого оно попадает в карантин
+   * @param syncRuns закрытие {@code SyncRun} по итогу маркера {@code snapshot-complete}
+   */
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup,
+      NormalizationWarnings warnings,
+      int maxAttempts,
+      SyncRunClosing syncRuns) {
+    this.syncRuns = Objects.requireNonNull(syncRuns, "syncRuns");
+    if (maxAttempts < 1) {
+      throw new IllegalArgumentException("maxAttempts must be positive");
+    }
+    this.maxAttempts = maxAttempts;
     this.warnings = Objects.requireNonNull(warnings, "warnings");
     this.lookup = Objects.requireNonNull(lookup, "lookup");
     this.eamLookup = Objects.requireNonNull(eamLookup, "eamLookup");
@@ -192,10 +241,55 @@ public final class EventProcessor {
     }
     return switch (event.type()) {
       case CanonicalEvent.TYPE_ASSET_UPSERTED -> upsert(event, raw, entry);
-      case TYPE_ASSET_DELETED -> delete(event, entry);
-      case TYPE_SNAPSHOT_COMPLETE -> snapshotComplete(event, entry);
+      case CanonicalEvent.TYPE_ASSET_DELETED -> delete(event, entry);
+      case CanonicalEvent.TYPE_SNAPSHOT_COMPLETE -> snapshotComplete(event, entry);
       default -> quarantine(event, "UNSUPPORTED_EVENT_TYPE", "event type is not supported");
     };
+  }
+
+  /**
+   * Заново проецирует применённую версию записи на её новый {@code gid} (запись перенесена
+   * подтверждением кандидата, {@code IdentityMapping} уже отдаёт {@code gid} выжившего). Журнальный статус события и
+   * checkpoint не трогаются: исходное событие давно в конечном статусе. Проверка версии обходится
+   * ({@link Relocation}), утверждения свойств и конфликты нового {@code gid} пересчитываются как для обычного
+   * события; кандидаты не пересчитываются. Ошибки не глушатся: ничего не откладывается в {@code RETRYING}, сбой
+   * уходит вызывающему (админская операция фиксирует {@code FAILED}).
+   *
+   * @param event событие из raw: тип {@code architecture.asset.upserted.v1}
+   * @param fromGid прежний {@code gid} записи
+   * @param retireSource на прежнем {@code gid} ключей не осталось: его узел закрывается
+   * @param at момент закрытия прежних узла и связей
+   * @throws ProjectionException если нормализация отвергла событие или конец связи не найден
+   * @throws IdentityStoreException при отказе хранилища
+   */
+  public ProjectionResult reproject(
+      CanonicalEvent event, RawPayloadRef raw, UUID fromGid, boolean retireSource, Instant at) {
+    SourceSystemCode source = sourceCode(event.source());
+    if (source == null || !CanonicalEvent.TYPE_ASSET_UPSERTED.equals(event.type())) {
+      throw new IllegalArgumentException("only an upserted event of a known source can be reprojected");
+    }
+    AssetEventData data = event.data();
+    SourceKey key = new SourceKey(source, data.sourceType(), data.sourceId());
+    NormalizationResult normalized = normalizer.normalize(event, raw);
+    if (normalized instanceof NormalizationResult.Quarantined q) {
+      throw new ProjectionException(q.errorCode(), q.reason());
+    }
+    var result = (NormalizationResult.Normalized) normalized;
+    List<GraphCommand> commands = new ArrayList<>(result.commands());
+    result.unresolved().stream().map(UnresolvedReference::relation).distinct().map(DeferRelation::new).forEach(commands::add);
+    Map<SourceKey, UUID> gids = resolveGids(key, commands);
+    ConflictMarkers markers = assertProperties(key, commands, gids);
+    markers = assertSystemRelation(key, commands, gids, markers);
+    markers = assertSystemPlatform(key, commands, gids, markers);
+    Relocation relocation = new Relocation(fromGid, gids.get(key), retireSource, at);
+    ProjectionResult projected =
+        projection.project(
+            new ProjectionRequest(
+                key, data.sourceVersion(), event.time(), null, gids, commands, markers,
+                PARTIAL.equals(data.payload().get(COMPLETENESS_KEY)), relocation));
+    recheckServiceDeployments(key, commands);
+    recheckSolutionSystems(key, commands);
+    return projected;
   }
 
   private ProcessingResult upsert(CanonicalEvent event, RawPayloadRef raw, JournalEntry entry) {
@@ -256,7 +350,7 @@ public final class EventProcessor {
     if (source == null) {
       return quarantine(event, "UNKNOWN_SOURCE", "event source is not known");
     }
-    if (!SCHEMA_ASSET_DELETED.equals(event.dataschema())) {
+    if (!CanonicalEvent.SCHEMA_DELETED.equals(event.dataschema())) {
       return quarantine(event, "UNKNOWN_SCHEMA_VERSION", "dataschema version is not supported");
     }
     AssetEventData data = event.data();
@@ -287,14 +381,27 @@ public final class EventProcessor {
   }
 
   private ProcessingResult snapshotComplete(CanonicalEvent event, JournalEntry entry) {
+    // Без валидного objectCount полноту прогона проверить нечем: reconcile не запускается, маркер в карантин.
+    OptionalLong objectCount = objectCount(event);
+    if (objectCount.isEmpty()) {
+      return quarantine(event, SnapshotRejectedException.MISSING_OBJECT_COUNT, "marker has no valid objectCount");
+    }
     advance(event, ProcessingStatus.VALIDATED);
     advance(event, ProcessingStatus.NORMALIZED);
     advance(event, ProcessingStatus.RESOLVED);
     try {
       reconciliation.snapshotComplete(
-          event.source(), event.data().sourceId(), event.id(), objectCount(event));
+          event.source(), event.data().sourceId(), event.id(), objectCount.getAsLong(), isPartial(event));
+    } catch (SnapshotRejectedException e) {
+      return quarantine(event, e.code(), e.getMessage());
     } catch (RuntimeException e) {
       return retry(event, "RECONCILIATION_TRIGGER_FAILED", e.getClass().getSimpleName());
+    }
+    // Прогон закрывается до перехода маркера в PROJECTED: сбой записи в Neo4j оставляет маркер на повтор.
+    try {
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.SUCCEEDED);
+    } catch (RuntimeException e) {
+      return retry(event, "SYNC_RUN_CLOSE_FAILED", e.getClass().getSimpleName());
     }
     return finish(event, ProcessingStatus.PROJECTED, null);
   }
@@ -355,7 +462,8 @@ public final class EventProcessor {
       result =
           projection.project(
               new ProjectionRequest(
-                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands, markers));
+                  key, event.data().sourceVersion(), event.time(), entry.syncRunId(), gids, commands, markers,
+                  PARTIAL.equals(event.data().payload().get(COMPLETENESS_KEY))));
     } catch (ProjectionException e) {
       return retry(event, e.code(), e.getMessage());
     } catch (IllegalArgumentException e) {
@@ -574,10 +682,6 @@ public final class EventProcessor {
           endpoints.add(r.from());
           endpoints.add(r.to());
         }
-        case CloseAssertion c -> {
-          endpoints.add(c.from());
-          endpoints.add(c.to());
-        }
         // Отложенная связь gid не требует: неизвестный конец берётся из графа при достраивании.
         case DeferRelation d -> {}
         case UpsertNode u -> {}
@@ -617,30 +721,41 @@ public final class EventProcessor {
   }
 
   private ProcessingResult retry(CanonicalEvent event, String code, String reason) {
-    journal.transition(event.source(), event.id(), ProcessingStatus.RETRYING, code, reason);
+    JournalEntry entry = journal.transition(event.source(), event.id(), ProcessingStatus.RETRYING, code, reason);
+    if (entry.attempts() >= maxAttempts) {
+      // Лимит исчерпан: RETRYING -> QUARANTINED, в причину идёт исходный код сбоя и его текст.
+      return quarantine(event, RETRY_LIMIT_EXCEEDED, code + ": " + reason);
+    }
     return new ProcessingResult(ProcessingStatus.RETRYING, code, null);
   }
 
   private ProcessingResult quarantine(CanonicalEvent event, String code, String reason) {
+    if (CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(event.type())) {
+      // Единая точка: любой карантин маркера закрывает прогон как FAILED. Сбой записи уходит наружу до DLQ,
+      // маркер остаётся необработанным и придёт на повтор.
+      syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.FAILED);
+    }
     journal.toDlq(event.source(), event.id(), code, reason);
     return new ProcessingResult(ProcessingStatus.QUARANTINED, code, null);
   }
 
-  private static long objectCount(CanonicalEvent event) {
-    return event.data().payload().get("objectCount") instanceof Number n ? n.longValue() : 0;
+  /** {@code objectCount} маркера; пусто, если поля нет, оно не целое число или отрицательное. */
+  private static OptionalLong objectCount(CanonicalEvent event) {
+    Object value = event.data().payload().get("objectCount");
+    boolean integral = value instanceof Long || value instanceof Integer;
+    return integral && ((Number) value).longValue() >= 0
+        ? OptionalLong.of(((Number) value).longValue())
+        : OptionalLong.empty();
+  }
+
+  /** Маркер заявил полноту {@code PARTIAL}; отсутствие поля означает {@code COMPLETE} (формат до UNLOCKER-279). */
+  private static boolean isPartial(CanonicalEvent event) {
+    return PARTIAL.equals(event.data().payload().get("completeness"));
   }
 
   /** Код системы по {@code source} события ({@code urn:corp:eam} → {@code EAM}); {@code null} для неизвестного. */
   static SourceSystemCode sourceCode(String urn) {
-    if (!urn.startsWith(SOURCE_PREFIX)) {
-      return null;
-    }
-    return switch (urn.substring(SOURCE_PREFIX.length())) {
-      case "eam" -> SourceSystemCode.EAM;
-      case "scm" -> SourceSystemCode.SCM;
-      case "cmdb" -> SourceSystemCode.CMDB;
-      case "deploymap" -> SourceSystemCode.DEPLOYMAP;
-      default -> null;
-    };
+    // MANUAL — источник ручной модерации, событий от него быть не может
+    return SourceSystemCode.fromUrn(urn).filter(code -> code != SourceSystemCode.MANUAL).orElse(null);
   }
 }

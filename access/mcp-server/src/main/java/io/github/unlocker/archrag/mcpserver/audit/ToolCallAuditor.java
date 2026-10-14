@@ -96,6 +96,17 @@ public class ToolCallAuditor {
     write(tool, Map.of(), List.of(), Duration.ZERO, 0, false, decision, null);
   }
 
+  /**
+   * Фиксирует запрос, отклонённый фильтром до разбора тела (400/413): имя tool ещё неизвестно.
+   * Тело запроса в аудит не попадает; тег {@code tool} равен {@code unknown}.
+   */
+  public void rejected(ToolDecision decision) {
+    Observation observation = start(UNKNOWN_TOOL_TAG);
+    observation.lowCardinalityKeyValue("decision", decision.name());
+    observation.stop();
+    write(null, Map.of(), List.of(), Duration.ZERO, 0, false, decision, null);
+  }
+
   private void write(
       String tool,
       Map<String, Object> arguments,

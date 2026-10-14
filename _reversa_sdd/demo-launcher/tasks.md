@@ -39,7 +39,7 @@
 - [ ] TT-02: `StubControlTest` — upsert, 400/405, лимит тела, подписанный webhook, `notify:false`, недоступный получатель (platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/StubControlTest.java:55-183)
 - [ ] TT-03: `EamApiControlTest` — upsert/`ver`, archive, плохие запросы, `/api/**` read-only (platform/demo-launcher/src/test/java/io/github/unlocker/archrag/demolauncher/EamApiControlTest.java:47-80)
 - [ ] TT-04: 🔴 нет теста `DemoLauncher.main` (маршрутизация, `exit(2)`), `runAdapter` (порядок старта) и `GET /health` (Q-05)
-- [ ] TT-05: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] нет теста на согласованность `EamApiControl.TYPES` с `EamApiSeed` (Q-03)
+- [ ] TT-05: тест согласованности `EamApiSeed.TYPES` с типами коннектора: `EamStandTypesTest` (Q-03)
 - [ ] TT-06: интеграционных тестов (`*IT`) в модуле нет; запуск ролей проверяет смоук стенда `platform/docker/smoke.sh` (вне модуля)
 
 ## Ordem Sugerida

@@ -382,7 +382,6 @@ High-water mark нельзя продвигать до успешной прое
 RECEIVED -> VALIDATED -> NORMALIZED -> RESOLVED -> PROJECTED
                     \-> QUARANTINED
                                   \-> RETRYING -> ...
-PROJECTED -> SUPERSEDED
 RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
 ```
 
@@ -483,8 +482,9 @@ architecture-knowledge-platform/
 
 ```java
 public interface SourceConnector {
-    SourcePage fetchChanges(SourceCursor cursor, int limit);
-    SourceSnapshot fetchById(SourceObjectId id);
+    SourceSystem system();
+    ChangePage fetchChanges(String cursor, int limit);
+    Optional<SourceChange> fetchById(String sourceType, String sourceId);
 }
 
 public interface CanonicalMapper {
@@ -492,7 +492,7 @@ public interface CanonicalMapper {
 }
 
 public sealed interface GraphCommand
-        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation {}
+        permits UpsertNode, UpsertRelation, TombstoneSourceRecord, DeferRelation {}
 ```
 
 Source DTO не должны проникать в graph projector. Маппинг следует тестировать contract fixtures, а операции проекции — integration tests с реальным Neo4j/Testcontainers.
@@ -552,7 +552,7 @@ Spring AI предоставляет Java MCP SDK integration, Boot starters, an
 - Java 21;
 - Spring Boot 4.x, совместимый со Spring AI 2.x;
 - `spring-ai-starter-mcp-server-webmvc` или WebFlux;
-- `spring.ai.mcp.server.protocol=STREAMABLE`;
+- `spring.ai.mcp.server.protocol=STREAMABLE` (в коде PoC — `STATELESS`, см. ADR 0017, уточнение 2026-10-07);
 - stateless deployment из двух и более реплик;
 - OAuth/OIDC на gateway и проверка JWT/scopes в приложении;
 - отдельная read-only учетная запись Neo4j (в Community read-only обеспечивается приложением, см. «Безопасность»).

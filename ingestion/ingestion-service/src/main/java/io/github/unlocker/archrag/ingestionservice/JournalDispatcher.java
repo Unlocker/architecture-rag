@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SyncRunStatus;
 import io.github.unlocker.archrag.eventschemas.CanonicalEvent;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.JournalEntry;
@@ -10,6 +11,7 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadRef;
 import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.StoredEvent;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
+import io.github.unlocker.archrag.graphprojector.SyncRunClosing;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,6 +62,7 @@ public class JournalDispatcher {
   private final int batchSize;
   private final Duration retryDelay;
   private final IngestionMetrics metrics;
+  private final SyncRunClosing syncRuns;
   private volatile boolean stopped;
 
   public JournalDispatcher(
@@ -73,6 +76,22 @@ public class JournalDispatcher {
       int batchSize,
       Duration retryDelay,
       IngestionMetrics metrics) {
+    this(reader, journal, rawStore, events, processor, lock, clock, batchSize, retryDelay, metrics, SyncRunClosing.NONE);
+  }
+
+  public JournalDispatcher(
+      JournalReader reader,
+      EventJournal journal,
+      RawPayloadStore rawStore,
+      StoredEventReader events,
+      EventProcessor processor,
+      AdminLock lock,
+      Clock clock,
+      int batchSize,
+      Duration retryDelay,
+      IngestionMetrics metrics,
+      SyncRunClosing syncRuns) {
+    this.syncRuns = syncRuns;
     this.reader = reader;
     this.journal = journal;
     this.rawStore = rawStore;
@@ -141,7 +160,11 @@ public class JournalDispatcher {
     try {
       RawPayloadRef ref = entry.payloadRef();
       if (ref == null) {
-        boolean marker = StoredEventReader.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
+        boolean marker = CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
+        if (marker) {
+          // Маркера без raw нечем разобрать: прогон закрывается как FAILED.
+          syncRuns.close(entry.source(), entry.sourceId(), entry.eventId(), SyncRunStatus.FAILED);
+        }
         return quarantine(entry, marker ? MARKER_NO_RAW : NO_RAW_PAYLOAD, "event has no raw payload");
       }
       // Ошибки хранилища (нет объекта, расхождение hash) — не вина события: наружу, повтор в следующем проходе.

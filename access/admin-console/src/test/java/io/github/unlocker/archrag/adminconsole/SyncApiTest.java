@@ -144,7 +144,7 @@ class SyncApiTest {
   }
 
   @Test
-  void sourcesAlwaysListAllFourSourcesWithZeroCounts() {
+  void sourcesAlwaysListAllFiveSourcesWithZeroCounts() {
     when(repository.checkpoints()).thenReturn(Map.of());
     when(repository.eventCounts()).thenReturn(Map.of());
     when(repository.lastProjected()).thenReturn(Map.of());
@@ -155,9 +155,11 @@ class SyncApiTest {
 
     assertThat(res.getStatusCode().value()).isEqualTo(200);
     JsonNode body = json(res);
-    assertThat(body.size()).isEqualTo(4);
+    assertThat(body.size()).isEqualTo(5);
     assertThat(body.get(0).get("source").asString()).isEqualTo("eam");
     assertThat(body.get(3).get("source").asString()).isEqualTo("deploymap");
+    assertThat(body.get(4).get("source").asString()).isEqualTo("manual");
+    assertThat(body.get(4).get("lastSyncRun").isNull()).isTrue();
     assertThat(body.get(0).get("eventsByStatus").get("PROJECTED").asLong()).isZero();
     assertThat(body.get(0).get("lagSeconds").isNull()).isTrue();
     assertThat(body.get(0).get("lastSyncRun").isNull()).isTrue();

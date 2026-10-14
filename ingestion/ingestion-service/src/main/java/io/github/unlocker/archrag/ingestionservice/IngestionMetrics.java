@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.ingestionservice;
 
 import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.identityresolution.FeatureKind;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -35,6 +36,11 @@ import org.springframework.scheduling.annotation.Scheduled;
  * нормализацию, давшую код предупреждения о значении вне словаря, включая повтор, replay и rebuild: это метрика
  * темпа (в Prometheus — через {@code increase()}). Коды вне {@link #UNMAPPED_PROPERTIES} не считаются; в теги и логи
  * попадают только коды, без значений источника.
+ *
+ * <p>Счётчик {@code archrag.identity.candidates.overflow} ({@code feature}) растёт, когда у сильного признака
+ * совпадений больше предела и кандидаты по нему не создаются; {@code archrag.ingestion.reconcile.skipped}
+ * ({@code source}, {@code reason}) — когда reconcile не выполнен из-за {@code PARTIAL} или превышения порога
+ * массового закрытия.
  */
 public class IngestionMetrics {
 
@@ -45,13 +51,14 @@ public class IngestionMetrics {
   static final String SYNC_LAG = "archrag.ingestion.sync.lag";
   static final String DLQ_OPEN = "archrag.ingestion.dlq.open";
   static final String UNMAPPED_VALUES = "archrag.normalizer.unmapped.values";
+  static final String CANDIDATES_OVERFLOW = "archrag.identity.candidates.overflow";
+  static final String RECONCILE_SKIPPED = "archrag.ingestion.reconcile.skipped";
 
   /** Код предупреждения нормализатора → свойство, чьё значение вышло за словарь. Фиксированная таблица ограничивает кардинальность. */
   static final Map<String, String> UNMAPPED_PROPERTIES = Map.of("UNMAPPED_CRITICALITY", "criticality");
   private static final Map<SourceSystemCode, List<String>> UNMAPPED_SOURCES =
       Map.of(SourceSystemCode.EAM, List.copyOf(UNMAPPED_PROPERTIES.values()));
 
-  private static final String SOURCE_PREFIX = "urn:corp:";
   static final String UNKNOWN_SOURCE = "unknown";
   private static final Set<String> KNOWN_SOURCES =
       Arrays.stream(SourceSystem.values()).map(SourceSystem::code).collect(Collectors.toUnmodifiableSet());
@@ -91,6 +98,31 @@ public class IngestionMetrics {
       eventCounter(source, STATUS_ERROR);
     }
     UNMAPPED_SOURCES.forEach((source, properties) -> properties.forEach(p -> unmappedCounter(source, p)));
+    for (FeatureKind kind : FeatureKind.values()) {
+      if (kind.strong()) {
+        overflowCounter(kind);
+      }
+    }
+  }
+
+  /**
+   * Считает признак, у которого совпадений больше предела {@code PostgresIdentityCandidates.MAX_MATCHES}: кандидаты
+   * по нему не созданы. Тег {@code feature} — вид признака из {@link FeatureKind}, значения признака в метрике нет.
+   */
+  public void recordCandidatesOverflow(FeatureKind kind) {
+    overflowCounter(kind).increment();
+  }
+
+  private Counter overflowCounter(FeatureKind kind) {
+    return registry.counter(CANDIDATES_OVERFLOW, "feature", kind.name().toLowerCase(Locale.ROOT));
+  }
+
+  /**
+   * Считает reconcile, не выполненный по защите от неполного snapshot: {@code reason} — {@code PARTIAL} или код
+   * {@code SnapshotRejectedException}; значения теги берут только из этих констант.
+   */
+  public void recordReconcileSkipped(SourceSystemCode source, String reason) {
+    registry.counter(RECONCILE_SKIPPED, "source", source.name().toLowerCase(Locale.ROOT), "reason", reason).increment();
   }
 
   /**
@@ -148,7 +180,7 @@ public class IngestionMetrics {
 
   /** {@code urn:corp:eam} (значение {@code source} в журнале) → {@code eam}: тег совпадает с {@link SourceSystem#code()}. */
   static String sourceTag(String source) {
-    String code = source.startsWith(SOURCE_PREFIX) ? source.substring(SOURCE_PREFIX.length()) : source;
+    String code = SourceSystemCode.fromUrn(source).map(SourceSystemCode::code).orElse(source);
     // Значения вне SourceSystem не плодят серии: кардинальность ограничена перечислением.
     return KNOWN_SOURCES.contains(code) ? code : UNKNOWN_SOURCE;
   }

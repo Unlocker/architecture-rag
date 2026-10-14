@@ -100,8 +100,8 @@ public final class ScmMapper implements CanonicalMapper {
    * Приводит URL к каноническому виду ({@link GitUrls#normalize}), чтобы deploy map находил репозиторий по
    * равенству. Нераспознанный URL — {@code INVALID_PAYLOAD} без значения в причине.
    *
-   * <p>TODO: {@code FeatureNormalizer.repositoryUrl} (identity candidates) сравнивает URL своей функцией
-   * {@code host/path}; на кандидатов формат хранимого {@code url} не влияет, функции можно объединить позже.
+   * <p>Алиас сохраняет регистр пути; признак кандидата identity сравнивается без учёта регистра
+   * ({@link GitUrls#matchKey}).
    */
   private static String normalizedUrl(String raw) {
     try {

@@ -3,7 +3,6 @@ package io.github.unlocker.archrag.integrationtests;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertNode;
 import io.github.unlocker.archrag.canonicalmodel.command.UpsertRelation;
@@ -423,6 +422,19 @@ class GraphProjectorIT {
     assertThat(openHosts()).containsExactly("h-a");
   }
 
+  @Test
+  void partialRecordWithIncompleteHostsDoesNotCloseOtherRunsOn() {
+    String a = host("h-a");
+    String b = host("h-b");
+    String dep = "dep-" + uid();
+    upsert("deploymap", "DEPLOYMENT", dep, "1", Map.of("name", "pay", "hosts", List.of(a)));
+
+    // PARTIAL называет только b: список связей неполон, связь с a остаётся открытой.
+    upsert("deploymap", "DEPLOYMENT", dep, "2", Map.of("name", "pay", "hosts", List.of(b), "_completeness", "PARTIAL"));
+
+    assertThat(openHosts()).containsExactlyInAnyOrder("h-a", "h-b");
+  }
+
   /** Известное ограничение: пустой список неотличим от отсутствующего поля, поэтому ничего не закрывает. */
   @Test
   void emptyHostsListClosesNothingKnownLimitation() {
@@ -607,26 +619,6 @@ class GraphProjectorIT {
     var before = dump();
     assertThat(migration.migrate(now.plusSeconds(60))).isZero();
     assertThat(dump()).isEqualTo(before);
-  }
-
-  @Test
-  void closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent() {
-    String team = "t-" + uid();
-    String system = "its-" + uid();
-    upsert("eam", "TEAM", team, "1", Map.of("name", "Core"));
-    upsert("eam", "IT_SYSTEM", system, "1", Map.of("name", "Payments", "ownerTeam", team));
-    var sys = key(SourceSystemCode.EAM, "IT_SYSTEM", system);
-    var tm = key(SourceSystemCode.EAM, "TEAM", team);
-    var request = new ProjectionRequest(sys, new SourceVersion("2"), T2, null,
-        Map.of(sys, identity.resolve(sys), tm, identity.resolve(tm)),
-        List.of(new UpsertNode(new SourceRecord(sys, "2", "sha256:y", T2, true),
-                new io.github.unlocker.archrag.canonicalmodel.node.ITSystem("Payments", null, null, null)),
-            new CloseAssertion(RelationType.OWNED_BY, sys, tm, T2, sys)));
-
-    assertThat(projector.project(request).outcome()).isEqualTo(ProjectionOutcome.APPLIED);
-
-    var rel = single("MATCH (:ITSystem)-[r:OWNED_BY]->(:Team) RETURN r").get("r").asRelationship();
-    assertThat(rel.get("validTo").asZonedDateTime().toInstant()).isEqualTo(T2);
   }
 
   @Test
@@ -824,6 +816,27 @@ class GraphProjectorIT {
   }
 
   @Test
+  void tombstoneOfMasterKeepsNodeWhileSupplementaryAssertionIsActiveAndClosesWithLastOne() {
+    String id = "svc-" + uid();
+    upsert("scm", "SERVICE", id, "1", Map.of("name", "pay", "language", "java"));
+    var scm = key(SourceSystemCode.SCM, "SERVICE", id);
+    var cmdb = key(SourceSystemCode.CMDB, "SERVICE", id);
+    identity.approve(new Crosswalk(scm, cmdb, "admin", "same service", T1));
+    projector.project(new ProjectionRequest(cmdb, new SourceVersion("1"), T2, null, Map.of(cmdb, identity.resolve(cmdb)),
+        List.of(new UpsertNode(new SourceRecord(cmdb, "1", "sha256:x", T2, true), new Service("pay", null, null, null)))));
+
+    handle(deleteEvent("d-" + uid(), "scm", "SERVICE", id, "2", T2));
+    var kept = single("MATCH (n:Service) RETURN n").get("n").asNode();
+    assertThat(kept.get("isCurrent").asBoolean()).isTrue();
+    assertThat(kept.containsKey("deletedAt")).isFalse();
+
+    handle(deleteEvent("d-" + uid(), "cmdb", "SERVICE", id, "2", T2));
+    var closed = single("MATCH (n:Service) RETURN n").get("n").asNode();
+    assertThat(closed.get("isCurrent").asBoolean()).isFalse();
+    assertThat(closed.containsKey("deletedAt")).isTrue();
+  }
+
+  @Test
   void deleteArrivingBeforeUpsertBlocksOlderUpsertAndCreatesNoNode() {
     String id = "t-" + uid();
     var delete = handle(deleteEvent("d-" + uid(), "eam", "TEAM", id, "5", T2));
@@ -862,7 +875,7 @@ class GraphProjectorIT {
   void snapshotCompleteIsHandedToReconciliationAndNotProjected() {
     var event = new CanonicalEvent("snapshot-complete:run-9", "urn:corp:eam", "architecture.sync.snapshot-complete.v1",
         "sync-run/run-9", T1, "urn:corp:schema:snapshot-complete:1", null,
-        new AssetEventData("SYNC_RUN", "run-9", new SourceVersion("1"), Map.of()));
+        new AssetEventData("SYNC_RUN", "run-9", new SourceVersion("1"), Map.of("syncRunId", "run-9", "objectCount", 0L)));
 
     var result = handle(event, "run-9");
 

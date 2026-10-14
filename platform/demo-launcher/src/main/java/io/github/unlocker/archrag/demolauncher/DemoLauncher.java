@@ -2,11 +2,13 @@ package io.github.unlocker.archrag.demolauncher;
 
 import com.sun.net.httpserver.HttpServer;
 import io.github.unlocker.archrag.adaptercore.AdapterConfig;
+import io.github.unlocker.archrag.adaptercore.ControlTokenValidator;
 import io.github.unlocker.archrag.adaptercore.RetryPolicy;
 import io.github.unlocker.archrag.adaptercore.SourceAdapter;
 import io.github.unlocker.archrag.assetadapter.AssetAdapter;
 import io.github.unlocker.archrag.deploymapadapter.DeploymapAdapter;
 import io.github.unlocker.archrag.eamadapter.EamAdapter;
+import io.github.unlocker.archrag.eamadapter.EamApiConnector;
 import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.scmadapter.ScmAdapter;
@@ -41,7 +43,7 @@ import org.postgresql.ds.PGSimpleDataSource;
  * {@value #STUB_CONTROL_PORT} (только в режиме stub). Если задан {@code ARCHRAG_WEBHOOK_TARGET} (и
  * {@code ARCHRAG_WEBHOOK_SECRET}), upsert через control дополнительно шлёт адаптеру webhook.
  *
- * <p>Адаптер: webhook ({@code POST /webhook}, {@code POST /control/snapshot}) на {@code ARCHRAG_WEBHOOK_PORT}, polling и
+ * <p>Адаптер: webhook ({@code POST /webhook}, {@code POST /control/snapshot}, последний только с токеном администратора: {@code ARCHRAG_CONTROL_OIDC_ISSUER_URI}, {@code ARCHRAG_CONTROL_OIDC_JWKS_URI}, {@code ARCHRAG_CONTROL_AUDIENCE}) на {@code ARCHRAG_WEBHOOK_PORT}, polling и
  * reconciliation. {@code GET /health} на {@code ARCHRAG_HEALTH_PORT} отвечает 200 только после старта всех трёх.
  * Экземпляр адаптера одного источника должен быть ровно один: замок snapshot действует только внутри процесса.
  * Миграции журнала накатывает {@code ingestion-service}, поэтому адаптер стартует после него.
@@ -114,6 +116,9 @@ public final class DemoLauncher {
     AdapterConfig adapterConfig = new AdapterConfig(config.system(), config.sourceUrl(), config.webhookSecret(),
         AdapterConfig.DEFAULT_REPLAY_WINDOW, 100, config.pollInterval(), config.reconcileInterval(),
         RetryPolicy.defaults());
+    if (config.eamApi() != null) {
+      verifyEamAccess(config.eamApi());
+    }
     try (var store = S3RawPayloadStore.create(config.s3Endpoint(), config.s3AccessKey(), config.s3SecretKey(),
         config.s3Bucket())) {
       store.ensureBucket();
@@ -121,7 +126,10 @@ public final class DemoLauncher {
         var started = new AtomicBoolean();
         HttpServer health = healthServer(config.healthPort(), started);
         try {
-          adapter.startWebhook(new InetSocketAddress(config.webhookPort()));
+          var control = config.control() == null ? null
+              : new ControlTokenValidator(config.control().issuer(), config.control().jwksUri(),
+                  config.control().audience(), LauncherConfig.CONTROL_ROLE);
+          adapter.startWebhook(new InetSocketAddress(config.webhookPort()), control);
           adapter.startPolling();
           adapter.startReconciliation();
           started.set(true);
@@ -130,6 +138,21 @@ public final class DemoLauncher {
         } finally {
           health.stop(0);
         }
+      }
+    }
+  }
+
+  /**
+   * Проверка подключения EAM при старте (п. 8 {@code docs/06-eam-integration.md}). Источник недоступен: WARN и запуск
+   * продолжается, polling ретраит сам. Отказ в доступе или лишние права: {@link IllegalStateException}, адаптер не
+   * стартует. Токен и тела ответов в лог не попадают.
+   */
+  static void verifyEamAccess(EamAdapter.EamApi api) {
+    try (var connector = new EamApiConnector(api.baseUri(), api.token(), 1)) {
+      switch (connector.verifyAccess()) {
+        case VERIFIED -> LOG.log(System.Logger.Level.INFO, "eam access verified: " + api.baseUri());
+        case UNAVAILABLE -> LOG.log(System.Logger.Level.WARNING,
+            "eam access check skipped, source unavailable: " + api.baseUri());
       }
     }
   }

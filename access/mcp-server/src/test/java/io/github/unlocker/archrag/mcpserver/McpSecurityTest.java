@@ -93,6 +93,22 @@ class McpSecurityTest {
   }
 
   @Test
+  void tokenWithoutReaderRoleIsForbiddenOnEveryMethod() {
+    String noRole = TestJwt.tokenWithRoles(List.of(), "architecture.read");
+    String otherRole = TestJwt.tokenWithRoles(List.of("archrag-console-admin"), "architecture.read");
+    String init =
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{"
+            + "\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},"
+            + "\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"}}}";
+    String list = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}";
+    for (String token : List.of(noRole, otherRole)) {
+      assertThat(post(token, init).getStatusCode().value()).isEqualTo(403);
+      assertThat(post(token, list).getStatusCode().value()).isEqualTo(403);
+      assertThat(post(token, CALL_PING).getStatusCode().value()).isEqualTo(403);
+    }
+  }
+
+  @Test
   void tokenWithoutScopeCanInitializeAndListTools() {
     String token = TestJwt.token();
     var init =

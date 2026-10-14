@@ -113,7 +113,7 @@ class ExplainProvenanceIT {
     var normalizer =
         new Normalizer(
             List.of(new EamMapper(), new ScmItSystemMapper(), new CmdbMapper(), new DeployMapMapper()), projector::isActive);
-    reconciler = new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts);
+    reconciler = new Reconciler(journal, new NoopRawStore(), projector, Clock.systemUTC(), identity, conflicts, new PostgresIdentityCandidates(ds), 1.0, Reconciler.SkipListener.NONE);
     processor =
         new EventProcessor(
             journal, normalizer, identity, projector, (source, run, id, count) -> {}, new PostgresIdentityCandidates(ds), conflicts);
@@ -125,6 +125,7 @@ class ExplainProvenanceIT {
     mcp = new AnnotationConfigApplicationContext();
     mcp.registerBean(GraphQueryExecutor.class, () -> executor);
     mcp.registerBean(QueryLimits.class, () -> LIMITS);
+    mcp.registerBean(AuthorityMatrix.class, AuthorityMatrix::defaults);
     mcp.register(io.github.unlocker.archrag.mcpserver.graph.GraphQueries.class, ExplainProvenanceTool.class);
     mcp.refresh();
     tool = mcp.getBean(ExplainProvenanceTool.class);

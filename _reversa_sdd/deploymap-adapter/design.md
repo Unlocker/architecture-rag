@@ -65,7 +65,7 @@
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 13)] Реального источника deploy map нет; контракт `poc-0/poc-1` временный и подлежит замене (см. [questions.md](questions.md) Q-01).
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-287; не сделано: реальный источник deploy map не выбран] Реального источника deploy map нет; контракт `poc-0/poc-1` временный и подлежит замене (см. [questions.md](questions.md) Q-01).
 - 🟡 `DeploymapAdapter.config` не используется в прод-коде (Q-02).
 - 🔴 Положительный путь `create` не покрыт тестом модуля (Q-03).
 - 🟡 Контрактные тесты fixtures проверяют форму и согласованность с seed, но не прогоняют fixtures через `DeployMapMapper`; нормализатор тестируется отдельно (`ingestion/normalizer/src/test/.../DeployMapMapperTest.java`), общих файлов нет (grep по `deploymap/` в `ingestion`, `platform` пуст) (Q-04).

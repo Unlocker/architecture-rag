@@ -39,7 +39,7 @@ UnresolvedReference(SourceKey from, String field, RelationType relationType, Sou
 | `UNKNOWN_SCHEMA_VERSION` | нет префикса `urn:corp:schema:asset-upserted:` или версия не в `supportedSchemaVersions()` | `dataschema version is not supported` | `:65` |
 | `UNKNOWN_SOURCE_TYPE` | `sourceType` не обслуживается маппером | `unknown EAM sourceType` / `unknown SCM sourceType` / `unknown CMDB sourceType` / `unknown deploymap sourceType` | `EamMapper.java:116`, `ScmMapper.java:95`, `CmdbMapper.java:33`, `DeployMapMapper.java:134` |
 | `MISSING_REQUIRED_FIELD` | обязательное поле не передано | `required field is missing: <поле>` | `Payload.java:27`; `EamMapper.java:137` (`attrs`); `DeployMapMapper.java:152` (`chartMeta`) |
-| `INVALID_PAYLOAD` | неверный тип/значение/формат | `field has unexpected type: <поле>`; `field has unknown value: criticality` / `: kind`; `repository url is not a recognized git url`; `annotation has invalid format: <аннотация>`; `unknown deploymap format`; `cannot determine environment class`; `payload violates canonical model invariants` | `Payload.java:125`; `EamMapper.java:124`; `CmdbMapper.java:55`; `ScmMapper.java:110`; `DeployMapMapper.java:145,189,250`; `Normalizer.java:83` |
+| `INVALID_PAYLOAD` | неверный тип/значение/формат | `field has unexpected type: <поле>`; `field has unknown value: kind`; `repository url is not a recognized git url`; `annotation has invalid format: <аннотация>`; `unknown deploymap format`; `cannot determine environment class`; `payload violates canonical model invariants` | `Payload.java:125`; `EamMapper.java:124`; `CmdbMapper.java:55`; `ScmMapper.java:110`; `DeployMapMapper.java:145,189,250`; `Normalizer.java:83` |
 
 Других кодов нормализатор не выдаёт 🟢. Прочие коды карантина (`INVALID_COMMANDS`, `GRAPH_REJECTED`, …) ставит `EventProcessor`, не модуль.
 
@@ -48,7 +48,7 @@ UnresolvedReference(SourceKey from, String field, RelationType relationType, Sou
 | Код | Условие | Источник |
 |---|---|---|
 | `DEPENDS_ON_NOT_SUPPORTED` | плоский `IT_SYSTEM` с непустым `dependsOn` (после отбрасывания пустых элементов) | `EamMapper.java:96-98` |
-| `UNMAPPED_CRITICALITY` | `IT_SYSTEM` (ArchObject), `attrs.criticality` задан и не из {HIGH, MEDIUM, LOW} (регистр не важен) | `EamMapper.java:161-168` |
+| `UNMAPPED_CRITICALITY` | `IT_SYSTEM` (ArchObject: не из {HIGH, MEDIUM, LOW}; плоский: не имя `Criticality`), `SERVICE_DEPENDENCY.criticality` вне `Criticality` (регистр не важен; К-10, UNLOCKER-287) | `EamMapper.java:161-168` |
 | `DEPLOYMENT_SERVICE_UNRESOLVED` | `deploymap-poc-1`: сервис не определился | `DeployMapMapper.java:222-224` |
 
 ## 5. Форматы payload по `sourceType` (🟢)

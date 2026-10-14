@@ -108,7 +108,6 @@
 |---|---|---|
 | `UpsertNode` (`CM/command/UpsertNode.java:8`) | `record: SourceRecord`*, `data: NodeData`* | только `null` |
 | `UpsertRelation` (`CM/command/UpsertRelation.java:21`) | `type`*, `from`*, `fromLabel`*, `to`*, `toLabel`*, `properties`*, `validity` (нет), `assertedBy`* | `type.allows(fromLabel,toLabel)` (`:32-34`); `validity` только для temporal (`:35-37`); `properties` — `copyProperties`; включают все `identityProperties` (`:38-41`) |
-| `CloseAssertion` (`CM/command/CloseAssertion.java:9`) | `type`*, `from`*, `to`*, `validTo`*, `assertedBy`* | `type.temporal()` (`:18-20`) |
 | `TombstoneSourceRecord` (`CM/command/TombstoneSourceRecord.java:8`) | `key`*, `deletedAt`* | только `null`; «после полного snapshot» — только в Javadoc 🟡 |
 | `DeferRelation` (`CM/command/DeferRelation.java:12`) | `relation: UpsertRelation`* | только `null` |
 
@@ -186,10 +185,9 @@
 | `VALIDATED` | промежуточное | NORMALIZED, RETRYING, QUARANTINED, IGNORED_OLD_VERSION |
 | `NORMALIZED` | промежуточное | RESOLVED, RETRYING, QUARANTINED, IGNORED_OLD_VERSION |
 | `RESOLVED` | промежуточное | PROJECTED, RETRYING, QUARANTINED, IGNORED_OLD_VERSION |
-| `PROJECTED` | конечное* | SUPERSEDED |
+| `PROJECTED` | конечное | — |
 | `QUARANTINED` | ждёт оператора | RETRYING |
 | `RETRYING` | повтор | VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, IGNORED_OLD_VERSION |
-| `SUPERSEDED` | конечное | — |
 | `DUPLICATE` | конечное | — |
 | `IGNORED_OLD_VERSION` | конечное | — |
 
@@ -396,7 +394,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 | `error_code` | text | нет | обязателен (`toDlq` бросает `IllegalArgumentException` при пустом) |
 | `payload_key` | text | да | копия ссылки на raw |
 | `created_at` | timestamptz | нет | |
-| `replayed_at` | timestamptz | да | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **в коде не заполняется** (code-analysis §Q1.5) |
+| `replayed_at` | timestamptz | да | 🟢 (реализовано — UNLOCKER-281) заполняет `EventJournal.closeDlq` при replay и release из карантина (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`); `NULL` = запись ещё не разобрана |
 
 Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`V1__event_journal.sql:47-48`).
 
@@ -471,7 +469,7 @@ PK `(source, source_type, source_id, feature)` — **одно значение �
 | `label_family` | text | |
 | `matched` | jsonb NOT NULL | массив `{feature, value}` в порядке признаков |
 | `score` | numeric(3,2) NOT NULL | 0.00–1.00 |
-| `status` | text NOT NULL DEFAULT `'OPEN'` | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] других значений код не выставляет |
+| `status` | text NOT NULL DEFAULT `'OPEN'` | 🟢 (реализовано — UNLOCKER-282) `OPEN` → `RESOLVED` при подтверждении оператором (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresCandidateApprovals.java:45`) |
 | `first_seen_at`, `updated_at` | timestamptz | `first_seen_at` не меняется при повторе |
 
 Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-22`) 🟡.
@@ -520,12 +518,12 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `SourceSystem` | `code` (UNIQUE) | — | upsert, relation-only, tombstone |
 | `(:SourceSystem)-[:OWNS_RECORD]->(:SourceRecord)` | — | — | то же |
 | `(:SourceRecord)-[:ASSERTS]->(:<Canonical>)` | — | `confidence=1.0`, `authority ∈ {MASTER, SUPPLEMENTARY}`, `conflicts: list<string>` (имена свойств; снимается при отсутствии конфликта) | `UpsertNode`; `conflicts` — `writeConflictMarkers` |
-| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум) | если у события есть `syncRunId` (`:687-703`) |
+| `SyncRun` | `runId` (UNIQUE) | `adapter`, `status='RUNNING'` (при создании), `startedAt` (минимум); при закрытии `status`, `endedAt`, `fetched`, `applied`, `failed` (`SyncRunWriter`) | если у события есть `syncRunId` (`:687-703`) |
 | `(:SyncRun)-[:PROCESSED]->(:SourceRecord)` | — | — | то же |
 | `PendingRelation` | `key` (UNIQUE, SHA-256) | `type`, `fromLabel`, `toLabel`, `from{Source,Type,Id}`, `to{Source,Type,Id}`, `props` (JSON-строка), `validFrom?`, `validTo?`, `referrerVersion`, `eventTime` | `DeferRelation` (`GP/PendingRelations.java:53-80`) |
 | `(:SourceRecord)-[:DEFERS]->(:PendingRelation)` | — | — | то же |
 
-Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы, `:694`); `SyncRun.status` после создания не меняется 🟡 — кто его завершает, из кода ingestion не видно (проверить в R.3).
+Счётчики `SyncRun` проектор **не** ведёт (инкремент внутри повторяемой транзакции удваивался бы); 🟢 [UNLOCKER-280: реализовано] `SyncRun.status` и счётчики пишет закрытие прогона по маркеру `snapshot-complete` (`SyncRunWriter.close`, `SET`, `SUCCEEDED` финален), зависшие `RUNNING` и retention — `HousekeepingJob` (`archrag.sync-run.*`).
 
 ### Q.4.3 Канонический узел
 
@@ -539,7 +537,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 
 | Тип | Поля | Инварианты |
 |---|---|---|
-| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation`/`CloseAssertion` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
+| `ProjectionRequest` (`GP/ProjectionRequest.java:37-44`) | `key`, `version`, `eventTime`, `syncRunId?`, `gids: Map<SourceKey,UUID>`, `commands`, `conflicts` | ≤ 1 узел-команды; ключ и версия узла совпадают с запросом; все связи утверждаются этой записью; `gid` есть для узла и обоих концов `UpsertRelation` (кроме `DeferRelation`); tombstone — единственная команда; маркеры конфликтов — только для `gid` записи |
 | `ProjectionResult` (`GP/ProjectionResult.java:13-14`) | `outcome ∈ {APPLIED, NOOP_SAME_VERSION, IGNORED_OLD_VERSION}`, `skippedProperties`, `skippedRelations` | списки неизменяемы |
 | `ProcessingResult` (`GP/ProcessingResult.java:13`) | `status`, `errorCode?`, `projection?` | `status` обязателен |
 | `ConflictMarkers` (`GP/ConflictMarkers.java:22`) | `gid?`, `byRecord: Map<SourceKey, List<String>>` | непустые списки; маркеры без `gid` недопустимы; `none()` = «не менять» |
@@ -578,7 +576,7 @@ PK `(gid, property, dissent_source, dissent_type, dissent_id)`; `dissent_value`,
 | `error` | text | да | класс исключения, ≤ 200 символов |
 | `started_at`, `finished_at` | timestamptz | нет / да | |
 
-Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`).
+Индексы: `ix_admin_audit_started (started_at)`, `ix_admin_audit_replay (replay_id)`. Запись `STARTED` делается **до** операции; зависшая `STARTED` означает падение процесса или сбой записи итога (`IS/AdminOperations.java:56`). Retention: `HousekeepingJob` переводит `STARTED` старше `archrag.admin.audit-stale-after` (24h, не связан с таймаутом прогона адаптера) в `FAILED` (`error='abandoned'`), затем удаляет записи старше `archrag.admin.audit-retention` (90d) по `started_at` (🟢 [UNLOCKER-280: реализовано] К-8).
 
 ### Q.5.2 Роль БД `archrag_console_ro` (`V6__console_readonly_role.sql`)
 
@@ -1125,7 +1123,7 @@ Upsert всегда `COMPLETE` (`StubSource.upsert`); удаление и `PARTI
 | `POST /control/upsert` | `{"type": "platforms"\|"itproducts"\|"itsystems", "id": <целое>, "attrs": <объект>}` | `200 {"ver":N}` — `attrs` **заменяются целиком**; `ver=1` у нового, `+1` при изменении, прежнее при идентичных `attrs` | `400 {"error":"invalid request"}` (не JSON, неизвестный `type`, нецелый `id`, `attrs` не объект, тело слишком большое); `405 {"error":"POST expected"}` |
 | `POST /control/archive` | `{"type": …, "id": <целое>}` | `200 {}` — объект исчезает из `GET /api/{type}/` и `/{id}/`; для неизвестного объекта тоже `200` | те же `400`/`405` |
 
-Допустимые `type` зашиты литералами `Set.of("platforms","itproducts","itsystems")` (`:27`), а не константами `EamApiSeed` (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] `code-analysis.md` §Y2.7). `id` принимается только как JSON-целое (`Long` из `adapter-core.Json`), дробное и строковое значения отвергаются. 🟢
+Допустимые `type` зашиты литералами `Set.of("platforms","itproducts","itsystems")` (`:27`), а не константами `EamApiSeed` (на момент анализа; 🟢 (реализовано — UNLOCKER-287): `EamApiControl` берёт типы из `EamApiSeed.TYPES`, `platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiSeed.java:31`; `code-analysis.md` §Y2.7). `id` принимается только как JSON-целое (`Long` из `adapter-core.Json`), дробное и строковое значения отвергаются. 🟢
 
 ### Y.2.7 Лимиты и таймауты
 

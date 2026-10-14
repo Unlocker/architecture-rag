@@ -57,6 +57,8 @@ class EventProcessorTest {
   private FakeCandidates candidates;
   private FakeConflicts conflicts;
   private final List<String> snapshots = new ArrayList<>();
+  private final List<Boolean> partialSnapshots = new ArrayList<>();
+  private boolean rejectSnapshots;
   private EventProcessor processor;
 
   @BeforeEach
@@ -72,7 +74,21 @@ class EventProcessorTest {
             Normalizer.standard(key -> true),
             identity,
             projection,
-            (source, run, eventId, count) -> snapshots.add(source + "/" + run + "/" + eventId),
+            new ReconciliationTrigger() {
+              @Override
+              public void snapshotComplete(String source, String run, String eventId, long count) {
+                snapshotComplete(source, run, eventId, count, false);
+              }
+
+              @Override
+              public void snapshotComplete(String source, String run, String eventId, long count, boolean partial) {
+                if (rejectSnapshots) {
+                  throw new SnapshotRejectedException(SnapshotRejectedException.MASS_CLOSE_LIMIT, "too many");
+                }
+                snapshots.add(source + "/" + run + "/" + eventId);
+                partialSnapshots.add(partial);
+              }
+            },
             candidates,
             conflicts);
   }
@@ -144,7 +160,7 @@ class EventProcessorTest {
 
   @Test
   void tombstoneForgetsFeaturesOfKey() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(candidates.forgotten).containsExactly(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"));
@@ -154,7 +170,7 @@ class EventProcessorTest {
   void tombstoneCandidateStoreFailureRetriesBeforeGraphIsTouched() {
     candidates.fail = true;
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
     assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
@@ -200,7 +216,7 @@ class EventProcessorTest {
     var team = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
     identity.map.put(team, UUID.randomUUID());
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(conflicts.retracted).containsExactly(team);
@@ -213,7 +229,7 @@ class EventProcessorTest {
 
   @Test
   void tombstoneOfUnknownKeyDoesNotCallConflictStore() {
-    run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(conflicts.retracted).isEmpty();
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
@@ -224,7 +240,7 @@ class EventProcessorTest {
     identity.map.put(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"), UUID.randomUUID());
     conflicts.fail = true;
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
     assertThat(result.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
@@ -456,6 +472,33 @@ class EventProcessorTest {
   }
 
   @Test
+  void retryLimitQuarantinesWithOriginalCodeInReason() {
+    projection.failure = new ServiceUnavailableException("down");
+    var event = upsert("e1", "5", Map.of("name", "core"));
+    var result = run(event);
+    for (int attempt = 1; attempt < EventProcessor.DEFAULT_MAX_ATTEMPTS - 1; attempt++) {
+      assertThat(result.status()).as("attempt " + attempt).isEqualTo(ProcessingStatus.RETRYING);
+      result = processor.process(event, RAW);
+    }
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(journal.entry("e1").attempts()).isEqualTo(EventProcessor.DEFAULT_MAX_ATTEMPTS - 1);
+
+    result = processor.process(event, RAW);
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(EventProcessor.RETRY_LIMIT_EXCEEDED);
+    assertThat(journal.entry("e1").errorReason()).startsWith("GRAPH_UNAVAILABLE");
+    assertThat(journal.history("e1")).endsWith(ProcessingStatus.RETRYING, ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void maxAttemptsMustBePositive() {
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new EventProcessor(journal, Normalizer.standard(k -> true),
+        identity, projection, ReconciliationTrigger.NOOP, candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE,
+        NormalizationWarnings.NONE, 0)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void normalizationErrorQuarantinesWithCodeAndNoWrite() {
     var result = run(upsert("e1", "5", Map.of()));
 
@@ -463,6 +506,14 @@ class EventProcessorTest {
     assertThat(result.errorCode()).isEqualTo("MISSING_REQUIRED_FIELD");
     assertThat(projection.requests).isEmpty();
     assertThat(journal.checkpoint).isNull();
+  }
+
+  @Test
+  void sourceCodeRejectsManualUnknownAndForeignUrns() {
+    assertThat(EventProcessor.sourceCode("urn:corp:deploymap")).isEqualTo(SourceSystemCode.DEPLOYMAP);
+    assertThat(EventProcessor.sourceCode("urn:corp:manual")).isNull();
+    assertThat(EventProcessor.sourceCode("urn:corp:hr")).isNull();
+    assertThat(EventProcessor.sourceCode("urn:other:eam")).isNull();
   }
 
   @Test
@@ -475,7 +526,7 @@ class EventProcessorTest {
 
   @Test
   void deleteBecomesTombstoneRequestWithoutNormalizer() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(projection.requests).hasSize(1);
@@ -487,7 +538,7 @@ class EventProcessorTest {
   void deleteWithOldVersionIsIgnored() {
     projection.applied = Optional.of(new AppliedRecord(new SourceVersion("9"), true));
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
     assertThat(projection.requests).isEmpty();
@@ -495,19 +546,168 @@ class EventProcessorTest {
 
   @Test
   void deleteWithUnknownSchemaIsQuarantined() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, "urn:corp:schema:asset-deleted:9", "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, "urn:corp:schema:asset-deleted:9", "TEAM", "t1"));
 
     assertThat(result.errorCode()).isEqualTo("UNKNOWN_SCHEMA_VERSION");
   }
 
+  private static CanonicalEvent marker(String runId, Map<String, Object> payload) {
+    return new CanonicalEvent(
+        "snapshot-complete:" + runId, "urn:corp:eam", CanonicalEvent.TYPE_SNAPSHOT_COMPLETE, "sync-run/" + runId, T,
+        "urn:corp:schema:snapshot-complete:1", null, new AssetEventData("SYNC_RUN", runId, new SourceVersion("1"), payload));
+  }
+
+  @Test
+  void partialUpsertIsProjectedAsPartialAndCompleteIsNot() {
+    run(upsert("p1", "5", Map.of("name", "core", "_completeness", "PARTIAL")));
+    run(upsert("c1", "6", Map.of("name", "core", "_completeness", "COMPLETE")));
+
+    assertThat(projection.requests).extracting(ProjectionRequest::partial).containsExactly(true, false);
+  }
+
   @Test
   void snapshotCompleteIsHandedToReconciliationAndNotProjected() {
-    var result =
-        run(other("snapshot-complete:run-7", EventProcessor.TYPE_SNAPSHOT_COMPLETE, "urn:corp:schema:snapshot-complete:1", "SYNC_RUN", "run-7"));
+    var result = run(marker("run-7", Map.of("syncRunId", "run-7", "objectCount", 5L)));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(snapshots).containsExactly("urn:corp:eam/run-7/snapshot-complete:run-7");
     assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteWithExplicitZeroObjectCountIsAccepted() {
+    var result = run(marker("run-0", Map.of("syncRunId", "run-0", "objectCount", 0L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(snapshots).hasSize(1);
+  }
+
+  @Test
+  void snapshotCompleteWithoutObjectCountIsQuarantinedAndReconciliationIsNotCalled() {
+    var result = run(marker("run-8", Map.of("syncRunId", "run-8")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT);
+    assertThat(snapshots).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteWithInvalidObjectCountIsQuarantined() {
+    for (Object bad : new Object[] {-1L, "5", 2.5d}) {
+      var result = run(marker("run-" + bad, Map.of("syncRunId", "run", "objectCount", bad)));
+
+      assertThat(result.status()).as("objectCount=%s", bad).isEqualTo(ProcessingStatus.QUARANTINED);
+      assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT);
+    }
+    assertThat(snapshots).isEmpty();
+  }
+
+  @Test
+  void snapshotCompleteRejectedByReconciliationIsQuarantinedWithItsCode() {
+    rejectSnapshots = true;
+
+    var result = run(marker("run-9", Map.of("syncRunId", "run-9", "objectCount", 1L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(result.errorCode()).isEqualTo(SnapshotRejectedException.MASS_CLOSE_LIMIT);
+  }
+
+  private final List<String> closes = new ArrayList<>();
+  private boolean failClose;
+
+  private EventProcessor withSyncRuns() {
+    return new EventProcessor(
+        journal, Normalizer.standard(key -> true), identity, projection,
+        (source, run, eventId, count) -> {
+          if (rejectSnapshots) {
+            throw new SnapshotRejectedException(SnapshotRejectedException.MASS_CLOSE_LIMIT, "too many");
+          }
+        },
+        candidates, conflicts, DeploymentLookup.NONE, EamLookup.NONE, NormalizationWarnings.NONE,
+        EventProcessor.DEFAULT_MAX_ATTEMPTS,
+        (source, runId, markerId, status) -> {
+          if (failClose) {
+            throw new IllegalStateException("neo4j down");
+          }
+          closes.add(runId + "/" + markerId + "/" + status);
+        });
+  }
+
+  private ProcessingResult runWith(EventProcessor p, CanonicalEvent event) {
+    journal.append(event, RAW, "run-1");
+    return p.process(event, RAW);
+  }
+
+  @Test
+  void acceptedMarkerClosesSyncRunAsSucceeded() {
+    var result = runWith(withSyncRuns(), marker("r1", Map.of("syncRunId", "r1", "objectCount", 5L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
+    assertThat(closes).containsExactly("r1/snapshot-complete:r1/SUCCEEDED");
+  }
+
+  @Test
+  void partialMarkerStillClosesSyncRunAsSucceeded() {
+    runWith(withSyncRuns(), marker("r2", Map.of("syncRunId", "r2", "objectCount", 1L, "completeness", "PARTIAL")));
+
+    assertThat(closes).containsExactly("r2/snapshot-complete:r2/SUCCEEDED");
+  }
+
+  @Test
+  void markerWithoutObjectCountClosesSyncRunAsFailed() {
+    var result = runWith(withSyncRuns(), marker("r3", Map.of("syncRunId", "r3")));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.QUARANTINED);
+    assertThat(closes).containsExactly("r3/snapshot-complete:r3/FAILED");
+  }
+
+  @Test
+  void markerRejectedByReconciliationClosesSyncRunAsFailed() {
+    rejectSnapshots = true;
+
+    runWith(withSyncRuns(), marker("r4", Map.of("syncRunId", "r4", "objectCount", 2L)));
+
+    assertThat(closes).containsExactly("r4/snapshot-complete:r4/FAILED");
+  }
+
+  @Test
+  void closeFailureLeavesMarkerForRetryInsteadOfProjected() {
+    failClose = true;
+
+    var result = runWith(withSyncRuns(), marker("r5", Map.of("syncRunId", "r5", "objectCount", 2L)));
+
+    assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(result.errorCode()).isEqualTo("SYNC_RUN_CLOSE_FAILED");
+  }
+
+  @Test
+  void closeFailureWhileQuarantiningMarkerDoesNotSwallowTheError() {
+    failClose = true;
+
+    assertThatThrownBy(() -> runWith(withSyncRuns(), marker("r6", Map.of("syncRunId", "r6"))))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(journal.entry("snapshot-complete:r6").status()).isNotEqualTo(ProcessingStatus.QUARANTINED);
+  }
+
+  @Test
+  void nonMarkerQuarantineDoesNotCloseSyncRun() {
+    runWith(withSyncRuns(), other("e-x", "architecture.unknown.v1", "urn:corp:schema:x:1", "X", "x1"));
+
+    assertThat(closes).isEmpty();
+  }
+
+  @Test
+  void partialMarkerIsPassedToReconciliationAsPartial() {
+    run(marker("run-p", Map.of("syncRunId", "run-p", "objectCount", 1L, "completeness", "PARTIAL")));
+
+    assertThat(partialSnapshots).containsExactly(true);
+  }
+
+  @Test
+  void markerWithoutCompletenessIsComplete() {
+    run(marker("run-c", Map.of("syncRunId", "run-c", "objectCount", 1L)));
+
+    assertThat(partialSnapshots).containsExactly(false);
   }
 
   @Test
@@ -566,7 +766,7 @@ class EventProcessorTest {
       var updated =
           new JournalEntry(
               old.source(), old.eventId(), old.correlationId(), old.syncRunId(), old.sourceType(), old.sourceId(),
-              old.sourceVersion(), old.schemaVersion(), status, code, reason, old.attempts(), old.payloadRef(),
+              old.sourceVersion(), old.schemaVersion(), status, code, reason, old.attempts() + (status == ProcessingStatus.RETRYING ? 1 : 0), old.payloadRef(),
               old.receivedAt(), T);
       entries.put(eventId, updated);
       history.get(eventId).add(status);
@@ -579,7 +779,22 @@ class EventProcessorTest {
     }
 
     @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public SnapshotContents snapshotContents(String source, String syncRunId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
       throw new UnsupportedOperationException();
     }
 
@@ -968,7 +1183,7 @@ class EventProcessorTest {
         run(
             processor,
             new CanonicalEvent(
-                "d1", "urn:corp:eam", EventProcessor.TYPE_ASSET_DELETED, "SOLUTION/7201", T, EventProcessor.SCHEMA_ASSET_DELETED, null,
+                "d1", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_DELETED, "SOLUTION/7201", T, CanonicalEvent.SCHEMA_DELETED, null,
                 new AssetEventData("SOLUTION", "7201", new SourceVersion("3"), Map.of())));
 
     assertThat(old.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);

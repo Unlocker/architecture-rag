@@ -136,6 +136,6 @@
 Ссылки `файл:строка` выше сверены с `develop` (`b24ac9d`). Файлы и символы на месте; номера строк местами сместились. Актуальные ссылки приведены в самих ADR 0033–0040 и в дополнениях к ADR 0028 и 0029. Расхождения с текстом кандидатов:
 
 - К-7: `AdminLock` — PostgreSQL advisory lock на сессии (`AdminLock.java:11-14`), а не внутрипроцессный замок; допущение единственного экземпляра относится к диспетчеру, порядку событий и `PendingRelation`.
-- К-8: `ToolScopeFilter` уже вызывает `auditor.denied` для неизвестного tool и недостающего scope (`ToolScopeFilter.java:84-93`); состав неаудируемых отказов уточняет п. 17 UNLOCKER-276.
-- К-10: отступление от политики есть и внутри `EamMapper`: необязательный `criticality` у `IT_SYSTEM` без `attrs` и у `SERVICE_DEPENDENCY` даёт `INVALID_PAYLOAD` (`EamMapper.java:83`, `:104`, `:120-125`).
-- К-5: `/control/snapshot` по-прежнему без аутентификации (`docs/03-interfaces.md:33`).
+- К-8: `ToolScopeFilter` уже вызывает `auditor.denied` для неизвестного tool и недостающего scope (`ToolScopeFilter.java:95`, `:100`); отказы 400/413 до разбора тела добавлены в UNLOCKER-285 (`ToolScopeFilter.java:65-87`, ADR 0038, п. 6).
+- К-10: отступление от политики есть и внутри `EamMapper`: необязательный `criticality` у `IT_SYSTEM` без `attrs` и у `SERVICE_DEPENDENCY` давал `INVALID_PAYLOAD`; приведено к политике в UNLOCKER-287 (`EamMapper.java:77-89`, `:109-117`).
+- К-5: на момент сверки `/control/snapshot` был без аутентификации; закрыто в UNLOCKER-290 (`ControlTokenValidator`, `docs/03-interfaces.md:33`, ADR 0035, п. 5).

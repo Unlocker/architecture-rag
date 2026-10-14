@@ -132,7 +132,7 @@ ADR 0003 (`gid` и `SourceRecord`), 0008 (authority matrix), 0009/0029 (deploy m
 | Отложенные ссылки через `UnresolvedReference` (+alias-ключи) вместо фиктивных узлов | `NZ/CommandSink.java:62-67`, `NZ/ScmMapper.java:68-82`, `DeployMapMapper.java:195-198` | 🟢 |
 | `null` вместо значений по умолчанию; обязательные `kind`/`name` | `NZ/CmdbMapper.java:36-37`, `NT/NormalizerTest#absentKindIsQuarantinedNotDefaulted` | 🟢 |
 | Строгий разбор ссылок EAM: только одиночный целый `id` | `NZ/Payload.java:109-122`; docs/06 решение 3 | 🟢 |
-| Критичность EAM: две таблицы (ArchObject — словарь HIGH/MEDIUM/LOW с `criticalityRaw`; плоский/`SERVICE_DEPENDENCY` — `Criticality.valueOf`) | `NZ/EamMapper.java:120-126,129-130,161-168` | 🟢 факт, 🟡 намеренность |
+| Критичность EAM: две таблицы (ArchObject — словарь HIGH/MEDIUM/LOW с `criticalityRaw`; плоский/`SERVICE_DEPENDENCY` — `Criticality.valueOf`) | `NZ/EamMapper.java:120-126,129-130,161-168` | 🟢 факт, 🟡 намеренность; К-10 (UNLOCKER-287): неизвестное значение у плоского/`SERVICE_DEPENDENCY` → warning + `criticalityRaw`, не карантин |
 | `validity` только из источника | `NZ/EamMapper.java:94,112,192` | 🟢 |
 | Причины без значений (фиксированные строки) | `NZ/Normalizer.java:81-83` | 🟢 |
 

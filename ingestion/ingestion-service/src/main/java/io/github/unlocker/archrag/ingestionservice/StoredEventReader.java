@@ -31,7 +31,6 @@ import tools.jackson.databind.json.JsonMapper;
 public class StoredEventReader {
 
   static final String COMPLETENESS_KEY = "_completeness";
-  static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   private static final String OPERATION_DELETE = "DELETE";
 
   private final JsonMapper json;
@@ -52,7 +51,7 @@ public class StoredEventReader {
     if (!root.isObject()) {
       throw new IllegalArgumentException("raw payload is not a JSON object");
     }
-    if (TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
+    if (CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
       return marker(stored, root);
     }
     boolean delete = OPERATION_DELETE.equals(text(root, "operation"));
@@ -88,12 +87,18 @@ public class StoredEventReader {
   private static CanonicalEvent marker(StoredEvent stored, JsonNode root) {
     JournalEntry entry = stored.entry();
     JsonNode count = root.get("objectCount");
-    if (count == null || !count.isIntegralNumber() || count.asLong() < 0) {
-      throw new IllegalArgumentException("marker raw payload has no valid objectCount");
-    }
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("syncRunId", entry.sourceId());
-    payload.put("objectCount", count.asLong());
+    // Невалидный objectCount не отвергается здесь: без поля EventProcessor уводит маркер в карантин с отдельным кодом.
+    if (count != null && count.isIntegralNumber() && count.asLong() >= 0) {
+      payload.put("objectCount", count.asLong());
+    }
+    String completeness = text(root, "completeness");
+    if (completeness != null && !completeness.equals("COMPLETE") && !completeness.equals("PARTIAL")) {
+      throw new IllegalArgumentException("marker raw payload has no valid completeness");
+    }
+    // Маркеры до UNLOCKER-279 поля не имеют: это COMPLETE.
+    payload.put("completeness", completeness == null ? "COMPLETE" : completeness);
     return new CanonicalEvent(
         entry.eventId(),
         entry.source(),

@@ -5,6 +5,7 @@ import static io.github.unlocker.archrag.sourcestubs.StubSources.fields;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Seed заглушки EAM в формате реального API: вертикальный срез {@code ITSystem -> Solution -> Platform}.
@@ -25,6 +26,9 @@ public final class EamApiSeed {
    * {@code aknsd}). Единственное место выбора: смена константы переключает заглушку на другой тип.
    */
   public static final String SOLUTION_TYPE = "itproducts";
+
+  /** Все типы, которые отдаёт заглушка и читает адаптер; единственный источник для {@code EamApiControl}. */
+  public static final Set<String> TYPES = Set.of(PLATFORM_TYPE, SOLUTION_TYPE, IT_SYSTEM_TYPE);
 
   /** Id типов в {@code /api/types/{id}/} — допущение. */
   static final Map<String, Long> TYPE_IDS = Map.of(PLATFORM_TYPE, 11L, SOLUTION_TYPE, 13L, IT_SYSTEM_TYPE, 12L);

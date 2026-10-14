@@ -80,6 +80,8 @@ function Candidates() {
                   <th>Семейство</th>
                   <th>Совпавшие признаки</th>
                   <th>Score</th>
+                  {status === 'RESOLVED' && <th>Закрыт</th>}
+                  {status === 'RESOLVED' && <th>Кем</th>}
                 </tr>
               </thead>
               <tbody>
@@ -90,6 +92,12 @@ function Candidates() {
                     <td>{c.labelFamily}</td>
                     <td>{(c.matched ?? []).map((m) => `${m.feature}=${text(m.value)}`).join(', ') || '—'}</td>
                     <td>{c.score}</td>
+                    {status === 'RESOLVED' && (
+                      <td>
+                        <Time value={c.resolvedAt ?? null} />
+                      </td>
+                    )}
+                    {status === 'RESOLVED' && <td>{c.resolvedBy ?? '—'}</td>}
                   </tr>
                 ))}
               </tbody>

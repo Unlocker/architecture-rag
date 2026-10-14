@@ -1,7 +1,6 @@
 package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -48,7 +47,7 @@ import org.neo4j.driver.TransactionContext;
  *       только если источник авторитетен для типа; остальное пропускается и возвращается в результате;
  *       {@code null} никогда не записывается;</li>
  *   <li>удаления физического нет: tombstone ставит {@code active=false}, а каноничный узел архивируется
- *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных MASTER-утверждений;</li>
+ *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных утверждений любой авторитетности;</li>
  *   <li>версия записи замещает свои темпоральные связи: открытая связь типа, который эта версия утверждает
  *       (или откладывает), от этой записи, но отсутствующая в версии, закрывается на {@code eventTime}; типы,
  *       которых в версии нет, не трогаются; tombstone и повтор версии ничего не замещают;</li>
@@ -316,7 +315,9 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                 applied == null ? null : applied.version(),
                 applied != null && applied.active())
             : VersionDecision.forUpsert(request.version(), applied == null ? null : applied.version());
-    if (decision != VersionDecision.APPLY) {
+    // Перенос записи на другой gid переигрывает уже применённую версию: равная версия здесь не дубль.
+    boolean forced = request.relocation() != null && decision == VersionDecision.SAME;
+    if (decision != VersionDecision.APPLY && !forced) {
       return ProjectionResult.of(
           decision == VersionDecision.SAME
               ? ProjectionOutcome.NOOP_SAME_VERSION
@@ -326,6 +327,9 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
     List<String> skippedRelations = new ArrayList<>();
     // Отложенные связи записи заменяются целиком: старые удаляются, текущие пишутся командами DeferRelation.
     PendingRelations.deleteOf(tx, key);
+    if (request.relocation() != null) {
+      relocate(tx, request);
+    }
     for (GraphCommand command : request.commands()) {
       switch (command) {
         case UpsertNode upsert -> {
@@ -344,10 +348,10 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                 request.gids().get(relation.to()),
                 request.eventTime(),
                 skippedRelations);
-        case CloseAssertion close -> closeAssertion(tx, request, close);
       }
     }
-    if (!request.isTombstone()) {
+    // PARTIAL: список связей неполон, отсутствие связи не означает её закрытие.
+    if (!request.isTombstone() && !request.partial()) {
       closeReplacedRelations(tx, request);
     }
     if (request.isRelationOnly()) {
@@ -457,7 +461,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                 + staleLabels
                 + " SET n.firstSeenAt = CASE WHEN n.firstSeenAt IS NULL OR n.firstSeenAt > $at THEN $at ELSE n.firstSeenAt END, "
                 + "n.lastSeenAt = CASE WHEN n.lastSeenAt IS NULL OR n.lastSeenAt < $at THEN $at ELSE n.lastSeenAt END "
-                + "FOREACH (x IN CASE WHEN $master THEN [1] ELSE [] END | SET n.isCurrent = true REMOVE n.deletedAt) "
+                + "SET n.isCurrent = true REMOVE n.deletedAt "
                 + "MERGE (r)-[a:ASSERTS]->(n) "
                 + "SET a.confidence = 1.0, a.authority = $authority",
             params)
@@ -517,14 +521,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
             params)
         .consume();
     // Открытые временные связи, утверждённые этой записью, закрываются на момент удаления.
-    tx.run(
-            "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n)-[rel]-() "
-                + "WHERE type(rel) IN $temporalTypes AND rel.validTo IS NULL "
-                + "AND rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
-                + "AND rel.assertedById = $sourceId "
-                + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
-            params)
-        .consume();
+    closeRecordRelations(tx, params, "");
     // Запись только со связью не имеет ASSERTS: ребро ищется по утверждающей записи напрямую. Тип связи — из enum.
     for (RelationType type : RelationType.values()) {
       if (!type.temporal()) {
@@ -539,12 +536,70 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
               params)
           .consume();
     }
-    // Каноничный узел закрывается только без других активных MASTER-утверждений.
+    // Каноничный узел закрывается только без других активных утверждений (любой авторитетности).
+    closeNode(tx, params, "");
+  }
+
+  /**
+   * Закрывает открытые временные связи, которые утверждает запись, у её узлов; {@code nodeFilter} (фрагмент
+   * {@code " AND n.gid = $old"} или пустая строка) сужает узлы. Общий путь tombstone и переноса записи.
+   */
+  private void closeRecordRelations(TransactionContext tx, Map<String, Object> params, String nodeFilter) {
+    tx.run(
+            "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n)-[rel]-() "
+                + "WHERE type(rel) IN $temporalTypes AND rel.validTo IS NULL "
+                + "AND rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
+                + "AND rel.assertedById = $sourceId" + nodeFilter + " "
+                + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
+            params)
+        .consume();
+  }
+
+  /**
+   * Закрывает канонический узел записи ({@code isCurrent=false}, {@code deletedAt}), если у него нет других активных
+   * утверждений (любой авторитетности); {@code nodeFilter} сужает узлы. Общий путь tombstone и закрытия прежнего узла при переносе.
+   */
+  private void closeNode(TransactionContext tx, Map<String, Object> params, String nodeFilter) {
     tx.run(
             "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n) "
-                + "WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS {authority: 'MASTER'}]->(n) "
-                + "WHERE o <> r } "
+                + "WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS]->(n) "
+                + "WHERE o <> r }" + nodeFilter + " "
                 + "SET n.isCurrent = false, n.deletedAt = coalesce(n.deletedAt, $at)",
+            params)
+        .consume();
+  }
+
+  /**
+   * Снимает запись с прежнего узла до записи на выжившем: связи записи у прежнего узла закрываются; если на прежнем
+   * {@code gid} ключей не осталось, узел закрывается тем же путём, что при tombstone, получает {@code mergedInto} и
+   * теряет все открытые связи; ребро {@code ASSERTS} на прежний узел удаляется. Выполняется, пока запись ещё
+   * утверждает прежний узел. Тип связи подставляется из enum, значения идут параметрами.
+   */
+  private void relocate(TransactionContext tx, ProjectionRequest request) {
+    Relocation move = request.relocation();
+    Map<String, Object> params = new HashMap<>(keyParams(request.key()));
+    params.put("old", move.from().toString());
+    params.put("into", move.into().toString());
+    params.put("at", NodeProperties.utc(move.at()));
+    params.put("temporalTypes", temporalTypes());
+    String onOld = " AND n.gid = $old";
+    closeRecordRelations(tx, params, onOld);
+    if (move.retireSource()) {
+      closeNode(tx, params, onOld);
+      tx.run(
+              "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n) "
+                  + "WHERE n.gid = $old AND n.isCurrent = false SET n.mergedInto = $into",
+              params)
+          .consume();
+      tx.run(
+              "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n)-[rel]-() "
+                  + "WHERE n.gid = $old AND type(rel) IN $temporalTypes AND rel.validTo IS NULL "
+                  + "SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END",
+              params)
+          .consume();
+    }
+    tx.run(
+            "MATCH (r:SourceRecord " + RECORD_KEY + ")-[a:ASSERTS]->(n) WHERE n.gid = $old DELETE a",
             params)
         .consume();
   }
@@ -665,25 +720,6 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
         && matrix.isAuthoritative(relation.type(), key.source());
   }
 
-  private void closeAssertion(TransactionContext tx, ProjectionRequest request, CloseAssertion close) {
-    if (!matrix.isAuthoritative(close.type(), close.assertedBy().source())) {
-      return;
-    }
-    Map<String, Object> params =
-        relationParams(
-            request.gids().get(close.from()), request.gids().get(close.to()), request.eventTime(), close.assertedBy());
-    params.put("validTo", NodeProperties.utc(close.validTo()));
-    // Нет подходящей открытой связи — ничего не меняется: повтор закрытия идемпотентен.
-    tx.run(
-            "MATCH (a:" + roots(close.type().sources()) + " {gid: $from})-[rel:" + close.type().name()
-                + "]->(b:" + roots(close.type().targets()) + " {gid: $to}) "
-                + "WHERE rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
-                + "AND rel.assertedById = $sourceId AND rel.validTo IS NULL "
-                + "SET rel.validTo = CASE WHEN rel.validFrom > $validTo THEN rel.validFrom ELSE $validTo END",
-            params)
-        .consume();
-  }
-
   private void linkSyncRun(TransactionContext tx, ProjectionRequest request) {
     if (request.syncRunId() == null) {
       return;
@@ -691,7 +727,8 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
     Map<String, Object> params = new HashMap<>(keyParams(request.key()));
     params.put("runId", request.syncRunId());
     params.put("at", NodeProperties.utc(request.eventTime()));
-    // Счётчики SyncRun не трогаем: инкремент внутри повторяемой транзакции удваивался бы при повторе.
+    // Счётчики SyncRun не трогаем: их пишет закрытие прогона (SyncRunWriter), инкремент внутри повторяемой
+    // транзакции удваивался бы при повторе.
     tx.run(
             "MATCH (r:SourceRecord " + RECORD_KEY + ") "
                 + "MERGE (s:SyncRun {runId: $runId}) "

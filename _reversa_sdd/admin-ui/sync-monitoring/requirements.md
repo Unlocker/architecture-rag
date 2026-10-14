@@ -4,20 +4,20 @@
 
 ## Visão Geral
 
-Раздел «Синхронизация» (`#/sync`) показывает оператору состояние конвейера: вкладки «Источники» (светофор по четырём источникам), «Журнал событий» (inbox с фильтрами и карточкой события без payload) и «DLQ» (карантин с кодом и причиной). Данные читает консоль из PostgreSQL ролью `archrag_console_ro` и из графа (`SyncRun`); UI ничего не меняет — повтор, выход из карантина и reconcile выполняются через admin REST ingestion вне UI 🟢 (`access/admin-ui/src/pages/SyncPage.tsx:8-39`; `docs/adr/0026-admin-console-readonly-loopback.md:18`).
+Раздел «Синхронизация» (`#/sync`) показывает оператору состояние конвейера: вкладки «Источники» (светофор по пяти источникам (`manual` без адаптера: «нет данных»)), «Журнал событий» (inbox с фильтрами и карточкой события без payload) и «DLQ» (карантин с кодом и причиной). Данные читает консоль из PostgreSQL ролью `archrag_console_ro` и из графа (`SyncRun`); UI ничего не меняет — повтор, выход из карантина и reconcile выполняются через admin REST ingestion вне UI 🟢 (`access/admin-ui/src/pages/SyncPage.tsx:8-39`; `docs/adr/0026-admin-console-readonly-loopback.md:18`).
 
 ## Regras de Negócio
 
 - Вкладка по умолчанию — «Источники»; выбор вкладки живёт в состоянии страницы (после перезагрузки вкладка сбрасывается) 🟢 (`access/admin-ui/src/pages/SyncPage.tsx:8-14, 18`).
 - «Источники»: таблица из `GET /api/sync/sources`; обновляется автоматически раз в 30 с без сброса экрана и вручную кнопкой «Обновить» (с индикатором загрузки) 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:28-34`; `access/admin-ui/src/api/constants.ts:58-59`; `access/admin-ui/src/hooks/useAsync.ts:45-54`).
-- Светофор `health(s)`: `bad`, если есть события `QUARANTINED` или `RETRYING`, **или** последний `SyncRun` в статусе `FAILED`, **или** `failed > 0`, **или** `lagSeconds > 3600`; иначе `warn`, если нет `lastProjectedAt`, нет `lastSyncRun` или `lagSeconds > 900`; иначе `ok`. Подписи: `ok` — «норма», `warn` — «нет данных», `bad` — «проблемы» 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:8-18, 58`; `access/admin-ui/src/api/constants.ts:62-63`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] Ветки `FAILED` и `failed > 0` на данных проектора недостижимы: `SyncRun` создаётся со статусом `RUNNING`, счётчики и `endedAt` не обновляются (Q-01).
+- Светофор `health(s)`: `bad`, если есть события `QUARANTINED` или `RETRYING`, **или** последний `SyncRun` в статусе `FAILED`, **или** `failed > 0`, **или** `lagSeconds > 3600`; иначе `warn`, если нет `lastProjectedAt`, нет `lastSyncRun`, последний прогон `RUNNING` или `lagSeconds > 900`; иначе `ok`. Подписи: `ok` — «норма», `warn` — «идёт прогон» (для `RUNNING`) или «нет данных», `bad` — «проблемы» 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:8-18, 58`; `access/admin-ui/src/api/constants.ts:62-63`).
+- 🟢 [UNLOCKER-280: реализовано] Ветки `FAILED` и `failed > 0` достижимы: `SyncRun` создаётся `RUNNING`, закрывается по маркеру `snapshot-complete` (`SUCCEEDED`/`FAILED`, `endedAt`, счётчики), зависшие `RUNNING` старше `archrag.sync-run.stale-after` переводит в `FAILED` фоновая задача (Q-01).
 - Lag форматируется: `null` → «—», < 60 с → «N с», < 3600 → «N мин», иначе «N ч» (целые, округление вниз) 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:20-25`).
-- Колонка «Последний SyncRun»: статус, время старта, `fetched/applied/failed` (`—` для `null`); без прогона — «—». Колонка «События по статусам» — только ненулевые; колонка «Ошибки» — всегда `QUARANTINED: N, RETRYING: N` 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:53-77`).
+- Колонка «Последний SyncRun»: статус, время старта и окончания (`endedAt`, если есть), `fetched/applied/failed` (`—` для `null`); без прогона — «—». Колонка «События по статусам» — только ненулевые; колонка «Ошибки» — всегда `QUARANTINED: N, RETRYING: N` 🟢 (`access/admin-ui/src/pages/sync/SourcesTab.tsx:53-77`).
 - «Журнал событий»: фильтры источник (`SOURCES`), статус (`EVENT_STATUSES`), период «С»/«По» (`datetime-local` в локальной зоне → ISO UTC через `toIso`; пустое или невалидное значение не отправляется); любое изменение фильтра сбрасывает страницу на 0; размер страницы 50 🟢 (`access/admin-ui/src/pages/sync/EventsTab.tsx:8, 57-69, 73-84`; `access/admin-ui/src/components/common.tsx:101-106`).
 - Клик по `eventId` открывает карточку `GET /api/sync/events/{source}/{eventId}` (оба сегмента кодируются): все поля события таблицей (`receivedAt`/`updatedAt` как время), «Причина ошибки», `historyNote`, список записей DLQ события; **payload в карточке нет** — только `payloadRef` и `contentHash` 🟢 (`access/admin-ui/src/pages/sync/EventsTab.tsx:10-45, 107-113`; `access/admin-ui/src/api/types.ts:108-127`).
 - «DLQ»: по умолчанию `replayed=false` («только открытые»); флажок «Включая повторённые» убирает параметр; фильтр источника; смена фильтра сбрасывает страницу 🟢 (`access/admin-ui/src/pages/sync/DlqTab.tsx:13-19, 27-39`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `dlq_entry.replayed_at` не заполняется ни replay, ни диспетчером, поэтому «открытые» = все записи, колонка «Повтор» всегда «—» (Q-02).
+- 🟢 (реализовано — UNLOCKER-281) `dlq_entry.replayed_at` заполняют replay и `POST /admin/quarantine/release`, поэтому «открытые» = ещё не разобранные, колонка «Повтор» показывает время разбора (Q-02; `ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`).
 - Причина DLQ и код — недоверенный текст, выводится как текст 🟢 (`access/admin-ui/src/pages/sync/DlqTab.tsx:66-67`; `access/admin-ui/src/pages/SyncPage.test.tsx:179`).
 - Сервер отвергает неизвестные `source`/`status` (400), `from ≥ to` (400), `size` вне 1..200 (400) 🟢 (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:86-91`; `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/PageRequest.java:17-22`).
 
@@ -45,7 +45,7 @@
 
 ```gherkin
 # AC-01 (SyncPage.test.tsx «sources screen shows a traffic light per source…», «health rules»)
-Дано четыре источника: eam (норма, lag 125 с), scm (3 события QUARANTINED), cmdb (нет прогона и lastProjectedAt), deploymap (прогон FAILED, failed=2)
+Дано пять источников: eam (норма, lag 125 с), scm (3 события QUARANTINED), cmdb (нет прогона и lastProjectedAt), deploymap (прогон FAILED, failed=2), manual (нет прогона)
 Когда открыта вкладка «Источники»
 Тогда строки: «норма» и «2 мин»; «проблемы» с «QUARANTINED: 3»; «нет данных»; «проблемы»
 

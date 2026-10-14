@@ -36,10 +36,23 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** API консоли целиком: безопасность, валидация, формы ответов, аудит. Граф подменён, Docker не нужен. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@org.springframework.context.annotation.Import(ConsoleApiTest.FixedClockConfig.class)
 class ConsoleApiTest {
 
   static final String GID = "11111111-1111-1111-1111-111111111111";
   static final String ADMIN = "architecture.admin";
+
+  static final java.time.Instant NOW = java.time.Instant.parse("2026-10-05T12:00:00Z");
+
+  /** Фиксированные часы: возраст узла в тестах карточки считается от {@link #NOW}. */
+  @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+  static class FixedClockConfig {
+    @org.springframework.context.annotation.Bean
+    @org.springframework.context.annotation.Primary
+    java.time.Clock fixedClock() {
+      return java.time.Clock.fixed(NOW, ZoneOffset.UTC);
+    }
+  }
 
   @LocalServerPort int port;
   @MockitoBean GraphQueryExecutor executor;
@@ -99,6 +112,22 @@ class ConsoleApiTest {
   @Test
   void apiWithoutAdminScopeIsForbidden() {
     var res = get("/api/graph/stats", TestJwt.token("architecture.read"));
+
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+    verify(executor, never()).execute(any(), any(), any());
+  }
+
+  @Test
+  void apiWithAdminScopeButWithoutAdminRoleIsForbidden() {
+    var res = get("/api/graph/stats", TestJwt.tokenWithRoles(List.of(), "architecture.admin"));
+
+    assertThat(res.getStatusCode().value()).isEqualTo(403);
+    verify(executor, never()).execute(any(), any(), any());
+  }
+
+  @Test
+  void apiWithAdminRoleButWithoutAdminScopeIsForbidden() {
+    var res = get("/api/graph/stats", TestJwt.tokenWithRoles(List.of(TestJwt.ROLE), "architecture.read"));
 
     assertThat(res.getStatusCode().value()).isEqualTo(403);
     verify(executor, never()).execute(any(), any(), any());
@@ -291,6 +320,46 @@ class ConsoleApiTest {
     assertThat(body.get("properties").get("name").asString()).isEqualTo("Pay");
     assertThat(body.get("properties").get("createdAt").asString()).isEqualTo("2026-01-01T00:00:00Z");
     assertThat(body.get("sources").get(0).get("authority").asString()).isEqualTo("MASTER");
+    assertThat(body.get("staleAfter").asString()).isEqualTo("PT168H");
+  }
+
+  private boolean staleFlag(String lastSeenAt, boolean isCurrent, Boolean sourceActive) {
+    Map<String, Object> asset = new java.util.HashMap<>();
+    asset.put("gid", GID);
+    asset.put("type", "Service");
+    asset.put("properties", Map.of());
+    asset.put("isCurrent", isCurrent);
+    asset.put("sources", List.of());
+    asset.put("lastSeenAt", lastSeenAt);
+    List<Map<String, Object>> records =
+        sourceActive == null ? List.of() : List.of(Map.of("source", "EAM", "sourceId", "S-1", "active", sourceActive));
+    when(executor.execute(eq("get_asset"), any(), any())).thenReturn(rows("get_asset", false, asset));
+    when(executor.execute(eq("explain_provenance"), any(), any()))
+        .thenReturn(rows("explain_provenance", false, Map.of("gid", GID, "records", records)));
+    return json(get("/api/graph/nodes/" + GID, TestJwt.token(ADMIN))).get("stale").asBoolean();
+  }
+
+  @Test
+  void nodeCardStaleIsComputedOnServer() {
+    String fresh = NOW.minus(Duration.ofHours(1)).toString();
+    String old = NOW.minus(Duration.ofDays(8)).toString();
+
+    assertThat(staleFlag(fresh, true, true)).isFalse();
+    assertThat(staleFlag(NOW.minus(Duration.ofDays(7)).toString(), true, true)).isFalse();
+    assertThat(staleFlag(NOW.minus(Duration.ofDays(7)).minusSeconds(1).toString(), true, true)).isTrue();
+    assertThat(staleFlag(old, true, true)).isTrue();
+    assertThat(staleFlag(null, true, true)).isTrue();
+    assertThat(staleFlag("not-a-date", true, true)).isTrue();
+    assertThat(staleFlag(fresh, true, false)).isTrue();
+    assertThat(staleFlag(fresh, true, null)).isTrue();
+  }
+
+  @Test
+  void closedNodeCardIsNeverStale() {
+    String old = NOW.minus(Duration.ofDays(30)).toString();
+
+    assertThat(staleFlag(old, false, null)).isFalse();
+    assertThat(staleFlag(null, false, false)).isFalse();
   }
 
   @Test

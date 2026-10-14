@@ -1,9 +1,11 @@
 package io.github.unlocker.archrag.mcpserver.graph;
 
+import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
@@ -36,6 +38,12 @@ public class GraphReaderConfiguration {
   Driver graphReaderDriver(GraphReaderProperties properties) {
     return GraphDatabase.driver(
         properties.uri(), AuthTokens.basic(properties.username(), properties.password()));
+  }
+
+  /** Матрица авторитетности для {@code explain_provenance}. */
+  @Bean
+  AuthorityMatrix authorityMatrix() {
+    return AuthorityMatrix.defaults();
   }
 
   @Bean
@@ -96,6 +104,11 @@ public class GraphReaderConfiguration {
   @Bean
   QueryTemplate runtimeFootprintTemplate() {
     return RuntimeTemplates.RUNTIME_FOOTPRINT;
+  }
+
+  @Bean
+  Staleness staleness(StalenessProperties properties, Clock clock) {
+    return new Staleness(properties.staleAfter(), clock);
   }
 
   @Bean

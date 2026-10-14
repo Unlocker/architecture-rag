@@ -8,7 +8,7 @@
 
 ## Правила
 
-- PR-01. `ProjectionRequest` валидирует инварианты в конструкторе, нарушение — `IllegalArgumentException`: не более одной команды `UpsertNode`/`TombstoneSourceRecord` суммарно; ключ узла/tombstone равен `key`; версия `SourceRecord` равна `version.value()`; все `UpsertRelation`/`CloseAssertion`/`DeferRelation` утверждаются `key`; `gid` есть для узла записи и обоих концов `UpsertRelation`/`CloseAssertion`; tombstone-запрос не несёт других команд; маркеры конфликтов (не `none`, не tombstone) относятся к `gid` записи 🟢 (`GP/ProjectionRequest.java:57-98`). Запись только со связями и пустой список допустимы.
+- PR-01. `ProjectionRequest` валидирует инварианты в конструкторе, нарушение — `IllegalArgumentException`: не более одной команды `UpsertNode`/`TombstoneSourceRecord` суммарно; ключ узла/tombstone равен `key`; версия `SourceRecord` равна `version.value()`; все `UpsertRelation`/`DeferRelation` утверждаются `key`; `gid` есть для узла записи и обоих концов `UpsertRelation`; tombstone-запрос не несёт других команд; маркеры конфликтов (не `none`, не tombstone) относятся к `gid` записи 🟢 (`GP/ProjectionRequest.java:57-98`). Запись только со связями и пустой список допустимы.
 - PR-02. Транзакция: `MERGE (r:SourceRecord {source, sourceType, sourceId}) SET r._lock = true REMOVE r._lock RETURN r.sourceVersion, r.active` — `MERGE` по ключу под constraint, затем фиктивная запись свойства для блокировки до чтения версии 🟢 (`GP/GraphProjector.java:304-310`).
 - PR-03. Решение по версии под блокировкой: `version` в строке `null` → запись не применялась (`APPLY`); иначе `forUpsert`/`forTombstone`; `SAME` → `ProjectionResult.of(NOOP_SAME_VERSION)`, `OLD` → `of(IGNORED_OLD_VERSION)`, граф не меняется 🟢 (`GP/GraphProjector.java:311-324`).
 - PR-04. При `APPLY` сначала удаляются отложенные связи записи (`PendingRelations.deleteOf`), затем команды выполняются **в порядке списка**; после них (в этом порядке): `closeReplacedRelations` (не для tombstone), `markRelationOnlyRecord` (если нет `UpsertNode`/`Tombstone`), `writeConflictMarkers`, `linkSyncRun` 🟢 (`GP/GraphProjector.java:325-358`).
@@ -19,8 +19,7 @@
 - PR-09. `UpsertRelation`: если источник не авторитетен для типа — тип в `skippedRelations`, ребро не пишется; иначе `MATCH (a:<root> {gid}), (b:<root> {gid})` + `MERGE (a)-[rel:<TYPE>{identity}]->(b)`, `SET rel += props, rel.assertedBy{Source,Type,Id}`; для темпоральных — правила открытия (BR-17); нет одного из узлов → `ProjectionException(UNRESOLVED_ENDPOINT)` 🟢 (`GP/GraphProjector.java:552-602`).
 - PR-10. Идентичность связи: свойства из `RelationType.identityProperties()` (в PoC — `commit` у `DEPLOYED_FROM`) входят в шаблон `MERGE` как `{commit: $id_commit}`; другое значение — другое ребро, прежнее закрывается замещением 🟢 (`GP/GraphProjector.java:580-584, 649-660`; `CM/relation/RelationType.java`; IT `DeployedFromIT` в `platform/integration-tests`).
 - PR-11. Замещение: для каждого типа с `UpsertRelation` (авторитетной, темпоральной, утверждённой этой записью) или `DeferRelation` той же записи собирается множество троек `[from.gid, to.gid, identity props в порядке имён]`; открытые связи типа с `assertedBy*` = ключ записи и тройкой вне множества получают `validTo = max(validFrom, eventTime)`. Не для tombstone 🟢 (`GP/GraphProjector.java:604-647, 662-666`).
-- PR-12. `CloseAssertion` (если источник авторитетен для типа): ищет открытую связь `type` между `gid` концов с `assertedBy*` записи и ставит `validTo = max(validFrom, validTo команды)`; нет связи — no-op (идемпотентно) 🟢 (`GP/GraphProjector.java:668-685`). Команду не создаёт ни один main-код 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] Q-03.
-- PR-13. Tombstone: `SourceRecord.sourceVersion = version`, `active = false`, `deletedAt = tombstone.deletedAt`; закрываются открытые темпоральные связи, утверждённые записью (через узлы `ASSERTS` и отдельным циклом по каждому темпоральному типу по `assertedBy*` — для записей «только связь»); узлы, утверждённые записью, при отсутствии других активных MASTER-утверждений получают `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` 🟢 (`GP/GraphProjector.java:507-550`).
+- PR-13. Tombstone: `SourceRecord.sourceVersion = version`, `active = false`, `deletedAt = tombstone.deletedAt`; закрываются открытые темпоральные связи, утверждённые записью (через узлы `ASSERTS` и отдельным циклом по каждому темпоральному типу по `assertedBy*` — для записей «только связь»); узлы, утверждённые записью, при отсутствии других активных утверждений (любой авторитетности) получают `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` 🟢 (`GP/GraphProjector.java:507-550`).
 - PR-14. Запись без узла (`isRelationOnly`): `sourceVersion`, `active = true`, снятие `deletedAt`, `OWNS_RECORD`; без этого дедупликация и порядок версий не работали бы 🟢 (`GP/GraphProjector.java:493-505`).
 - PR-15. Маркеры конфликтов: `markers.isNone()` — ничего; иначе для `gid` на всех `ASSERTS` из узла: запись из набора → `SET a.conflicts = <имена свойств>`, остальные → `REMOVE a.conflicts` 🟢 (`GP/GraphProjector.java:471-491`).
 - PR-16. `SyncRun`: при `syncRunId != null` — `MERGE (s:SyncRun {runId})`, `ON CREATE SET adapter = $source, status = 'RUNNING'`, `startedAt` = минимум, `MERGE (s)-[:PROCESSED]->(r)`; счётчики не трогаются 🟢 (`GP/GraphProjector.java:687-703`).
@@ -38,7 +37,6 @@
 | PR-RF-05 | Валидация `ProjectionRequest` | Must | AC-11 |
 | PR-RF-06 | Маркеры конфликтов, `SyncRun` | Should | AC-12 |
 | PR-RF-07 | Порты чтения (`applied`, `isActive`, `activeRecords`, `DeploymentLookup`, `EamLookup`) | Must | AC-13 |
-| PR-RF-08 | `CloseAssertion` | Won't (нет производителя) | `closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent` |
 
 ## Нефункциональные требования
 
@@ -95,9 +93,9 @@
 Тогда SourceRecord.active=false, deletedAt задан, связи закрыты, узел isCurrent=false, deletedAt задан (tombstoneDeactivatesRecordArchivesNodeAndClosesRelations)
 
 # AC-10 (негативный: другой мастер)
-Дано узел утверждён вторым активным MASTER
+Дано узел утверждён вторым активным assertion (MASTER или SUPPLEMENTARY)
 Когда одна запись получает tombstone
-Тогда узел остаётся isCurrent (tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains);
+Тогда узел остаётся isCurrent (tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains, tombstoneOfMasterKeepsNodeWhileSupplementaryAssertionIsActiveAndClosesWithLastOne);
   upsert более новой версии реактивирует запись (upsertWithNewerVersionAfterTombstoneReactivates);
   delete раньше upsert блокирует старый upsert и не создаёт узел (deleteArrivingBeforeUpsertBlocksOlderUpsertAndCreatesNoNode)
 
@@ -123,13 +121,12 @@
 | PR-01…PR-09, PR-13…PR-14 | Must | Весь путь записи в граф |
 | PR-10, PR-11 | Must | ADR 0028, иначе устаревшие рёбра |
 | PR-15, PR-16 | Should | Диагностика и провенанс прогона |
-| PR-12 `CloseAssertion` | Won't | Нет производителя (Q-03) |
 
 ## Трассировка
 
 | Файл | Символ | Покрытие |
 |---|---|---|
-| `GP/GraphProjector.java` | `project`, `write`, `upsertNode`, `upsertRelation`, `closeReplacedRelations`, `closeAssertion`, `tombstone`, `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun`, порты чтения | 🟢 (`GraphProjectorIT`, 51 `@Test`) |
+| `GP/GraphProjector.java` | `project`, `write`, `upsertNode`, `upsertRelation`, `closeReplacedRelations`, `tombstone`, `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun`, порты чтения | 🟢 (`GraphProjectorIT`, 51 `@Test`) |
 | `GP/ProjectionRequest.java`, `GP/ProjectionResult.java`, `GP/ProjectionOutcome.java`, `GP/ConflictMarkers.java` | типы | 🟢 (`ProjectionRequestTest`, 12) |
 | `GP/NodeProperties.java` | `of`, `value`, `utc` | 🟢 (`ProjectionRequestTest#nodePropertiesDropNullsAndConvertTypes`) |
 | `GP/TemporalRelationMigration.java` | `migrate` | 🟢 (IT `temporalRelationMigrationFillsMissingValidFromAndIsIdempotent`) |

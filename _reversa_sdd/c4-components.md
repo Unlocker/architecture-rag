@@ -104,7 +104,7 @@ flowchart TB
 
 - Диспетчер, replay и rebuild делят один PostgreSQL advisory lock: во время admin-операции диспетчер «спит» 🟢 (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminLock.java:41-41`). Следствие: `POST /admin/reconcile/{source}` держит замок до 10 минут (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdapterControlClient.java:20-20`) 🟡.
 - Зависимость `graph-projector → normalizer, identity-resolution` — штатная (`ingestion/graph-projector/pom.xml:18-39`); `ingestion-service` собирает всё через явные `@Bean`, без component scan для доменных классов 🟢.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 2)] Недостижимые состояния и незаполняемые поля, видимые в этом контейнере: `SUPERSEDED`, выход из `QUARANTINED`, `dlq_entry.replayed_at`, `identity_candidate.status`, итоговый статус `SyncRun` (Р-1…Р-5, [`detective-gaps.md`](detective-gaps.md) §2).
+- 🟢 (реализовано — UNLOCKER-280, 281, 282) Бывшие недостижимые состояния и незаполняемые поля, видимые в этом контейнере: `SUPERSEDED` (удалён), выход из `QUARANTINED` (release), `dlq_entry.replayed_at`, `identity_candidate.status`, итоговый статус `SyncRun` (Р-1…Р-5, [`detective-gaps.md`](detective-gaps.md) §2).
 
 ## 2. Контейнер `mcp-server` и библиотека `graph-query-core`
 

@@ -18,12 +18,10 @@
   Origin: `GP/GraphProjector.java:552-602, 649-660`. Критерий готовности: AC-05, AC-08; IT `temporalRelationGetsValidFromAndIsNotReopenedByRepeat`, `hostReturningInLaterVersionReopensRunsOn`, `DeployedFromIT`. Уверенность: 🟢.
 - [ ] **T-07. `closeReplacedRelations`.** Тройки, `kept` по типам (включая `DeferRelation`), закрытие вне набора.
   Origin: `GP/GraphProjector.java:604-647, 662-666`. Критерий готовности: AC-06, AC-07. Уверенность: 🟢.
-- [ ] **T-08. `tombstone`.** Четыре запроса (запись, связи через `ASSERTS`, связи «только связь» по enum, архивация узла без других MASTER).
+- [ ] **T-08. `tombstone`.** Четыре запроса (запись, связи через `ASSERTS`, связи «только связь» по enum, архивация узла без других активных утверждений).
   Origin: `GP/GraphProjector.java:507-550, 747-749`. Критерий готовности: AC-09, AC-10; `tombstoneClosesStructuralEdges`. Уверенность: 🟢.
 - [ ] **T-09. `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun`.**
   Origin: `GP/GraphProjector.java:467-505, 687-703`. Критерий готовности: `relationOnlyEventIsProjectedNotQuarantined` (юнит); AC-12; IT `SourceConflictIT` (маркеры `ASSERTS.conflicts`). Уверенность: 🟢 (IT конфликтов — 🟡: тест вне этого модуля).
-- [ ] **T-10. `closeAssertion`.** Для полноты контракта; нет производителя.
-  Origin: `GP/GraphProjector.java:668-685`. Критерий готовности: IT `closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent`. Уверенность: 🟢 (поведение) / 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] (нужность, Q-03).
 - [ ] **T-11. Порты чтения.** `applied`, `isActive`, `activeRecords`, `DeploymentLookup`, `EamLookup` — `executeRead`, параметры, `try-with-resources`.
   Origin: `GP/GraphProjector.java:113-300`. Критерий готовности: AC-13; `eamSystemOfServiceFindsTheSingleDecomposingSystem`, `eamSystemOfServiceIsEmptyWithoutSystem`. Уверенность: 🟢.
 - [ ] **T-12. `TemporalRelationMigration`.** По типам `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DECOMPOSED_INTO`, `IMPLEMENTED_IN`: отдельная сессия и `executeWrite` на тип; `validFrom = coalesce(min(firstSeenAt узлов записи), $now)` только где `validFrom IS NULL`.
@@ -41,4 +39,4 @@ T-01 → T-02 → T-03 → T-04 → T-05 → T-06 → T-07 → T-08 → T-09 →
 
 ## Открытые 🔴
 
-[`../questions.md`](../questions.md): Q-03 (`CloseAssertion`), Q-04 (`SyncRun`); 🟡 Q-09, Q-13, Q-14, Q-16, Q-17.
+[`../questions.md`](../questions.md): Q-04 (`SyncRun`); 🟡 Q-09, Q-13, Q-14, Q-16, Q-17.

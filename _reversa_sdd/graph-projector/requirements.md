@@ -26,7 +26,7 @@
 
 - BR-01. Маршрут по `type` идёт до `Normalizer`; в нормализатор попадает только `architecture.asset.upserted.v1` 🟢 (`GP/EventProcessor.java:47-53, 193-198`).
 - BR-02. Статусы проходят по одному шагу `RECEIVED → VALIDATED → NORMALIZED → RESOLVED → PROJECTED`; из `RETRYING` допустим прыжок в любой этап; повторный `advance` в уже достигнутый статус — no-op 🟢 (`GP/EventProcessor.java:603-610`; тест `EventProcessorTest#upsertWalksStatusesStepByStepAndSavesCheckpointAfterWrite`).
-- BR-03. События в конечных статусах (`PROJECTED`, `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`) повторно не обрабатываются: возвращается текущий статус 🟢 (`GP/EventProcessor.java:99-105, 190-192`; тест `finishedEventIsNotProcessedTwice`).
+- BR-03. События в конечных статусах (`PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION`, `QUARANTINED`) повторно не обрабатываются: возвращается текущий статус 🟢 (`GP/EventProcessor.java:99-105, 190-192`; тест `finishedEventIsNotProcessedTwice`).
 - BR-04. Событие, которого нет в журнале, — `IllegalArgumentException("event is not in the journal")`, без изменения состояния 🟢 (`GP/EventProcessor.java:186-189`; тест `eventMissingFromJournalIsRejected`).
 - BR-05. Идемпотентность решает версия объекта, а не `eventId`: равная версия под другим `eventId` — `DUPLICATE`, ниже — `IGNORED_OLD_VERSION`, выше — применить; версии сравниваются как числа (`99 < 184`) 🟢 (`GP/VersionDecision.java:8-13, 20-26`; `ES/SourceVersion.java:19-21`; тесты `VersionDecisionTest#versionsAreComparedAsNumbersNotStrings`, `EventProcessorTest#sameVersionUnderAnotherEventIdIsDuplicateAndDoesNotTouchGraph`).
 - BR-06. Tombstone с равной версией применяется к ещё активной записи (удаление не обязано повышать версию), к уже неактивной — `SAME` 🟢 (`GP/VersionDecision.java:28-38`; тест `VersionDecisionTest#tombstoneWithEqualVersionAppliesOnlyToActiveRecord`).
@@ -42,11 +42,11 @@
 - BR-16. `null` никогда не записывается: `NodeProperties.of` отбрасывает `null`; неполная запись не затирает известные поля 🟢 (`GP/NodeProperties.java:16-17, 34-36`; IT `partialRecordDoesNotEraseKnownFields`).
 - BR-17. Темпоральная связь открывается заново, если новая или закрыта (`validFrom` источника, иначе время события); открытая сохраняет `validFrom`; повторное утверждение даёт `validTo = $validTo` (обычно `null`) 🟢 (`GP/GraphProjector.java:566-575`; IT `temporalRelationGetsValidFromAndIsNotReopenedByRepeat`, `hostReturningInLaterVersionReopensRunsOn`).
 - BR-18. Новая версия записи замещает её темпоральные связи: для каждого типа, который версия утверждает (`UpsertRelation`) или откладывает (`DeferRelation`), открытые связи **этой же записи** вне набора троек `(from.gid, to.gid, identity props)` закрываются на `eventTime`; тип без утверждений в версии не затрагивается; tombstone и повтор версии ничего не замещают 🟢 (`GP/GraphProjector.java:52-54, 604-647`; IT `replacedHostClosesOldRunsOnAtEventTimeAndKeepsNewOpen`, `partialRecordWithoutHostsClosesNothing`, `repeatedVersionClosesNothing`).
-- BR-19. Физического удаления нет: tombstone ставит `SourceRecord.active=false`, `deletedAt`, закрывает открытые темпоральные связи записи и архивирует канонический узел (`isCurrent=false`, `deletedAt`) только если нет других активных **MASTER**-утверждений 🟢 (`GP/GraphProjector.java:507-550`; IT `tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains`).
+- BR-19. Физического удаления нет: tombstone ставит `SourceRecord.active=false`, `deletedAt`, закрывает открытые темпоральные связи записи и архивирует канонический узел (`isCurrent=false`, `deletedAt`) только если нет других активных утверждений любой авторитетности 🟢 (`GP/GraphProjector.java:507-550`; IT `tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains`, `tombstoneOfMasterKeepsNodeWhileSupplementaryAssertionIsActiveAndClosesWithLastOne`).
 - BR-20. Подтип узла может смениться (`ComputeInstance` → `VirtualMachine`) без дубля: `MERGE` идёт по корневой метке, прочие подтипы корня снимаются 🟢 (`GP/GraphProjector.java:442-457, 729-745`; IT `computeInstanceSubtypeChangeKeepsOneNode`).
 - BR-21. Маркеры конфликтов — полный набор для `gid`: `ASSERTS.conflicts` ставится на рёбра записей из набора и снимается с остальных; значения свойств в граф не попадают; `ConflictMarkers.none()` — «не трогать» 🟢 (`GP/ConflictMarkers.java:12-21`, `GP/GraphProjector.java:467-491`).
 - BR-22. Отложенная связь хранится узлом `PendingRelation` и заменяется целиком при каждой применённой проекции записи; tombstone её удаляет; достраивается только пока запись-источник активна и имеет ту версию, с которой связь отложена 🟢 (`GP/GraphProjector.java:327-328`, `GP/PendingRelations.java:81-106`; IT `newReferrerVersionReplacesDeferredRelation`, `tombstoneOfReferrerRemovesDeferredRelation`).
-- BR-23. Удалять по missing set можно только после маркера `snapshot-complete` и только если журнал содержит не меньше событий прогона, чем заявлено `objectCount`; объект, получивший любое событие после начала прогона, не удаляется 🟢 (`GP/Reconciler.java:105-113, 122-129`; ловушка №9 `CLAUDE.md`; тесты `ReconcilerTest#incompleteRunInJournalDeletesNothing`, `objectTouchedAfterRunStartIsNotDeleted`).
+- BR-23. Удалять по missing set можно только после маркера `snapshot-complete` и только если журнал содержит не меньше событий прогона, чем заявлено `objectCount` (маркер без `objectCount` — карантин; прогон `PARTIAL` не удаляет; missing set больше доли `archrag.reconcile.max-missing-share` — карантин, UNLOCKER-279); объект, получивший любое событие после начала прогона, не удаляется 🟢 (`GP/Reconciler.java:105-113, 122-129`; ловушка №9 `CLAUDE.md`; тесты `ReconcilerTest#incompleteRunInJournalDeletesNothing`, `objectTouchedAfterRunStartIsNotDeleted`).
 - BR-24. Tombstone `Reconciler` идёт с применённой версией записи и до записи в граф фиксируется событием `architecture.asset.deleted.v1` (`eventId = reconcile:<syncRunId>:<sourceType>/<sourceId>`) и raw в S3 — replay и rebuild воспроизводят удаление 🟢 (`GP/Reconciler.java:42-48, 130-136, 156-182`).
 - BR-25. Время хранится как `Instant` → UTC `OffsetDateTime` (в Neo4j `datetime`) 🟢 (`GP/NodeProperties.java:57-59`).
 - BR-26. Cypher только с параметрами; в текст подставляются лишь метки из `NodeLabel`, типы связей и имена identity-свойств из `RelationType`; границ переменной длины пути в модуле нет 🟢 (`GP/GraphProjector.java:78-79, 442-447, 578-589, 637`).
@@ -71,7 +71,6 @@
 | RF-12 | Схема Neo4j идемпотентна и порождается из `NodeLabel.canonical()` | Must | `Neo4jSchemaTest#everyCanonicalLabelHasGidConstraint`, `everyStatementIsIdempotent` 🟢 |
 | RF-13 | `TemporalRelationMigration.migrate` проставляет `validFrom` связям без него (ADR [0028](../../docs/adr/0028-structural-relations-temporal.md)) | Could | IT `temporalRelationMigrationFillsMissingValidFromAndIsIdempotent` 🟢 |
 | RF-14 | Передавать предупреждения нормализации в порт `NormalizationWarnings` (один раз, только непустые) | Could | `unmappedCriticalityIsReportedToWarningsPortOnce`, `eventWithoutWarningsDoesNotCallWarningsPort` 🟢 |
-| RF-15 | Обработка `CloseAssertion` в проекторе | Won't (мёртвый путь: никто не создаёт) | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 5)] [`questions.md`](questions.md) Q-03 |
 
 ## Требования нефункциональные
 
@@ -121,7 +120,6 @@
 | Темпоральное замещение | Must | ADR 0028; без него в графе остаются устаревшие рёбра |
 | Конфликты и сверки (маркеры, ADR 0030/0031) | Should | Не меняют граф, диагностика расхождений |
 | `TemporalRelationMigration` | Could | Разовая миграция живого графа; rebuild её не требует |
-| `CloseAssertion` | Won't | Не создаётся нигде в main-коде (Q-03) |
 
 ## Трассировка кода
 

@@ -31,7 +31,7 @@
 - Авторитетность: поиск точный; источник вне списка не авторитетен; тип вне матрицы — пустое множество; `MANUAL` не мастер ничего 🟢 (`CM/authority/AuthorityMatrix.java:17-22, 63-74`).
 - Свойство без собственного правила наследует правило метки; суперметка (`ComputeInstance` для `VirtualMachine`) НЕ опрашивается 🟢 (`CM/authority/AuthorityMatrix.java:68-70`).
 - Допустимость связи считается с учётом подтипов меток: `RUNS_ON → VirtualMachine` допустима через `ComputeInstance` 🟢 (`CM/relation/RelationType.java:73-75`, `:19`).
-- `validity` в `UpsertRelation` допустим только для темпоральных типов; `CloseAssertion` — только для темпоральных 🟢 (`CM/command/UpsertRelation.java:35-37`, `CM/command/CloseAssertion.java:18-20`).
+- `validity` в `UpsertRelation` допустим только для темпоральных типов 🟢 (`CM/command/UpsertRelation.java:35-37`).
 - Identity-свойства допускаются только у темпоральных типов, иначе падает инициализация enum `RelationType` 🟢 (`CM/relation/RelationType.java:42-44`).
 - Свойство `commit` — идентифицирующее для `DEPLOYED_FROM`; `UpsertRelation` без него отвергается 🟢 (`CM/relation/RelationType.java:20`, `CM/command/UpsertRelation.java:39-41`).
 - `null` в необязательном поле узла означает «не передано» (а не «очистить»); в частности `Repository.archived == null` — неизвестно и не должно перезаписывать известное значение 🟢 (`CM/node/Repository.java:6`); применение этой семантики — в проекторе 🟡.
@@ -45,10 +45,9 @@
 | RF-02 | Обязательные поля узлов отвергают `null` (NPE) и blank (IAE); необязательные — `null` ок, `""`/blank → IAE 🟢 (`CM/node/*.java`; сводка — [`node-model-invariants`](node-model-invariants/requirements.md)) | Must | `NodeTest.requiredFieldsRejectNullAndBlank`, `optionalFieldRejectsEmptyString` |
 | RF-03 | `NodeLabel`: 16 значений; строка метки Neo4j (`label()`); `supertype()`; `isA` транзитивно и рефлексивно; `isCanonical()`/`canonical()` исключают `SOURCE_SYSTEM`, `SOURCE_RECORD`, `SYNC_RUN` 🟢 (`CM/node/NodeLabel.java:14-71`) | Must | `NodeTest.labelSupertypes`, `solutionAndPlatformRequireNameAndHaveLabels`; `AuthorityMatrixTest.everyCanonicalLabelAndDomainRelationHasExactlyOneMaster` |
 | RF-04 | `RelationType`: 15 значений с `sources`, `targets`, `temporal`, `identityProperties`; `allows(from,to)` с подтипами 🟢 (`CM/relation/RelationType.java:12-76`) | Must | `RelationTypeTest.*` (7 тестов) |
-| RF-05 | `GraphCommand` — sealed из 5 вариантов (`UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation`); `switch` по нему исчерпывающ без `default` 🟢 (`CM/command/GraphCommand.java:7-9`) | Must | `GraphCommandTest.switchIsExhaustiveWithoutDefault` |
+| RF-05 | `GraphCommand` — sealed из 4 вариантов (`UpsertNode, UpsertRelation, TombstoneSourceRecord, DeferRelation`); `switch` по нему исчерпывающ без `default` 🟢 (`CM/command/GraphCommand.java:7-9`) | Must | `GraphCommandTest.switchIsExhaustiveWithoutDefault` |
 | RF-06 | `UpsertRelation` проверяет: обязательные поля (кроме `validity`, `properties` отдельно), допустимость пары меток, `validity` только у temporal, валидность `properties`, наличие всех identity-свойств 🟢 (`CM/command/UpsertRelation.java:25-42`) | Must | `GraphCommandTest.validityOnlyForTemporal`, `disallowedLabelsRejected`, `propertiesValidatedAndImmutable` |
 | RF-07 | `Invariants.copyProperties`: значения — `String, Boolean, Long, Integer, Double (конечный), Instant` или `List` из них (без вложенных списков); ключ — непустой текст; результат неизменяем и не зависит от исходной карты/списков 🟢 (`CM/Invariants.java:44-77`) | Must | `GraphCommandTest.nonFiniteDoublesRejected`, `propertiesValidatedAndImmutable` |
-| RF-08 | `CloseAssertion` — только для темпоральных типов, все 5 полей обязательны 🟢 (`CM/command/CloseAssertion.java:12-21`) | Should | `GraphCommandTest.closeAssertionOnlyTemporal` |
 | RF-09 | `UpsertNode`, `TombstoneSourceRecord`, `DeferRelation` проверяют только `null` 🟢 (`CM/command/UpsertNode.java:10-13`, `CM/command/TombstoneSourceRecord.java:10-13`, `CM/command/DeferRelation.java:14-16`) | Must | `GraphCommandTest.upsertNodeAndTombstoneRequireFields` (`DeferRelation` отдельно не тестируется 🟡) |
 | RF-10 | `AuthorityMatrix.defaults()` — единственная встроенная матрица PoC (правила узлов для 13 меток, 9 правил свойств у 7 меток, правила для 12 типов связей); три перегрузки `isAuthoritative` и три метода `*Authorities` 🟢 (`CM/authority/AuthorityMatrix.java:43-125`) | Must | `AuthorityMatrixTest.*` (11 тестов) |
 | RF-11 | `GitUrls.normalize(raw)` приводит URL к канону; идемпотентна; отвергает blank/неразбираемое/неподдерживаемую схему/пустой хост/пустой путь без утечки входа 🟢 (`CM/node/GitUrls.java:30-91`) | Must | `GitUrlsTest.*` (9 методов) |
@@ -118,7 +117,6 @@
 | RF-10 (AuthorityMatrix) | Must | Определяет, какое значение попадает в canonical; используется проектором, `PostgresSourceConflicts`, `ExplainProvenanceTool` |
 | RF-11 (GitUrls) | Must | Ключ сопоставления репозиториев в deploy map |
 | RF-12, RF-13 | Must | Базовые провенанс-инварианты |
-| RF-08 (`CloseAssertion`) | Should | В `main` нет производителя команды (см. 🔴-3 ниже); потребители есть |
 | RF-14 (`LookupKeys`) | Should | Нужны для отложенных связей; прямого теста нет |
 | RF-15 (маркер) | Could | Технический |
 | Валидация состава `SyncRunStatus.SUCCEEDED/FAILED` | Won't (не реализовано проектором) | Значения объявлены, но никем не выставляются (🔴-1) |
@@ -127,7 +125,6 @@
 
 - 🔴-1 `SyncRunStatus.SUCCEEDED`/`FAILED` никем не выставляются (`CM/provenance/SyncRunStatus.java:5`; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:698`).
 - 🔴-2 `docs/02-data-model.md:170` перечисляет явные правила свойств `ITSystem` только `criticality`, `eamCode`; в коде также `platformId` (`CM/authority/AuthorityMatrix.java:95-96`).
-- 🔴-3 `CloseAssertion` нигде в `main` не создаётся (потребители: `GraphProjector.java:347`, `EventProcessor.java:577`).
 - 🔴-4 ADR 0008 не называет мастера `DECOMPOSED_INTO` (SCM) — в коде `AuthorityMatrix.java:108`.
 
 ## Трассировка кода

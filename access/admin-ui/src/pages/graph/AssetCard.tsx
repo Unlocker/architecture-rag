@@ -1,16 +1,8 @@
 import { useApi } from '../../api/ApiContext';
-import { STALE_AFTER_MS } from '../../api/constants';
 import { endpoints } from '../../api/endpoints';
 import { NodeCard } from '../../api/types';
 import { Badge, Loadable, text, Time } from '../../components/common';
 import { useAsync } from '../../hooks/useAsync';
-
-/** Актив считается устаревшим, если он текущий, но давно не виден источникам. */
-export function isStale(card: NodeCard, now: number = Date.now()): boolean {
-  if (!card.isCurrent || !card.lastSeenAt) return false;
-  const seen = new Date(card.lastSeenAt).getTime();
-  return !Number.isNaN(seen) && now - seen > STALE_AFTER_MS;
-}
 
 /** Блок «Исходный код» у Deployment: commit и репозиторий из Helm chart. URL внешний, поэтому текстом, без ссылки. */
 function SourceCode({ card }: { card: NodeCard }) {
@@ -57,7 +49,7 @@ export function AssetCard({ gid }: { gid: string }) {
               <li>
                 isCurrent: {String(card.isCurrent)}{' '}
                 {!card.isCurrent && <Badge kind="bad">закрыт</Badge>}
-                {isStale(card) && <Badge kind="warn">устарел</Badge>}
+                {card.stale && <Badge kind="warn">устарел</Badge>}
               </li>
               <li>
                 firstSeenAt: <Time value={card.firstSeenAt} />

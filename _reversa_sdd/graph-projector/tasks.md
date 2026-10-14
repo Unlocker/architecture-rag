@@ -30,7 +30,7 @@
 
 - [ ] **TT-01. Юнит модуля** (Docker не нужен): `EventProcessorTest` (46), `ReconcilerTest` (12), `ProjectionRequestTest` (12), `Neo4jSchemaTest` (8), `VersionDecisionTest` (4), `PropertyJsonTest` (3), `GraphProjectorSmokeTest` (1) — всего 86 `@Test` по `grep -c` в `GPT/`. Уверенность: 🟢.
 - [ ] **TT-02. IT платформы** (Docker): `GraphProjectorIT` (51), `ReconciliationIT` (6), `Neo4jSchemaIT`, `DeployedFromIT`, `SourceConflictIT`, `GraphQueryCoreIT` (читающая сторона схемы). Origin: `IT/`. Уверенность: 🟢.
-- [ ] **TT-03 (пробел).** Тесты на 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6); ответ владельца: вопросы 9] из [`questions.md`](questions.md): маркер без `objectCount` (Q-05); `finishTombstone` для строки в `QUARANTINED` (Q-12); общий тест имён типов событий и таблицы кодов источников (Q-06). Уверенность: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6); ответ владельца: вопросы 9].
+- [ ] **TT-03 (пробел).** Тесты на 🟡 [R.8: решение принято, реализация — UNLOCKER-279; ответ владельца: вопросы 9; тест на маркер без `objectCount` (Q-05) добавлен, остальное не сделано] из [`questions.md`](questions.md): маркер без `objectCount` (Q-05); `finishTombstone` для строки в `QUARANTINED` (Q-12); общий тест имён типов событий и таблицы кодов источников (Q-06). Уверенность: 🟡 [R.8: решение принято, реализация — UNLOCKER-279; ответ владельца: вопросы 9].
 
 ## Порядок
 
@@ -38,4 +38,4 @@ T-04 → T-01 → T-02 → T-05 (в порядке `project-request` → `deferr
 
 ## Открытые 🔴
 
-Q-01 (`SUPERSEDED` недостижим), Q-02 (crosswalk не обновляет граф до replay), Q-03 (`CloseAssertion` без производителя), Q-04 (`SyncRun` всегда `RUNNING`), Q-05 (`objectCount` по умолчанию 0), Q-06 (дубли литералов), Q-08 (расхождения с docs/ADR) — [`questions.md`](questions.md). Решения: [`decisions.md`](decisions.md).
+Q-01 (`SUPERSEDED` недостижим), Q-02 (crosswalk не обновляет граф до replay), Q-03 (`CloseAssertion` удалён, UNLOCKER-284), Q-04 (`SyncRun` всегда `RUNNING`), Q-05 (`objectCount` по умолчанию 0), Q-06 (дубли литералов), Q-08 (расхождения с docs/ADR) — [`questions.md`](questions.md). Решения: [`decisions.md`](decisions.md).

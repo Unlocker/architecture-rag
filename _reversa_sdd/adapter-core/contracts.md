@@ -38,7 +38,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 
 ### 1.2 `POST /control/snapshot` (`AC/WebhookServer.java:55-57, 67-94`)
 
-Создаётся только если передан `Supplier<PollResult>` (`SourceAdapter` всегда передаёт `poller::snapshotOnce`, `AC/SourceAdapter.java:63`). **Без аутентификации** 🟢. Тело запроса не читается. Синхронный вызов `Poller.snapshotOnce()`.
+Создаётся только если передан `Supplier<PollResult>` (`SourceAdapter` всегда передаёт `poller::snapshotOnce`, `AC/SourceAdapter.java:63`). **Аутентификация (UNLOCKER-290):** `Authorization: Bearer <JWT>`, проверка `ControlTokenValidator` (issuer, подпись по JWKS RS256, срок, audience, realm-роль `archrag-console-admin`): нет/недействителен — `401`, нет роли — `403`; без валидатора (не заданы `ARCHRAG_CONTROL_*`) контекст не создаётся 🟢. Тело запроса не читается. Синхронный вызов `Poller.snapshotOnce()`.
 
 | Код | Условие |
 |---|---|
@@ -67,7 +67,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 | `correlationid` | polling: `null`; snapshot: `syncRunId`; webhook: `eventId` | то же | `syncRunId` |
 | `data.sourceType` / `sourceId` | как у изменения | то же | `SYNC_RUN` / `<syncRunId>` |
 | `data.sourceVersion` | `Long.toString(version)`, `[0-9]{1,40}` | то же | `"1"` |
-| `data.payload` | поля источника без `null` верхнего уровня + `_completeness` | пусто | `{syncRunId: string, objectCount: long}` |
+| `data.payload` | поля источника без `null` верхнего уровня + `_completeness` | пусто | `{syncRunId: string, objectCount: long, completeness: COMPLETE|PARTIAL}` |
 | столбец `sync_run_id` журнала | polling/webhook: `null`; snapshot: `syncRunId` | — | `syncRunId` |
 
 Места: `AC/EventMapper.java:29-42, 52-109`; передача `correlationId`/`syncRunId`: `AC/Poller.java:127, 154, 169`, `AC/WebhookHandler.java:105`.
@@ -90,7 +90,7 @@ JDK `HttpServer`, виртуальные потоки (`AC/WebhookServer.java:52
 
 ### 3.2 Raw маркера (`InboxWriter.markerRawJson`, `:51-57`)
 
-`{"syncRunId":"<id>","objectCount":<long>,"updatedAt":"<Instant>"}` — `objectCount` нужен reconciliation, чтобы не удалять объекты при неполном журнале (Javadoc `:40-43`) 🟢.
+`{"syncRunId":"<id>","objectCount":<long>,"completeness":"COMPLETE|PARTIAL","updatedAt":"<Instant>"}` (`completeness` — UNLOCKER-279; `PARTIAL`, если среди записей прогона была `PARTIAL`; нет поля = `COMPLETE`) — `objectCount` нужен reconciliation, чтобы не удалять объекты при неполном журнале (Javadoc `:40-43`) 🟢.
 
 ## 4. HTTP-выход: контракт источника (`HttpSourceConnector`)
 

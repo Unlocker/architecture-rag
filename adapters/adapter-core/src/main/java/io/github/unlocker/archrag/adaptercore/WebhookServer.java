@@ -18,8 +18,9 @@ import java.util.function.Supplier;
  * <p>Если передан запуск snapshot, добавляется {@code POST /control/snapshot} (ручной reconcile, E1.7): запускает
  * {@link Poller#snapshotOnce()} и отвечает JSON {@code {"outcome","appended","syncRunId"}}: {@code 202} — цикл
  * завершён, {@code 409} — {@code ALREADY_RUNNING}, {@code 503} — источник недоступен ({@code GAVE_UP}). Контекст не
- * аутентифицирован: порт и сеть те же, что у webhook, наружу он не публикуется (граница compose, E5.2). Запрос
- * выполняется синхронно, поэтому клиент должен ждать завершения snapshot.
+ * открыт только держателю bearer-токена администратора ({@link ControlTokenValidator}): нет токена — {@code 401},
+ * нет роли — {@code 403}. Без валидатора контекст не создаётся (fail closed), а в лог пишется предупреждение. Webhook
+ * остаётся на HMAC-подписи. Запрос выполняется синхронно, поэтому клиент должен ждать завершения snapshot.
  *
  * <p>Необработанное исключение (сбой журнала/S3) логируется только типом, без сообщения, и даёт
  * {@code 500}: источник повторит доставку.
@@ -36,13 +37,19 @@ public final class WebhookServer implements AutoCloseable {
 
   /** @param port порт; 0 — свободный */
   public WebhookServer(WebhookHandler handler, InetSocketAddress address) {
-    this(handler, address, null);
+    this(handler, address, null, null);
   }
 
   /**
    * @param snapshot запуск полного snapshot для {@code /control/snapshot}; {@code null} — контекст не создаётся
+   * @param controlAuth проверка токена администратора для {@code /control/snapshot}; {@code null} — контекст не
+   *     создаётся
    */
-  public WebhookServer(WebhookHandler handler, InetSocketAddress address, Supplier<PollResult> snapshot) {
+  public WebhookServer(
+      WebhookHandler handler,
+      InetSocketAddress address,
+      Supplier<PollResult> snapshot,
+      ControlTokenValidator controlAuth) {
     this.handler = handler;
     try {
       this.server = HttpServer.create(address, 0);
@@ -52,8 +59,11 @@ public final class WebhookServer implements AutoCloseable {
     // Медленный fetchById одного запроса не должен блокировать приём остальных.
     server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
     server.createContext("/webhook", this::serve);
-    if (snapshot != null) {
-      server.createContext("/control/snapshot", ex -> control(ex, snapshot));
+    if (snapshot != null && controlAuth != null) {
+      server.createContext("/control/snapshot", ex -> control(ex, snapshot, controlAuth));
+    } else if (snapshot != null) {
+      LOG.log(System.Logger.Level.WARNING,
+          "/control/snapshot is disabled: token validation is not configured (issuer/JWKS/audience)");
     }
     server.start();
   }
@@ -64,11 +74,24 @@ public final class WebhookServer implements AutoCloseable {
         + server.getAddress().getPort() + "/webhook");
   }
 
-  private void control(HttpExchange ex, Supplier<PollResult> snapshot) throws IOException {
+  private void control(HttpExchange ex, Supplier<PollResult> snapshot, ControlTokenValidator auth)
+      throws IOException {
     try (ex) {
       if (!"POST".equals(ex.getRequestMethod())) {
         ex.sendResponseHeaders(405, -1);
         return;
+      }
+      switch (auth.validate(ex.getRequestHeaders().getFirst("Authorization"))) {
+        case UNAUTHENTICATED -> {
+          ex.getResponseHeaders().add("WWW-Authenticate", "Bearer");
+          ex.sendResponseHeaders(401, -1);
+          return;
+        }
+        case FORBIDDEN -> {
+          ex.sendResponseHeaders(403, -1);
+          return;
+        }
+        case OK -> { }
       }
       int status;
       String body;

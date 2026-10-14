@@ -21,7 +21,7 @@
 | `SnapshotContents` | `objects: Set<ObjectRef>, eventCount: long, firstReceivedAt` | `objects = Set.copyOf(objects)` (NPE при `null`) 🟢 | `ES/SnapshotContents.java:14-18` |
 | `JournalKey` | `receivedAt, source, eventId`; `of(JournalEntry)` | NPE на все три 🟢 | `ES/JournalKey.java:11-22` |
 | `JournalQuery` | `source, receivedFrom, receivedTo, excludeReplays, after: JournalKey, limit`; `REPLAY_PREFIX="replay:"`, `MAX_LIMIT=1000`; `after(JournalKey)` | IAE `"limit must be in 1..1000"`; IAE `"receivedFrom must be before receivedTo"` 🟢 | `ES/JournalQuery.java:18-39` |
-| `ProcessingStatus` | enum, порядок: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION`; `canTransitionTo(next)` | — | `ES/ProcessingStatus.java:8-42` |
+| `ProcessingStatus` | enum, порядок: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, DUPLICATE, IGNORED_OLD_VERSION`; `canTransitionTo(next)` | — | `ES/ProcessingStatus.java:8-42` |
 
 ### Порты
 
@@ -53,8 +53,7 @@
 | `RESOLVED` | `PROJECTED`, `RETRYING`, `QUARANTINED`, `IGNORED_OLD_VERSION` (`:35`) |
 | `RETRYING` | `VALIDATED`, `NORMALIZED`, `RESOLVED`, `PROJECTED`, `QUARANTINED`, `IGNORED_OLD_VERSION` (`:36-37`) |
 | `QUARANTINED` | `RETRYING` (`:38`) |
-| `PROJECTED` | `SUPERSEDED` (`:39`) |
-| `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда, кроме себя (`:40`) |
+| `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда, кроме себя |
 
 Свойства: из `RECEIVED` нельзя прыгнуть в `NORMALIZED`/`RESOLVED`/`PROJECTED` напрямую; `PROJECTED` нельзя вернуть в `RETRYING`; `RETRYING → RECEIVED` запрещён; `QUARANTINED → IGNORED_OLD_VERSION` запрещён (сначала `RETRYING`) 🟢. Диаграмма совпадает с `docs/02-data-model.md` §5.2 (все стрелки диаграммы присутствуют в коде и наоборот) 🟢.
 
@@ -111,4 +110,4 @@
 - 🟡 `JournalEntry`, `Checkpoint`, `ObjectRef` без валидации — реализация контракта может записать любые `null`/пустые значения (`ES/JournalEntry.java:14`, `ES/Checkpoint.java:13`, `ES/ObjectRef.java:7`).
 - 🟡 Единообразия исключений в модуле нет: `CanonicalEvent`/`AssetEventData`/`RawPayloadRef`/`SourceVersion` бросают `IllegalArgumentException` и на `null`, а `JournalKey`/`StoredEvent` — `NullPointerException` (`ES/CanonicalEvent.java:48-52`, `ES/JournalKey.java:14-16`, `ES/StoredEvent.java:15-16`).
 - 🟡 Javadoc `CanonicalEvent` (`ES/CanonicalEvent.java:6`) описывает класс как событие `...upserted.v1`, хотя тип — любая непустая строка и класс несёт и `deleted`, и `snapshot-complete`.
-- 🟡 Javadoc `ProcessingStatus` (`:3-6`) называет `PROJECTED` конечным, тогда как `canTransitionTo` разрешает `PROJECTED → SUPERSEDED` (`:39`).
+- 🟢 Javadoc `ProcessingStatus` и `canTransitionTo` согласованы: `PROJECTED` конечный (UNLOCKER-281).

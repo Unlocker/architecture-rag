@@ -142,4 +142,34 @@ class ProjectionRequestTest {
     assertThatThrownBy(() -> request(Map.of(), new DeferRelation(foreign)))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  void relocationNeedsTheRecordGidToEqualTargetAndForbidsTombstone() {
+    UUID from = UUID.randomUUID();
+    UUID into = UUID.randomUUID();
+    var relocation = new Relocation(from, into, true, T);
+
+    var ok = new ProjectionRequest(SVC, new SourceVersion("5"), T, null, Map.of(SVC, into), List.of(service()),
+        ConflictMarkers.none(), false, relocation);
+    assertThat(ok.relocation()).isEqualTo(relocation);
+
+    assertThatThrownBy(() -> new ProjectionRequest(SVC, new SourceVersion("5"), T, null, Map.of(SVC, from),
+        List.of(service()), ConflictMarkers.none(), false, relocation))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new ProjectionRequest(SVC, new SourceVersion("5"), T, null, Map.of(),
+        List.of(new TombstoneSourceRecord(SVC, T)), ConflictMarkers.none(), false, relocation))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void relocationMustChangeTheGid() {
+    UUID gid = UUID.randomUUID();
+
+    assertThatThrownBy(() -> new Relocation(gid, gid, false, T)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void ordinaryRequestHasNoRelocation() {
+    assertThat(request(Map.of(SVC, UUID.randomUUID()), service()).relocation()).isNull();
+  }
 }

@@ -12,7 +12,7 @@
 - [ ] T-02: `health(s)` и `formatLag`
   - Origin: `access/admin-ui/src/pages/sync/SourcesTab.tsx:8-25`
   - Критерий готовности: AC-01, AC-02; `access/admin-ui/src/pages/SyncPage.test.tsx:79-89`
-  - Уверенность: 🟢 (поведение) / 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] (достижимость веток — Q-01)
+  - Уверенность: 🟢 (поведение) / 🟢 [UNLOCKER-280: реализовано] (достижимость веток — Q-01)
 - [ ] T-03: `SourcesTab` (таблица, автообновление 30 с, «Обновить», пустое/ошибка)
   - Origin: `access/admin-ui/src/pages/sync/SourcesTab.tsx:28-87`; `access/admin-ui/src/hooks/useAsync.ts:19-56`
   - Критерий готовности: AC-03
@@ -28,12 +28,12 @@
 - [ ] T-06: `DlqTab` (`replayed=false` по умолчанию, переключатель, фильтр источника)
   - Origin: `access/admin-ui/src/pages/sync/DlqTab.tsx:11-81`
   - Критерий готовности: AC-07
-  - Уверенность: 🟢 (поведение) / 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] (смысл «открытые» — Q-02)
+  - Уверенность: 🟢 (поведение) / 🟢 («открытые» = `replayed_at IS NULL`, 🟢 (реализовано — UNLOCKER-281), Q-02)
 
 ## Tarefas de Teste
 
 - [ ] TT-01: `access/admin-ui/src/pages/SyncPage.test.tsx` — 16 тестов (из них 11 относятся к этому use case: источники ×5, журнал ×4, DLQ ×2)
-- [ ] TT-02: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] нет теста связи светофора с реальным `SyncRun` проектора (Q-01)
+- [x] TT-02: 🟢 [UNLOCKER-280: реализовано] связь светофора с реальным `SyncRun`: `SyncConsoleIT` (прогоны закрыты `SyncRunWriter`), `SyncRunLifecycleIT`
 - [ ] TT-03: 🟡 фикстуры используют `source: 'urn:corp:eam'`, реальный API отдаёт короткий код (Q-18)
 
 ## Ordem Sugerida

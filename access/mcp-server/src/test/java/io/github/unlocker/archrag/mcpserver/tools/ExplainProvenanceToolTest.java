@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
@@ -29,7 +30,7 @@ class ExplainProvenanceToolTest {
 
   @BeforeEach
   void setUp() {
-    tool = new ExplainProvenanceTool(queries, limits);
+    tool = new ExplainProvenanceTool(queries, limits, AuthorityMatrix.defaults());
   }
 
   private static Map<String, Object> record(String source, String authority, boolean active, List<String> conflicts) {

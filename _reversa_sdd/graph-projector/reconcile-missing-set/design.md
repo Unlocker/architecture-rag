@@ -40,9 +40,10 @@ flowchart TD
 ## Основной поток `reconcile`
 
 1. `code = EventProcessor.sourceCode(source)`; `null` → `IllegalArgumentException` (`GP/Reconciler.java:101-104`).
+1a. (UNLOCKER-279) `objectCount < 0` → `SnapshotRejectedException`; `partial` → пропуск без чтения графа (RC-12.2).
 2. `run = journal.snapshotContents(source, syncRunId)`; `run.eventCount() < objectCount` → `IllegalStateException` (`GP/Reconciler.java:105-108`). Состав прогона — события с `event_id` `snap:<syncRunId>:…` (SQL `starts_with`, чтобы `%` и `_` в `syncRunId` не работали как шаблон) 🟢 (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:275-299`).
 3. `since = run.firstReceivedAt() ?? journal.find(source, eventId).orElseThrow().receivedAt()`; `touched = journal.objectsReceivedSince(source, since)`; `now = clock.instant()` (`GP/Reconciler.java:109-114`).
-4. Цикл по `projection.activeRecords(code)` (`GP/Reconciler.java:119-142`): `ref = ObjectRef(key.sourceType, key.sourceId)`; `run.objects().contains(ref)` → `inSnapshot++`; `touched.contains(ref)` → `recent++`; иначе:
+4. (UNLOCKER-279) Сначала missing set собирается списком, затем проверяется порог `maxMissingShare` (RC-12.3); только после этого цикл по `projection.activeRecords(code)` (`GP/Reconciler.java:119-142`): `ref = ObjectRef(key.sourceType, key.sourceId)`; `run.objects().contains(ref)` → `inSnapshot++`; `touched.contains(ref)` → `recent++`; иначе:
    1. `tombstoneId = journalTombstone(source, key, record.version(), now, syncRunId)`;
    2. `markers = retract(key, record.version())`;
    3. `result = projection.project(new ProjectionRequest(key, record.version(), now, syncRunId, Map.of(), List.of(new TombstoneSourceRecord(key, now)), markers))`;
@@ -88,4 +89,4 @@ flowchart TD
 
 ## Риски и пробелы
 
-🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] [`../questions.md`](../questions.md) Q-05 (маркер без `objectCount` и без проверки `dataschema` разрешает удаление всего missing set при неполной выборке); 🟡 Q-07 (raw DELETE вручную), Q-11 (неизвестный источник/неполный прогон повторяются бесконечно), Q-12 (строка `reconcile:…` в `QUARANTINED` → `IllegalStateException` в `finishTombstone`), Q-13 (tombstone с применённой версией: тот же `ver` не воскресит). Пустой прогон с `objectCount = 0` удаляет **всё** активное — это зафиксировано тестом как штатное поведение для пустого источника (`emptyRunWithMarkerTombstonesEverythingActiveBeforeTheMarker`) 🟢.
+🟢 Q-05 закрыт в UNLOCKER-279 в части `objectCount` ([`requirements.md`](requirements.md) RC-12); проверка `dataschema` маркера остаётся открытой;  🟡 Q-07 (raw DELETE вручную), Q-11 (неизвестный источник/неполный прогон повторяются бесконечно), Q-12 (строка `reconcile:…` в `QUARANTINED` → `IllegalStateException` в `finishTombstone`), Q-13 (tombstone с применённой версией: тот же `ver` не воскресит). Пустой прогон с `objectCount = 0` удаляет **всё** активное — это зафиксировано тестом как штатное поведение для пустого источника (`emptyRunWithMarkerTombstonesEverythingActiveBeforeTheMarker`) 🟢.

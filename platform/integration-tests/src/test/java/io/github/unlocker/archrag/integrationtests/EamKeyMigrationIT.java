@@ -295,7 +295,8 @@ class EamKeyMigrationIT {
   private String token() {
     var encoder = new NimbusJwtEncoder(new ImmutableSecret<>(KEY));
     var claims = JwtClaimsSet.builder().subject("operator-1").issuedAt(Instant.now())
-        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin");
+        .expiresAt(Instant.now().plusSeconds(600)).claim("scope", "architecture.admin")
+        .claim("realm_access", java.util.Map.of("roles", java.util.List.of("archrag-console-admin")));
     return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()))
         .getTokenValue();
   }

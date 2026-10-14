@@ -9,16 +9,16 @@
 ## Правила
 
 - PE-01. Событие обязано быть в журнале; иначе `IllegalArgumentException`, состояние не меняется 🟢 (`GP/EventProcessor.java:186-189`).
-- PE-02. Для статуса из `{PROJECTED, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED}` возвращается `ProcessingResult(status, errorCode, null)` без каких-либо вызовов 🟢 (`GP/EventProcessor.java:99-105, 190-192`).
+- PE-02. Для статуса из `{PROJECTED, DUPLICATE, IGNORED_OLD_VERSION, QUARANTINED}` возвращается `ProcessingResult(status, errorCode, null)` без каких-либо вызовов 🟢 (`GP/EventProcessor.java:99-105, 190-192`).
 - PE-03. Маршрут: `architecture.asset.upserted.v1` → `upsert`; `architecture.asset.deleted.v1` → `delete`; `architecture.sync.snapshot-complete.v1` → `snapshotComplete`; иное → `QUARANTINED`/`UNSUPPORTED_EVENT_TYPE` до нормализатора 🟢 (`GP/EventProcessor.java:193-198`).
 - PE-04. `upsert`/`delete` с неизвестным `source` → `QUARANTINED`/`UNKNOWN_SOURCE`; `delete` с `dataschema ≠ urn:corp:schema:asset-deleted:1` → `QUARANTINED`/`UNKNOWN_SCHEMA_VERSION` 🟢 (`GP/EventProcessor.java:203-205, 256-261`).
 - PE-05. Только для статуса `RECEIVED` до нормализации: версия равна применённой → `DUPLICATE`; ниже → `IGNORED_OLD_VERSION`; оба с checkpoint, граф не трогается 🟢 (`GP/EventProcessor.java:303-322`).
 - PE-06. Для `RETRYING` (и любого не-`RECEIVED`) решение принимается позже, перед записью в PG: отсекается только `OLD`; равная версия идёт дальше (проектор вернёт `NOOP_SAME_VERSION`, итоговый статус — `PROJECTED`) 🟢 (`GP/EventProcessor.java:324-344, 383-387`).
 - PE-07. Цепочка `upsert`: `→VALIDATED` → `normalize` → (`Quarantined` → карантин с кодом нормализатора) → `warnings.record` (если список непуст) → `DeferRelation` на каждую различную `UnresolvedReference.relation()` → `→NORMALIZED` → `resolveGids` → `recordCandidates` → `ignoreIfOlderOnRetry` → `assertProperties` → `assertSystemRelation` → `assertSystemPlatform` → `→RESOLVED` → `write` 🟢 (`GP/EventProcessor.java:212-251`).
 - PE-08. Связь с двумя неизвестными концами приходит дважды (по ссылке на каждый конец) — откладывается один раз (`distinct()`) 🟢 (`GP/EventProcessor.java:222-223`; тест `unresolvedReferenceReachesProjectorAsDeferredRelationOnce`).
-- PE-09. `gid` для ключа события выдаёт `identity.resolve(key)`; концы `UpsertRelation`/`CloseAssertion` — `identity.find`; без `gid` → `RETRYING`/`UNRESOLVED_ENDPOINT`; для `DeferRelation` `gid` не требуется 🟢 (`GP/EventProcessor.java:569-601`).
+- PE-09. `gid` для ключа события выдаёт `identity.resolve(key)`; концы `UpsertRelation` — `identity.find`; без `gid` → `RETRYING`/`UNRESOLVED_ENDPOINT`; для `DeferRelation` `gid` не требуется 🟢 (`GP/EventProcessor.java:569-601`).
 - PE-10. `delete`: `→VALIDATED`, `→NORMALIZED`, `candidates.forget(key)`, `ignoreIfOlderOnRetry(tombstone)`, `retractProperties(key)`, `→RESOLVED`, запись `ProjectionRequest` с единственной командой `TombstoneSourceRecord(key, event.time())` и пустой картой `gids` 🟢 (`GP/EventProcessor.java:268-286`).
-- PE-11. `snapshot-complete`: статусы до `RESOLVED` без проверок, вызов `ReconciliationTrigger.snapshotComplete(source, data.sourceId, event.id, objectCount)`, затем `PROJECTED` + checkpoint; любое `RuntimeException` → `RETRYING`/`RECONCILIATION_TRIGGER_FAILED` с причиной `getClass().getSimpleName()` 🟢 (`GP/EventProcessor.java:289-300`).
+- PE-11. `snapshot-complete`: сначала проверка `objectCount` (нет валидного → `QUARANTINED`/`SNAPSHOT_OBJECT_COUNT_MISSING`, UNLOCKER-279); статусы до `RESOLVED`, вызов `ReconciliationTrigger.snapshotComplete(source, data.sourceId, event.id, objectCount)`, затем `PROJECTED` + checkpoint; `SnapshotRejectedException` → `QUARANTINED` с её кодом; прочее `RuntimeException` → `RETRYING`/`RECONCILIATION_TRIGGER_FAILED` с причиной `getClass().getSimpleName()` 🟢 (`GP/EventProcessor.java:289-300`).
 - PE-12. После записи (`APPLIED` или `NOOP_SAME_VERSION`) для SCM-`SERVICE` перепроверяются его развёртывания, для EAM-`SOLUTION` — её системы; для `IGNORED_OLD_VERSION` и tombstone — нет 🟢 (`GP/EventProcessor.java:374-382, 461-464, 534-538`).
 - PE-13. Checkpoint `(projector, source, eventId)` сохраняется в `finish` после перехода в конечный статус (в т.ч. `DUPLICATE`, `IGNORED_OLD_VERSION`); `retry`/`quarantine` его не сдвигают 🟢 (`GP/EventProcessor.java:612-627`).
 - PE-14. Сообщения/причины не содержат значений источника; неожиданные исключения (NPE нормализатора, ошибка журнала, `IllegalStateException` перехода) пробрасываются вызывающему, статус остаётся достигнутым, повтор безопасен 🟢 (`GP/EventProcessor.java:72-74`).
@@ -117,7 +117,7 @@
 | `delete` и `snapshot-complete` | Must | Единственные пути удаления |
 | Кандидаты и конфликты | Should | Диагностика, граф не меняют |
 | Сверки `eamSystemId`/`platformId` | Should | ADR 0030/0031 |
-| Выход из `QUARANTINED`, `SUPERSEDED` | Won't | Не реализованы (Q-01, Р-2) |
+| Выход из `QUARANTINED` из самого `process` | Won't | Выход — операция оператора `POST /admin/quarantine/release` (UNLOCKER-281); `SUPERSEDED` удалён (Q-01) |
 
 ## Трассировка
 

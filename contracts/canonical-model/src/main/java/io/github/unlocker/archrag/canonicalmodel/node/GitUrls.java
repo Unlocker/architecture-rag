@@ -73,6 +73,18 @@ public final class GitUrls {
         + path;
   }
 
+  /**
+   * Ключ сравнения репозиториев: результат {@link #normalize} без схемы, в нижнем регистре, то есть
+   * {@code host[:port]/path}. Используется для признака кандидата identity, где регистр пути не
+   * различается; алиас для deploy map остаётся с учётом регистра ({@link #normalize}).
+   *
+   * @throws IllegalArgumentException в тех же случаях, что и {@link #normalize}
+   */
+  public static String matchKey(String raw) {
+    String normalized = normalize(raw);
+    return normalized.substring(normalized.indexOf("://") + 3).toLowerCase(Locale.ROOT);
+  }
+
   private static String trimPath(String path) {
     String p = path == null ? "" : path;
     while (p.startsWith("/")) {

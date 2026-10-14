@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.LongSupplier;
 
 /**
@@ -52,6 +53,20 @@ public final class EamApiConnector implements SourceConnector, AutoCloseable {
       Map.entry("PLATFORM", "platforms"),
       Map.entry("SOLUTION", SOLUTION_TYPE),
       Map.entry("IT_SYSTEM", "itsystems"));
+
+  /** Типы EAM API, которые читает коннектор: общий источник для проверок согласованности со стендом. */
+  public static final Set<String> READ_TYPES = Set.copyOf(TYPES.stream().map(Map.Entry::getValue).toList());
+
+  /** Эндпоинт, к которому у учётки адаптера доступа быть не должно (допущение 8 {@code docs/06}). */
+  private static final String FORBIDDEN_PATH = "/api/buffers/";
+
+  /** Итог {@link #verifyAccess()}, когда проверка не привела к отказу. */
+  public enum AccessCheck {
+    /** Три списка отдали 200, {@code buffers} закрыт. */
+    VERIFIED,
+    /** Сеть недоступна, 429 или 5xx: проверить не удалось, polling повторит чтение сам. */
+    UNAVAILABLE
+  }
 
   private static final Duration MIN_INTERVAL = Duration.ofMillis(100);
   private static final Duration MAX_RETRY_AFTER = Duration.ofSeconds(30);
@@ -129,6 +144,35 @@ public final class EamApiConnector implements SourceConnector, AutoCloseable {
       return new ChangePage(changes, next(c, c.type() + 1, 1, watermark), true, false);
     }
     return new ChangePage(changes, EamApiCursor.watermark(watermark).encode(), false, snapshot);
+  }
+
+  /**
+   * Проверка подключения (п. 8 {@code docs/06-eam-integration.md}): {@code GET /api/<type>/?page=1&page_size=1} по
+   * трём типам ждёт 200, {@code GET /api/buffers/} ждёт 403 или 404. Идёт через тот же HTTP-путь и лимит запросов, что
+   * и чтение. Только чтение; токен и тела ответов в исключения не попадают.
+   *
+   * @return {@link AccessCheck#UNAVAILABLE}, если источник не ответил (сеть, 429, 5xx): запуск не блокируется
+   * @throws IllegalStateException если учётке отказано в списке (401/403, прочий не-200) или {@code buffers} открыт
+   *     (лишние права): fail-closed
+   */
+  public AccessCheck verifyAccess() {
+    try {
+      for (String type : READ_TYPES.stream().sorted().toList()) {
+        int status = get("/api/" + type + "/?page=1&page_size=1").statusCode();
+        if (status != 200) {
+          throw new IllegalStateException("eam access check failed: /api/" + type + "/ answered " + status
+              + ", expected 200");
+        }
+      }
+      int status = get(FORBIDDEN_PATH).statusCode();
+      if (status >= 200 && status < 300) {
+        throw new IllegalStateException("eam access check failed: " + FORBIDDEN_PATH + " answered " + status
+            + ", expected 403 or 404 (the account has excess permissions)");
+      }
+      return AccessCheck.VERIFIED;
+    } catch (SourceUnavailableException e) {
+      return AccessCheck.UNAVAILABLE;
+    }
   }
 
   @Override

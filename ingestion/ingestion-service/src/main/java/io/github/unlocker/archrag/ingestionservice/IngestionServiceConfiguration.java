@@ -10,10 +10,15 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.graphprojector.EventProcessor;
 import io.github.unlocker.archrag.graphprojector.GraphProjector;
 import io.github.unlocker.archrag.graphprojector.Reconciler;
+import io.github.unlocker.archrag.graphprojector.SyncRunCloser;
+import io.github.unlocker.archrag.graphprojector.SyncRunClosing;
+import io.github.unlocker.archrag.graphprojector.SyncRunWriter;
 import io.github.unlocker.archrag.graphprojector.TemporalRelationMigration;
 import io.github.unlocker.archrag.graphprojector.schema.Neo4jSchema;
+import io.github.unlocker.archrag.identityresolution.CandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityMapping;
+import io.github.unlocker.archrag.identityresolution.PostgresCandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.PostgresIdentityMapping;
 import io.github.unlocker.archrag.identityresolution.PostgresSourceConflicts;
@@ -55,13 +60,25 @@ public class IngestionServiceConfiguration {
   }
 
   @Bean
-  IdentityCandidates identityCandidates(DataSource dataSource, PostgresEventJournal migrated) {
-    return new PostgresIdentityCandidates(dataSource);
+  IdentityCandidates identityCandidates(
+      DataSource dataSource, PostgresEventJournal migrated, IngestionMetrics metrics) {
+    return new PostgresIdentityCandidates(dataSource, metrics::recordCandidatesOverflow);
   }
 
   @Bean
-  SourceConflicts sourceConflicts(DataSource dataSource, PostgresEventJournal migrated) {
-    return new PostgresSourceConflicts(dataSource, AuthorityMatrix.defaults());
+  CandidateApprovals candidateApprovals(DataSource dataSource, PostgresEventJournal migrated) {
+    return new PostgresCandidateApprovals(dataSource);
+  }
+
+  /** Единственная матрица авторитетности сервиса: общая для конфликтов и проектора. */
+  @Bean
+  AuthorityMatrix authorityMatrix() {
+    return AuthorityMatrix.defaults();
+  }
+
+  @Bean
+  SourceConflicts sourceConflicts(DataSource dataSource, PostgresEventJournal migrated, AuthorityMatrix matrix) {
+    return new PostgresSourceConflicts(dataSource, matrix);
   }
 
   @Bean(destroyMethod = "close")
@@ -82,8 +99,8 @@ public class IngestionServiceConfiguration {
   }
 
   @Bean
-  GraphProjector graphProjector(Driver driver) {
-    return new GraphProjector(driver, AuthorityMatrix.defaults());
+  GraphProjector graphProjector(Driver driver, AuthorityMatrix matrix) {
+    return new GraphProjector(driver, matrix);
   }
 
   /** Reconciliation после маркера {@code snapshot-complete} (E1.6): missing set получает tombstone. */
@@ -93,8 +110,13 @@ public class IngestionServiceConfiguration {
       RawPayloadStore rawStore,
       GraphProjector projector,
       IdentityMapping identity,
-      SourceConflicts conflicts) {
-    return new Reconciler(journal, rawStore, projector, Clock.systemUTC(), identity, conflicts);
+      SourceConflicts conflicts,
+      IdentityCandidates candidates,
+      ReconcileProperties props,
+      IngestionMetrics metrics) {
+    return new Reconciler(
+        journal, rawStore, projector, Clock.systemUTC(), identity, conflicts, candidates, props.maxMissingShare(),
+        metrics::recordReconcileSkipped);
   }
 
   @Bean
@@ -105,10 +127,26 @@ public class IngestionServiceConfiguration {
       Reconciler reconciliation,
       IdentityCandidates candidates,
       SourceConflicts conflicts,
-      IngestionMetrics metrics) {
+      DispatcherProperties dispatcher,
+      IngestionMetrics metrics,
+      SyncRunClosing syncRuns) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector, projector, metrics::recordWarnings);
+        projector, projector, metrics::recordWarnings, dispatcher.maxAttempts(), syncRuns);
+  }
+
+  /** Закрытие {@code SyncRun} по итогу маркера {@code snapshot-complete} (UNLOCKER-280). */
+  @Bean
+  SyncRunClosing syncRunClosing(EventJournal journal, Driver driver) {
+    return new SyncRunCloser(journal, new SyncRunWriter(driver), Clock.systemUTC());
+  }
+
+  /** Зависшие прогоны и retention {@code SyncRun} и {@code admin_audit}. */
+  @Bean
+  @ConditionalOnProperty(name = "archrag.sync-run.enabled", havingValue = "true", matchIfMissing = true)
+  HousekeepingJob housekeepingJob(
+      Driver driver, EventJournal journal, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin, PostgresEventJournal migrated) {
+    return new HousekeepingJob(driver, journal, jdbc, props, admin, Clock.systemUTC());
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */
@@ -128,9 +166,10 @@ public class IngestionServiceConfiguration {
       EventProcessor processor,
       AdminLock lock,
       DispatcherProperties props,
-      IngestionMetrics metrics) {
+      IngestionMetrics metrics,
+      SyncRunClosing syncRuns) {
     return new JournalDispatcher(
         reader, journal, rawStore, events, processor, lock, Clock.systemUTC(), props.batchSize(), props.retryDelay(),
-        metrics);
+        metrics, syncRuns);
   }
 }

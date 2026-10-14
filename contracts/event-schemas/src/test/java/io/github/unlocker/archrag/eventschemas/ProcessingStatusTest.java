@@ -13,7 +13,6 @@ class ProcessingStatusTest {
     assertThat(ProcessingStatus.VALIDATED.canTransitionTo(ProcessingStatus.NORMALIZED)).isTrue();
     assertThat(ProcessingStatus.NORMALIZED.canTransitionTo(ProcessingStatus.RESOLVED)).isTrue();
     assertThat(ProcessingStatus.RESOLVED.canTransitionTo(ProcessingStatus.PROJECTED)).isTrue();
-    assertThat(ProcessingStatus.PROJECTED.canTransitionTo(ProcessingStatus.SUPERSEDED)).isTrue();
   }
 
   @Test
@@ -24,12 +23,17 @@ class ProcessingStatusTest {
 
   @Test
   void terminalStatesOnlyStayPut() {
-    for (var terminal : EnumSet.of(ProcessingStatus.SUPERSEDED, ProcessingStatus.DUPLICATE,
+    for (var terminal : EnumSet.of(ProcessingStatus.PROJECTED, ProcessingStatus.DUPLICATE,
         ProcessingStatus.IGNORED_OLD_VERSION)) {
       for (var next : ProcessingStatus.values()) {
         assertThat(terminal.canTransitionTo(next)).as(terminal + " -> " + next).isEqualTo(terminal == next);
       }
     }
+  }
+
+  @Test
+  void supersededIsNotAStatus() {
+    assertThat(ProcessingStatus.values()).extracting(Enum::name).doesNotContain("SUPERSEDED");
   }
 
   @Test

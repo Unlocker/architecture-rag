@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.eventschemas;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -40,6 +41,23 @@ public interface EventJournal {
    */
   JournalEntry toDlq(String source, String eventId, String errorCode, String reason);
 
+  /**
+   * Возвращает событие из {@code QUARANTINED} в очередь повторов: одной транзакцией ставит {@code RETRYING} с
+   * {@code attempts = 0} (обычный переход счётчик увеличивает) и закрывает открытую запись DLQ. Дальше событие берёт
+   * диспетчер, как любой {@code RETRYING}; если оно упадёт снова, откроется новая запись DLQ.
+   *
+   * @throws UnknownEventException если события нет
+   * @throws NotQuarantinedException если событие не в {@code QUARANTINED}
+   */
+  JournalEntry releaseFromQuarantine(String source, String eventId);
+
+  /**
+   * Закрывает открытую запись DLQ события ({@code replayed_at = now()}): оператор её разобрал. Идемпотентно.
+   *
+   * @return {@code true}, если открытая запись была и закрыта
+   */
+  boolean closeDlq(String source, String eventId);
+
   /** Читает checkpoint consumer по источнику. */
   Optional<Checkpoint> loadCheckpoint(String consumer, String source);
 
@@ -58,4 +76,10 @@ public interface EventJournal {
 
   /** Объекты источника, по которым в журнал попало любое событие не раньше {@code since}. */
   Set<ObjectRef> objectsReceivedSince(String source, Instant since);
+
+  /**
+   * Сколько событий прогона {@code syncRunId} в каком статусе ({@code inbox_event.sync_run_id}), без события
+   * {@code excludeEventId} (маркер). Статусы без событий в карту не попадают. Основа счётчиков {@code SyncRun}.
+   */
+  Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId);
 }

@@ -50,6 +50,10 @@ export interface NodeCard {
   deletedAt: string | null;
   isCurrent: boolean;
   sources: SourceRecordInfo[];
+  /** Вычислено сервером: текущий узел устарел. Закрытый узел не устаревает. */
+  stale: boolean;
+  /** Порог устаревания, ISO-8601 Duration. */
+  staleAfter: string;
 }
 
 export interface GraphNode {
@@ -181,6 +185,9 @@ export interface Candidate {
   status: string;
   firstSeenAt: string;
   updatedAt: string;
+  /** Заполнены у подтверждённого кандидата (RESOLVED). */
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
 }
 
 export interface Audit {

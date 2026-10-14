@@ -101,6 +101,7 @@ class JournalDispatcherIT {
     r.add("archrag.dispatcher.poll-interval", () -> "100ms");
     r.add("archrag.dispatcher.batch-size", () -> "1");
     r.add("archrag.dispatcher.retry-delay", () -> "1s");
+    r.add("archrag.dispatcher.max-attempts", () -> "3");
   }
 
   @Autowired Driver driver;
@@ -154,6 +155,22 @@ class JournalDispatcherIT {
     assertThat(quarantined.errorReason()).doesNotContain("SECRET");
     assertThat(openDlqRows(badId)).isEqualTo(1);
     awaitTrue("events after bad one projected", () -> Boolean.TRUE.equals(active(after1)) && Boolean.TRUE.equals(active(after2)));
+  }
+
+  @Test
+  void releasedEventIsTakenByDispatcherAgainAndOpensNewDlqRecord() throws Exception {
+    RawPayloadRef broken = rawStore.put(SOURCE, "not json".getBytes(StandardCharsets.UTF_8));
+    String id = "released-" + uid();
+    journal.append(event(id, "TEAM", "REL-" + uid(), CanonicalEvent.TYPE_ASSET_UPSERTED, Map.of()), broken, null);
+    awaitTrue("event quarantined", () -> status(id) == ProcessingStatus.QUARANTINED && openDlqRows(id) == 1);
+
+    journal.releaseFromQuarantine(SOURCE, id);
+    assertThat(openDlqRows(id)).isZero();
+
+    // Битый raw не изменился: диспетчер берёт событие по retry-delay и снова отправляет в карантин с новой записью DLQ.
+    awaitTrue("released event quarantined again", () -> status(id) == ProcessingStatus.QUARANTINED && openDlqRows(id) == 1,
+        () -> status(id) + "/" + openDlqRows(id));
+    assertThat(journal.find(SOURCE, id).orElseThrow().errorCode()).isEqualTo("INVALID_RAW_PAYLOAD");
   }
 
   @Test
@@ -212,6 +229,44 @@ class JournalDispatcherIT {
       return entry.isPresent() && entry.get().attempts() >= 2
           && "RECONCILIATION_TRIGGER_FAILED".equals(entry.get().errorCode());
     }, () -> journal.find(SOURCE, marker.id()).map(e -> e.status() + "/" + e.attempts() + "/" + e.errorCode()).orElse("absent"));
+    assertThat(active(victim)).isTrue();
+  }
+
+  @Test
+  void eventFailingEveryAttemptIsQuarantinedAfterMaxAttemptsWithOpenDlq() {
+    // Маркер заявляет 5 объектов при пустом журнале: каждая попытка заканчивается RETRYING.
+    String runId = "limit-" + uid();
+    CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 5L);
+    RawPayloadRef raw = rawStore.put(SOURCE, ("{\"syncRunId\":\"" + runId + "\",\"objectCount\":5,\"updatedAt\":\""
+        + Instant.now() + "\"}").getBytes(StandardCharsets.UTF_8));
+    journal.append(marker, raw, runId);
+
+    awaitTrue("marker quarantined by retry limit", () -> status(marker.id()) == ProcessingStatus.QUARANTINED,
+        () -> journal.find(SOURCE, marker.id()).map(e -> e.status() + "/" + e.attempts()).orElse("absent"));
+
+    JournalEntry entry = journal.find(SOURCE, marker.id()).orElseThrow();
+    assertThat(entry.errorCode()).isEqualTo("RETRY_LIMIT_EXCEEDED");
+    assertThat(entry.errorReason()).startsWith("RECONCILIATION_TRIGGER_FAILED");
+    assertThat(entry.attempts()).isEqualTo(3);
+    assertThat(openDlqRows(marker.id())).isEqualTo(1);
+  }
+
+  @Test
+  void markerWithoutObjectCountInRawGoesToDlqWithSpecificCodeAndClosesNothing() {
+    StubSource eam = new StubSource(SourceSystem.EAM, Clock.systemUTC());
+    String victim = "victim-" + uid();
+    eam.upsert("TEAM", victim, team("Victim"));
+    poller(eam).pollOnce();
+    awaitTrue("victim projected", () -> Boolean.TRUE.equals(active(victim)));
+    String runId = "nocount-" + uid();
+    CanonicalEvent marker = EventMapper.snapshotComplete(SourceSystem.EAM, runId, Instant.now(), 0L);
+    RawPayloadRef raw = rawStore.put(SOURCE, ("{\"syncRunId\":\"" + runId + "\",\"updatedAt\":\""
+        + Instant.now() + "\"}").getBytes(StandardCharsets.UTF_8));
+    journal.append(marker, raw, runId);
+
+    awaitTrue("marker quarantined", () -> status(marker.id()) == ProcessingStatus.QUARANTINED);
+    assertThat(journal.find(SOURCE, marker.id()).orElseThrow().errorCode()).isEqualTo("SNAPSHOT_OBJECT_COUNT_MISSING");
+    assertThat(openDlqRows(marker.id())).isEqualTo(1);
     assertThat(active(victim)).isTrue();
   }
 

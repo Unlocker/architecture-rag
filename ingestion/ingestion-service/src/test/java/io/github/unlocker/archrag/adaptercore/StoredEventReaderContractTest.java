@@ -61,21 +61,21 @@ class StoredEventReaderContractTest {
   @Test
   void upsertMatchesEventMapperForComplete() {
     var change = new SourceChange("IT_SYSTEM", "EAM-1", 184L, ChangeOperation.UPSERT, Completeness.COMPLETE, T, payload());
-    assertThat(viaReader(change, "poll:IT_SYSTEM/EAM-1/v184", "corr", CanonicalEvent.TYPE_ASSET_UPSERTED, EventMapper.SCHEMA_UPSERTED))
+    assertThat(viaReader(change, "poll:IT_SYSTEM/EAM-1/v184", "corr", CanonicalEvent.TYPE_ASSET_UPSERTED, CanonicalEvent.SCHEMA_UPSERTED))
         .isEqualTo(viaAdapter(change, "poll:IT_SYSTEM/EAM-1/v184", "corr"));
   }
 
   @Test
   void upsertMatchesEventMapperForPartialWithoutCorrelation() {
     var change = new SourceChange("SERVICE", "s/1", 99L, ChangeOperation.UPSERT, Completeness.PARTIAL, T, Map.of("name", "x"));
-    assertThat(viaReader(change, "e1", null, CanonicalEvent.TYPE_ASSET_UPSERTED, EventMapper.SCHEMA_UPSERTED))
+    assertThat(viaReader(change, "e1", null, CanonicalEvent.TYPE_ASSET_UPSERTED, CanonicalEvent.SCHEMA_UPSERTED))
         .isEqualTo(viaAdapter(change, "e1", null));
   }
 
   @Test
   void deleteMatchesEventMapperAndHasEmptyPayload() {
     var change = new SourceChange("IT_SYSTEM", "EAM-1", 185L, ChangeOperation.DELETE, Completeness.COMPLETE, T, Map.of());
-    var event = viaReader(change, "e2", "corr", EventMapper.TYPE_ASSET_DELETED, EventMapper.SCHEMA_DELETED);
+    var event = viaReader(change, "e2", "corr", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED);
     assertThat(event).isEqualTo(viaAdapter(change, "e2", "corr"));
     assertThat(event.data().payload()).isEmpty();
   }
@@ -88,9 +88,9 @@ class StoredEventReaderContractTest {
     String raw = "{\"sourceType\":\"TEAM\",\"sourceId\":\"gone\",\"sourceVersion\":7,\"operation\":\"DELETE\","
         + "\"completeness\":\"COMPLETE\",\"updatedAt\":\"" + T + "\",\"payload\":{}}";
     var entry = new JournalEntry(adapter.source(), adapter.id(), "run-1", "run-1", "TEAM", "gone", new SourceVersion("7"),
-        EventMapper.SCHEMA_DELETED, ProcessingStatus.PROJECTED, null, null, 0, new RawPayloadRef("raw/x", "h"), T, T);
+        CanonicalEvent.SCHEMA_DELETED, ProcessingStatus.PROJECTED, null, null, 0, new RawPayloadRef("raw/x", "h"), T, T);
 
-    assertThat(reader.toEvent(new StoredEvent(entry, EventMapper.TYPE_ASSET_DELETED, adapter.subject()),
+    assertThat(reader.toEvent(new StoredEvent(entry, CanonicalEvent.TYPE_ASSET_DELETED, adapter.subject()),
         raw.getBytes(StandardCharsets.UTF_8))).isEqualTo(adapter);
   }
 
@@ -99,7 +99,7 @@ class StoredEventReaderContractTest {
     var change = new SourceChange("IT_SYSTEM", "EAM-1", 1L, ChangeOperation.UPSERT, Completeness.COMPLETE, T, Map.of());
     var adapter = viaAdapter(change, "e3", null);
     var entry = new JournalEntry(adapter.source(), "e3", null, null, "IT_SYSTEM", "EAM-1", new SourceVersion("1"),
-        EventMapper.SCHEMA_UPSERTED, ProcessingStatus.RECEIVED, null, null, 0, new RawPayloadRef("raw/x", "h"), T, T);
+        CanonicalEvent.SCHEMA_UPSERTED, ProcessingStatus.RECEIVED, null, null, 0, new RawPayloadRef("raw/x", "h"), T, T);
     var stored = new StoredEvent(entry, CanonicalEvent.TYPE_ASSET_UPSERTED, adapter.subject());
 
     assertThatThrownBy(() -> reader.toEvent(stored, "{SECRET-not-json".getBytes(StandardCharsets.UTF_8)))
@@ -124,15 +124,38 @@ class StoredEventReaderContractTest {
   }
 
   @Test
-  void snapshotMarkerWithoutObjectCountIsRejected() {
+  void partialSnapshotMarkerKeepsCompletenessAndLegacyMarkerIsComplete() {
+    var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 3L, true);
+    var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
+        marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
+        new RawPayloadRef("raw/x", "h"), T, T);
+    var stored = new StoredEvent(entry, marker.type(), marker.subject());
+
+    var partial = reader.toEvent(stored, InboxWriter.markerRawJson(marker).getBytes(StandardCharsets.UTF_8));
+    var legacy = reader.toEvent(stored,
+        ("{\"syncRunId\":\"run-1\",\"objectCount\":3,\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8));
+
+    assertThat(partial).isEqualTo(marker);
+    assertThat(partial.data().payload()).containsEntry("completeness", "PARTIAL");
+    assertThat(legacy.data().payload()).containsEntry("completeness", "COMPLETE");
+    assertThatThrownBy(() -> reader.toEvent(stored,
+        ("{\"syncRunId\":\"run-1\",\"objectCount\":3,\"completeness\":\"BOGUS\",\"updatedAt\":\"" + T + "\"}")
+            .getBytes(StandardCharsets.UTF_8))).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void snapshotMarkerWithoutObjectCountIsReadWithoutTheFieldSoThatEventProcessorQuarantinesIt() {
     var marker = EventMapper.snapshotComplete(SourceSystem.EAM, "run-1", T, 1L);
     var entry = new JournalEntry(marker.source(), marker.id(), "run-1", "run-1", marker.data().sourceType(),
         marker.data().sourceId(), new SourceVersion("1"), marker.dataschema(), ProcessingStatus.RECEIVED, null, null, 0,
         new RawPayloadRef("raw/x", "h"), T, T);
     var stored = new StoredEvent(entry, marker.type(), marker.subject());
 
-    assertThatThrownBy(() -> reader.toEvent(stored,
-        ("{\"syncRunId\":\"run-1\",\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8)))
-        .isInstanceOf(IllegalArgumentException.class);
+    for (String raw : new String[] {"", ",\"objectCount\":-1", ",\"objectCount\":\"5\"", ",\"objectCount\":2.5"}) {
+      var event = reader.toEvent(stored,
+          ("{\"syncRunId\":\"run-1\"" + raw + ",\"updatedAt\":\"" + T + "\"}").getBytes(StandardCharsets.UTF_8));
+
+      assertThat(event.data().payload()).as(raw).doesNotContainKey("objectCount");
+    }
   }
 }

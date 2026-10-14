@@ -17,6 +17,9 @@ import io.github.unlocker.archrag.eventschemas.RawPayloadStore;
 import io.github.unlocker.archrag.eventschemas.SnapshotContents;
 import io.github.unlocker.archrag.eventschemas.SourceVersion;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.identityresolution.Feature;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidate;
+import io.github.unlocker.archrag.identityresolution.IdentityCandidates;
 import io.github.unlocker.archrag.identityresolution.IdentityStoreException;
 import io.github.unlocker.archrag.identityresolution.SourceConflict;
 import io.github.unlocker.archrag.identityresolution.SourceConflicts;
@@ -44,8 +47,16 @@ class ReconcilerTest {
   private final List<String> calls = new ArrayList<>();
   private final EventProcessorTest.FakeIdentity identity = new EventProcessorTest.FakeIdentity();
   private final FakeConflicts conflicts = new FakeConflicts(calls);
-  private final Reconciler reconciler =
-      new Reconciler(journal, rawStore, projection, Clock.fixed(NOW, ZoneOffset.UTC), identity, conflicts);
+  private final FakeCandidates candidates = new FakeCandidates(calls);
+  private final List<String> skips = new ArrayList<>();
+  /** Без ограничения доли: тесты механики tombstone закрывают всё, что не вошло в прогон. */
+  private final Reconciler reconciler = reconciler(1.0);
+
+  private Reconciler reconciler(double maxMissingShare) {
+    return new Reconciler(
+        journal, rawStore, projection, Clock.fixed(NOW, ZoneOffset.UTC), identity, conflicts, candidates, maxMissingShare,
+        (source, reason) -> skips.add(source + "/" + reason));
+  }
 
   private static SourceKey team(String id) {
     return new SourceKey(SourceSystemCode.EAM, "TEAM", id);
@@ -133,7 +144,7 @@ class ReconcilerTest {
 
     reconciler.reconcile(SOURCE, "run-1", "m", 0);
 
-    assertThat(calls).containsExactly("retract", "project");
+    assertThat(calls).containsExactly("retract", "forget", "project");
     assertThat(projection.requests).singleElement().satisfies(r -> {
       assertThat(r.conflicts().gid()).isEqualTo(gid);
       assertThat(r.conflicts().byRecord()).containsExactly(Map.entry(dissent, List.of("name")));
@@ -146,7 +157,7 @@ class ReconcilerTest {
 
     reconciler.reconcile(SOURCE, "run-1", "m", 0);
 
-    assertThat(calls).isEmpty();
+    assertThat(calls).doesNotContain("retract");
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
   }
 
@@ -171,6 +182,160 @@ class ReconcilerTest {
 
     assertThat(calls).isEmpty();
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
+  }
+
+  private void activeTeams(int count) {
+    for (int i = 0; i < count; i++) {
+      projection.active.add(new GraphProjection.ActiveRecord(team("t" + i), new SourceVersion("1")));
+    }
+  }
+
+  @Test
+  void partialRunDeletesNothingAndIsReported() {
+    activeTeams(2);
+
+    var report = reconciler.reconcile(SOURCE, "run-1", "m", 0, true);
+
+    assertThat(report).isEqualTo(new Reconciler.Report(0, 0, 0, 0));
+    assertThat(projection.requests).isEmpty();
+    assertThat(journal.appended).isEmpty();
+    assertThat(candidates.forgotten).isEmpty();
+    assertThat(skips).containsExactly("EAM/PARTIAL");
+  }
+
+  @Test
+  void partialFlagIsPassedThroughTheTriggerPort() {
+    activeTeams(1);
+
+    reconciler.snapshotComplete(SOURCE, "run-1", "m", 0, true);
+
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void missingSetOverTheShareIsRejectedBeforeAnyWrite() {
+    activeTeams(4);
+    journal.runObjects.add(new ObjectRef("TEAM", "t0"));
+
+    // 3 из 4 активных не вошли в прогон: 3 > 0.5 * 4
+    assertThatThrownBy(() -> reconciler(0.5).reconcile(SOURCE, "run-1", "m", 1))
+        .isInstanceOfSatisfying(
+            SnapshotRejectedException.class,
+            e -> assertThat(e.code()).isEqualTo(SnapshotRejectedException.MASS_CLOSE_LIMIT));
+
+    assertThat(projection.requests).isEmpty();
+    assertThat(journal.appended).isEmpty();
+    assertThat(rawStore.stored).isEmpty();
+    assertThat(candidates.forgotten).isEmpty();
+    assertThat(calls).isEmpty();
+    assertThat(skips).containsExactly("EAM/" + SnapshotRejectedException.MASS_CLOSE_LIMIT);
+  }
+
+  @Test
+  void missingSetEqualToTheShareIsAllowed() {
+    activeTeams(4);
+    journal.runObjects.add(new ObjectRef("TEAM", "t0"));
+    journal.runObjects.add(new ObjectRef("TEAM", "t1"));
+
+    var report = reconciler(0.5).reconcile(SOURCE, "run-1", "m", 2);
+
+    assertThat(report.tombstoned()).isEqualTo(2);
+    assertThat(skips).isEmpty();
+  }
+
+  @Test
+  void objectsKeptByTheRunOrRecentTouchDoNotCountTowardTheShare() {
+    activeTeams(4);
+    journal.runObjects.add(new ObjectRef("TEAM", "t0"));
+    journal.touched.add(new ObjectRef("TEAM", "t1"));
+    journal.touched.add(new ObjectRef("TEAM", "t2"));
+
+    var report = reconciler(0.5).reconcile(SOURCE, "run-1", "m", 1);
+
+    assertThat(report).isEqualTo(new Reconciler.Report(1, 0, 2, 1));
+  }
+
+  @Test
+  void sourceWithoutActiveRecordsPassesTheShareCheck() {
+    assertThat(reconciler(0.5).reconcile(SOURCE, "run-1", "m", 0).tombstoned()).isZero();
+  }
+
+  @Test
+  void negativeObjectCountIsRejected() {
+    activeTeams(1);
+
+    assertThatThrownBy(() -> reconciler.reconcile(SOURCE, "run-1", "m", -1))
+        .isInstanceOfSatisfying(
+            SnapshotRejectedException.class,
+            e -> assertThat(e.code()).isEqualTo(SnapshotRejectedException.MISSING_OBJECT_COUNT));
+    assertThat(projection.requests).isEmpty();
+  }
+
+  @Test
+  void shareOutsideZeroToOneIsRejected() {
+    for (double bad : new double[] {0, -0.1, 1.01, Double.NaN}) {
+      assertThatThrownBy(() -> reconciler(bad)).isInstanceOf(IllegalArgumentException.class);
+    }
+  }
+
+  @Test
+  void tombstoneForgetsIdentityFeaturesBeforeTheGraphWrite() {
+    projection.calls = calls;
+    activeTeams(1);
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(candidates.forgotten).containsExactly(team("t0"));
+    assertThat(calls).containsExactly("forget", "project");
+  }
+
+  @Test
+  void newerAppliedVersionDoesNotForgetFeatures() {
+    var gone = team("gone");
+    projection.applied.put(gone, new GraphProjection.AppliedRecord(new SourceVersion("8"), true));
+    projection.active.add(new GraphProjection.ActiveRecord(gone, new SourceVersion("7")));
+
+    reconciler.reconcile(SOURCE, "run-1", "m", 0);
+
+    assertThat(candidates.forgotten).isEmpty();
+  }
+
+  @Test
+  void candidateStoreFailureDoesNotTouchTheGraph() {
+    candidates.fail = true;
+    activeTeams(1);
+
+    assertThatThrownBy(() -> reconciler.reconcile(SOURCE, "run-1", "m", 0)).isInstanceOf(IdentityStoreException.class);
+    assertThat(projection.requests).isEmpty();
+  }
+
+  static final class FakeCandidates implements IdentityCandidates {
+    final List<String> calls;
+    final List<SourceKey> forgotten = new ArrayList<>();
+    boolean fail;
+
+    FakeCandidates(List<String> calls) {
+      this.calls = calls;
+    }
+
+    @Override
+    public List<IdentityCandidate> record(SourceKey key, NodeLabel label, Set<Feature> features) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void forget(SourceKey key) {
+      if (fail) {
+        throw new IdentityStoreException("down", null);
+      }
+      calls.add("forget");
+      forgotten.add(key);
+    }
+
+    @Override
+    public List<IdentityCandidate> candidatesOf(SourceKey key) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   static final class FakeConflicts implements SourceConflicts {
@@ -253,6 +418,11 @@ class ReconcilerTest {
     }
 
     @Override
+    public Map<ProcessingStatus, Long> statusCounts(String source, String syncRunId, String excludeEventId) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Set<ObjectRef> objectsReceivedSince(String source, Instant since) {
       this.since = since;
       return touched;
@@ -294,6 +464,16 @@ class ReconcilerTest {
 
     @Override
     public JournalEntry toDlq(String s, String id, String c, String r) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
       throw new UnsupportedOperationException();
     }
 
