@@ -39,3 +39,12 @@ ADR [0009](0009-deployment-from-deploymap.md) брал `Deployment` из deploy 
 ## Связанные ADR
 
 [0009](0009-deployment-from-deploymap.md) — уточняет: формат `deploymap-poc-1` и привязка по репозиторию. [0008](0008-authority-matrix-field-level.md) — `DEPLOYED_FROM` в матрице авторитетности. [0010](0010-master-systems-are-stubs.md) — заглушки. [0024](0024-open-source-id-format.md) — `id` EAM. [0028](0028-structural-relations-temporal.md) — механизм темпоральных связей и identity-свойств.
+
+## Дополнение 2026-10-13
+
+Исходный текст выше не менялся. Дополнение описывает механизм отложенных связей, на который опирается п. 7; источник — UNLOCKER-278, кандидат К-3 в `_reversa_sdd/adrs/candidates.md` (UNLOCKER-269), согласие владельца в UNLOCKER-260 (2026-10-13). Кто принял: владелец, 2026-10-13.
+
+1. **Механизм `PendingRelation`.** Нормализатор не создаёт фиктивных узлов: неизвестный конец связи превращается в `UnresolvedReference`, затем в `DeferRelation` (`ingestion/normalizer/.../CommandSink.java:13-22`, `:62-65`, `:94-97`). Проектор хранит такую связь узлом `PendingRelation`, ключ закреплён constraint `pending_relation_key` (`ingestion/graph-projector/.../schema/Neo4jSchema.java:52`; `PendingRelations.java:25`, `:75`). Связь достраивается в транзакции проекции конечной точки (`GraphProjector.java:367-373`), отложенные связи записи заменяются целиком при каждой применённой проекции (`GraphProjector.java:328-337`) и удаляются при tombstone.
+2. **Alias-ключи.** Помимо `SourceKey(SCM, REPOSITORY_URL, url)` (п. 7 исходного текста) используется `SourceKey(EAM, IT_SYSTEM_CODE, <eamCode>)`: он достраивается записью EAM `ITSystem` с тем же `eamCode` (`GraphProjector.java:73-76`, `:384-412`; `contracts/canonical-model/.../provenance/LookupKeys.java:14`, `:29`). Ключ `ITSystem` в EAM — целочисленный `id`, а `eam_id` — свойство, поэтому на ключ `(EAM, IT_SYSTEM, <eam_id>)` ссылаться нельзя.
+3. **Границы.** У отложенной связи нет срока годности; reconciliation её не лечит; повторной проверки после записи отложенной связи нет (`GraphProjector.java:64-67`). Допущение держится на одном экземпляре ingestion-сервиса и однопоточном диспетчере — [ADR 0037](0037-single-instance-journal-dispatcher.md); при втором экземпляре оно перестаёт выполняться.
+4. **Отвергнутые альтернативы.** Stub-узел для неизвестного конца (`gid` чужого конца не создаётся); возврат `RETRYING` до прихода конца (код `UNRESOLVED_ENDPOINT`, `docs/02-data-model.md:273`); по данным кандидата К-3 так было до E1.14, в истории кода это не перепроверялось.
