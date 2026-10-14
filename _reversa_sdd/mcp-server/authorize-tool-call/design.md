@@ -63,7 +63,7 @@
 ## Riscos e Lacunas
 
 - 🟡 Проверка пути — точное совпадение `getRequestURI()` с `/mcp` (access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:40, 53): Q-15.
-- 🟡 Отказы `400`/`413`/`401` не аудируются: Q-16.
+- 🟡 Отказ `401` (цепочка Spring Security до фильтра) не аудируется: Q-16. Отказы `400`/`413` аудируются: `ToolCallAuditor.rejected`, `decision` = `REJECTED_INVALID_REQUEST`/`REJECTED_TOO_LARGE`, `tool` в метриках `unknown`, в логе `null`; тело не пишется; `chain.doFilter` не вызывается, поэтому аспект второй записи не добавляет 🟢.
 - 🟡 `initialize`/`tools/list` без scope: Q-02.
 - 🟡 Нет сверки списка `@McpTool` и `tool-scopes` при старте: Q-04.
 - 🟡 Маскирование аргументов эвристическое: Q-05.

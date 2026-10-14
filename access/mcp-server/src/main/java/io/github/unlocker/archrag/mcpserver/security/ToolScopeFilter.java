@@ -32,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Работает только на {@code POST /mcp}. Тело читается не более {@code max-request-bytes} и
  * передаётся дальше буферизованным. Tool без записи в {@code tool-scopes} отклоняется
- * (fail-closed). Отказы пишутся в аудит. Роль {@code archrag-reader} на все методы MCP проверяет цепочка Spring Security до этого фильтра.
+ * (fail-closed). Отказы (403, а также 400/413 до разбора тела) пишутся в аудит ровно одной записью. Роль {@code archrag-reader} на все методы MCP проверяет цепочка Spring Security до этого фильтра.
  */
 final class ToolScopeFilter extends OncePerRequestFilter {
 
@@ -58,6 +58,7 @@ final class ToolScopeFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
     if (!isSupportedCharset(request.getCharacterEncoding())) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }
@@ -65,6 +66,7 @@ final class ToolScopeFilter extends OncePerRequestFilter {
     byte[] body =
         request.getInputStream().readNBytes((int) Math.min(limit, Integer.MAX_VALUE - 1) + 1);
     if (body.length > limit) {
+      auditor.rejected(ToolDecision.REJECTED_TOO_LARGE);
       response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
       return;
     }
@@ -72,10 +74,12 @@ final class ToolScopeFilter extends OncePerRequestFilter {
     try {
       json = mapper.readTree(body);
     } catch (JacksonException e) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }
     if (json == null || !json.isObject()) {
+      auditor.rejected(ToolDecision.REJECTED_INVALID_REQUEST);
       response.sendError(HttpServletResponse.SC_BAD_REQUEST);
       return;
     }

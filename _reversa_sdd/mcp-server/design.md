@@ -12,7 +12,7 @@
 |--------|-----------|------------------------|-------------|
 | `McpServerApplication.main` | `(String[]) -> void` | `SpringApplication.run`; порт — умолчание Spring (8080), `server.port` не задан | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/McpServerApplication.java:6-13` 🟢 |
 | `McpSecurityConfiguration.mcpSecurityFilterChain` | `(HttpSecurity, McpSecurityProperties, ToolCallAuditor, OAuth2ResourceServerProperties) -> SecurityFilterChain` | цепочка: JWT, PRM, `ToolScopeFilter` после `AuthorizationFilter` | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityConfiguration.java:25-63` 🟢 |
-| `ToolScopeFilter.doFilterInternal` | `(request, response, chain) -> void` | `400` кодировка/JSON; `413`; `403` + `WWW-Authenticate`; иначе `chain.doFilter(BufferedRequest)` | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:56-98` 🟢 |
+| `ToolScopeFilter.doFilterInternal` | `(request, response, chain) -> void` | `400` кодировка/JSON и `413` (оба с аудитом `rejected`); `403` + `WWW-Authenticate`; иначе `chain.doFilter(BufferedRequest)` | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/ToolScopeFilter.java:56-98` 🟢 |
 | `McpSecurityProperties` | `record(String resourceUri, Map<String,String> toolScopes, DataSize maxRequestBytes)` | `toolScopes` по умолчанию пусто, `maxRequestBytes` — 1 МБ | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/security/McpSecurityProperties.java:15-23` 🟢 |
 | `@McpTool` методы | см. [`contracts.md`](contracts.md) §1.3 | результат — `record`, ошибки — `IllegalArgumentException` | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/SearchAssetsTool.java:39-93` (и остальные tools) 🟢 |
 | `ToolCallAuditAspect.audit` | `@Around("@annotation(mcpTool)")` | открывает `ToolCallContext`, наблюдение, пишет итог в `finally`; исключение пробрасывается | `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/audit/ToolCallAuditAspect.java:29-60` 🟢 |
@@ -73,7 +73,7 @@
 
 - 🟢 `initialize` и `tools/list` требуют роль `archrag-reader` (UNLOCKER-290; П-6, Q-02); scope — только на `tools/call`.
 - 🟡 Согласованность `@McpTool` ↔ `tool-scopes` проверяется только в рантайме: забытый tool получит `403` (Q-04, матрица №8).
-- 🟡 `find_runtime_footprint` не нормализует `systemGid` (не `strip`, не `lowercase`), в отличие от трёх других tools (Н-7, Q-06).
+- 🟢 `find_runtime_footprint` нормализует `systemGid` (`strip` + `UUID.toString()`) как три других tools (Н-7, Q-06).
 - 🟢 [R.8: ответ владельца, вопрос 12] Нет rate limiting (Q-09).
 - 🟡 Аудит аргументов маскирует секреты по именам ключей, а не по содержимому (П-14, Q-05).
 - 🟡 `stale-after` продублирован в UI админ-консоли без связи (матрица №10, Q-08).

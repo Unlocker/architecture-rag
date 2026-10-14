@@ -37,7 +37,10 @@ import org.springframework.web.client.RestClient;
 
 @SpringBootTest(
     webEnvironment = WebEnvironment.RANDOM_PORT,
-    properties = "archrag.mcp.security.tool-scopes.probe=architecture.read")
+    properties = {
+      "archrag.mcp.security.tool-scopes.probe=architecture.read",
+      "archrag.mcp.security.max-request-bytes=2KB"
+    })
 @Import(McpAuditTest.Config.class)
 class McpAuditTest {
 
@@ -105,6 +108,21 @@ class McpAuditTest {
                 + "\",\"arguments\":"
                 + arguments
                 + "}}")
+        .retrieve()
+        .toEntity(String.class);
+  }
+
+  private ResponseEntity<String> postRaw(String token, String body) {
+    return RestClient.builder()
+        .baseUrl("http://localhost:" + port)
+        .defaultStatusHandler(s -> true, (req, res) -> {})
+        .build()
+        .post()
+        .uri("/mcp")
+        .header("Accept", "application/json, text/event-stream")
+        .header("Content-Type", "application/json")
+        .headers(h -> h.setBearerAuth(token))
+        .body(body)
         .retrieve()
         .toEntity(String.class);
   }
@@ -201,5 +219,26 @@ class McpAuditTest {
     var record = onlyRecord();
     assertThat(record).containsEntry("decision", ToolDecision.TIMEOUT);
     assertThat(record.get("errorClass").toString()).endsWith("QueryTimeoutException");
+  }
+
+  @Test
+  void malformedAndNonObjectBodiesAreAuditedOnceAsInvalidRequest() {
+    String token = TestJwt.token("architecture.read");
+    for (String body : new String[] {"{not SECRET json", "[{\"method\":\"tools/call\"}]"}) {
+      appender.list.clear();
+      assertThat(postRaw(token, body).getStatusCode().value()).isEqualTo(400);
+      var record = onlyRecord();
+      assertThat(record).containsEntry("decision", ToolDecision.REJECTED_INVALID_REQUEST);
+      assertThat(record.toString()).doesNotContain("SECRET").doesNotContain(token);
+    }
+  }
+
+  @Test
+  void oversizedBodyIsAuditedOnceAsTooLarge() {
+    var res =
+        postRaw(
+            TestJwt.token("architecture.read"), "{\"pad\":\"" + "x".repeat(4096) + "\"}");
+    assertThat(res.getStatusCode().value()).isEqualTo(413);
+    assertThat(onlyRecord()).containsEntry("decision", ToolDecision.REJECTED_TOO_LARGE);
   }
 }
