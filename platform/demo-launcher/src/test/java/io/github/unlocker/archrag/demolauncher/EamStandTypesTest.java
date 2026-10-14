@@ -33,6 +33,16 @@ class EamStandTypesTest {
   }
 
   @Test
+  void startWithUnavailableSourceWarnsAndDoesNotThrow() throws Exception {
+    int closedPort;
+    try (var socket = new java.net.ServerSocket(0, 0, java.net.InetAddress.getLoopbackAddress())) {
+      closedPort = socket.getLocalPort();
+    }
+    var api = new EamAdapter.EamApi(java.net.URI.create("http://127.0.0.1:" + closedPort), "tok");
+    assertThatCode(() -> DemoLauncher.verifyEamAccess(api)).doesNotThrowAnyException();
+  }
+
+  @Test
   void startWithWrongTokenFailsClosedWithoutLeakingIt() {
     try (var stub = new EamApiStub(EamApiSeed.seeded(Clock.systemUTC()), "tok")) {
       assertThatThrownBy(() -> DemoLauncher.verifyEamAccess(new EamAdapter.EamApi(stub.baseUri(), "bad-token")))

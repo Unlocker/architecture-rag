@@ -4,8 +4,8 @@ import static io.github.unlocker.archrag.sourcestubs.StubSources.fields;
 
 import java.time.Clock;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Seed заглушки EAM в формате реального API: вертикальный срез {@code ITSystem -> Solution -> Platform}.
