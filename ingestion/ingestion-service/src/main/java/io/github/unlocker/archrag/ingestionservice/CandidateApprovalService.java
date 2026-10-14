@@ -14,7 +14,6 @@ import io.github.unlocker.archrag.identityresolution.CandidateApproval;
 import io.github.unlocker.archrag.identityresolution.CandidateApprovals;
 import io.github.unlocker.archrag.identityresolution.CandidateRelocation;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -73,7 +72,7 @@ public class CandidateApprovalService {
     StoredEvent stored =
         reader
             .projectedUpsert(
-                "urn:corp:" + moved.source().name().toLowerCase(Locale.ROOT),
+                moved.source().urn(),
                 moved.sourceType(),
                 moved.sourceId(),
                 applied.get().version())

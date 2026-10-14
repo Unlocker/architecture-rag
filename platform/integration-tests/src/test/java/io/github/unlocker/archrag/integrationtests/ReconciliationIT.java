@@ -321,7 +321,7 @@ class ReconciliationIT {
     poller.pollOnce();
     drain();
     String run = "bad-" + uid();
-    var marker = new CanonicalEvent("snapshot-complete:" + run, SOURCE, io.github.unlocker.archrag.adaptercore.EventMapper.TYPE_SNAPSHOT_COMPLETE,
+    var marker = new CanonicalEvent("snapshot-complete:" + run, SOURCE, CanonicalEvent.TYPE_SNAPSHOT_COMPLETE,
         "sync-run/" + run, Instant.now(), "urn:corp:schema:snapshot-complete:1", run,
         new AssetEventData("SYNC_RUN", run, new SourceVersion("1"), Map.of("syncRunId", run)));
     var ref = new RawPayloadRef("raw/m", "sha256:m");

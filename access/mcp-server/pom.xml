@@ -20,6 +20,10 @@
       <artifactId>graph-query-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.github.unlocker.archrag</groupId>
+      <artifactId>canonical-model</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.neo4j.driver</groupId>
       <artifactId>neo4j-java-driver</artifactId>
     </dependency>

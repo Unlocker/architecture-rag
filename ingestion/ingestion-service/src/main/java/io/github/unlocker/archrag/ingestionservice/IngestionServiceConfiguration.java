@@ -70,9 +70,15 @@ public class IngestionServiceConfiguration {
     return new PostgresCandidateApprovals(dataSource);
   }
 
+  /** Единственная матрица авторитетности сервиса: общая для конфликтов и проектора. */
   @Bean
-  SourceConflicts sourceConflicts(DataSource dataSource, PostgresEventJournal migrated) {
-    return new PostgresSourceConflicts(dataSource, AuthorityMatrix.defaults());
+  AuthorityMatrix authorityMatrix() {
+    return AuthorityMatrix.defaults();
+  }
+
+  @Bean
+  SourceConflicts sourceConflicts(DataSource dataSource, PostgresEventJournal migrated, AuthorityMatrix matrix) {
+    return new PostgresSourceConflicts(dataSource, matrix);
   }
 
   @Bean(destroyMethod = "close")
@@ -93,8 +99,8 @@ public class IngestionServiceConfiguration {
   }
 
   @Bean
-  GraphProjector graphProjector(Driver driver) {
-    return new GraphProjector(driver, AuthorityMatrix.defaults());
+  GraphProjector graphProjector(Driver driver, AuthorityMatrix matrix) {
+    return new GraphProjector(driver, matrix);
   }
 
   /** Reconciliation после маркера {@code snapshot-complete} (E1.6): missing set получает tombstone. */

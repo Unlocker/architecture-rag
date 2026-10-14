@@ -266,10 +266,10 @@ public final class Reconciler implements ReconciliationTrigger {
           new CanonicalEvent(
               eventId,
               source,
-              EventProcessor.TYPE_ASSET_DELETED,
+              CanonicalEvent.TYPE_ASSET_DELETED,
               key.sourceType().toLowerCase(Locale.ROOT).replace('_', '-') + "/" + key.sourceId(),
               now,
-              EventProcessor.SCHEMA_ASSET_DELETED,
+              CanonicalEvent.SCHEMA_DELETED,
               syncRunId,
               new AssetEventData(key.sourceType(), key.sourceId(), version, Map.of()));
       RawPayloadRef ref = rawStore.put(source, rawDelete(key, version, now).getBytes(StandardCharsets.UTF_8));
