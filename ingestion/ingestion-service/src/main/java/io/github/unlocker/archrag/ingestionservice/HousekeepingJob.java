@@ -55,6 +55,8 @@ public class HousekeepingJob {
           + "RETURN count(*) AS n";
 
   private static final String SOURCE_PREFIX = "urn:corp:";
+  /** Префикс id маркера {@code snapshot-complete}: маркер в счётчики не входит. */
+  private static final String MARKER_PREFIX = "snapshot-complete:";
 
   private final Driver driver;
   private final EventJournal journal;
@@ -110,7 +112,7 @@ public class HousekeepingJob {
       String runId = (String) run.get("runId");
       // Журнал читается вне транзакции Neo4j: в повторяемой функции драйвера побочных эффектов быть не должно.
       String source = SOURCE_PREFIX + ((String) run.get("adapter")).toLowerCase(Locale.ROOT);
-      Map<ProcessingStatus, Long> byStatus = journal.statusCounts(source, runId, "");
+      Map<ProcessingStatus, Long> byStatus = journal.statusCounts(source, runId, MARKER_PREFIX + runId);
       SyncRunCounts counts = SyncRunCounts.of(byStatus);
       Map<String, Object> params =
           Map.of("runId", runId, "now", now.atOffset(ZoneOffset.UTC), "fetched", counts.fetched(),
