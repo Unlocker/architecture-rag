@@ -11,12 +11,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *     адаптер считается умершим и прогон переводится в {@code FAILED}
  * @param keepPerSource сколько терминальных прогонов на адаптер хранится; более старые удаляются
  * @param housekeepingInterval пауза между проходами чистки
+ * @param enabled {@code false} отключает фоновую чистку (детерминированные IT)
  */
 @ConfigurationProperties("archrag.sync-run")
 public record SyncRunProperties(
     @DefaultValue("6h") Duration staleAfter,
     @DefaultValue("20") int keepPerSource,
-    @DefaultValue("1h") Duration housekeepingInterval) {
+    @DefaultValue("1h") Duration housekeepingInterval,
+    @DefaultValue("true") boolean enabled) {
 
   public SyncRunProperties {
     if (staleAfter.isZero() || staleAfter.isNegative()) {

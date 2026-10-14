@@ -50,6 +50,8 @@ archrag:
     stale-after: ${ARCHRAG_SYNC_RUN_STALE_AFTER:6h}
     keep-per-source: ${ARCHRAG_SYNC_RUN_KEEP_PER_SOURCE:20}
     housekeeping-interval: ${ARCHRAG_SYNC_RUN_HOUSEKEEPING_INTERVAL:1h}
+    # false отключает фоновую чистку (детерминированные IT).
+    enabled: ${ARCHRAG_SYNC_RUN_ENABLED:true}
   # Диспетчер журнала: RECEIVED/RETRYING → EventProcessor. Один поток, один экземпляр сервиса.
   dispatcher:
     enabled: ${ARCHRAG_DISPATCHER_ENABLED:true}

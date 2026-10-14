@@ -202,7 +202,8 @@ class SyncRunLifecycleIT {
 
     job(20, Duration.ofDays(90)).run();
 
-    assertThat(syncRun(stale)).containsEntry("status", "FAILED");
+    assertThat(syncRun(stale)).containsEntry("status", "FAILED").containsEntry("fetched", 1L)
+        .containsEntry("applied", 1L).containsEntry("failed", 0L);
     assertThat(syncRun(stale).get("endedAt")).isNotNull();
     assertThat(syncRun(fresh)).containsEntry("status", "RUNNING");
   }
@@ -289,7 +290,7 @@ class SyncRunLifecycleIT {
 
   private static HousekeepingJob job(int keep, Duration auditRetention) {
     return new HousekeepingJob(
-        driver, jdbc, new SyncRunProperties(Duration.ofHours(6), keep, Duration.ofHours(1)),
+        driver, journal, jdbc, new SyncRunProperties(Duration.ofHours(6), keep, Duration.ofHours(1), true),
         new AdminProperties(List.of("c"), auditRetention), Clock.systemUTC());
   }
 

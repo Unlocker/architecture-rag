@@ -1,7 +1,15 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.eventschemas.EventJournal;
+import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.graphprojector.SyncRunCounts;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
@@ -26,9 +34,14 @@ public class HousekeepingJob {
 
   private static final Logger LOG = LoggerFactory.getLogger(HousekeepingJob.class);
 
-  private static final String FAIL_STALE =
+  private static final String STALE_RUNS =
       "MATCH (s:SyncRun) WHERE s.status = 'RUNNING' AND s.startedAt < $cutoff "
-          + "SET s.status = 'FAILED', s.endedAt = $now "
+          + "RETURN s.runId AS runId, s.adapter AS adapter";
+
+  // Условие RUNNING в записи: поздний маркер уже мог закрыть прогон, его итог таймаут не перезаписывает.
+  private static final String FAIL_STALE =
+      "MATCH (s:SyncRun {runId: $runId}) WHERE s.status = 'RUNNING' "
+          + "SET s.status = 'FAILED', s.endedAt = $now, s.fetched = $fetched, s.applied = $applied, s.failed = $failed "
           + "RETURN count(s) AS n";
 
   // Терминальные прогоны адаптера, упорядоченные от новых к старым; пропускаем keep последних.
@@ -41,14 +54,20 @@ public class HousekeepingJob {
           + "DETACH DELETE old "
           + "RETURN count(*) AS n";
 
+  private static final String SOURCE_PREFIX = "urn:corp:";
+
   private final Driver driver;
+  private final EventJournal journal;
   private final JdbcTemplate jdbc;
   private final SyncRunProperties props;
   private final AdminProperties admin;
   private final Clock clock;
 
-  public HousekeepingJob(Driver driver, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin, Clock clock) {
+  public HousekeepingJob(
+      Driver driver, EventJournal journal, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin,
+      Clock clock) {
     this.driver = driver;
+    this.journal = journal;
     this.jdbc = jdbc;
     this.props = props;
     this.admin = admin;
@@ -71,15 +90,37 @@ public class HousekeepingJob {
     }
   }
 
-  /** Переводит {@code RUNNING}-прогоны старше {@code stale-after} в {@code FAILED}; возвращает их число. */
+  /**
+   * Переводит {@code RUNNING}-прогоны старше {@code stale-after} в {@code FAILED} со счётчиками из журнала
+   * ({@code fetched} — все события прогона); возвращает число переведённых.
+   */
   long failStaleRuns() {
     Instant now = clock.instant();
-    Map<String, Object> params =
-        Map.of("cutoff", now.minus(props.staleAfter()).atOffset(java.time.ZoneOffset.UTC), "now",
-            now.atOffset(java.time.ZoneOffset.UTC));
+    OffsetDateTime cutoff = now.minus(props.staleAfter()).atOffset(ZoneOffset.UTC);
+    List<Map<String, Object>> stale;
     try (Session session = driver.session()) {
-      return session.executeWrite(tx -> tx.run(FAIL_STALE, params).single().get("n").asLong());
+      stale =
+          session.executeRead(
+              tx ->
+                  tx.run(STALE_RUNS, Map.of("cutoff", cutoff)).list(r -> Map.<String, Object>of(
+                      "runId", r.get("runId").asString(), "adapter", r.get("adapter").asString("")))); 
     }
+    long failed = 0;
+    for (Map<String, Object> run : stale) {
+      String runId = (String) run.get("runId");
+      // Журнал читается вне транзакции Neo4j: в повторяемой функции драйвера побочных эффектов быть не должно.
+      String source = SOURCE_PREFIX + ((String) run.get("adapter")).toLowerCase(Locale.ROOT);
+      Map<ProcessingStatus, Long> byStatus = journal.statusCounts(source, runId, "");
+      long fetched = byStatus.values().stream().mapToLong(Long::longValue).sum();
+      SyncRunCounts counts = SyncRunCounts.of(fetched, byStatus);
+      Map<String, Object> params =
+          Map.of("runId", runId, "now", now.atOffset(ZoneOffset.UTC), "fetched", counts.fetched(),
+              "applied", counts.applied(), "failed", counts.failed());
+      try (Session session = driver.session()) {
+        failed += session.executeWrite(tx -> tx.run(FAIL_STALE, params).single().get("n").asLong());
+      }
+    }
+    return failed;
   }
 
   /** Удаляет терминальные прогоны сверх {@code keep-per-source} на адаптер; возвращает число удалённых. */
@@ -99,13 +140,13 @@ public class HousekeepingJob {
   /** Переводит брошенные {@code STARTED} в {@code FAILED} и удаляет записи старше retention. */
   void cleanAudit() {
     Instant now = clock.instant();
-    java.sql.Timestamp stale = java.sql.Timestamp.from(now.minus(props.staleAfter()));
+    Timestamp stale = Timestamp.from(now.minus(props.staleAfter()));
     jdbc.update(
         "UPDATE admin_audit SET status = 'FAILED', error = 'abandoned', finished_at = ?"
             + " WHERE status = 'STARTED' AND started_at < ?",
-        java.sql.Timestamp.from(now), stale);
+        Timestamp.from(now), stale);
     jdbc.update(
         "DELETE FROM admin_audit WHERE started_at < ?",
-        java.sql.Timestamp.from(now.minus(admin.auditRetention())));
+        Timestamp.from(now.minus(admin.auditRetention())));
   }
 }

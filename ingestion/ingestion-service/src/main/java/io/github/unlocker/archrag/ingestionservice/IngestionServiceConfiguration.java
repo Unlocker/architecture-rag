@@ -129,9 +129,10 @@ public class IngestionServiceConfiguration {
 
   /** Зависшие прогоны и retention {@code SyncRun} и {@code admin_audit}. */
   @Bean
+  @ConditionalOnProperty(name = "archrag.sync-run.enabled", havingValue = "true", matchIfMissing = true)
   HousekeepingJob housekeepingJob(
-      Driver driver, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin, PostgresEventJournal migrated) {
-    return new HousekeepingJob(driver, jdbc, props, admin, Clock.systemUTC());
+      Driver driver, EventJournal journal, JdbcTemplate jdbc, SyncRunProperties props, AdminProperties admin, PostgresEventJournal migrated) {
+    return new HousekeepingJob(driver, journal, jdbc, props, admin, Clock.systemUTC());
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */
