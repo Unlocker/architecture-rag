@@ -13,7 +13,7 @@ class StalenessTest {
 
   private static final Instant NOW = Instant.parse("2026-10-05T12:00:00Z");
   private final Staleness staleness =
-      new Staleness(new StalenessProperties(Duration.ofDays(7)), Clock.fixed(NOW, ZoneOffset.UTC));
+      new Staleness(Duration.ofDays(7), Clock.fixed(NOW, ZoneOffset.UTC));
 
   @Test
   void freshTimeIsNotStale() {
@@ -58,7 +58,7 @@ class StalenessTest {
 
   @Test
   void nonPositiveThresholdIsRejected() {
-    assertThatThrownBy(() -> new StalenessProperties(Duration.ZERO)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new StalenessProperties(Duration.ofDays(-1))).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new Staleness(Duration.ZERO, Clock.systemUTC())).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new Staleness(Duration.ofDays(-1), Clock.systemUTC())).isInstanceOf(IllegalArgumentException.class);
   }
 }

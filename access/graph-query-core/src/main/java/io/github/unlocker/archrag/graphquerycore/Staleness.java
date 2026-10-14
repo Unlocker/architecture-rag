@@ -17,8 +17,15 @@ public final class Staleness {
   private final Duration staleAfter;
   private final Clock clock;
 
-  public Staleness(StalenessProperties properties, Clock clock) {
-    this.staleAfter = properties.staleAfter();
+  /**
+   * @param staleAfter порог устаревания, строго положительный
+   * @param clock источник текущего времени
+   */
+  public Staleness(Duration staleAfter, Clock clock) {
+    if (staleAfter.isZero() || staleAfter.isNegative()) {
+      throw new IllegalArgumentException("stale-after must be positive");
+    }
+    this.staleAfter = staleAfter;
     this.clock = clock;
   }
 

@@ -19,11 +19,6 @@
       <groupId>io.github.unlocker.archrag</groupId>
       <artifactId>canonical-model</artifactId>
     </dependency>
-    <!-- @ConfigurationProperties для StalenessProperties; версия из BOM. -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot</artifactId>
-    </dependency>
     <dependency>
       <groupId>org.neo4j.driver</groupId>
       <artifactId>neo4j-java-driver</artifactId>

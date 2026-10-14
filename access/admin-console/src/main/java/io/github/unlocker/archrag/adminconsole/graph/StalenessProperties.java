@@ -1,4 +1,4 @@
-package io.github.unlocker.archrag.graphquerycore;
+package io.github.unlocker.archrag.adminconsole.graph;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;

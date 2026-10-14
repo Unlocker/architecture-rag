@@ -12,7 +12,6 @@ import static org.mockito.Mockito.when;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.graphquerycore.Staleness;
-import io.github.unlocker.archrag.graphquerycore.StalenessProperties;
 import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
 import java.time.Clock;
@@ -38,7 +37,7 @@ class TraceDependenciesToolTest {
 
   @BeforeEach
   void setUp() {
-    tool = new TraceDependenciesTool(queries, limits, new Staleness(new StalenessProperties(Duration.ofDays(7)), CLOCK));
+    tool = new TraceDependenciesTool(queries, limits, new Staleness(Duration.ofDays(7), CLOCK));
   }
 
   private static Map<String, Object> node(String gid) {
@@ -272,6 +271,19 @@ class TraceDependenciesToolTest {
     var stale = result.nodes().stream().collect(java.util.stream.Collectors.toMap(
         TraceDependenciesResult.NodeRef::gid, TraceDependenciesResult.NodeRef::stale));
     assertThat(stale).containsEntry("onThreshold", false).containsEntry("justOlder", true).containsEntry("never", true);
+  }
+
+  @Test
+  void unparseableTimesAreStaleWithoutException() {
+    returning(
+        "trace_downstream",
+        false,
+        row(List.of(node("start"), node("bad", "not-a-date", List.of())), rel("DEPENDS_ON", "start", "bad", "not-a-date", true)));
+
+    var result = tool.traceDependencies(GID, null, null, null, null, null);
+
+    assertThat(result.nodes()).filteredOn(n -> n.gid().equals("bad")).singleElement().satisfies(n -> assertThat(n.stale()).isTrue());
+    assertThat(result.relations()).singleElement().satisfies(r -> assertThat(r.stale()).isTrue());
   }
 
   @Test

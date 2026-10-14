@@ -36,10 +36,23 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** API консоли целиком: безопасность, валидация, формы ответов, аудит. Граф подменён, Docker не нужен. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@org.springframework.context.annotation.Import(ConsoleApiTest.FixedClockConfig.class)
 class ConsoleApiTest {
 
   static final String GID = "11111111-1111-1111-1111-111111111111";
   static final String ADMIN = "architecture.admin";
+
+  static final java.time.Instant NOW = java.time.Instant.parse("2026-10-05T12:00:00Z");
+
+  /** Фиксированные часы: возраст узла в тестах карточки считается от {@link #NOW}. */
+  @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+  static class FixedClockConfig {
+    @org.springframework.context.annotation.Bean
+    @org.springframework.context.annotation.Primary
+    java.time.Clock fixedClock() {
+      return java.time.Clock.fixed(NOW, ZoneOffset.UTC);
+    }
+  }
 
   @LocalServerPort int port;
   @MockitoBean GraphQueryExecutor executor;
@@ -328,10 +341,12 @@ class ConsoleApiTest {
 
   @Test
   void nodeCardStaleIsComputedOnServer() {
-    String fresh = java.time.Instant.now().minus(Duration.ofHours(1)).toString();
-    String old = java.time.Instant.now().minus(Duration.ofDays(8)).toString();
+    String fresh = NOW.minus(Duration.ofHours(1)).toString();
+    String old = NOW.minus(Duration.ofDays(8)).toString();
 
     assertThat(staleFlag(fresh, true, true)).isFalse();
+    assertThat(staleFlag(NOW.minus(Duration.ofDays(7)).toString(), true, true)).isFalse();
+    assertThat(staleFlag(NOW.minus(Duration.ofDays(7)).minusSeconds(1).toString(), true, true)).isTrue();
     assertThat(staleFlag(old, true, true)).isTrue();
     assertThat(staleFlag(null, true, true)).isTrue();
     assertThat(staleFlag("not-a-date", true, true)).isTrue();
@@ -341,7 +356,7 @@ class ConsoleApiTest {
 
   @Test
   void closedNodeCardIsNeverStale() {
-    String old = java.time.Instant.now().minus(Duration.ofDays(30)).toString();
+    String old = NOW.minus(Duration.ofDays(30)).toString();
 
     assertThat(staleFlag(old, false, null)).isFalse();
     assertThat(staleFlag(null, false, false)).isFalse();

@@ -6,6 +6,7 @@ import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
 import io.github.unlocker.archrag.mcpserver.tools.FindRuntimeFootprintResult.*;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -190,7 +191,15 @@ public class FindRuntimeFootprintTool {
   /** lastSeenAt из строки Cypher в UTC ISO-8601; {@code null}, если не задан. */
   private static String seen(Map<String, Object> node) {
     Object v = node.get("lastSeenAt");
-    return v == null ? null : OffsetDateTime.parse((String) v).toInstant().toString();
+    if (v == null) {
+      return null;
+    }
+    try {
+      return OffsetDateTime.parse((String) v).toInstant().toString();
+    } catch (DateTimeParseException e) {
+      // Нераспознанное время не отдаём и не роняем вызов: узел считается устаревшим, как при null.
+      return null;
+    }
   }
 
   private static void warn(
