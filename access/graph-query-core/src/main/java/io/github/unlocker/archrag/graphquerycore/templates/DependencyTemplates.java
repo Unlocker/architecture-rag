@@ -1,9 +1,9 @@
 package io.github.unlocker.archrag.graphquerycore.templates;
 
-import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
-import io.github.unlocker.archrag.graphquerycore.ResultKind;
 import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
 import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
+import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
+import io.github.unlocker.archrag.graphquerycore.ResultKind;
 import java.util.List;
 import java.util.Set;
 
