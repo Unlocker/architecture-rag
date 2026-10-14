@@ -125,6 +125,7 @@ class ExplainProvenanceIT {
     mcp = new AnnotationConfigApplicationContext();
     mcp.registerBean(GraphQueryExecutor.class, () -> executor);
     mcp.registerBean(QueryLimits.class, () -> LIMITS);
+    mcp.registerBean(AuthorityMatrix.class, AuthorityMatrix::defaults);
     mcp.register(io.github.unlocker.archrag.mcpserver.graph.GraphQueries.class, ExplainProvenanceTool.class);
     mcp.refresh();
     tool = mcp.getBean(ExplainProvenanceTool.class);

@@ -31,7 +31,6 @@ import tools.jackson.databind.json.JsonMapper;
 public class StoredEventReader {
 
   static final String COMPLETENESS_KEY = "_completeness";
-  static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   private static final String OPERATION_DELETE = "DELETE";
 
   private final JsonMapper json;
@@ -52,7 +51,7 @@ public class StoredEventReader {
     if (!root.isObject()) {
       throw new IllegalArgumentException("raw payload is not a JSON object");
     }
-    if (TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
+    if (CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
       return marker(stored, root);
     }
     boolean delete = OPERATION_DELETE.equals(text(root, "operation"));

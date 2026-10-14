@@ -46,7 +46,7 @@ class JournalDispatcherTest {
   private static final Instant NOW = Instant.parse("2026-10-05T10:00:00Z");
   private static final Duration RETRY_DELAY = Duration.ofSeconds(30);
   private static final String UPSERT = CanonicalEvent.TYPE_ASSET_UPSERTED;
-  private static final String MARKER = StoredEventReader.TYPE_SNAPSHOT_COMPLETE;
+  private static final String MARKER = CanonicalEvent.TYPE_SNAPSHOT_COMPLETE;
 
   private final JournalReader reader = mock(JournalReader.class);
   private final EventJournal journal = mock(EventJournal.class);

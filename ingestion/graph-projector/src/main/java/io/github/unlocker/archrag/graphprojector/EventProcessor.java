@@ -91,14 +91,10 @@ public final class EventProcessor {
   static final String SYSTEM_PROPERTY = "eamSystemId";
   /** Свойство узла, несущее платформу ИТ-системы и решения; имя {@code RELATION}-конфликта (ADR 0031). */
   static final String PLATFORM_PROPERTY = "platformId";
-  static final String TYPE_ASSET_DELETED = "architecture.asset.deleted.v1";
   private static final String COMPLETENESS_KEY = "_completeness";
   private static final String PARTIAL = "PARTIAL";
-  static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
-  static final String SCHEMA_ASSET_DELETED = "urn:corp:schema:asset-deleted:1";
   private static final String IT_SYSTEM_TYPE = "IT_SYSTEM";
   private static final String SOLUTION_TYPE = "SOLUTION";
-  private static final String SOURCE_PREFIX = "urn:corp:";
 
   /** Код карантина для события, исчерпавшего лимит повторов. */
   public static final String RETRY_LIMIT_EXCEEDED = "RETRY_LIMIT_EXCEEDED";
@@ -245,8 +241,8 @@ public final class EventProcessor {
     }
     return switch (event.type()) {
       case CanonicalEvent.TYPE_ASSET_UPSERTED -> upsert(event, raw, entry);
-      case TYPE_ASSET_DELETED -> delete(event, entry);
-      case TYPE_SNAPSHOT_COMPLETE -> snapshotComplete(event, entry);
+      case CanonicalEvent.TYPE_ASSET_DELETED -> delete(event, entry);
+      case CanonicalEvent.TYPE_SNAPSHOT_COMPLETE -> snapshotComplete(event, entry);
       default -> quarantine(event, "UNSUPPORTED_EVENT_TYPE", "event type is not supported");
     };
   }
@@ -354,7 +350,7 @@ public final class EventProcessor {
     if (source == null) {
       return quarantine(event, "UNKNOWN_SOURCE", "event source is not known");
     }
-    if (!SCHEMA_ASSET_DELETED.equals(event.dataschema())) {
+    if (!CanonicalEvent.SCHEMA_DELETED.equals(event.dataschema())) {
       return quarantine(event, "UNKNOWN_SCHEMA_VERSION", "dataschema version is not supported");
     }
     AssetEventData data = event.data();
@@ -734,7 +730,7 @@ public final class EventProcessor {
   }
 
   private ProcessingResult quarantine(CanonicalEvent event, String code, String reason) {
-    if (TYPE_SNAPSHOT_COMPLETE.equals(event.type())) {
+    if (CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(event.type())) {
       // Единая точка: любой карантин маркера закрывает прогон как FAILED. Сбой записи уходит наружу до DLQ,
       // маркер остаётся необработанным и придёт на повтор.
       syncRuns.close(event.source(), event.data().sourceId(), event.id(), SyncRunStatus.FAILED);
@@ -759,15 +755,7 @@ public final class EventProcessor {
 
   /** Код системы по {@code source} события ({@code urn:corp:eam} → {@code EAM}); {@code null} для неизвестного. */
   static SourceSystemCode sourceCode(String urn) {
-    if (!urn.startsWith(SOURCE_PREFIX)) {
-      return null;
-    }
-    return switch (urn.substring(SOURCE_PREFIX.length())) {
-      case "eam" -> SourceSystemCode.EAM;
-      case "scm" -> SourceSystemCode.SCM;
-      case "cmdb" -> SourceSystemCode.CMDB;
-      case "deploymap" -> SourceSystemCode.DEPLOYMAP;
-      default -> null;
-    };
+    // MANUAL — источник ручной модерации, событий от него быть не может
+    return SourceSystemCode.fromUrn(urn).filter(code -> code != SourceSystemCode.MANUAL).orElse(null);
   }
 }

@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.eventschemas.EventJournal;
 import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
 import io.github.unlocker.archrag.graphprojector.SyncRunCounts;
@@ -54,7 +55,6 @@ public class HousekeepingJob {
           + "DETACH DELETE old "
           + "RETURN count(*) AS n";
 
-  private static final String SOURCE_PREFIX = "urn:corp:";
   /** Префикс id маркера {@code snapshot-complete}: маркер в счётчики не входит. */
   private static final String MARKER_PREFIX = "snapshot-complete:";
 
@@ -111,7 +111,7 @@ public class HousekeepingJob {
     for (Map<String, Object> run : stale) {
       String runId = (String) run.get("runId");
       // Журнал читается вне транзакции Neo4j: в повторяемой функции драйвера побочных эффектов быть не должно.
-      String source = SOURCE_PREFIX + ((String) run.get("adapter")).toLowerCase(Locale.ROOT);
+      String source = sourceUrn((String) run.get("adapter"));
       Map<ProcessingStatus, Long> byStatus = journal.statusCounts(source, runId, MARKER_PREFIX + runId);
       SyncRunCounts counts = SyncRunCounts.of(byStatus);
       Map<String, Object> params =
@@ -149,5 +149,14 @@ public class HousekeepingJob {
     jdbc.update(
         "DELETE FROM admin_audit WHERE started_at < ?",
         Timestamp.from(now.minus(admin.auditRetention())));
+  }
+
+  /** {@code SyncRun.adapter} ({@code EAM}) → {@code urn:corp:eam}; неизвестное значение отдаёт пустой журнал. */
+  private static String sourceUrn(String adapter) {
+    try {
+      return SourceSystemCode.valueOf(adapter.toUpperCase(Locale.ROOT)).urn();
+    } catch (IllegalArgumentException e) {
+      return SourceSystemCode.URN_PREFIX + adapter.toLowerCase(Locale.ROOT);
+    }
   }
 }

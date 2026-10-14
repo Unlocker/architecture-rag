@@ -378,6 +378,12 @@ class NormalizerTest {
   }
 
   @Test
+  void manualSourceIsQuarantinedAsUnknown() {
+    var e = event("urn:corp:manual", "urn:corp:schema:asset-upserted:1", "TEAM", "t", fields("name", "N"));
+    assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("UNKNOWN_SOURCE");
+  }
+
+  @Test
   void unknownSourceIsQuarantined() {
     var e = event("urn:corp:hr", "urn:corp:schema:asset-upserted:1", "TEAM", "t", fields("name", "N"));
     assertThat(((Quarantined) normalizer.normalize(e, RAW)).errorCode()).isEqualTo("UNKNOWN_SOURCE");

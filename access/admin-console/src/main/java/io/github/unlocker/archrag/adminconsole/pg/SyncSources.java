@@ -1,35 +1,30 @@
 package io.github.unlocker.archrag.adminconsole.pg;
 
 import io.github.unlocker.archrag.adminconsole.api.InvalidRequestException;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
+import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * Источники синхронизации и статусы событий: allowlist фильтров API.
  *
- * <p>Значения продублированы из {@code ProcessingStatus} (event-schemas) и {@code SourceSystemCode}
+ * <p>Значения берутся из {@code ProcessingStatus} (event-schemas) и {@code SourceSystemCode}
  * (canonical-model): консоль не зависит от ingestion. В {@code inbox_event.source} лежит URN
  * {@value #URN_PREFIX}{@code <код>}, API работает с коротким кодом.
  */
 public final class SyncSources {
 
   /** Префикс URN источника в {@code inbox_event.source} и {@code consumer_checkpoint.source}. */
-  public static final String URN_PREFIX = "urn:corp:";
+  public static final String URN_PREFIX = SourceSystemCode.URN_PREFIX;
 
-  /** Короткие коды источников в порядке отдачи; совпадают с {@code SourceSystemCode} в lowercase (тест). */
-  public static final List<String> CODES = List.of("eam", "scm", "cmdb", "deploymap", "manual");
+  /** Короткие коды источников в порядке {@code SourceSystemCode}. */
+  public static final List<String> CODES =
+      Arrays.stream(SourceSystemCode.values()).map(SourceSystemCode::code).toList();
 
-  /** Статусы {@code inbox_event.status} ({@code ProcessingStatus}). */
+  /** Статусы {@code inbox_event.status} в порядке {@code ProcessingStatus}. */
   public static final List<String> STATUSES =
-      List.of(
-          "RECEIVED",
-          "VALIDATED",
-          "NORMALIZED",
-          "RESOLVED",
-          "PROJECTED",
-          "QUARANTINED",
-          "RETRYING",
-          "DUPLICATE",
-          "IGNORED_OLD_VERSION");
+      Arrays.stream(ProcessingStatus.values()).map(Enum::name).toList();
 
   private SyncSources() {}
 
