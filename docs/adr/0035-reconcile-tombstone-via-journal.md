@@ -1,4 +1,4 @@
-# 0034. Reconcile: tombstone через журнал, missing set по журналу, ручной reconcile — новый snapshot
+# 0035. Reconcile: tombstone через журнал, missing set по журналу, ручной reconcile — новый snapshot
 
 - **Статус:** Принято
 - **Дата:** 2026-10-13
@@ -14,7 +14,7 @@ ADR [0020](0020-tombstone-instead-of-hard-delete.md) фиксирует «уда
 Как в коде сейчас:
 
 1. **Tombstone идёт через журнал.** Каждый tombstone `Reconciler` до записи в граф фиксируется событием `architecture.asset.deleted.v1` с `eventId = reconcile:<syncRunId>:<sourceType>/<sourceId>` и raw в S3, чтобы replay и rebuild воспроизводили удаления. Повтор даёт ту же строку и доводит её до конечного статуса (`ingestion/graph-projector/.../Reconciler.java:44-47`, `:61`, `:157-171`).
-2. **Missing set считается по журналу, а не по графу** (`Reconciler.java:105-119`): объект, по которому после начала прогона пришло любое событие, не удаляется; прогон, в котором событий меньше заявленного `objectCount`, считается неполным и не удаляет ничего (`Reconciler.java:37-42`, `:106`). Tombstone несёт версию применённой записи ([ADR 0032](0032-source-version-numeric-idempotency.md)): обновлённый объект не удаляется.
+2. **Missing set считается по журналу, а не по графу** (`Reconciler.java:105-119`): объект, по которому после начала прогона пришло любое событие, не удаляется; прогон, в котором событий меньше заявленного `objectCount`, считается неполным и не удаляет ничего (`Reconciler.java:37-42`, `:106`). Tombstone несёт версию применённой записи ([ADR 0033](0033-source-version-numeric-idempotency.md)): обновлённый объект не удаляется.
 3. **Ручной reconcile — это новый полный snapshot.** `POST /admin/reconcile/{source}` не пересчитывает прежний missing set, а вызывает `POST /control/snapshot` в adapter-сервисе (`ingestion/ingestion-service/.../AdminController.java:95-102`, `adapters/adapter-core/.../WebhookServer.java:18`, `:56`); удаления делает `Reconciler` по маркеру `snapshot-complete`.
 
 Целевое решение (в коде этого нет, реализация — UNLOCKER-276 пп. 6, 11, 15):
@@ -39,4 +39,4 @@ ADR [0020](0020-tombstone-instead-of-hard-delete.md) фиксирует «уда
 
 ## Связанные ADR
 
-[0013](0013-operator-ops-via-admin-endpoint.md) — админский эндпоинт. [0020](0020-tombstone-instead-of-hard-delete.md) — tombstone и `snapshot-complete`. [0032](0032-source-version-numeric-idempotency.md) — версия tombstone.
+[0013](0013-operator-ops-via-admin-endpoint.md) — админский эндпоинт. [0020](0020-tombstone-instead-of-hard-delete.md) — tombstone и `snapshot-complete`. [0033](0033-source-version-numeric-idempotency.md) — версия tombstone.

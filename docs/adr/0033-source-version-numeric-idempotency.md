@@ -1,4 +1,4 @@
-# 0032. Версия источника — неотрицательное целое; идемпотентность по сравнению через `BigInteger`
+# 0033. Версия источника — неотрицательное целое; идемпотентность по сравнению через `BigInteger`
 
 - **Статус:** Принято
 - **Дата:** 2026-10-13
@@ -34,9 +34,9 @@ ADR [0006](0006-postgres-inbox-event-backbone.md) и [0020](0020-tombstone-inste
 ## Последствия
 
 - **Положительные:** повтор и устаревшее событие не меняют граф; tombstone и upsert одной версии не конфликтуют; параллельные проекции не обгоняют друг друга.
-- **Отрицательные / ограничения:** источник без монотонной числовой версии не подключается; версия длиннее 40 цифр отклоняется; версия tombstone, который создаёт `Reconciler`, берётся из применённой записи ([ADR 0034](0034-reconcile-tombstone-via-journal.md)).
+- **Отрицательные / ограничения:** источник без монотонной числовой версии не подключается; версия длиннее 40 цифр отклоняется; версия tombstone, который создаёт `Reconciler`, берётся из применённой записи ([ADR 0035](0035-reconcile-tombstone-via-journal.md)).
 - **Затронутый код:** `contracts/event-schemas` (`SourceVersion`), `ingestion/graph-projector` (`VersionDecision`, `EventProcessor`, `GraphProjector`).
 
 ## Связанные ADR
 
-[0006](0006-postgres-inbox-event-backbone.md) — журнал и статусы событий. [0020](0020-tombstone-instead-of-hard-delete.md) — tombstone. [0008](0008-authority-matrix-field-level.md) — отказ от last-write-wins. [0034](0034-reconcile-tombstone-via-journal.md) — версия tombstone при reconcile.
+[0006](0006-postgres-inbox-event-backbone.md) — журнал и статусы событий. [0020](0020-tombstone-instead-of-hard-delete.md) — tombstone. [0008](0008-authority-matrix-field-level.md) — отказ от last-write-wins. [0035](0035-reconcile-tombstone-via-journal.md) — версия tombstone при reconcile.

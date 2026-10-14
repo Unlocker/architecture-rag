@@ -1,4 +1,4 @@
-# 0038. Webhook — только триггер: данные берутся у источника через `fetchById`
+# 0039. Webhook — только триггер: данные берутся у источника через `fetchById`
 
 - **Статус:** Принято
 - **Дата:** 2026-10-13
@@ -27,10 +27,10 @@ Webhook приходит из внешней по отношению к граф
 
 ## Последствия
 
-- **Положительные:** граница доверия — ответ источника, а не тело запроса; повтор уведомления даёт `DUPLICATE` ([ADR 0032](0032-source-version-numeric-idempotency.md)).
-- **Отрицательные / ограничения:** источник должен поддерживать `fetchById`; `/control/snapshot` на том же сервере аутентификации не имеет, это известное ограничение, целевая авторизация — в UNLOCKER-276, п. 11 ([ADR 0034](0034-reconcile-tombstone-via-journal.md)).
+- **Положительные:** граница доверия — ответ источника, а не тело запроса; повтор уведомления даёт `DUPLICATE` ([ADR 0033](0033-source-version-numeric-idempotency.md)).
+- **Отрицательные / ограничения:** источник должен поддерживать `fetchById`; `/control/snapshot` на том же сервере аутентификации не имеет, это известное ограничение, целевая авторизация — в UNLOCKER-276, п. 11 ([ADR 0035](0035-reconcile-tombstone-via-journal.md)).
 - **Затронутый код:** `contracts/source-spi` (`WebhookSignature`), `adapters/adapter-core` (`WebhookHandler`, `WebhookServer`).
 
 ## Связанные ADR
 
-[0010](0010-master-systems-are-stubs.md) — источники-заглушки. [0014](0014-sla-webhook-to-neo4j.md) — SLA webhook. [0032](0032-source-version-numeric-idempotency.md) — дубли. [0034](0034-reconcile-tombstone-via-journal.md) — `/control/snapshot`.
+[0010](0010-master-systems-are-stubs.md) — источники-заглушки. [0014](0014-sla-webhook-to-neo4j.md) — SLA webhook. [0033](0033-source-version-numeric-idempotency.md) — дубли. [0035](0035-reconcile-tombstone-via-journal.md) — `/control/snapshot`.
