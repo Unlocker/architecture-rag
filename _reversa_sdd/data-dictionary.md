@@ -394,7 +394,7 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (элеме
 | `error_code` | text | нет | обязателен (`toDlq` бросает `IllegalArgumentException` при пустом) |
 | `payload_key` | text | да | копия ссылки на raw |
 | `created_at` | timestamptz | нет | |
-| `replayed_at` | timestamptz | да | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **в коде не заполняется** (code-analysis §Q1.5) |
+| `replayed_at` | timestamptz | да | 🟢 (реализовано — UNLOCKER-281) заполняет `EventJournal.closeDlq` при replay и release из карантина (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`); `NULL` = запись ещё не разобрана |
 
 Частичный уникальный индекс `uq_dlq_entry_open (source,event_id) WHERE replayed_at IS NULL` — «одна открытая запись на событие» (`V1__event_journal.sql:47-48`).
 
@@ -469,7 +469,7 @@ PK `(source, source_type, source_id, feature)` — **одно значение �
 | `label_family` | text | |
 | `matched` | jsonb NOT NULL | массив `{feature, value}` в порядке признаков |
 | `score` | numeric(3,2) NOT NULL | 0.00–1.00 |
-| `status` | text NOT NULL DEFAULT `'OPEN'` | 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] других значений код не выставляет |
+| `status` | text NOT NULL DEFAULT `'OPEN'` | 🟢 (реализовано — UNLOCKER-282) `OPEN` → `RESOLVED` при подтверждении оператором (`ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresCandidateApprovals.java:45`) |
 | `first_seen_at`, `updated_at` | timestamptz | `first_seen_at` не меняется при повторе |
 
 Индекс `ix_identity_candidate_right (right_*)`. Запись `IdentityCandidate(left, right, labelFamily, matched, score, status, firstSeenAt, updatedAt)` без инвариантов в конструкторе (`IR/IdentityCandidate.java:14-22`) 🟡.
@@ -1123,7 +1123,7 @@ Upsert всегда `COMPLETE` (`StubSource.upsert`); удаление и `PARTI
 | `POST /control/upsert` | `{"type": "platforms"\|"itproducts"\|"itsystems", "id": <целое>, "attrs": <объект>}` | `200 {"ver":N}` — `attrs` **заменяются целиком**; `ver=1` у нового, `+1` при изменении, прежнее при идентичных `attrs` | `400 {"error":"invalid request"}` (не JSON, неизвестный `type`, нецелый `id`, `attrs` не объект, тело слишком большое); `405 {"error":"POST expected"}` |
 | `POST /control/archive` | `{"type": …, "id": <целое>}` | `200 {}` — объект исчезает из `GET /api/{type}/` и `/{id}/`; для неизвестного объекта тоже `200` | те же `400`/`405` |
 
-Допустимые `type` зашиты литералами `Set.of("platforms","itproducts","itsystems")` (`:27`), а не константами `EamApiSeed` (🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 20)] `code-analysis.md` §Y2.7). `id` принимается только как JSON-целое (`Long` из `adapter-core.Json`), дробное и строковое значения отвергаются. 🟢
+Допустимые `type` зашиты литералами `Set.of("platforms","itproducts","itsystems")` (`:27`), а не константами `EamApiSeed` (на момент анализа; 🟢 (реализовано — UNLOCKER-287): `EamApiControl` берёт типы из `EamApiSeed.TYPES`, `platform/source-stubs/src/main/java/io/github/unlocker/archrag/sourcestubs/EamApiSeed.java:31`; `code-analysis.md` §Y2.7). `id` принимается только как JSON-целое (`Long` из `adapter-core.Json`), дробное и строковое значения отвергаются. 🟢
 
 ### Y.2.7 Лимиты и таймауты
 

@@ -77,7 +77,7 @@
 - Gauges `archrag.ingestion.sync.lag` (секунды, самый старый ожидающий `inbox_event` по `source`) и `archrag.ingestion.dlq.open` (`dlq_entry WHERE replayed_at IS NULL`) обновляются `@Scheduled(fixedDelayString = "${archrag.metrics.refresh-interval:15s}")`; ожидающие статусы: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, RETRYING` (`:62-71, 131-147`) 🟢. `DataAccessException` → `LOG.warn` с классом, прежние значения сохраняются.
 - Счётчик `archrag.normalizer.unmapped.values{source,property}`: растёт на предупреждения нормализатора из таблицы `UNMAPPED_PROPERTIES = {UNMAPPED_CRITICALITY → criticality}`; предрегистрируется для `EAM`/`criticality`. Источник сообщений — `EventProcessor` (`metrics::recordWarnings`) (`:50-52, 93, 100-112`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionServiceConfiguration.java:110-111`) 🟢.
 - `sourceTag`: `urn:corp:eam` → `eam`; код вне `SourceSystem` → `unknown` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:150-154`) 🟢. Теги `source` счётчика предупреждений — `SourceSystemCode.name().toLowerCase()` (`:109-112`); для `DEPLOYMAP` и `deploymap` совпадает с `SourceSystem.DEPLOY_MAP.code()` (`contracts/source-spi/src/main/java/io/github/unlocker/archrag/sourcespi/SourceSystem.java:9`, `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/provenance/SourceSystemCode.java:4-6`) 🟢.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Метрика `dlq.open` не уменьшается (колонка `replayed_at` нигде не пишется) — см. [`questions.md`](questions.md) Q-03.
+- 🟢 (реализовано — UNLOCKER-281) Метрика `dlq.open` считает `replayed_at IS NULL` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:78`) и уменьшается после разбора записи — см. [`questions.md`](questions.md) Q-03.
 
 ## Конфигурация
 
@@ -133,9 +133,9 @@
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] Нет лимита повторов `RETRYING`; постоянная ошибка повторяется бесконечно — Q-01.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `QUARANTINED` — тупик для оператора (REST-операции нет) — Q-02.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `dlq_entry.replayed_at` не пишется — Q-03.
+- 🟢 (реализовано — UNLOCKER-281) Лимит повторов `RETRYING`: после `archrag.dispatcher.max-attempts` (10 по умолчанию, `application.yml:64`) событие уходит в `QUARANTINED` с `RETRY_LIMIT_EXCEEDED` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:100`) — Q-01.
+- 🟢 (реализовано — UNLOCKER-281) Выход из `QUARANTINED`: `POST /admin/quarantine/release` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:115`) — Q-02.
+- 🟢 (реализовано — UNLOCKER-281) `dlq_entry.replayed_at` пишет `closeDlq` (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`) — Q-03.
 - 🔴 Replay/rebuild прерываются на первой «битой» строке журнала — Q-04, [`replay-rebuild/design.md`](replay-rebuild/design.md).
 - 🟢 [R.8: ответ владельца, вопрос 9] Литералы типов событий без общего источника и без теста — Q-05.
 - 🟡 `JournalDispatcher.stop()` необратим: повторный `DispatcherRunner.start()` создаст executor, но `runOnce` сразу вернёт 0 (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:63, 89-91, 99`) — Q-09.

@@ -20,8 +20,8 @@
 - **Аудит чтений.** Каждое SQL-чтение пишется в read-аудит (логгер `archrag.audit.console`): `endpoint = "GET /api/sync/events"`, `templates = ["sql:inbox_event"]`, `rows = 2`; `request`/`result` больше 6000 символов не возвращаются (`null` и флаги `requestTruncated`/`resultTruncated`) 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:220-248`).
 - **Журнал событий.** Фильтры `source`/`status`/период и порядок по убыванию времени; пагинация и потолок `size` (201 → `400`); метаданные события содержат `payloadRef`/`contentHash`, но **не payload**; детали события с историей DLQ, неизвестное → `404`; список DLQ с `replayedAt = null`; сводка источников (checkpoint, счётчики по статусам, `lastProjectedAt`, `lagSeconds`, последний `SyncRun`, нули и `null` для пустого источника); конфликты (по умолчанию `OPEN`, `RESOLVED` явным фильтром) и кандидаты; аудит операций с `request`/`result` 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncConsoleIT.java:263-375`).
 - **Метрики.** `archrag.ingestion.sync.lag` по источнику — возраст старейшего нетерминального события (`RECEIVED`/`RETRYING`); `PROJECTED` и `QUARANTINED` не в счёт; у пустых источников и неизвестного `cmdb` — 0; `archrag.ingestion.dlq.open` считает только непереигранные записи 🟢 (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/IngestionMetricsIT.java:38-61`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 2)] Тесты закрепляют состояния, недостижимые в проде: `replayedAt = null` и «переигранные» DLQ-записи, вставленные SQL-ом (Р-3); `SyncRun` со статусом `SUCCEEDED`, вставленный Cypher-ом (Р-5) — Q-07, Q-08.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 11)] Негативы безопасности неполны: `/admin/crosswalks` без 401, audience, `azp`; `/admin/reconcile/*` без audience, `azp`; консоль — без audience и `azp` вообще, `/api/graph/*`, `/api/identity/*`, `/api/sync/dlq|sources` без отказов — Q-01.
+- 🟢 (реализовано — UNLOCKER-280, 281) Состояния, которые тесты вставляют напрямую (`replayedAt = null` и «переигранные» DLQ-записи — SQL-ом, Р-3; `SyncRun` со статусом `SUCCEEDED` — Cypher-ом, Р-5), теперь достижимы в проде (`ingestion/event-journal/src/main/java/io/github/unlocker/archrag/eventjournal/PostgresEventJournal.java:213-228`; `SyncRunWriter`) — Q-07, Q-08; фикстуры остаются прямыми вставками.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-290; закрыто частично: роли admin/reader и отказы по audience/issuer/exp в `McpSecurityTest`/`AdminEndpointIT`; для консоли и приёмочных IT негативы не добавлены] Негативы безопасности неполны: `/admin/crosswalks` без 401, audience, `azp`; `/admin/reconcile/*` без audience, `azp`; консоль — без audience и `azp` вообще, `/api/graph/*`, `/api/identity/*`, `/api/sync/dlq|sources` без отказов — Q-01.
 
 ## Requisitos Funcionais
 
@@ -135,7 +135,7 @@
 | RF-01..RF-07 | Must | ADR 0013, 0026; критерии PoC 3, 4; ловушки 3, 13 |
 | RF-08 | Should | Критерий 9 (метрики) |
 | Роли внутри `architecture.admin` | Won't | Одна роль «оператор» (П-10) |
-| Закрытие DLQ и перевод кандидата | Won't | Не реализовано (Р-3, Р-4; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2, 3)] Q-08, Q-09) |
+| Закрытие DLQ и перевод кандидата | Won't | В консоли нет (она read-only); реализовано в ingestion-service: Р-3 — 🟢 (реализовано — UNLOCKER-281), Р-4 — 🟢 (реализовано — UNLOCKER-282) (Q-08, Q-09) |
 
 ## Rastreabilidade de Código
 

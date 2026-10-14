@@ -89,7 +89,7 @@ sequenceDiagram
 
 ## Riscos e Lacunas
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 4); ответ владельца: вопросы 14] Q-03: нет проверки побочных эффектов при transient-сбое; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 4); ответ владельца: вопросы 14] Q-10: курсор адаптера «после коммита Neo4j» не требуется — 🟢 [R.8: решение владельца, вопрос 4; UNLOCKER-283], ADR 0020 уточнён.
+- 🟡 [R.8: решение принято, реализация — UNLOCKER-283; ответ владельца: вопросы 14; не сделано] Q-03: нет проверки побочных эффектов при transient-сбое; 🟢 (реализовано — UNLOCKER-283) Q-10: курсор адаптера «после коммита Neo4j» не требуется — 🟢 [R.8: решение владельца, вопрос 4; UNLOCKER-283], ADR 0020 уточнён.
 - 🟡 Q-15: имитации (`SourceConflictIT` подделывает маркер) — вне этого use case, но тот же `Reconciler`.
 - 🟡 Q-17: `Thread.sleep(2000)`, p95 по реальному времени CI.
 - 🟡 `SyncAcceptanceIT.k2c` опирается на сервис из `k2a`, `k4` — на tombstone из `k2b` и версии из `k3` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/SyncAcceptanceIT.java:360-361, 447`).

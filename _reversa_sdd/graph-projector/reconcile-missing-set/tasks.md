@@ -9,7 +9,7 @@
 - [ ] **T-02. Конструктор и `Report`.** Шесть зависимостей с `requireNonNull`; `Report(int, int, int, int)`.
   Origin: `GP/Reconciler.java:70-86`. Критерий готовности: `ReconcilerTest` компилируется и проходит. Уверенность: 🟢.
 - [ ] **T-03. Проверки полноты.** Источник известен; `eventCount < objectCount` → `IllegalStateException`; начало окна `touched`.
-  Origin: `GP/Reconciler.java:100-114`. Критерий готовности: AC-02, AC-09, AC-10. Уверенность: 🟢 (обязательность `objectCount` — 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] Q-05).
+  Origin: `GP/Reconciler.java:100-114`. Критерий готовности: AC-02, AC-09, AC-10. Уверенность: 🟢 (обязательность `objectCount` — 🟢 (реализовано — UNLOCKER-279), Q-05).
 - [ ] **T-04. Цикл по активным записям и счётчики.**
   Origin: `GP/Reconciler.java:115-143`. Критерий готовности: AC-01, AC-03, AC-07; IT `missedDeleteIsTombstonedAfterSnapshotAndNeighboursStayActive`. Уверенность: 🟢.
 - [ ] **T-05. `journalTombstone`, `rawDelete`, `quote`.** Идемпотентный append, шаги статусов по `ordinal()`/`RETRYING`, формат raw (контракт — [`../contracts.md`](../contracts.md) §6.1).
@@ -25,7 +25,7 @@
 
 - [ ] **TT-01.** `ReconcilerTest` (12 тестов): список в [`requirements.md`](requirements.md). Origin: `GPT/ReconcilerTest.java`. Уверенность: 🟢.
 - [ ] **TT-02.** `ReconciliationIT` (Docker): `missedDeleteIsTombstonedAfterSnapshotAndNeighboursStayActive`, `missedCreateAppearsAfterSnapshot`, `failureInTheMiddleOfSnapshotDeletesNothingAndRestartCompletesTheSameRun`, `quarantinedSnapshotObjectIsNotTreatedAsMissing`, `reprocessingTheSameMarkerChangesNothing`, `objectCreatedByWebhookDuringTheSnapshotWindowSurvivesThisRun`. Origin: `IT/ReconciliationIT.java`. Уверенность: 🟢.
-- [ ] **TT-03 (пробел).** Нет теста: маркер без `objectCount`; маркер с неизвестным источником через `EventProcessor`; `finishTombstone` для строки в `QUARANTINED`; replay строки `reconcile:…`. Уверенность: 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 6)] (Q-05, Q-11, Q-12).
+- [ ] **TT-03 (пробел).** Нет теста: маркер без `objectCount`; маркер с неизвестным источником через `EventProcessor`; `finishTombstone` для строки в `QUARANTINED`; replay строки `reconcile:…`. Уверенность: 🟡 [R.8: решение принято, реализация — UNLOCKER-279; код сделан, тест на маркер без `objectCount` добавлен в `EventProcessorTest`, остальные пробелы (Q-11, Q-12) остаются] (Q-05, Q-11, Q-12).
 
 ## Порядок
 

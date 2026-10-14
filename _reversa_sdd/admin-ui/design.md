@@ -103,7 +103,7 @@
 
 - 🟢 [UNLOCKER-280: реализовано] `health()` в «Источниках»: `RUNNING` — «идёт прогон» (`warn`), `FAILED` или `failed > 0` — `bad`, `SUCCEEDED` без `failed` — `ok`; прогон закрывает `EventProcessor` по маркеру (Q-01). Показывается `endedAt`.
 - 🟢 [UNLOCKER-281: реализовано] Вкладка DLQ по умолчанию просит `replayed=false`: после UNLOCKER-281 `replayed_at` заполняют replay и release, фильтр работает (Q-02). Кнопок replay/release в консоли нет: отложено по ADR 0026.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] Фильтр кандидатов `RESOLVED` пуст: `identity_candidate.status` не выходит из `OPEN` — Q-03.
+- 🟢 (реализовано — UNLOCKER-282) Фильтр кандидатов `RESOLVED` показывает кандидатов, закрытых подтверждением оператора: `identity_candidate.status` выставляет `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/PostgresCandidateApprovals.java:45` — Q-03. Кнопки закрытия в UI нет, операция доступна через `POST /admin/identity/candidates/approve`.
 - 🟢 [R.8: ответ владельца, вопрос 9] Порог «устарел» 7 суток не связан с `archrag.query.stale-after`; allowlist'ы продублированы без теста — Q-04, Q-05.
 - 🟡 `logout()` не подключён к UI; токен не обновляется тихо — Q-06, Q-07.
 - 🟡 Cytoscape под строгой CSP проверяется только в jsdom; реальная проверка — смоук стенда — Q-10.
