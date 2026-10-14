@@ -27,6 +27,13 @@
 - **Отрицательные / ограничения:** Изменение мастера — изменение кода и ADR.
 - **Затронутый код:** `contracts/canonical-model/...` (authority matrix)
 
+## Уточнение 2026-10-14
+
+Решение владельца (UNLOCKER-276, вопрос 7). Исходный текст выше не меняется. Истина — код (`AuthorityMatrix.defaults()`).
+
+- Мастер `DECOMPOSED_INTO` (ITSystem → Service) и `IMPLEMENTED_IN` — SCM; EAM остаётся мастером `DEPENDS_ON`, `OWNED_BY`, `USES_SOLUTION`, `USES_PLATFORM`. Свойства узлов, закреплённые за EAM явно: `ITSystem.criticality`, `eamCode`, `platformId`, `Solution.platformId` ([0031](0031-it-system-platform-invariant.md)).
+- `PART_OF` и `HOSTED_ON` нетемпоральны намеренно (`RelationType`, `temporal=false`): `PART_OF` в PoC не наполняется ([0011](0011-namespace-cluster-modeled-not-populated.md)), `HOSTED_ON` нормализатор не строит. Остальные бизнес-связи темпоральны ([0028](0028-structural-relations-temporal.md)).
+
 ## Связанные ADR
 
 [0003](0003-gid-and-source-record-identity.md), [0019](0019-identity-resolution-no-auto-merge.md)

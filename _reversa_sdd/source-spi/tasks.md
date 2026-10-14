@@ -7,7 +7,7 @@
 - [ ] Java 21 (records, `HexFormat` — Java 17+) 🟢
 - [ ] Родительский `pom.xml` с BOM и тестовыми зависимостями JUnit 5 + AssertJ (`pom.xml:164-171`) 🟢
 - [ ] Артефакт `io.github.unlocker.archrag:source-spi`, родитель `contracts` (`contracts/source-spi/pom.xml:7-15`) 🟢
-- [ ] Зависимость `canonical-model` — не нужна по коду; решение Q-01 🔴
+- [x] Зависимость `canonical-model` — не нужна по коду; штатная по решению владельца (вопрос 10), `CLAUDE.md` уточнён в UNLOCKER-288 🟢
 
 ## Tarefas
 

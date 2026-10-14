@@ -85,16 +85,16 @@
 | 4 | Реализация по ADR 0020 | узел закрывается по любым активным assertions; HWM после коммита Neo4j | ✅ UNLOCKER-283: код закрытия узла выровнен; HWM — уточнение ADR 0020 |
 | 5 | Удалить `CloseAssertion` | `canonical-model`, `graph-projector`, `normalizer` | задача кода; поправить `docs/06:82` |
 | 6 | ✅ Реализовано в UNLOCKER-279 | `Reconciler`: маркер без `objectCount` → карантин; `PARTIAL` → без удалений; порог массового закрытия `archrag.reconcile.max-missing-share` (0.5); tombstone вызывает `forget` | выполнено |
-| 7 | Истина — код | правка docs/ADR | задача архитектора (docs) |
-| 8 | Loopback — свойство стенда | дополнить ADR 0026 | задача архитектора (ADR) |
+| 7 | Истина — код | правка docs/ADR | ✅ UNLOCKER-288 |
+| 8 | Loopback — свойство стенда | ADR 0026 дополнен (уточнение 2026-10-14) | ✅ UNLOCKER-288 |
 | 9 | Анализ дублей и предложение | `spec-impact-matrix.md` §2 | задача анализа (без кода) |
-| 10 | Зависимость `contracts/*` → `canonical-model` — штатная | уточнить правило в `CLAUDE.md`; «починить, что сломается» — по факту сборки сломаться нечему (зависимость уже есть) | уточнение `CLAUDE.md` |
+| 10 | Зависимость `contracts/*` → `canonical-model` — штатная | правило в `CLAUDE.md` уточнено; сборка `./mvnw -B verify` не выявила поломок (зависимость уже есть) | ✅ UNLOCKER-288 |
 | 11 | Все API с авторизацией: admin — управление/контроль, reader — MCP | ~~`POST /control/snapshot` без аутентификации; MCP: scope только для `tools/call`; роль не проверяется~~ — реализовано в UNLOCKER-290: роли `archrag-console-admin` / `archrag-reader` проверяются во всех API | выполнено (UNLOCKER-290) |
 | 12 | Одна машина, скромные лимиты | NFR PoC: SLO/RPO-RTO не вводятся, задать лимиты контейнеров | ADR 0022 |
 | 13 | Источник deploy map — позже; проверка подключения EAM добавить | `eam-adapter` Q-1 | задача кода |
 | 14 | Пробелы тестов зафиксировать, не закрывать до приёмки | `integration-tests` Q-01…Q-35 остаются в specs | — |
 | 15, 18 | Дефекты | `Reconciler` без `forget`; `FindRuntimeFootprintTool` без нормализации `systemGid` | задачи кода |
-| 16 | Принять `localStorage` | ADR 0026:21 исправить; комментарий `authService.ts:36-37` | задача архитектора + мелкая правка |
+| 16 | Принять `localStorage` | ADR 0026 уточнён (`localStorage`); комментарий `authService.ts` исправлен | ✅ UNLOCKER-288 |
 | 17 | Аудит нужен | отказы `ToolScopeFilter.java:60-92` без аудита | задача кода |
 | 19 | ✅ Реализовано в UNLOCKER-286 | UI `AssetCard.tsx` `isStale` приведён к семантике `TraceDependenciesTool.java:187-190,228`; тест согласованности порога `constants.test.ts` | выполнено |
 | 20 | Нужны `MANUAL` и тест согласованности | `SyncSources.CODES`, `EamApiControl.java:27` | задача кода |

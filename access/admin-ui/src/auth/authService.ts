@@ -33,8 +33,8 @@ export async function loadConsoleConfig(fetchFn: typeof fetch = fetch): Promise<
 
 /**
  * OIDC Authorization Code + PKCE через oidc-client-ts.
- * Пользователь (и токены) хранится в InMemoryWebStorage; в sessionStorage остаётся только
- * одноразовое state/code_verifier на время редиректа.
+ * Пользователь (и токены) хранится в InMemoryWebStorage. stateStore не задан, поэтому одноразовое
+ * state/code_verifier на время редиректа oidc-client-ts по умолчанию держит в localStorage (ADR 0026).
  */
 export function createOidcAuthService(config: ConsoleConfig): AuthService {
   const redirectUri = `${window.location.origin}/`;

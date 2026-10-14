@@ -1,6 +1,6 @@
 # Интерфейсы взаимодействия прототипа
 
-Документ описывает интерфейсы по фактическому коду в `develop` (после E1, E4, F1–F4). Всё, чего в коде нет (топология compose из E5, tools вне PoC), отмечено явно; порты и пути compose, публикация через reverse proxy и `/control/upsert` заглушки описываются после вливания E5 (строки «— (E5, не в `develop`)» в разделе 6). Расхождения с [видением](00-vision.md) собраны в [разделе 8](#8-расхождения-с-видением). Идентификаторы в примерах (gid, время) взяты из реального прогона и меняются от запуска к запуску.
+Документ описывает интерфейсы по фактическому коду в `epic/UNLOCKER-276` (после E1–E5, F1–F4). Всё, чего в коде нет (tools вне PoC), отмечено явно; топология compose и публикация через reverse proxy описаны по `platform/docker`. Расхождения с [видением](00-vision.md) собраны в [разделе 8](#8-расхождения-с-видением). Идентификаторы в примерах (gid, время) взяты из реального прогона и меняются от запуска к запуску.
 
 ## 1. Карта интерфейсов
 
@@ -26,7 +26,7 @@ flowchart LR
 
 | Интерфейс | Тип | Кто вызывает | Кто обслуживает | Доступность | Аутентификация |
 |---|---|---|---|---|---|
-| MCP `/mcp` | Streamable HTTP (stateless), JSON-RPC | AI-агент | `access/mcp-server` (порт Spring по умолчанию 8080, `server.port` в `application.yml` не задан) | внешний; публикация через proxy — E5, не в `develop` | JWT (issuer + audience), realm-роль `archrag-reader` на все методы, scope `architecture.read` на `tools/call` |
+| MCP `/mcp` | Streamable HTTP (stateless), JSON-RPC | AI-агент | `access/mcp-server` (порт Spring по умолчанию 8080, `server.port` в `application.yml` не задан) | внешний; на стенде опубликован через reverse proxy: `location = /mcp` в `platform/docker/proxy/nginx.conf`, `https://localhost:${ARCHRAG_PUBLIC_PORT:-8443}/mcp` | JWT (issuer + audience), realm-роль `archrag-reader` на все методы, scope `architecture.read` на `tools/call` |
 | `GET /.well-known/oauth-protected-resource` | HTTP | MCP-клиент | `access/mcp-server` | внешний | нет (публичный) |
 | `GET /actuator/health/**` | HTTP | оркестратор | `access/mcp-server` | внутренний | нет (публичный) |
 | Webhook адаптеров `POST /webhook` | HTTP | мастер-система (заглушка) | `adapters/*` через `WebhookServer` | внешний; порт задаёт код, который запускает адаптер | HMAC-SHA256 + timestamp, JWT нет |
@@ -35,7 +35,7 @@ flowchart LR
 | Админ-консоль: UI и `/api/graph/*`, `/api/sync/*`, `/api/identity/*`, `/api/audit` | HTTP | оператор (браузер) | `access/admin-console`, порт 8080 в контейнере | только `127.0.0.1:${ARCHRAG_CONSOLE_PORT:-8090}`; через proxy не публикуется | JWT (issuer, audience `urn:archrag:console`), scope `architecture.admin` + realm-роль `archrag-console-admin` на `/api/**`; UI и `/console-config.json` публичны |
 | Источники `GET /changes`, `GET /objects/{type}/{id}` | HTTP | адаптеры | заглушки `platform/source-stubs` | внутренний | нет |
 
-Что публикуется через reverse proxy демо-стенда, определит E5 (compose и proxy в `develop` нет): см. [раздел 6](#6-безопасность-на-границах).
+Что публикуется через reverse proxy демо-стенда (`platform/docker/proxy/nginx.conf`): `/mcp`, `/.well-known/oauth-protected-resource`, OIDC-endpoint'ы realm `archrag` и `/webhooks/*`; см. [раздел 6](#6-безопасность-на-границах).
 
 ## 2. MCP-сервер
 
@@ -313,7 +313,7 @@ flowchart LR
 
 Код: `adapters/adapter-core` (`WebhookServer`, `WebhookHandler`, `HttpSourceConnector`, `InboxWriter`, `EventMapper`), подпись — `contracts/source-spi/.../WebhookSignature`. Четыре адаптера (`EamAdapter`, `ScmAdapter`, `AssetAdapter`, `DeploymapAdapter`) устроены одинаково и различаются только источником; веб-сервер один и тот же.
 
-**Запуск.** У адаптеров нет собственного `main()` и чтения env: порт задаёт код, который вызывает `SourceAdapter.startWebhook(InetSocketAddress)`, секрет приходит в `AdapterConfig.webhookSecret` (обязателен, не пустой, в `toString` маскируется). Env-переменные и порты адаптеров появятся вместе со стендом (E5, не в `develop`).
+**Запуск.** У адаптеров нет собственного `main()` и чтения env: порт задаёт код, который вызывает `SourceAdapter.startWebhook(InetSocketAddress)`, секрет приходит в `AdapterConfig.webhookSecret` (обязателен, не пустой, в `toString` маскируется). Env-переменные и порты адаптеров на стенде задаёт `demo-launcher` и `platform/docker/docker-compose.yml`.
 
 | Источник | Адаптер (модуль) | Код `source` | `source` в событии | Путь | Подпись |
 |---|---|---|---|---|---|
@@ -365,7 +365,7 @@ flowchart LR
 
 **Каноническое событие.** `EventMapper` превращает изменение в CloudEvent (раздел 5.4): `architecture.asset.upserted.v1`, для tombstone — `architecture.asset.deleted.v1`. Идентификатор webhook-события в журнале — `eventId` источника; опрос и snapshot используют `poll:<type>/<id>/v<ver>` и `snap:<runId>:<type>/<id>/v<ver>`.
 
-**`POST /control/snapshot`.** Тот же `WebhookServer` и порт (регистрируется всегда, если адаптер запущен через `SourceAdapter`). Без аутентификации; предназначен только для внутренней сети и вызывается admin-операцией `reconcile` (раздел 4). Метод только `POST`, параметров и тела нет. Вызов синхронный: ждёт завершения полного snapshot.
+**`POST /control/snapshot`.** Тот же `WebhookServer` и порт (регистрируется всегда, если адаптер запущен через `SourceAdapter`). Требует JWT администратора (раздел 6); предназначен только для внутренней сети и вызывается admin-операцией `reconcile` (раздел 4). Метод только `POST`, параметров и тела нет. Вызов синхронный: ждёт завершения полного snapshot.
 
 | Код | Условие |
 |---|---|
@@ -485,7 +485,7 @@ public interface CanonicalMapper {
 
 | Маппер | `sourceType` | Связи |
 |---|---|---|
-| `EamMapper` | `TEAM`, `IT_SYSTEM`, `SERVICE_DEPENDENCY` | `OWNED_BY` (из `ownerTeam`), `DEPENDS_ON` Service→Service (из `SERVICE_DEPENDENCY`); непустой `dependsOn` у `IT_SYSTEM` даёт только warning `DEPENDS_ON_NOT_SUPPORTED` |
+| `EamMapper` | `PLATFORM`, `SOLUTION`, `IT_SYSTEM`, `TEAM`, `SERVICE_DEPENDENCY` | `USES_PLATFORM` Solution→Platform (из `platform_id` решения), `USES_SOLUTION` ITSystem→Solution (из `product_id`), `OWNED_BY` (из `ownerTeam`), `DEPENDS_ON` Service→Service (из `SERVICE_DEPENDENCY`); `platform_id` системы связи не строит, а ложится в свойство `platformId` (ADR 0031); непустой `dependsOn` у плоского `IT_SYSTEM` даёт только warning `DEPENDS_ON_NOT_SUPPORTED` |
 | `ScmMapper` | `REPOSITORY`, `SERVICE` | `DECOMPOSED_INTO` ITSystem→Service (из `systemCode`), `IMPLEMENTED_IN` (из `repositoryId`) |
 | `CmdbMapper` | `COMPUTE_INSTANCE` | — (`kind` обязателен: значение по умолчанию затёрло бы известный тип) |
 | `DeployMapMapper` | `ENVIRONMENT`, `DEPLOYMENT` | `HAS_DEPLOYMENT` (к сервису репозитория, запасной путь — `service` из payload), `DEPLOYED_FROM {commit}` (формат `deploymap-poc-1`), `IN_ENVIRONMENT`, `RUNS_ON` (из `hosts`); форматы `deploymap-poc-0`/`-1` временные (раздел 5.5) |
@@ -535,7 +535,7 @@ public interface CanonicalMapper {
 | `GET /changes?cursor=<opaque>&limit=<n>` (`limit` по умолчанию 100) | `200 {changes:[{sourceType, sourceId, sourceVersion, operation, completeness, updatedAt, payload}], nextCursor, hasMore, snapshotComplete}`; `400 {}` при `limit ≤ 0` или неизвестном курсоре |
 | `GET /objects/{type}/{id}` | `200` — то же описание изменения; `404 {}` — неизвестный объект или битый путь |
 
-Курсоры непрозрачны для клиента: snapshot (`cursor == null`) отдаёт текущее состояние живых объектов (удалённые не возвращаются), последняя страница несёт `snapshotComplete=true`; затем опрос идёт инкрементально. Нет эндпоинтов `/control/*` — единственный control-эндпоинт находится в адаптере (раздел 3).
+Курсоры непрозрачны для клиента: snapshot (`cursor == null`) отдаёт текущее состояние живых объектов (удалённые не возвращаются), последняя страница несёт `snapshotComplete=true`; затем опрос идёт инкрементально. У самого `StubSourceServer` нет эндпоинтов `/control/*`. Управляющие `POST /control/upsert` (и `/control/archive` у `EamApiStub`) поднимает только `demo-launcher` на отдельном порту заглушки; наружу они не публикуются. Единственный control-эндпоинт адаптера — `POST /control/snapshot` (раздел 3).
 
 **Управляемые сценарии** (`StubSource`, in-memory): `upsert`, `upsertPartial` (`PARTIAL`), `delete`; `suppressWebhooks(true)` — изменения без webhook (сценарий «пропуск»); `reorderNextPage()` — следующая страница инкрементального опроса отдаётся в обратном порядке с дублем первой записи (out-of-order); `failNext(times, status, retryAfter)` и `failOnCall(n, status, retryAfter)` — `429`, `5xx` или таймаут (`status=0` → `504`) с `Retry-After` в секундах; `webhookEvents()` — список уведомлений (`eventId = <код>-evt-<seq>`).
 
@@ -566,13 +566,13 @@ Fixtures: `adapters/deploymap-adapter/src/test/resources/deploymap/` (`baseline`
 
 | Интерфейс | Аутентификация | Scope | Опубликован через proxy | Порт и путь в compose |
 |---|---|---|---|---|
-| MCP `/mcp` | JWT (issuer, audience) | `architecture.read` на `tools/call` | — (E5, не в `develop`) | — (E5, не в `develop`); приложение: порт Spring по умолчанию 8080, путь `/mcp` |
-| `/.well-known/oauth-protected-resource`, `/actuator/health/**` | нет | не применяется | — (E5, не в `develop`) | — (E5); тот же порт приложения |
-| Webhook адаптеров | HMAC-SHA256 + timestamp | не применяется (подпись и timestamp) | — (E5, не в `develop`) | — (E5); приложение: `POST /webhook`, порт задаёт запускающий код |
-| `POST /control/snapshot` | нет | не применяется | должен остаться внутренним | — (E5); приложение: порт `/webhook` |
-| Admin REST | JWT (issuer, audience) | `architecture.admin` | нет (только внутренняя сеть) | — (E5); приложение: порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081), `/admin/*` |
+| MCP `/mcp` | JWT (issuer, audience) | `architecture.read` на `tools/call` | да, `location = /mcp` (nginx.conf) | proxy `127.0.0.1:${ARCHRAG_PUBLIC_PORT:-8443}` → `mcp-server:8080/mcp` |
+| `/.well-known/oauth-protected-resource`, `/actuator/health/**` | нет | не применяется | `/.well-known/oauth-protected-resource` — да; `/actuator/health/**` — нет | тот же порт приложения (8080) |
+| Webhook адаптеров | HMAC-SHA256 + timestamp | не применяется (подпись и timestamp) | да, `/webhooks/{eam,scm,cmdb,deploymap}` → `POST /webhook` адаптера | порт адаптера в контейнере 8080 |
+| `POST /control/snapshot` | JWT администратора | роль `archrag-console-admin` | нет, в nginx.conf не проксируется (UNLOCKER-169) | порт `/webhook` адаптера (8080 в контейнере) |
+| Admin REST | JWT (issuer, audience) | `architecture.admin` | нет (только внутренняя сеть) | порт `ARCHRAG_ADMIN_PORT` (по умолчанию 8081), `/admin/*` |
 
-Реальная топология compose описывается после вливания E5 (см. [раздел 8](#8-расхождения-с-видением)).
+Топология compose — `platform/docker/docker-compose.yml` и `platform/docker/README.md`. На `127.0.0.1` хоста опубликованы proxy, Keycloak, админ-консоль и (профиль) Grafana; loopback — свойство стенда, не сервисов (ADR [0026](adr/0026-admin-console-readonly-loopback.md), уточнение 2026-10-14).
 
 ## 7. Последовательности вызовов
 
@@ -656,7 +656,7 @@ sequenceDiagram
 | 2 | Состав tools | `compare_environments`, `find_stale_assets`, `search_architecture_context`, `get_sync_status` в «Tools первого релиза» | Их нет; есть служебный `ping` (не в видении) | ADR [0022](adr/0022-out-of-poc-scope.md): вне PoC; `ping` — interop-проверка каркаса (E4) |
 | 3 | `find_runtime_footprint` | возвращает «Deployments, VM, clusters, namespaces» | Deployments, VM/ComputeInstance и физические серверы; кластеров и namespaces нет | ADR [0011](adr/0011-namespace-cluster-modeled-not-populated.md): `Namespace` и `KubernetesCluster` моделируются, но не наполняются |
 | 4 | Имена в SPI | `fetchChanges(cursor, limit)` → `SourcePage`, `SourceSnapshot`, `SourceCursor`; `map(SourceEnvelope)` | `fetchChanges(cursor, limit)` → `ChangePage`; snapshot — это `fetchChanges` с `cursor == null` и `snapshotComplete`; курсор — строка; `CanonicalMapper.map(Input, CommandSink)` | В документе используются фактические имена из `contracts/source-spi` и `normalizer` |
-| 5 | Admin: reconcile | операция в списке admin-эндпоинта | `POST /admin/reconcile/{source}` не сверяет сам, а вызывает `POST /control/snapshot` адаптера (без аутентификации, во внутренней сети) | ADR [0013](adr/0013-operator-ops-via-admin-endpoint.md); сетевую границу `/control/*` фиксирует E5 |
+| 5 | Admin: reconcile | операция в списке admin-эндпоинта | `POST /admin/reconcile/{source}` не сверяет сам, а вызывает `POST /control/snapshot` адаптера, пробрасывая токен администратора (адаптер проверяет JWT и роль, раздел 6); наружу endpoint не проксируется | ADR [0013](adr/0013-operator-ops-via-admin-endpoint.md) |
 | 6 | Read-only в MCP | read-only обеспечивает приложение (ADR [0005](adr/0005-readonly-mcp-by-application.md)) | Так и сделано (`executeRead`, `EXPLAIN`); `tools/list` отдаёт для каждого tool `readOnlyHint=true`, `destructiveHint=false`, `idempotentHint=true` | Расхождение закрыто (UNLOCKER-224). Подсказки носят справочный характер, защита — в приложении |
 | 7 | Audience токена admin | OIDC на границах | MCP и admin REST проверяют `audience` (admin: `ARCHRAG_ADMIN_RESOURCE_URI`, обязательна) | Расхождение закрыто (UNLOCKER-224). Compose задаёт переменную (UNLOCKER-229): `urn:archrag:admin`, admin `aud` выдаётся только со scope `architecture.admin` |
 | 8 | Имя источника deploy map | — | Источник в разных местах: `DEPLOY_MAP` (enum `SourceSystem`), `deploymap` (код, `urn:corp:deploymap`), `DEPLOYMAP` (`source` в ответах MCP) | Причина в коде не зафиксирована; для клиентов MCP значение — `DEPLOYMAP` |

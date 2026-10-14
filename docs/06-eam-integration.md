@@ -69,16 +69,17 @@ Webhook-путь заглушки на реальный EAM не перенос�
 
 | Источник | Команда |
 |---|---|
-| объект платформы | `UpsertNode(Platform{name, type, version})` |
-| объект решения | `UpsertNode(Solution{name, lifecycle, description})` |
-| объект ИТ-системы | `UpsertNode(ITSystem{name, status, criticality, description})` |
+| объект платформы | `UpsertNode(Platform{name, type, version, lifecycle, description})` |
+| объект решения | `UpsertNode(Solution{name, lifecycle, description, platformId})` |
+| объект ИТ-системы | `UpsertNode(ITSystem{name, status, criticality, criticalityRaw, description, eamCode, platformId})` |
+| поле `ownerTeam` ИТ-системы (допущение 9) | `UpsertRelation(OWNED_BY)` на `Team` |
 | поле-ссылка `product_id` ИТ-системы → решение | `UpsertRelation(USES_SOLUTION)` |
 | поле-ссылка `platform_id` решения (`itproducts`) → платформа | `UpsertRelation(USES_PLATFORM)` |
 | поле-ссылка `platform_id` ИТ-системы | связь не строится; свойство узла `platformId` и проверка инварианта: расхождение с `platform_id` решения → `Conflict`, запись помечается для разбора |
 
 Правила:
 
-- **Ссылка = id объекта EAM.** Целевой узел ищется по ключу записи `(EAM, sourceType, id)` (запись активна). Ссылка принимается как список целых `id`, одиночное целое или `null`. Если цель ещё не загружена (порядок чтения разный), команда откладывается `DeferRelation` и разрешается при появлении цели — порядок опроса типов не должен влиять на результат.
+- **Ссылка = id объекта EAM.** Целевой узел ищется по ключу записи `(EAM, sourceType, id)` (запись активна). Ссылка принимается как одиночное целое `id` или `null`/отсутствие поля; список и нецелое значение — карантин `INVALID_PAYLOAD` (`Payload.optionalIdRef`, решение 3). Если цель ещё не загружена (порядок чтения разный), команда откладывается `DeferRelation` и разрешается при появлении цели — порядок опроса типов не должен влиять на результат.
 - **Исчезновение ссылки в `attrs` = закрытие связи**, не удаление узлов: связь закрывается замещением версии записи (`closeReplacedRelations`): новая версия записи не подтверждает прежнее утверждение источника, и оно получает `validTo`.
 - **Критичность и статус** — свободные значения EAM; значения словаря сопоставляются с `Criticality` (`ITSystem`) через явную таблицу, неизвестное значение `criticality` не отбрасывается: `ITSystem.criticality` не ставится, сырое значение сохраняется в `ITSystem.criticalityRaw` для разбора, нормализатор пишет DEBUG и добавляет код `UNMAPPED_CRITICALITY` в предупреждения результата; ingestion считает его в `archrag_normalizer_unmapped_values_total{source="eam",property="criticality"}` (растёт на каждую нормализацию, включая replay и rebuild, смотреть через `increase()`). `status` и `lifecycle` — свободные строки без таблицы, хранятся как пришли.
 - **Authority.** Для `ITSystem`, `Solution`, `Platform` и связей между ними мастер — EAM; `ITSystem.criticality` обновляет только EAM. Остальные источники (SCM и др.) могут ссылаться на систему по EAM-ключу, но не меняют эти узлы.

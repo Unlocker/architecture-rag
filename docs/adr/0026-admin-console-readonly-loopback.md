@@ -38,6 +38,13 @@
   - Отсутствие ролевого ограничения на scope `architecture.admin`: любой пользователь realm может получить токен консоли через клиент `archrag-admin-console`. Ролевое ограничение задело бы service account `archrag-demo`. **Принято владельцем 2026-10-08 как ограничение PoC.** На стенде есть только демо-администратор. Целевое решение — [gap list](../05-production-gap-list.md), пункт 2.7.
 - **Затронутый код:** `access/admin-console`, `access/admin-ui` ([0027](0027-frontend-react-typescript-webpack.md)), `ingestion/ingestion-service` (`AuthorizedPartyValidator`), `platform/docker`.
 
+## Уточнение 2026-10-14
+
+Решение владельца (UNLOCKER-276, вопросы 8 и 16). Исходный текст выше не меняется.
+
+- **Loopback — свойство стенда, а не сервиса.** «Только с loopback» обеспечивает Compose: порты публикуются как `127.0.0.1:<порт>` (консоль, Keycloak, Grafana и proxy; консоль и Keycloak — plain HTTP). Приложение `admin-console` `server.address` не задаёт и слушает все интерфейсы контейнера; сеть `edge` без консоли и отсутствие публикации через proxy — часть топологии стенда. Вне Compose защиту дают только OIDC и роли (`architecture.admin` + `archrag-console-admin`). При развёртывании не через этот Compose сетевую границу нужно задать самому (gap list).
+- **`state`/`code_verifier` лежат в `localStorage`.** `authService.ts` не задаёт `stateStore`, поэтому `oidc-client-ts` (3.1.0) по умолчанию хранит одноразовое `state` и `code_verifier` на время редиректа в `localStorage`, а не в `sessionStorage`, как сказано выше. Пользователь и токены по-прежнему только в памяти (`InMemoryWebStorage`). Для PoC это принято: значения одноразовые и без самих токенов; `sessionStorage` не задаётся.
+
 ## Связанные ADR
 
 [0005](0005-readonly-mcp-by-application.md), [0013](0013-operator-ops-via-admin-endpoint.md), [0018](0018-domain-tools-not-arbitrary-cypher.md) (граф читается только фиксированными запросами), [0027](0027-frontend-react-typescript-webpack.md) (фронтенд-стек)
