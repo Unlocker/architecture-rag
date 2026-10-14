@@ -51,9 +51,6 @@ export const LABEL_COLORS: Record<string, string> = {
 
 export const DEFAULT_LABEL_COLOR = '#bcbd22';
 
-/** Актив, не виденный дольше этого срока, помечается как устаревший. */
-export const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-
 /** Период автообновления раздела «Источники». */
 export const SOURCES_REFRESH_MS = 30_000;
 

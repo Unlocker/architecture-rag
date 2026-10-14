@@ -5,6 +5,8 @@ import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
+import io.github.unlocker.archrag.graphquerycore.StalenessProperties;
 import io.github.unlocker.archrag.graphquerycore.templates.AssetTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.DependencyTemplates;
 import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
@@ -103,6 +105,11 @@ public class GraphReaderConfiguration {
   @Bean
   QueryTemplate runtimeFootprintTemplate() {
     return RuntimeTemplates.RUNTIME_FOOTPRINT;
+  }
+
+  @Bean
+  Staleness staleness(StalenessProperties properties, Clock clock) {
+    return new Staleness(properties, clock);
   }
 
   @Bean

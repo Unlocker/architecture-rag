@@ -1,11 +1,11 @@
-package io.github.unlocker.archrag.mcpserver.graph;
+package io.github.unlocker.archrag.graphquerycore;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * Порог устаревания фактов: {@code archrag.query.stale-after}.
+ * Порог устаревания фактов: {@code archrag.query.stale-after}. Положительный; по умолчанию 7 дней.
  *
  * @param staleAfter узел устарел, если его {@code lastSeenAt} старше этого срока (или не задан)
  */

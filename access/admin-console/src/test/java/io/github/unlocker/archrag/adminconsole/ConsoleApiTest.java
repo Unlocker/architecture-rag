@@ -307,6 +307,44 @@ class ConsoleApiTest {
     assertThat(body.get("properties").get("name").asString()).isEqualTo("Pay");
     assertThat(body.get("properties").get("createdAt").asString()).isEqualTo("2026-01-01T00:00:00Z");
     assertThat(body.get("sources").get(0).get("authority").asString()).isEqualTo("MASTER");
+    assertThat(body.get("staleAfter").asString()).isEqualTo("PT168H");
+  }
+
+  private boolean staleFlag(String lastSeenAt, boolean isCurrent, Boolean sourceActive) {
+    Map<String, Object> asset = new java.util.HashMap<>();
+    asset.put("gid", GID);
+    asset.put("type", "Service");
+    asset.put("properties", Map.of());
+    asset.put("isCurrent", isCurrent);
+    asset.put("sources", List.of());
+    asset.put("lastSeenAt", lastSeenAt);
+    List<Map<String, Object>> records =
+        sourceActive == null ? List.of() : List.of(Map.of("source", "EAM", "sourceId", "S-1", "active", sourceActive));
+    when(executor.execute(eq("get_asset"), any(), any())).thenReturn(rows("get_asset", false, asset));
+    when(executor.execute(eq("explain_provenance"), any(), any()))
+        .thenReturn(rows("explain_provenance", false, Map.of("gid", GID, "records", records)));
+    return json(get("/api/graph/nodes/" + GID, TestJwt.token(ADMIN))).get("stale").asBoolean();
+  }
+
+  @Test
+  void nodeCardStaleIsComputedOnServer() {
+    String fresh = java.time.Instant.now().minus(Duration.ofHours(1)).toString();
+    String old = java.time.Instant.now().minus(Duration.ofDays(8)).toString();
+
+    assertThat(staleFlag(fresh, true, true)).isFalse();
+    assertThat(staleFlag(old, true, true)).isTrue();
+    assertThat(staleFlag(null, true, true)).isTrue();
+    assertThat(staleFlag("not-a-date", true, true)).isTrue();
+    assertThat(staleFlag(fresh, true, false)).isTrue();
+    assertThat(staleFlag(fresh, true, null)).isTrue();
+  }
+
+  @Test
+  void closedNodeCardIsNeverStale() {
+    String old = java.time.Instant.now().minus(Duration.ofDays(30)).toString();
+
+    assertThat(staleFlag(old, false, null)).isFalse();
+    assertThat(staleFlag(null, false, false)).isFalse();
   }
 
   @Test

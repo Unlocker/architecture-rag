@@ -11,8 +11,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
+import io.github.unlocker.archrag.graphquerycore.StalenessProperties;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
-import io.github.unlocker.archrag.mcpserver.graph.StalenessProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,7 +35,9 @@ class FindRuntimeFootprintToolTest {
   private final GraphQueries graph = mock(GraphQueries.class);
   private final FindRuntimeFootprintTool tool =
       new FindRuntimeFootprintTool(
-          graph, new StalenessProperties(Duration.ofDays(7)), Clock.fixed(NOW, ZoneOffset.UTC));
+          graph,
+          new Staleness(
+              new StalenessProperties(Duration.ofDays(7)), Clock.fixed(NOW, ZoneOffset.UTC)));
 
   private static Map<String, Object> node(String gid, String seen, Map<String, Object> extra) {
     Map<String, Object> m = new HashMap<>(extra);

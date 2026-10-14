@@ -1,12 +1,10 @@
 package io.github.unlocker.archrag.mcpserver.tools;
 
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
 import io.github.unlocker.archrag.graphquerycore.templates.RuntimeTemplates;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
-import io.github.unlocker.archrag.mcpserver.graph.StalenessProperties;
 import io.github.unlocker.archrag.mcpserver.tools.FindRuntimeFootprintResult.*;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,13 +26,11 @@ import org.springframework.stereotype.Component;
 public class FindRuntimeFootprintTool {
 
   private final GraphQueries graph;
-  private final StalenessProperties staleness;
-  private final Clock clock;
+  private final Staleness staleness;
 
-  FindRuntimeFootprintTool(GraphQueries graph, StalenessProperties staleness, Clock clock) {
+  FindRuntimeFootprintTool(GraphQueries graph, Staleness staleness) {
     this.graph = graph;
     this.staleness = staleness;
-    this.clock = clock;
   }
 
   /**
@@ -78,11 +74,10 @@ public class FindRuntimeFootprintTool {
   }
 
   private FindRuntimeFootprintResult assemble(QueryResult result, String env) {
-    Instant threshold = clock.instant().minus(staleness.staleAfter());
     Map<String, String> warnings = new LinkedHashMap<>();
     Map<String, Object> system = map(result.rows().get(0).get("system"));
     String systemSeen = seen(system);
-    boolean systemStale = stale(systemSeen, threshold);
+    boolean systemStale = staleness.isStale(systemSeen);
     warn(warnings, systemStale, "ITSystem", system, systemSeen);
 
     Map<String, ServiceBuilder> services = new LinkedHashMap<>();
@@ -96,7 +91,7 @@ public class FindRuntimeFootprintTool {
               (String) svc.get("gid"),
               g -> {
                 String s = seen(svc);
-                boolean st = stale(s, threshold);
+                boolean st = staleness.isStale(s);
                 warn(warnings, st, "Service", svc, s);
                 return new ServiceBuilder(svc, s, st);
               });
@@ -109,7 +104,7 @@ public class FindRuntimeFootprintTool {
               (String) d.get("gid"),
               g -> {
                 String s = seen(d);
-                boolean st = stale(s, threshold);
+                boolean st = staleness.isStale(s);
                 warn(warnings, st, "Deployment", d, s);
                 return new DeploymentBuilder(d, s, st);
               });
@@ -118,13 +113,13 @@ public class FindRuntimeFootprintTool {
         continue;
       }
       String cs = seen(c);
-      boolean cst = stale(cs, threshold);
+      boolean cst = staleness.isStale(cs);
       warn(warnings, cst, (String) c.get("type"), c, cs);
       HostFootprint host = null;
       Map<String, Object> p = map(row.get("host"));
       if (p != null) {
         String ps = seen(p);
-        boolean pst = stale(ps, threshold);
+        boolean pst = staleness.isStale(ps);
         warn(warnings, pst, "PhysicalServer", p, ps);
         host =
             new HostFootprint(
@@ -196,10 +191,6 @@ public class FindRuntimeFootprintTool {
   private static String seen(Map<String, Object> node) {
     Object v = node.get("lastSeenAt");
     return v == null ? null : OffsetDateTime.parse((String) v).toInstant().toString();
-  }
-
-  private static boolean stale(String lastSeenAt, Instant threshold) {
-    return lastSeenAt == null || Instant.parse(lastSeenAt).isBefore(threshold);
   }
 
   private static void warn(

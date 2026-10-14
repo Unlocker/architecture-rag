@@ -11,9 +11,10 @@ import static org.mockito.Mockito.when;
 
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
+import io.github.unlocker.archrag.graphquerycore.Staleness;
+import io.github.unlocker.archrag.graphquerycore.StalenessProperties;
 import io.github.unlocker.archrag.graphquerycore.ResultBudget;
 import io.github.unlocker.archrag.mcpserver.graph.GraphQueries;
-import io.github.unlocker.archrag.mcpserver.graph.StalenessProperties;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -37,7 +38,7 @@ class TraceDependenciesToolTest {
 
   @BeforeEach
   void setUp() {
-    tool = new TraceDependenciesTool(queries, limits, new StalenessProperties(Duration.ofDays(7)), CLOCK);
+    tool = new TraceDependenciesTool(queries, limits, new Staleness(new StalenessProperties(Duration.ofDays(7)), CLOCK));
   }
 
   private static Map<String, Object> node(String gid) {
