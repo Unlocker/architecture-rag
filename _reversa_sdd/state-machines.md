@@ -7,7 +7,7 @@
 | № | Сущность | Где хранится | Значения | Кто переводит |
 |---|---|---|---|---|
 | 1 | Событие журнала | `inbox_event.status` | 10 значений `ProcessingStatus` | `EventProcessor`, `JournalDispatcher`, `Reconciler` |
-| 2 | Запись DLQ | `dlq_entry` (+ `replayed_at`) | «открыта» / «переиграна» | `PostgresEventJournal.toDlq`; закрытия нет 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] |
+| 2 | Запись DLQ | `dlq_entry` (+ `replayed_at`) | «открыта» / «разобрана» | `PostgresEventJournal.toDlq` (открытие); `closeDlq` из `ReplayService` и `releaseFromQuarantine` из `POST /admin/quarantine/release` (закрытие) 🟢 [UNLOCKER-281] |
 | 3 | Кандидат на совпадение | `identity_candidate.status` | `OPEN` | только значение по умолчанию 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3)] |
 | 4 | Конфликт источников | `source_conflict.status` | `OPEN`, `RESOLVED` | `PostgresSourceConflicts` |
 | 5 | Запись источника | `SourceRecord.active` | активна / tombstone | `GraphProjector` |
@@ -34,10 +34,11 @@
 | `RESOLVED` | `PROJECTED`, `RETRYING`, `QUARANTINED`, `IGNORED_OLD_VERSION` |
 | `RETRYING` | `VALIDATED`, `NORMALIZED`, `RESOLVED`, `PROJECTED`, `QUARANTINED`, `IGNORED_OLD_VERSION` |
 | `QUARANTINED` | только `RETRYING` |
-| `PROJECTED` | только `SUPERSEDED` |
-| `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда |
+| `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда |
 
-Переход в себя разрешён всегда (`ProcessingStatus.java:27-29`). Каждый переход в `RETRYING` увеличивает `attempts` (`PostgresEventJournal.java:345`).
+Статус `SUPERSEDED` удалён (UNLOCKER-281): код его не порождал, смысл «устарело» покрывает `IGNORED_OLD_VERSION`; CHECK на `inbox_event.status` нет, код значение никогда не писал (в живой БД проверить: `select count(*) from inbox_event where status = 'SUPERSEDED'`).
+
+Переход в себя разрешён всегда (`ProcessingStatus.java:27-29`). Каждый переход в `RETRYING` через `transition` увеличивает `attempts`; `releaseFromQuarantine` обнуляет счётчик отдельным SQL.
 
 ```mermaid
 stateDiagram-v2
@@ -65,12 +66,11 @@ stateDiagram-v2
     RETRYING --> PROJECTED
     RETRYING --> QUARANTINED
     RETRYING --> IGNORED_OLD_VERSION
-    QUARANTINED --> RETRYING: 🟡 решение принято, UNLOCKER-276 п. 2, в коде не вызывается
-    PROJECTED --> SUPERSEDED: 🟡 решение принято, UNLOCKER-276 п. 2, в коде не вызывается
+    QUARANTINED --> RETRYING: оператор, POST /admin/quarantine/release (attempts = 0)
+    RETRYING --> QUARANTINED: RETRY_LIMIT_EXCEEDED, attempts >= archrag.dispatcher.max-attempts
     PROJECTED --> [*]
     DUPLICATE --> [*]
     IGNORED_OLD_VERSION --> [*]
-    SUPERSEDED --> [*]
 ```
 
 ### 1.2. Кто и по какому условию переводит (🟢)
@@ -105,9 +105,9 @@ stateDiagram-v2
 
 ### 1.5. Пробелы автомата (🔴)
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **`SUPERSEDED` недостижим.** Кроме определения в enum и перечня в `FINISHED`, значение встречается лишь в списке статусов консоли (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:31`). Ни `EventProcessor`, ни `Reconciler`, ни `JournalDispatcher` в него не переводят. `docs/00-vision.md:385` и `docs/02-data-model.md:250` описывают переход `PROJECTED → SUPERSEDED`; смысл «вытеснено новой версией» вместо этого реализован через `IGNORED_OLD_VERSION` для самого *старого* события и вообще не помечает ранее спроецированную строку.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **Выхода из `QUARANTINED` нет.** `canTransitionTo` разрешает `QUARANTINED → RETRYING` (`ProcessingStatus.java:38`), `docs/02-data-model.md:241` называет это «решением оператора», но админский REST (`AdminController.java:61-123`) не содержит операции возврата из карантина, а `JournalDispatcher` карантин не выбирает (`PostgresEventJournal.java:213-216`). Практически карантин терминален; «починка» — только `replay`, который создаёт *новую* строку `replay:*`, а карантинная строка остаётся (связано с R.3, `_reversa_sdd/database/data-dictionary.md:94`).
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] **`RETRYING` без предела попыток.** `attempts` растёт, но порога перевода в `QUARANTINED` по числу попыток нет (`PostgresEventJournal.java:345`; `JournalDispatcher.java:111-121`). Событие с постоянным сбоем `GRAPH_CLIENT_ERROR` (не `Statement`/`Request`) будет повторяться бесконечно 🟡.
+- 🟢 [UNLOCKER-281] **`SUPERSEDED` удалён** из enum, `canTransitionTo`, `EventProcessor.FINISHED`, фильтров консоли и docs: привязка стоила бы лишнего UPDATE на каждую проекцию, а смысл «устарело» покрывает `IGNORED_OLD_VERSION`. `PROJECTED` стал терминальным.
+- 🟢 [UNLOCKER-281] **Выход из `QUARANTINED`** — `EventJournal.releaseFromQuarantine` (`POST /admin/quarantine/release`, операция `QUARANTINE_RELEASE`, ADR 0013): в одной транзакции под `FOR UPDATE` событие `QUARANTINED → RETRYING` с `attempts = 0`, `error_*` очищаются, открытая запись DLQ закрывается; дальше событие берёт диспетчер через `pending()` после `retry-delay`. Не в карантине — 409, нет события — 404. Replay маркеры `snapshot-complete` пропускает, поэтому их из карантина выводит только эта операция: маркер без `objectCount` с тем же payload снова уйдёт в карантин; маркер, отклонённый порогом массового закрытия, пройдёт после того, как оператор поднимет порог. Кнопки в консоли нет (ADR 0026: консоль read-only).
+- 🟢 [UNLOCKER-281] **Лимит повторов**: `archrag.dispatcher.max-attempts` (по умолчанию 10, `> 0`). `EventProcessor.retry`: если после перехода в `RETRYING` `attempts >= max`, событие уходит в `toDlq` с кодом `RETRY_LIMIT_EXCEEDED`, в `reason` — исходный код сбоя и его текст. Для `snapshot-complete` закрытие `SyncRun` как `FAILED` обеспечивает хук карантина. Неожиданные исключения в `JournalDispatcher.process` статус и `attempts` не меняют (событие повторяется в следующем проходе) — на них лимит не действует.
 - 🟡 Строка `DUPLICATE` из `append` (повтор `eventId`) и статус `DUPLICATE` (повтор версии при другом `eventId`) — разные вещи с одним именем: первый возвращается вызывающему как исход вставки и в БД не пишется, второй сохраняется в `inbox_event.status`.
 
 ---
@@ -118,12 +118,12 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> Открыта: toDlq (QUARANTINED + INSERT)
     Открыта --> Открыта: повторный toDlq (ON CONFLICT DO NOTHING)
-    Открыта --> Переиграна: 🟡 решение принято, UNLOCKER-276 п. 2, replayed_at нигде не пишется
+    Открыта --> Разобрана: replay исходного события (копия обработана) или release из карантина, replayed_at = now()
 ```
 
 - `toDlq` в одной транзакции переводит событие в `QUARANTINED` и вставляет строку; конфликт по частичному индексу `uq_dlq_entry_open (source, event_id) WHERE replayed_at IS NULL` молча пропускается (`PostgresEventJournal.java:132-160`; `ingestion/event-journal/src/main/resources/db/migration/V1__event_journal.sql:48`) 🟢.
 - Инвариант «не больше одной необработанной записи на событие» защищает от дубля при повторном карантине (повторный `toDlq` из `QUARANTINED` возможен: `ProcessingStatus.java:27-29` разрешает переход в себя, `PostgresEventJournal.java:139` не проверяет текущий статус, `EventJournalIT.repeatedDlqKeepsSingleRecord:187-196` вызывает `toDlq` дважды подряд; `uq_dlq_entry_open` и `ON CONFLICT` защищают от последовательного дубля, при этом `error_code`/`error_reason` в `inbox_event` перезаписываются, а `dlq_entry` хранит первые значения) 🟢 `[Ревью R.7]`.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] `replayed_at` читается (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/ConsoleReadRepository.java:158`; `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:71`), но не пишется: `UPDATE dlq_entry` в репозитории нет. Метрика «открытых записей DLQ» поэтому никогда не уменьшается после `replay` (ответ на вопрос R.3, `_reversa_sdd/database/data-dictionary.md:187-193`: это недоделка, ADR на такой выбор нет) 🔴.
+- 🟢 [UNLOCKER-281] `replayed_at` пишет `EventJournal.closeDlq` (идемпотентно, `WHERE replayed_at IS NULL`). `ReplayService.replayOne` закрывает запись **исходного** события, если копия закончилась не в `QUARANTINED`/`RETRYING` (у карантинной копии своя запись DLQ); строка `inbox_event` исходного остаётся `QUARANTINED`. Метрика `archrag.ingestion.dlq.open` и фильтр консоли `replayed=false` считают «ещё не разобранные оператором». После release повторный сбой открывает новую запись: частичный уникальный индекс допускает её рядом с закрытой.
 
 ---
 

@@ -60,6 +60,29 @@ class IngestionMetricsIT {
     assertThat(gauge(registry, "archrag.ingestion.dlq.open", "deploymap")).isZero();
   }
 
+  @Test
+  void openDlqDecreasesAfterReplayCloseAndAfterRelease() throws Exception {
+    var journal = new io.github.unlocker.archrag.eventjournal.PostgresEventJournal(dataSource());
+    insert("urn:corp:cmdb", "q1", "QUARANTINED", 10);
+    dlq("urn:corp:cmdb", "q1", false);
+    insert("urn:corp:cmdb", "q2", "QUARANTINED", 10);
+    dlq("urn:corp:cmdb", "q2", false);
+    var registry = new SimpleMeterRegistry();
+    var metrics = new IngestionMetrics(registry, new JdbcTemplate(dataSource()));
+    metrics.refresh();
+    assertThat(gauge(registry, "archrag.ingestion.dlq.open", "cmdb")).isEqualTo(2d);
+
+    // Replay исходного события закрывает его запись через closeDlq.
+    assertThat(journal.closeDlq("urn:corp:cmdb", "q1")).isTrue();
+    metrics.refresh();
+    assertThat(gauge(registry, "archrag.ingestion.dlq.open", "cmdb")).isEqualTo(1d);
+
+    // Возврат из карантина закрывает вторую.
+    journal.releaseFromQuarantine("urn:corp:cmdb", "q2");
+    metrics.refresh();
+    assertThat(gauge(registry, "archrag.ingestion.dlq.open", "cmdb")).isZero();
+  }
+
   private static double gauge(SimpleMeterRegistry registry, String name, String source) {
     return registry.get(name).tag("source", source).gauge().value();
   }

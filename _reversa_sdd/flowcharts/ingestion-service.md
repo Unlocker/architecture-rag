@@ -107,6 +107,5 @@ stateDiagram-v2
   RETRYING --> VALIDATED: повтор диспетчером после retry-delay
   RETRYING --> PROJECTED
   RETRYING --> QUARANTINED
-  QUARANTINED --> RETRYING: допустим контрактом; вызова нет ни в одном модуле (выход — replay новой строкой)
-  PROJECTED --> SUPERSEDED: допустим контрактом; вызова нет ни в одном модуле
+  QUARANTINED --> RETRYING: POST /admin/quarantine/release (attempts = 0)
 ```

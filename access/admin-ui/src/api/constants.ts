@@ -34,7 +34,6 @@ export const EVENT_STATUSES = [
   'PROJECTED',
   'QUARANTINED',
   'RETRYING',
-  'SUPERSEDED',
   'DUPLICATE',
   'IGNORED_OLD_VERSION',
 ] as const;

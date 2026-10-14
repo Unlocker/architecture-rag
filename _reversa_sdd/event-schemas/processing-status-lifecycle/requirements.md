@@ -7,16 +7,16 @@
 
 ## Правила
 - Переход в себя разрешён всегда (идемпотентный повтор) 🟢 (`:27-29`).
-- Конечные: `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION` — выходов нет 🟢 (`:40`). `PROJECTED` ведёт только в `SUPERSEDED` 🟢 (`:39`).
+- Конечные: `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION` — выходов нет 🟢.
 - `QUARANTINED` выходит только в `RETRYING` 🟢 (`:38`).
 - Из `RECEIVED`, `VALIDATED`, `NORMALIZED`, `RESOLVED`, `RETRYING` разрешены `QUARANTINED` и `IGNORED_OLD_VERSION`; в `RETRYING` — из `RECEIVED`, `VALIDATED`, `NORMALIZED`, `RESOLVED` 🟢 (`:31-37`).
 - `DUPLICATE` достижим только из `RECEIVED` 🟢 (`:31-32`).
-- 🔴 `SUPERSEDED` недостижим (R-02); выход из `QUARANTINED` оператором не реализован (R-03).
+- 🟢 `SUPERSEDED` удалён (R-02); выход из `QUARANTINED` оператором реализован (R-03, UNLOCKER-281).
 
 ## Функциональные требования
 | ID | Требование | MoSCoW | Критерий |
 |---|---|---|---|
-| RF-01 | Прямой путь `RECEIVED→VALIDATED→NORMALIZED→RESOLVED→PROJECTED→SUPERSEDED` разрешён | Must | AC-01 |
+| RF-01 | Прямой путь `RECEIVED→VALIDATED→NORMALIZED→RESOLVED→PROJECTED` разрешён | Must | AC-01 |
 | RF-02 | `PROJECTED` не откатывается (`RETRYING`, `RECEIVED` запрещены) | Must | AC-02 |
 | RF-03 | Из конечных статусов допустим только переход в себя | Must | AC-03 |
 | RF-04 | `QUARANTINED` → только `RETRYING` (и в себя) | Must | AC-04 |
@@ -27,7 +27,7 @@
 ```gherkin
 # AC-01  (ProcessingStatusTest.happyPathMovesForward)
 Дано статус RECEIVED
-Когда проверяется canTransitionTo по цепочке VALIDATED, NORMALIZED, RESOLVED, PROJECTED, SUPERSEDED
+Когда проверяется canTransitionTo по цепочке VALIDATED, NORMALIZED, RESOLVED, PROJECTED
 Тогда каждый шаг возвращает true
 
 # AC-02  (ProcessingStatusTest.projectedCannotRollBack)
@@ -36,7 +36,7 @@
 Тогда результат false
 
 # AC-03  (ProcessingStatusTest.terminalStatesOnlyStayPut)
-Дано SUPERSEDED, DUPLICATE или IGNORED_OLD_VERSION
+Дано PROJECTED, DUPLICATE или IGNORED_OLD_VERSION
 Когда проверяется переход в любое значение enum
 Тогда true только если next == текущему
 

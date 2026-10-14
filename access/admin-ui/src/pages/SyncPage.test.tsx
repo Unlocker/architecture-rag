@@ -7,7 +7,7 @@ import { health } from './sync/SourcesTab';
 
 const zero = {
   RECEIVED: 0, VALIDATED: 0, NORMALIZED: 0, RESOLVED: 0, PROJECTED: 0,
-  QUARANTINED: 0, RETRYING: 0, SUPERSEDED: 0, DUPLICATE: 0, IGNORED_OLD_VERSION: 0,
+  QUARANTINED: 0, RETRYING: 0, DUPLICATE: 0, IGNORED_OLD_VERSION: 0,
 };
 const run = { runId: 'r1', startedAt: '2026-10-01T10:00:00Z', endedAt: null, status: 'SUCCEEDED', fetched: 10, applied: 9, failed: 0 };
 const source = (name: string, extra: Partial<SourceStatus> = {}): SourceStatus => ({

@@ -68,7 +68,7 @@ paths:
       x-source: access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:78-91
       parameters:
         - {name: source, in: query, schema: {type: string, enum: [eam, scm, cmdb, deploymap]}}
-        - {name: status, in: query, schema: {type: string, enum: [RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION]}}
+        - {name: status, in: query, schema: {type: string, enum: [RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, DUPLICATE, IGNORED_OLD_VERSION]}}
         - {name: from, in: query, schema: {type: string, format: date-time}}
         - {name: to, in: query, schema: {type: string, format: date-time}}
         - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}

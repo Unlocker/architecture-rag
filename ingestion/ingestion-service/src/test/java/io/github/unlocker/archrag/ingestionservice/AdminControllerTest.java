@@ -14,6 +14,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.unlocker.archrag.eventschemas.EventJournal;
+import io.github.unlocker.archrag.eventschemas.JournalEntry;
+import io.github.unlocker.archrag.eventschemas.NotQuarantinedException;
+import io.github.unlocker.archrag.eventschemas.ProcessingStatus;
+import io.github.unlocker.archrag.eventschemas.SourceVersion;
+import io.github.unlocker.archrag.eventschemas.UnknownEventException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -48,6 +55,7 @@ class AdminControllerTest {
   @MockitoBean RebuildService rebuild;
   @MockitoBean CrosswalkService crosswalk;
   @MockitoBean AdapterControlClient adapters;
+  @MockitoBean EventJournal journal;
 
   private static RequestPostProcessor admin() {
     return jwt().jwt(j -> j.subject("alice")).authorities(new SimpleGrantedAuthority("SCOPE_architecture.admin"),
@@ -82,11 +90,13 @@ class AdminControllerTest {
   }
 
   private static final String REPLAY_BODY = "{\"source\":\"urn:corp:eam\"}";
+  private static final String RELEASE_BODY = "{\"source\":\"urn:corp:eam\",\"eventId\":\"e1\"}";
   private static final String[][] ENDPOINTS = {
       {"/admin/replay", REPLAY_BODY},
       {"/admin/rebuild?confirm=true", ""},
       {"/admin/crosswalks", "[]"},
       {"/admin/reconcile/eam", ""},
+      {"/admin/quarantine/release", RELEASE_BODY},
   };
 
   @Test
@@ -94,7 +104,7 @@ class AdminControllerTest {
     for (String[] e : ENDPOINTS) {
       mvc.perform(post(e[0]).contentType(MediaType.APPLICATION_JSON).content(e[1])).andExpect(status().isUnauthorized());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations);
+    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
   }
 
   @Test
@@ -103,7 +113,7 @@ class AdminControllerTest {
       mvc.perform(post(e[0]).with(otherScope()).contentType(MediaType.APPLICATION_JSON).content(e[1]))
           .andExpect(status().isForbidden());
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations);
+    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
   }
 
   @Test
@@ -114,7 +124,7 @@ class AdminControllerTest {
             .andExpect(status().isForbidden());
       }
     }
-    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations);
+    verifyNoInteractions(replay, rebuild, crosswalk, adapters, operations, journal);
   }
 
   @Test
@@ -128,6 +138,56 @@ class AdminControllerTest {
         .andExpect(jsonPath("$.replayId").value(id))
         .andExpect(jsonPath("$.statuses.PROJECTED").value(3));
     verify(operations).run(eq("REPLAY"), eq("alice"), any(), eq(id), any(), any());
+  }
+
+  private static JournalEntry released(int attempts) {
+    return new JournalEntry("urn:corp:eam", "e1", null, null, "APPLICATION", "1", new SourceVersion("1"), "1",
+        ProcessingStatus.RETRYING, null, null, attempts, null, Instant.EPOCH, Instant.EPOCH);
+  }
+
+  @Test
+  void releaseFromQuarantineReturnsRetryingAndIsAudited() throws Exception {
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenReturn(released(0));
+
+    mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON)
+            .content(RELEASE_BODY))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("RETRYING"))
+        .andExpect(jsonPath("$.attempts").value(0));
+    verify(operations).run(eq("QUARANTINE_RELEASE"), eq("alice"), any(), any(), any(), any());
+  }
+
+  @Test
+  void releaseOfEventNotInQuarantineIs409AndUnknownEventIs404() throws Exception {
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenThrow(new NotQuarantinedException("x"));
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e2")).thenThrow(new UnknownEventException("x"));
+
+    mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON)
+            .content(RELEASE_BODY))
+        .andExpect(status().isConflict());
+    mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"source\":\"urn:corp:eam\",\"eventId\":\"e2\"}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void releaseInfrastructureFailureIsNotMappedTo404Or409() throws Exception {
+    when(journal.releaseFromQuarantine("urn:corp:eam", "e1")).thenThrow(new IllegalStateException("admin lock failed"));
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> mvc.perform(post("/admin/quarantine/release")
+            .with(admin()).contentType(MediaType.APPLICATION_JSON).content(RELEASE_BODY)))
+        .hasCauseInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void releaseRejectsBadParameters() throws Exception {
+    for (String body : List.of("{}", "{\"source\":\"urn:corp:eam\"}", "{\"source\":\"urn:corp:eam\",\"eventId\":\" \"}",
+        "{\"eventId\":\"e1\"}", "{\"source\":\"bad source/\",\"eventId\":\"e1\"}",
+        "{\"source\":\"urn:corp:eam\",\"eventId\":\"" + "x".repeat(501) + "\"}")) {
+      mvc.perform(post("/admin/quarantine/release").with(admin()).contentType(MediaType.APPLICATION_JSON).content(body))
+          .andExpect(status().isBadRequest());
+    }
+    verifyNoInteractions(journal);
   }
 
   @Test

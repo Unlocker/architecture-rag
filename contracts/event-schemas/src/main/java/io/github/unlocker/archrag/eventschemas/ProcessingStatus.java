@@ -2,8 +2,7 @@ package io.github.unlocker.archrag.eventschemas;
 
 /**
  * Состояние обработки события в журнале (vision, «Состояния обработки»). Конечные: {@code PROJECTED},
- * {@code SUPERSEDED}, {@code DUPLICATE}, {@code IGNORED_OLD_VERSION}; {@code QUARANTINED} требует
- * решения оператора.
+ * {@code DUPLICATE}, {@code IGNORED_OLD_VERSION}; {@code QUARANTINED} требует решения оператора.
  */
 public enum ProcessingStatus {
   RECEIVED,
@@ -13,15 +12,13 @@ public enum ProcessingStatus {
   PROJECTED,
   QUARANTINED,
   RETRYING,
-  SUPERSEDED,
   DUPLICATE,
   IGNORED_OLD_VERSION;
 
   /**
    * Допустим ли переход в {@code next}. Переход в себя разрешён всегда (идемпотентный повтор).
-   * Из конечных состояний ({@code SUPERSEDED}, {@code DUPLICATE}, {@code IGNORED_OLD_VERSION}) других
-   * переходов нет, {@code PROJECTED} ведёт только в {@code SUPERSEDED}, из {@code QUARANTINED} выход
-   * только через {@code RETRYING} (решение оператора).
+   * Из конечных состояний ({@code PROJECTED}, {@code DUPLICATE}, {@code IGNORED_OLD_VERSION}) других
+   * переходов нет, из {@code QUARANTINED} выход только через {@code RETRYING} (решение оператора).
    */
   public boolean canTransitionTo(ProcessingStatus next) {
     if (this == next) {
@@ -36,8 +33,7 @@ public enum ProcessingStatus {
       case RETRYING -> next == VALIDATED || next == NORMALIZED || next == RESOLVED || next == PROJECTED
           || next == QUARANTINED || next == IGNORED_OLD_VERSION;
       case QUARANTINED -> next == RETRYING;
-      case PROJECTED -> next == SUPERSEDED;
-      case SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION -> false;
+      case PROJECTED, DUPLICATE, IGNORED_OLD_VERSION -> false;
     };
   }
 }

@@ -99,10 +99,14 @@ public final class EventProcessor {
   private static final String SOLUTION_TYPE = "SOLUTION";
   private static final String SOURCE_PREFIX = "urn:corp:";
 
+  /** Код карантина для события, исчерпавшего лимит повторов. */
+  public static final String RETRY_LIMIT_EXCEEDED = "RETRY_LIMIT_EXCEEDED";
+  /** Лимит повторов по умолчанию; в сервисе задаётся {@code archrag.dispatcher.max-attempts}. */
+  public static final int DEFAULT_MAX_ATTEMPTS = 10;
+
   private static final Set<ProcessingStatus> FINISHED =
       Set.of(
           ProcessingStatus.PROJECTED,
-          ProcessingStatus.SUPERSEDED,
           ProcessingStatus.DUPLICATE,
           ProcessingStatus.IGNORED_OLD_VERSION,
           ProcessingStatus.QUARANTINED);
@@ -117,6 +121,7 @@ public final class EventProcessor {
   private final DeploymentLookup lookup;
   private final EamLookup eamLookup;
   private final NormalizationWarnings warnings;
+  private final int maxAttempts;
 
   /** Без чтения графа для проверки системы EAM из chart: такие конфликты не открываются. */
   public EventProcessor(
@@ -166,6 +171,27 @@ public final class EventProcessor {
       DeploymentLookup lookup,
       EamLookup eamLookup,
       NormalizationWarnings warnings) {
+    this(journal, normalizer, identity, projection, reconciliation, candidates, conflicts, lookup, eamLookup, warnings,
+        DEFAULT_MAX_ATTEMPTS);
+  }
+
+  /** @param maxAttempts сколько раз событие может уйти в {@code RETRYING}; после этого оно попадает в карантин */
+  public EventProcessor(
+      EventJournal journal,
+      Normalizer normalizer,
+      IdentityMapping identity,
+      GraphProjection projection,
+      ReconciliationTrigger reconciliation,
+      IdentityCandidates candidates,
+      SourceConflicts conflicts,
+      DeploymentLookup lookup,
+      EamLookup eamLookup,
+      NormalizationWarnings warnings,
+      int maxAttempts) {
+    if (maxAttempts < 1) {
+      throw new IllegalArgumentException("maxAttempts must be positive");
+    }
+    this.maxAttempts = maxAttempts;
     this.warnings = Objects.requireNonNull(warnings, "warnings");
     this.lookup = Objects.requireNonNull(lookup, "lookup");
     this.eamLookup = Objects.requireNonNull(eamLookup, "eamLookup");
@@ -628,7 +654,11 @@ public final class EventProcessor {
   }
 
   private ProcessingResult retry(CanonicalEvent event, String code, String reason) {
-    journal.transition(event.source(), event.id(), ProcessingStatus.RETRYING, code, reason);
+    JournalEntry entry = journal.transition(event.source(), event.id(), ProcessingStatus.RETRYING, code, reason);
+    if (entry.attempts() >= maxAttempts) {
+      // Лимит исчерпан: RETRYING -> QUARANTINED, в причину идёт исходный код сбоя и его текст.
+      return quarantine(event, RETRY_LIMIT_EXCEEDED, code + ": " + reason);
+    }
     return new ProcessingResult(ProcessingStatus.RETRYING, code, null);
   }
 

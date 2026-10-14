@@ -382,7 +382,6 @@ High-water mark нельзя продвигать до успешной прое
 RECEIVED -> VALIDATED -> NORMALIZED -> RESOLVED -> PROJECTED
                     \-> QUARANTINED
                                   \-> RETRYING -> ...
-PROJECTED -> SUPERSEDED
 RECEIVED  -> DUPLICATE | IGNORED_OLD_VERSION
 ```
 

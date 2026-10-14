@@ -463,6 +463,16 @@ class ReconcilerTest {
     }
 
     @Override
+    public JournalEntry releaseFromQuarantine(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean closeDlq(String s, String id) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Optional<Checkpoint> loadCheckpoint(String consumer, String source) {
       throw new UnsupportedOperationException();
     }

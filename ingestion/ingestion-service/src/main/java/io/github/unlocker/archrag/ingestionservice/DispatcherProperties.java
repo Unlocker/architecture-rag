@@ -11,6 +11,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param pollInterval пауза между проходами
  * @param batchSize размер страницы выборки, {@code 1..1000}
  * @param retryDelay сколько {@code RETRYING} (и прерванное событие) ждёт после последнего изменения
+ * @param maxAttempts сколько раз событие может уйти в {@code RETRYING}; затем {@code QUARANTINED} с кодом
+ *     {@code RETRY_LIMIT_EXCEEDED}
  * @param shutdownTimeout сколько ждать завершения текущего события при остановке
  */
 @ConfigurationProperties("archrag.dispatcher")
@@ -19,7 +21,8 @@ public record DispatcherProperties(
     @DefaultValue("1s") Duration pollInterval,
     @DefaultValue("100") int batchSize,
     @DefaultValue("30s") Duration retryDelay,
-    @DefaultValue("30s") Duration shutdownTimeout) {
+    @DefaultValue("30s") Duration shutdownTimeout,
+    @DefaultValue("10") int maxAttempts) {
 
   public DispatcherProperties {
     if (pollInterval.isNegative() || pollInterval.isZero()) {
@@ -27,6 +30,9 @@ public record DispatcherProperties(
     }
     if (retryDelay.isNegative()) {
       throw new IllegalArgumentException("archrag.dispatcher.retry-delay must not be negative");
+    }
+    if (maxAttempts < 1) {
+      throw new IllegalArgumentException("archrag.dispatcher.max-attempts must be positive");
     }
     if (batchSize < 1 || batchSize > 1000) {
       throw new IllegalArgumentException("archrag.dispatcher.batch-size must be in 1..1000");
