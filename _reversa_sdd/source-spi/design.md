@@ -38,7 +38,7 @@
 
 ## Dependências
 
-- **Maven:** `canonical-model` (`contracts/source-spi/pom.xml:19-21`). 🔴 В main и test нет ни одного `import io.github.unlocker.archrag.canonicalmodel` (проверено `grep`), т. е. зависимость не используется; документы `dependencies.md` (`SPI --> CM`) и `inventory.md:29` её фиксируют как рабочую.
+- **Maven:** `canonical-model` (`contracts/source-spi/pom.xml:19-21`). 🟢 [вопрос 10: зависимость штатная] В main и test нет ни одного `import io.github.unlocker.archrag.canonicalmodel` (проверено `grep`), т. е. зависимость не используется; документы `dependencies.md` (`SPI --> CM`) и `inventory.md:29` её фиксируют как рабочую.
 - **JDK:** `javax.crypto.Mac`, `javax.crypto.spec.SecretKeySpec`, `java.security.MessageDigest`, `java.util.HexFormat` 🟢.
 - Тест: JUnit 5 + AssertJ (из BOM корня; в `pom.xml` модуля тестовых зависимостей не объявлено — приходят из корневого `pom.xml:164-171`) 🟢.
 
@@ -48,7 +48,7 @@
 
 | Спецификация | Связь | Статус |
 |---|---|---|
-| `contracts/canonical-model` | прямая зависимость в `pom.xml`, не используется (§Dependências) | 🔴 |
+| `contracts/canonical-model` | прямая зависимость в `pom.xml`, не используется (§Dependências) | 🟢 |
 | `adapters/adapter-core` | реализация порта `HttpSourceConnector` (`HttpSourceConnector.java:33`); `EamApiConnector` (`EamApiConnector.java:42`) и `CompositeEamConnector` (`CompositeEamConnector.java:27`) лежат в `adapters/eam-adapter`, `StubSource` (`StubSource.java:29`) — в `platform/source-stubs` `[Ревью R.7]`; потребляет весь SPI: `HttpSourceConnector`, `WebhookHandler` (verify), `Poller`, `EventMapper` (`long → SourceVersion`) — **меняется SPI ⇒ пересмотреть** | 🟢 (матрица §1) |
 | `adapters/eam-adapter` (`EamApiConnector`), `scm-adapter`, `asset-adapter`, `deploymap-adapter` | реализации/конфигурация на `SourceConnector`; `SourceUnavailableException` бросает `EamApiConnector` (`EamApiConnector.java:216, 234`) | 🟢 |
 | `platform/source-stubs` | `StubSource` реализует порт, `StubWebhookSender` подписывает через `WebhookSignature.sign` (`StubWebhookSender.java:47, 55, 76-78`) | 🟢 |
@@ -80,7 +80,7 @@
 
 ## Riscos e Lacunas
 
-- 🔴 Неиспользуемая зависимость на `canonical-model` (`contracts/source-spi/pom.xml:19-21`) расходится с формулировкой CLAUDE.md «contracts/* ни от чего проектного не зависят» (допустима только как внутриконтрактная; фактическая нужда не выявлена).
+- 🟢 [R.8: вопрос 10; UNLOCKER-288: зависимость штатная, правило уточнено] Неиспользуемая зависимость на `canonical-model` (`contracts/source-spi/pom.xml:19-21`) расходится с формулировкой CLAUDE.md «contracts/* ни от чего проектного не зависят» (допустима только как внутриконтрактная; фактическая нужда не выявлена).
 - 🟡 Инварианты `SourceChange` (DELETE → пустой payload; монотонность версии) только в Javadoc (`SPI/SourceChange.java:12-14`); `sourceVersion` может быть отрицательным, `sourceType/sourceId` — пустыми строками.
 - 🟡 `long sourceVersion` против `SourceVersion` до 40 цифр в `event-schemas` (`contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/SourceVersion.java:13`, regex `[0-9]{1,40}`): версия > `Long.MAX_VALUE` не выразима.
 - 🟡 `verify` с пустым `secret` бросает `IllegalArgumentException` из `SecretKeySpec` (`SPI/WebhookSignature.java:91`; поведение JDK, не запускалось); `null` у `secret/now/window` — NPE. Смягчение: `AdapterConfig` запрещает пустой секрет (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/AdapterConfig.java:39-41`).
