@@ -2,6 +2,8 @@ package io.github.unlocker.archrag.graphquerycore.templates;
 
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.ResultKind;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import java.util.List;
 import java.util.Set;
 
@@ -14,7 +16,14 @@ public final class AssetTemplates {
 
   /** Метки, по которым ищет {@code search_assets}: allowlist для параметра {@code types}. */
   public static final List<String> SEARCHABLE_TYPES =
-      List.of("ITSystem", "Service", "Repository", "Team", "Environment", "Deployment", "ComputeInstance");
+      Allowlists.labels(
+          NodeLabel.IT_SYSTEM,
+          NodeLabel.SERVICE,
+          NodeLabel.REPOSITORY,
+          NodeLabel.TEAM,
+          NodeLabel.ENVIRONMENT,
+          NodeLabel.DEPLOYMENT,
+          NodeLabel.COMPUTE_INSTANCE);
 
   /** Score точного совпадения: всегда выше score FULLTEXT. */
   public static final double EXACT_SCORE = 1000.0;
@@ -100,7 +109,15 @@ public final class AssetTemplates {
    * {@code OWNS_RECORD}, {@code PROCESSED}, {@code PART_OF}, {@code HOSTED_ON}) не входят.
    */
   public static final List<String> RELATION_TYPES =
-      List.of("DECOMPOSED_INTO", "IMPLEMENTED_IN", "HAS_DEPLOYMENT", "IN_ENVIRONMENT", "RUNS_ON", "DEPENDS_ON", "OWNED_BY", "DEPLOYED_FROM");
+      Allowlists.relations(
+          RelationType.DECOMPOSED_INTO,
+          RelationType.IMPLEMENTED_IN,
+          RelationType.HAS_DEPLOYMENT,
+          RelationType.IN_ENVIRONMENT,
+          RelationType.RUNS_ON,
+          RelationType.DEPENDS_ON,
+          RelationType.OWNED_BY,
+          RelationType.DEPLOYED_FROM);
 
   /**
    * Карточка актива по {@code gid}. Метки только из {@link #SEARCHABLE_TYPES}: служебные узлы не читаются.

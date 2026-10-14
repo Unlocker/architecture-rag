@@ -2,6 +2,8 @@ package io.github.unlocker.archrag.graphquerycore.templates;
 
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.ResultKind;
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import java.util.List;
 import java.util.Set;
 
@@ -16,13 +18,29 @@ public final class DependencyTemplates {
 
   /** Типы связей, по которым разрешён обход: allowlist для параметра {@code relationTypes}. */
   public static final List<String> TRACE_RELATION_TYPES =
-      List.of("DEPENDS_ON", "DECOMPOSED_INTO", "HAS_DEPLOYMENT", "RUNS_ON", "HOSTED_ON", "OWNED_BY", "DEPLOYED_FROM");
+      Allowlists.relations(
+          RelationType.DEPENDS_ON,
+          RelationType.DECOMPOSED_INTO,
+          RelationType.HAS_DEPLOYMENT,
+          RelationType.RUNS_ON,
+          RelationType.HOSTED_ON,
+          RelationType.OWNED_BY,
+          RelationType.DEPLOYED_FROM);
 
   /** Метки узлов, из которых может начинаться обход и которые попадают в проекцию. */
   public static final List<String> TRACE_LABELS =
-      List.of(
-          "ITSystem", "Service", "Repository", "Team", "Environment", "Deployment", "ComputeInstance",
-          "VirtualMachine", "PhysicalServer", "Namespace", "KubernetesCluster");
+      Allowlists.labels(
+          NodeLabel.IT_SYSTEM,
+          NodeLabel.SERVICE,
+          NodeLabel.REPOSITORY,
+          NodeLabel.TEAM,
+          NodeLabel.ENVIRONMENT,
+          NodeLabel.DEPLOYMENT,
+          NodeLabel.COMPUTE_INSTANCE,
+          NodeLabel.VIRTUAL_MACHINE,
+          NodeLabel.PHYSICAL_SERVER,
+          NodeLabel.NAMESPACE,
+          NodeLabel.KUBERNETES_CLUSTER);
 
   private static final String LABELS = String.join("|", TRACE_LABELS);
 
@@ -96,10 +114,15 @@ public final class DependencyTemplates {
 
   /** Типы связей impact-обхода: allowlist параметра {@code relationTypes} в режиме {@code impact}. */
   public static final List<String> IMPACT_RELATION_TYPES =
-      List.of("RUNS_ON", "HOSTED_ON", "HAS_DEPLOYMENT", "DECOMPOSED_INTO", "DEPENDS_ON");
+      Allowlists.relations(
+          RelationType.RUNS_ON,
+          RelationType.HOSTED_ON,
+          RelationType.HAS_DEPLOYMENT,
+          RelationType.DECOMPOSED_INTO,
+          RelationType.DEPENDS_ON);
 
   /** Метки, на которых заканчивается impact-путь. */
-  public static final List<String> IMPACT_TARGET_LABELS = List.of("Service", "ITSystem");
+  public static final List<String> IMPACT_TARGET_LABELS = Allowlists.labels(NodeLabel.SERVICE, NodeLabel.IT_SYSTEM);
 
   /**
    * Impact: пути от актива против стрелок ({@code <-}), заканчивающиеся на {@code Service} или {@code ITSystem}.
