@@ -1,6 +1,7 @@
 package io.github.unlocker.archrag.mcpserver.graph;
 
 import io.github.unlocker.archrag.graphquerycore.GraphQueryExecutor;
+import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
 import io.github.unlocker.archrag.graphquerycore.QueryLimits;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplateRegistry;
@@ -36,6 +37,12 @@ public class GraphReaderConfiguration {
   Driver graphReaderDriver(GraphReaderProperties properties) {
     return GraphDatabase.driver(
         properties.uri(), AuthTokens.basic(properties.username(), properties.password()));
+  }
+
+  /** Матрица авторитетности для {@code explain_provenance}. */
+  @Bean
+  AuthorityMatrix authorityMatrix() {
+    return AuthorityMatrix.defaults();
   }
 
   @Bean

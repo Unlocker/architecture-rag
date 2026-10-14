@@ -25,11 +25,12 @@ public class ExplainProvenanceTool {
 
   private final GraphQueries queries;
   private final QueryLimits limits;
-  private final AuthorityMatrix matrix = AuthorityMatrix.defaults();
+  private final AuthorityMatrix matrix;
 
-  ExplainProvenanceTool(GraphQueries queries, QueryLimits limits) {
+  ExplainProvenanceTool(GraphQueries queries, QueryLimits limits, AuthorityMatrix matrix) {
     this.queries = queries;
     this.limits = limits;
+    this.matrix = matrix;
   }
 
   /**

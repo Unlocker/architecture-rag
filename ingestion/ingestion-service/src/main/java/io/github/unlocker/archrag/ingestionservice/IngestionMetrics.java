@@ -59,7 +59,6 @@ public class IngestionMetrics {
   private static final Map<SourceSystemCode, List<String>> UNMAPPED_SOURCES =
       Map.of(SourceSystemCode.EAM, List.copyOf(UNMAPPED_PROPERTIES.values()));
 
-  private static final String SOURCE_PREFIX = "urn:corp:";
   static final String UNKNOWN_SOURCE = "unknown";
   private static final Set<String> KNOWN_SOURCES =
       Arrays.stream(SourceSystem.values()).map(SourceSystem::code).collect(Collectors.toUnmodifiableSet());
@@ -181,7 +180,7 @@ public class IngestionMetrics {
 
   /** {@code urn:corp:eam} (значение {@code source} в журнале) → {@code eam}: тег совпадает с {@link SourceSystem#code()}. */
   static String sourceTag(String source) {
-    String code = source.startsWith(SOURCE_PREFIX) ? source.substring(SOURCE_PREFIX.length()) : source;
+    String code = SourceSystemCode.fromUrn(source).map(SourceSystemCode::code).orElse(source);
     // Значения вне SourceSystem не плодят серии: кардинальность ограничена перечислением.
     return KNOWN_SOURCES.contains(code) ? code : UNKNOWN_SOURCE;
   }

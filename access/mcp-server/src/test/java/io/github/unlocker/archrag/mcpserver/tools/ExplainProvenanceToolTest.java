@@ -29,7 +29,7 @@ class ExplainProvenanceToolTest {
 
   @BeforeEach
   void setUp() {
-    tool = new ExplainProvenanceTool(queries, limits);
+    tool = new ExplainProvenanceTool(queries, limits, io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix.defaults());
   }
 
   private static Map<String, Object> record(String source, String authority, boolean active, List<String> conflicts) {

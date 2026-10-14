@@ -24,7 +24,6 @@ import java.util.Objects;
  */
 public final class Normalizer {
 
-  private static final String SOURCE_PREFIX = "urn:corp:";
   private static final String SCHEMA_PREFIX = "urn:corp:schema:asset-upserted:";
 
   private final Map<SourceSystemCode, CanonicalMapper> mappers = new EnumMap<>(SourceSystemCode.class);
@@ -90,16 +89,8 @@ public final class Normalizer {
   }
 
   private static SourceSystemCode sourceCode(String urn) {
-    if (!urn.startsWith(SOURCE_PREFIX)) {
-      return null;
-    }
-    return switch (urn.substring(SOURCE_PREFIX.length())) {
-      case "eam" -> SourceSystemCode.EAM;
-      case "scm" -> SourceSystemCode.SCM;
-      case "cmdb" -> SourceSystemCode.CMDB;
-      case "deploymap" -> SourceSystemCode.DEPLOYMAP;
-      default -> null;
-    };
+    // MANUAL — источник ручной модерации, событий от него быть не может
+    return SourceSystemCode.fromUrn(urn).filter(code -> code != SourceSystemCode.MANUAL).orElse(null);
   }
 
   private static String schemaVersion(String dataschema) {

@@ -11,11 +11,13 @@ import io.github.unlocker.archrag.adminconsole.pg.Rows.EventDetail;
 import io.github.unlocker.archrag.adminconsole.pg.Rows.SourceStatus;
 import io.github.unlocker.archrag.adminconsole.pg.Rows.SyncRunInfo;
 import io.github.unlocker.archrag.adminconsole.pg.SyncSources;
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import io.github.unlocker.archrag.graphquerycore.QueryResult;
 import io.github.unlocker.archrag.graphquerycore.templates.ConsoleTemplates;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SyncController {
 
   /** Значения {@code SyncRun.adapter} в графе ({@code SourceSystemCode}), по порядку {@link SyncSources#CODES}. */
-  private static final List<String> ADAPTERS = SyncSources.CODES.stream().map(String::toUpperCase).toList();
+  private static final List<String> ADAPTERS = Arrays.stream(SourceSystemCode.values()).map(Enum::name).toList();
 
   static final String HISTORY_NOTE =
       "Status history is not stored; dlqEntries lists quarantine records of this event.";

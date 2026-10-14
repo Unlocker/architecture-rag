@@ -1,5 +1,6 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.canonicalmodel.provenance.SourceSystemCode;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,7 +32,7 @@ public class AdapterControlClient {
 
   /** Короткий код источника ({@code eam}, ...) для {@code urn:corp:eam} или самого кода. */
   public static String code(String source) {
-    return source.startsWith("urn:corp:") ? source.substring("urn:corp:".length()) : source;
+    return SourceSystemCode.fromUrn(source).map(SourceSystemCode::code).orElse(source);
   }
 
   /** {@code true}, если для источника настроен адрес адаптера. */

@@ -51,6 +51,7 @@ CI (`.github/workflows/ci.yml`) гоняет три параллельных job
 
 Ключевые инварианты:
 
+- Общие значения (типы и схемы событий, коды и URN источников, статусы) Java-код берёт из `contracts/*` (`CanonicalEvent`, `SourceSystemCode`, `ProcessingStatus`), не-Java потребитель защищён контрактным тестом, дубль без защиты не допускается (ADR 0033).
 - Запись и чтение разделены: `graph-projector` пишет под учёткой `neo4j` (writer), `mcp-server` читает только под `archrag_reader`. В Neo4j Community нет ролей — read-only и domain-фильтрацию обеспечивает приложение (`GraphReaderConfiguration`, `init-reader.sh`).
 - Мастер каждой связи/сущности определяется authority matrix (напр. `DEPENDS_ON` — EAM, `Deployment` — deploy map + Helm); в `SourceRecord` поле называется `source`, не `key`.
 - `trace_dependencies` принимает `maxDepth` 1..6 и отклоняет остальное ошибкой (без clamp).

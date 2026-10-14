@@ -160,7 +160,7 @@ class EventProcessorTest {
 
   @Test
   void tombstoneForgetsFeaturesOfKey() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(candidates.forgotten).containsExactly(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"));
@@ -170,7 +170,7 @@ class EventProcessorTest {
   void tombstoneCandidateStoreFailureRetriesBeforeGraphIsTouched() {
     candidates.fail = true;
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
     assertThat(result.errorCode()).isEqualTo("IDENTITY_CANDIDATE_FAILED");
@@ -216,7 +216,7 @@ class EventProcessorTest {
     var team = new SourceKey(SourceSystemCode.EAM, "TEAM", "t1");
     identity.map.put(team, UUID.randomUUID());
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(conflicts.retracted).containsExactly(team);
@@ -229,7 +229,7 @@ class EventProcessorTest {
 
   @Test
   void tombstoneOfUnknownKeyDoesNotCallConflictStore() {
-    run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(conflicts.retracted).isEmpty();
     assertThat(projection.requests).singleElement().satisfies(r -> assertThat(r.conflicts().isNone()).isTrue());
@@ -240,7 +240,7 @@ class EventProcessorTest {
     identity.map.put(new SourceKey(SourceSystemCode.EAM, "TEAM", "t1"), UUID.randomUUID());
     conflicts.fail = true;
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.RETRYING);
     assertThat(result.errorCode()).isEqualTo("SOURCE_CONFLICT_FAILED");
@@ -509,6 +509,14 @@ class EventProcessorTest {
   }
 
   @Test
+  void sourceCodeRejectsManualUnknownAndForeignUrns() {
+    assertThat(EventProcessor.sourceCode("urn:corp:deploymap")).isEqualTo(SourceSystemCode.DEPLOYMAP);
+    assertThat(EventProcessor.sourceCode("urn:corp:manual")).isNull();
+    assertThat(EventProcessor.sourceCode("urn:corp:hr")).isNull();
+    assertThat(EventProcessor.sourceCode("urn:other:eam")).isNull();
+  }
+
+  @Test
   void unknownTypeIsQuarantinedBeforeNormalizer() {
     var result = run(other("e1", "architecture.something.v1", "urn:x", "TEAM", "t1"));
 
@@ -518,7 +526,7 @@ class EventProcessorTest {
 
   @Test
   void deleteBecomesTombstoneRequestWithoutNormalizer() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.PROJECTED);
     assertThat(projection.requests).hasSize(1);
@@ -530,7 +538,7 @@ class EventProcessorTest {
   void deleteWithOldVersionIsIgnored() {
     projection.applied = Optional.of(new AppliedRecord(new SourceVersion("9"), true));
 
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, EventProcessor.SCHEMA_ASSET_DELETED, "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, CanonicalEvent.SCHEMA_DELETED, "TEAM", "t1"));
 
     assertThat(result.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);
     assertThat(projection.requests).isEmpty();
@@ -538,14 +546,14 @@ class EventProcessorTest {
 
   @Test
   void deleteWithUnknownSchemaIsQuarantined() {
-    var result = run(other("d1", EventProcessor.TYPE_ASSET_DELETED, "urn:corp:schema:asset-deleted:9", "TEAM", "t1"));
+    var result = run(other("d1", CanonicalEvent.TYPE_ASSET_DELETED, "urn:corp:schema:asset-deleted:9", "TEAM", "t1"));
 
     assertThat(result.errorCode()).isEqualTo("UNKNOWN_SCHEMA_VERSION");
   }
 
   private static CanonicalEvent marker(String runId, Map<String, Object> payload) {
     return new CanonicalEvent(
-        "snapshot-complete:" + runId, "urn:corp:eam", EventProcessor.TYPE_SNAPSHOT_COMPLETE, "sync-run/" + runId, T,
+        "snapshot-complete:" + runId, "urn:corp:eam", CanonicalEvent.TYPE_SNAPSHOT_COMPLETE, "sync-run/" + runId, T,
         "urn:corp:schema:snapshot-complete:1", null, new AssetEventData("SYNC_RUN", runId, new SourceVersion("1"), payload));
   }
 
@@ -1175,7 +1183,7 @@ class EventProcessorTest {
         run(
             processor,
             new CanonicalEvent(
-                "d1", "urn:corp:eam", EventProcessor.TYPE_ASSET_DELETED, "SOLUTION/7201", T, EventProcessor.SCHEMA_ASSET_DELETED, null,
+                "d1", "urn:corp:eam", CanonicalEvent.TYPE_ASSET_DELETED, "SOLUTION/7201", T, CanonicalEvent.SCHEMA_DELETED, null,
                 new AssetEventData("SOLUTION", "7201", new SourceVersion("3"), Map.of())));
 
     assertThat(old.status()).isEqualTo(ProcessingStatus.IGNORED_OLD_VERSION);

@@ -52,7 +52,7 @@ class PollerTest {
     assertThat(r.syncRunId()).isEqualTo("run-1");
     List<CanonicalEvent> all = journal.eventList();
     assertThat(all).hasSize(5);
-    assertThat(all.getLast().type()).isEqualTo(EventMapper.TYPE_SNAPSHOT_COMPLETE);
+    assertThat(all.getLast().type()).isEqualTo(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE);
     assertThat(all.getLast().data().sourceId()).isEqualTo("run-1");
     assertThat(all.getLast().data().payload()).containsEntry("objectCount", 4L).containsEntry("completeness", "COMPLETE");
     assertThat(journal.rows.values()).allMatch(row -> "run-1".equals(row.syncRunId()));
@@ -77,7 +77,7 @@ class PollerTest {
     PollResult r = pollerOver(failingAfterFirstPage).pollOnce();
 
     assertThat(r.outcome()).isEqualTo(PollResult.Outcome.GAVE_UP);
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).isEmpty();
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).isEmpty();
     assertThat(journal.loadCheckpoint("eam-poller", SOURCE)).isEmpty();
   }
 
@@ -106,7 +106,7 @@ class PollerTest {
     PollResult r = poller.pollOnce();
 
     assertThat(r.syncRunId()).isEqualTo("run-2");
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
   }
 
   @Test
@@ -202,7 +202,7 @@ class PollerTest {
     poller.pollOnce();
 
     CanonicalEvent e = journal.eventList().getLast();
-    assertThat(e.type()).isEqualTo(EventMapper.TYPE_ASSET_DELETED);
+    assertThat(e.type()).isEqualTo(CanonicalEvent.TYPE_ASSET_DELETED);
     assertThat(e.data().payload()).isEmpty();
     assertThat(e.id()).isEqualTo("poll:IT_SYSTEM/EAM-2001/v2");
   }
@@ -225,7 +225,7 @@ class PollerTest {
     var stuckSnapshot = new StuckConnector(null);
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> pollerOver(stuckSnapshot).pollOnce())
         .isInstanceOf(IllegalStateException.class);
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).isEmpty();
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).isEmpty();
 
     journal.saveCheckpoint("eam-poller", SOURCE, "i1");
     var stuckIncremental = new StuckConnector("i1");
@@ -261,7 +261,7 @@ class PollerTest {
 
     assertThat(r.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     assertThat(r.syncRunId()).isEqualTo("run-2");
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
     // Удалённый в источнике объект в прогоне отсутствует: именно это и есть основа missing set.
     assertThat(journal.snapshotContents(SOURCE, "run-2").objects())
         .doesNotContain(new io.github.unlocker.archrag.eventschemas.ObjectRef("TEAM", "TEAM-PAY"));
@@ -274,13 +274,13 @@ class PollerTest {
     poller.pollOnce();
     PollResult failed = pollerOver(new FailingConnector(eam, 1)).snapshotOnce();
     assertThat(failed.outcome()).isEqualTo(PollResult.Outcome.GAVE_UP);
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(1);
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).hasSize(1);
 
     PollResult resumed = poller.snapshotOnce();
 
     assertThat(resumed.outcome()).isEqualTo(PollResult.Outcome.SNAPSHOT_COMPLETED);
     assertThat(resumed.syncRunId()).isEqualTo(failed.syncRunId());
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
   }
 
   @Test
@@ -320,7 +320,7 @@ class PollerTest {
     assertThat(inner.get().outcome()).isEqualTo(PollResult.Outcome.ALREADY_RUNNING);
     assertThat(inner.get().appended()).isZero();
     // Отказавший цикл ничего не записал: маркеров ровно два (первый snapshot и внешний).
-    assertThat(eventsOfType(EventMapper.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
+    assertThat(eventsOfType(CanonicalEvent.TYPE_SNAPSHOT_COMPLETE)).hasSize(2);
   }
 
   private Poller pollerOver(io.github.unlocker.archrag.sourcespi.SourceConnector connector) {

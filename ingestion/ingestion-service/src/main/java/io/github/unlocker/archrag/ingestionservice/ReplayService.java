@@ -37,7 +37,6 @@ public class ReplayService {
 
   static final String SKIPPED_SNAPSHOT_MARKER = "SKIPPED_SNAPSHOT_MARKER";
   static final String SKIPPED_NO_RAW = "SKIPPED_NO_RAW";
-  private static final String TYPE_SNAPSHOT_COMPLETE = "architecture.sync.snapshot-complete.v1";
   private static final int PAGE_SIZE = 200;
 
   private final JournalReader reader;
@@ -80,7 +79,7 @@ public class ReplayService {
 
   private String replayOne(StoredEvent stored, String replayId) {
     JournalEntry entry = stored.entry();
-    if (TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
+    if (CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(stored.type())) {
       return SKIPPED_SNAPSHOT_MARKER;
     }
     RawPayloadRef ref = entry.payloadRef();

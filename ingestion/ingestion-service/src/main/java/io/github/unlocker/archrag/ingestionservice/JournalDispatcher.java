@@ -160,7 +160,7 @@ public class JournalDispatcher {
     try {
       RawPayloadRef ref = entry.payloadRef();
       if (ref == null) {
-        boolean marker = StoredEventReader.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
+        boolean marker = CanonicalEvent.TYPE_SNAPSHOT_COMPLETE.equals(stored.type());
         if (marker) {
           // Маркера без raw нечем разобрать: прогон закрывается как FAILED.
           syncRuns.close(entry.source(), entry.sourceId(), entry.eventId(), SyncRunStatus.FAILED);
