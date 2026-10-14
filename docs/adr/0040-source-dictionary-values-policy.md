@@ -2,7 +2,7 @@
 
 - **Статус:** Принято
 - **Дата:** 2026-10-13
-- **Источник:** UNLOCKER-278; кандидат К-10 в `_reversa_sdd/adrs/candidates.md` (UNLOCKER-269); согласие владельца в UNLOCKER-260 (2026-10-13); реализация — UNLOCKER-256; целевая доработка — UNLOCKER-276, К-10
+- **Источник:** UNLOCKER-278; кандидат К-10 в `_reversa_sdd/adrs/candidates.md` (UNLOCKER-269); согласие владельца в UNLOCKER-260 (2026-10-13); реализация — UNLOCKER-256, UNLOCKER-287
 - **Кто принял:** владелец, 2026-10-13
 
 ## Контекст
@@ -18,10 +18,10 @@
 
 Как в коде сейчас:
 
-- `criticality` у `IT_SYSTEM` в EAM следует политике: значение вне таблицы даёт `null`, сырое значение сохраняется, код `UNMAPPED_CRITICALITY`, событие применяется (`ingestion/normalizer/.../EamMapper.java:128-130`, `:161-167`); счётчик `archrag.normalizer.unmapped.values` с тегами `source`, `property` (`ingestion/ingestion-service/.../IngestionMetrics.java:34`, `:47`, `:50`).
+- `criticality` у `IT_SYSTEM` в EAM следует политике: значение вне таблицы даёт `null`, сырое значение сохраняется, код `UNMAPPED_CRITICALITY`, событие применяется (`ingestion/normalizer/.../EamMapper.java:189-202`, `:144-158`); счётчик `archrag.normalizer.unmapped.values` с тегами `source`, `property` (`ingestion/ingestion-service/.../IngestionMetrics.java:53`, `:58`, `:134`).
 - Неизвестное значение обязательного поля уходит в карантин: например `kind` в CMDB, обязательный (`CmdbMapper.java:36-37`, `:55`).
 
-Расхождение с кодом (реализация — UNLOCKER-276, К-10): необязательный `criticality` у `IT_SYSTEM` в старом формате payload (без `attrs`) и у `SERVICE_DEPENDENCY` в `EamMapper` с неизвестным значением бросает `INVALID_PAYLOAD` (`EamMapper.java:83`, `:104`, `:120-125`), то есть политику не выполняет. Мапперы приводятся к политике в UNLOCKER-276.
+Расхождение закрыто в UNLOCKER-287: необязательный `criticality` в старом формате `IT_SYSTEM` (без `attrs`) и у `SERVICE_DEPENDENCY` с неизвестным значением больше не бросает `INVALID_PAYLOAD`. Каноническое поле остаётся `null`, сырое значение уходит в `criticalityRaw`, код `UNMAPPED_CRITICALITY` (`EamMapper.java:77-89`, `:109-117`, `:134-154`).
 
 ## Рассмотренные варианты
 
@@ -34,7 +34,7 @@
 ## Последствия
 
 - **Положительные:** предсказуемое поведение для новых источников; сырое значение доступно для разбора без потери.
-- **Отрицательные / ограничения:** до выполнения UNLOCKER-276 (К-10) эти две ветки `EamMapper` ведут себя иначе; каждый новый словарь требует явной классификации поля.
+- **Отрицательные / ограничения:** каждый новый словарь требует явной классификации поля.
 - **Затронутый код:** `ingestion/normalizer` (`EamMapper`, `CmdbMapper`), `ingestion/ingestion-service` (`IngestionMetrics`).
 
 ## Связанные ADR
