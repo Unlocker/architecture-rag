@@ -80,7 +80,7 @@
 | RF-EAM-05, RF-EAM-06 | Must | Источники `Team` и `DEPENDS_ON` |
 | RF-EAM-07 | Could | «Только реплей старого журнала» (`EamMapper.java:32-33`) |
 | RF-EAM-08 | Should | Информационные |
-| Won't | — | `mrelations`, `CloseAssertion`, связь «система → платформа» |
+| Won't | — | `mrelations`, связь «система → платформа» |
 
 ## Трассировка
 | Файл | Символ | Покрытие |

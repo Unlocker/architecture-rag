@@ -319,7 +319,6 @@
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/CanonicalModelModule.java` | `canonical-model/` | 🟡 |  |
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/Invariants.java` | `canonical-model/` | 🟢 | `data-dictionary.md`, `domain.md` |
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/authority/AuthorityMatrix.java` | `canonical-model/` | 🟢 | `domain.md`, `state-machines.md` |
-| `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/CloseAssertion.java` | `canonical-model/` | 🟡 |  |
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/DeferRelation.java` | `canonical-model/` | 🟡 |  |
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/GraphCommand.java` | `canonical-model/` | 🟡 |  |
 | `contracts/canonical-model/src/main/java/io/github/unlocker/archrag/canonicalmodel/command/TombstoneSourceRecord.java` | `canonical-model/` | 🟡 |  |

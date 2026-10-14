@@ -491,7 +491,7 @@ public interface CanonicalMapper {
 }
 
 public sealed interface GraphCommand
-        permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation {}
+        permits UpsertNode, UpsertRelation, TombstoneSourceRecord, DeferRelation {}
 ```
 
 Source DTO не должны проникать в graph projector. Маппинг следует тестировать contract fixtures, а операции проекции — integration tests с реальным Neo4j/Testcontainers.

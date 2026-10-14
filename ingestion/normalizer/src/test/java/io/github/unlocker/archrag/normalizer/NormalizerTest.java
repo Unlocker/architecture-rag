@@ -385,7 +385,7 @@ class NormalizerTest {
   }
 
   @Test
-  void partialRecordDoesNotEmitNullsOrCloseAssertions() {
+  void partialRecordDoesNotEmitNullsOrResets() {
     var scm = StubSources.scm(CLOCK);
     scm.upsertPartial("SERVICE", "svc-payments-api",
         fields("name", "payments-api", "language", null, "systemCode", null, "repositoryId", null));

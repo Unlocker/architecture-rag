@@ -63,4 +63,3 @@
 - 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 3); ответ владельца: вопросы 14] Q-03 (транзиентные сбои внутри transaction functions), Q-09 (статус кандидата), Q-11 (`SUPERSEDED`, выход из `QUARANTINED`).
 - 🟡 Q-15 (имитации), Q-16 (имена, обещающие больше), Q-27 (непокрытые пункты ADR 0031), Q-19 (upgrade-path миграций).
 - 🟡 Явный `null` в payload и семантика удаления поля не закреплены: единственный тест неполной записи убирает поля, а не передаёт `null` (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:303-315`).
-- 🟡 `closeAssertionClosesOnlyTheOpenRelationAssertedByTheRecordAndIsIdempotent` проверяет один вызов (`platform/integration-tests/src/test/java/io/github/unlocker/archrag/integrationtests/GraphProjectorIT.java:613-629`).

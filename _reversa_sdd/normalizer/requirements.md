@@ -22,7 +22,7 @@
 - Переводить любые нарушения входа в `Quarantined` с кодом и причиной без значений из источника 🟢 (`NZ/Normalizer.java:78-84`).
 - Возвращать предупреждения о потерянных данных кодами без значений 🟢 (`NZ/EamMapper.java:97,166`, `NZ/DeployMapMapper.java:223`).
 
-**Вне ответственности** 🟢: запись в Neo4j/PostgreSQL/S3, выбор `gid`, дедупликация и версии (это `EventProcessor`), tombstone-события `architecture.asset.deleted.v1` (нормализатор на них отвечает `UNSUPPORTED_EVENT_TYPE`; `NT/NormalizerTest#unsupportedEventTypeIsQuarantined`), закрытие связей (`CloseAssertion`), сравнение системы chart с системой сервиса (`NT/DeployMapMapperTest#systemMismatchGivesOrdinaryBindingWithoutConflictOrWarning`).
+**Вне ответственности** 🟢: запись в Neo4j/PostgreSQL/S3, выбор `gid`, дедупликация и версии (это `EventProcessor`), tombstone-события `architecture.asset.deleted.v1` (нормализатор на них отвечает `UNSUPPORTED_EVENT_TYPE`; `NT/NormalizerTest#unsupportedEventTypeIsQuarantined`), закрытие связей (делает проектор: `closeReplacedRelations`), сравнение системы chart с системой сервиса (`NT/DeployMapMapperTest#systemMismatchGivesOrdinaryBindingWithoutConflictOrWarning`).
 
 ## Regras de Negócio (Бизнес-правила)
 
@@ -31,7 +31,7 @@
 - BR-03. Версия схемы — суффикс `dataschema` после `urn:corp:schema:asset-upserted:`; для всех четырёх мапперов поддерживается только `"1"`; иной префикс или версия — `UNKNOWN_SCHEMA_VERSION` 🟢 (`NZ/Normalizer.java:63-66,105-107`; `EamMapper.java:61-63`, `ScmMapper.java:42-44`, `CmdbMapper.java:26-28`, `DeployMapMapper.java:75-77`).
 - BR-04. `SourceRecord`: `key=(source из URN, data.sourceType, data.sourceId)`, `sourceVersion=data.sourceVersion().value()`, `contentHash=raw.contentHash()`, `fetchedAt=event.time()`, `active=true`; `active=false` нормализатор не выставляет никогда 🟢 (`NZ/Normalizer.java:68-74`).
 - BR-05. «Поле не передано» = отсутствие ключа, `null` или пустая/пробельная строка; значения строк `strip()` 🟢 (`NZ/Payload.java:31-41`). Значение неверного типа — `INVALID_PAYLOAD` 🟢 (`NZ/Payload.java:124-126`).
-- BR-06. Необязательное поле узла, не переданное источником, остаётся `null` (никаких значений по умолчанию); обязательные поля — `MISSING_REQUIRED_FIELD` 🟢 (`NT/NormalizerTest#partialRecordDoesNotEmitNullsOrCloseAssertions`, `#absentArchivedStaysNullInsteadOfFalse`, `#absentKindIsQuarantinedNotDefaulted`).
+- BR-06. Необязательное поле узла, не переданное источником, остаётся `null` (никаких значений по умолчанию); обязательные поля — `MISSING_REQUIRED_FIELD` 🟢 (`NT/NormalizerTest#partialRecordDoesNotEmitNullsOrResets`, `#absentArchivedStaysNullInsteadOfFalse`, `#absentKindIsQuarantinedNotDefaulted`).
 - BR-07. Связь, у которой неизвестен второй конец, не выдаётся командой, а попадает в `unresolved` целиком (`UpsertRelation` внутри); фиктивный узел не создаётся 🟢 (`NZ/CommandSink.java:62-67`).
 - BR-08. `Validity` создаётся только как `Validity(validFrom, null)` при наличии `validFrom`/`ownerSince` в payload, иначе `null` («выбор за проектором») 🟢 (`NZ/EamMapper.java:94,112,192`, `ScmMapper.java:115-117`, `DeployMapMapper.java:240-242`).
 - BR-09. Причина карантина не содержит значений из источника: только имя поля/аннотации или фиксированный текст 🟢 (`NZ/Normalizer.java:81-83`; `NZ/Payload.java:27,125`; `NZ/DeployMapMapper.java:158,189`).
@@ -140,7 +140,7 @@
 | RF-10 (warnings) | Should | Информативно; на корректность графа не влияет |
 | Блок `DeploymentLookup` по умолчанию (`NONE`) | Could | Для тестов и сборки без графа (`NZ/DeploymentLookup.java:19-35`) |
 | Формат `deploymap-poc-0` и плоский `IT_SYSTEM` | Could | Временные/legacy (см. [`questions.md`](questions.md) Q-05, Q-06) |
-| Won't | — | Обработка `deleted`/`snapshot-complete` (вне модуля), `Namespace`/`KubernetesCluster` (мапперов нет, ADR 0011), `CloseAssertion` |
+| Won't | — | Обработка `deleted`/`snapshot-complete` (вне модуля), `Namespace`/`KubernetesCluster` (мапперов нет, ADR 0011) |
 
 ## Rastreabilidade de Código (Трассировка)
 

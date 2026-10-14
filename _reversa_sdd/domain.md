@@ -16,7 +16,7 @@
 | Кандидат (`identity_candidate`) | подозрение «две записи — один объект»; только запись, узлы не объединяются | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/IdentityCandidate.java:9-14` 🟢 |
 | Конфликт (`source_conflict`) | расхождение значения неавторитетной записи с авторитетной | `ingestion/identity-resolution/src/main/java/io/github/unlocker/archrag/identityresolution/SourceConflict.java:8-23` 🟢 |
 | Дельта / snapshot | инкрементальное чтение по курсору и полное чтение с маркером `snapshot-complete` | `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:19-31` 🟢 |
-| `GraphCommand` | единственный вход проектора: `UpsertNode`, `UpsertRelation`, `DeferRelation`, `TombstoneSourceRecord`, `CloseAssertion` | `EventProcessor.java:568-586` 🟢 |
+| `GraphCommand` | единственный вход проектора: `UpsertNode`, `UpsertRelation`, `DeferRelation`, `TombstoneSourceRecord` | `EventProcessor.java:568-586` 🟢 |
 
 ---
 
@@ -188,7 +188,7 @@
 |---|---|---|
 | Какие связи темпоральны | 10 из 15 типов; `PART_OF`, `HOSTED_ON` и служебные нет | `RelationType.java:13-27` 🟢 |
 | Начало интервала | `validFrom` источника, иначе время события; повторное утверждение закрытой связи открывает её заново | `GraphProjector.java:567-575` 🟢 |
-| Закрытие | версия записи замещает свои связи; tombstone и `CloseAssertion` закрывают явно; `validTo = max(validFrom, момент)` | `GraphProjector.java:519-545, 611-645, 668-690` 🟢 |
+| Закрытие | версия записи замещает свои связи; tombstone закрывает явно; `validTo = max(validFrom, момент)` | `GraphProjector.java:519-545, 611-645, 668-690` 🟢 |
 | Чтение «сейчас» | шаблоны `graph-query-core` берут связи с `validTo IS NULL` | ADR 0028; `access/graph-query-core/src/main/java/io/github/unlocker/archrag/graphquerycore/templates/RuntimeTemplates.java` 🟡 |
 | Свежесть фактов | `stale-after = P7D`: `lastSeenAt` старше порога → `stale` в ответе MCP | `access/mcp-server/src/main/resources/application.yml:43-44`; `access/mcp-server/src/main/java/io/github/unlocker/archrag/mcpserver/tools/FindRuntimeFootprintTool.java:80` 🟢 |
 | Миграция живого графа | `TemporalRelationMigration` при старте ingestion-service: `validFrom = coalesce(validFrom, firstSeenAt записи)`, иначе время миграции | ADR 0028; `ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/TemporalRelationMigration.java` 🟡 |

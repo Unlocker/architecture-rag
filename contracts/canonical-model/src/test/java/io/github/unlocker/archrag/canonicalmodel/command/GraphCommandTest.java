@@ -78,16 +78,6 @@ class GraphCommandTest {
     }
 
     @Test
-    void closeAssertionOnlyTemporal() {
-        assertThatThrownBy(() -> new CloseAssertion(RelationType.PART_OF, DEPLOY, ENV, T, DEPLOY))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CloseAssertion(RelationType.RUNS_ON, DEPLOY, HOST, null, DEPLOY))
-                .isInstanceOf(NullPointerException.class);
-        assertThatCode(() -> new CloseAssertion(RelationType.RUNS_ON, DEPLOY, HOST, T, DEPLOY))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
     void upsertNodeAndTombstoneRequireFields() {
         assertThatThrownBy(() -> new UpsertNode(null, new Team("t", null))).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new TombstoneSourceRecord(HOST, null)).isInstanceOf(NullPointerException.class);
@@ -101,7 +91,6 @@ class GraphCommandTest {
         String kind = switch (command) {
             case UpsertNode u -> "node";
             case UpsertRelation r -> "relation";
-            case CloseAssertion c -> "close";
             case TombstoneSourceRecord t -> "tombstone";
             case DeferRelation d -> "defer";
         };

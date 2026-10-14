@@ -60,7 +60,7 @@
 - [ ] TT-01 Happy path по каждому источнику: `NormalizerTest#eamTeamMapsToTeam`, `#scmRepositoryMapsToRepository`, `#cmdbComputeInstanceMapsKindAndState`, `#deployMapEnvironmentInfersClassFromCode`, `#deployMapDeploymentMapsServiceEnvironmentAndHosts`.
 - [ ] TT-02 Ворота: `#unsupportedEventTypeIsQuarantined`, `#unknownSourceIsQuarantined`, `#unknownSchemaVersionIsQuarantined`, `#foreignSchemaUrnIsQuarantined`, `#unknownSourceTypeIsQuarantined`.
 - [ ] TT-03 Валидация без утечек: `#missingRequiredFieldIsQuarantinedWithoutPayloadValues`, `#wrongFieldTypeIsQuarantined`, `#invariantViolationReasonDoesNotLeakSourceValues`, `ScmMapperTest#unrecognizedUrlIsQuarantinedWithoutLeakingValue`.
-- [ ] TT-04 Неполная запись: `#partialRecordDoesNotEmitNullsOrCloseAssertions`, `#blankOptionalValueIsTreatedAsAbsent`, `#absentArchivedStaysNullInsteadOfFalse`, `#absentKindIsQuarantinedNotDefaulted`, `#absentNameOfEnvironmentAndDeploymentIsQuarantinedNotDefaulted`.
+- [ ] TT-04 Неполная запись: `#partialRecordDoesNotEmitNullsOrResets`, `#blankOptionalValueIsTreatedAsAbsent`, `#absentArchivedStaysNullInsteadOfFalse`, `#absentKindIsQuarantinedNotDefaulted`, `#absentNameOfEnvironmentAndDeploymentIsQuarantinedNotDefaulted`.
 - [ ] TT-05 Отложенные ссылки: `#brokenReferenceBecomesUnresolvedReferenceWithoutPhantomNode`, `#deploymentWithUnknownReferencesYieldsUnresolvedForEach`, `#eamServiceDependencyWithUnknownServiceIsUnresolved`, `#scmServiceNeverReferencesLiteralEamCodeAsItSystemKey`.
 - [ ] TT-06 Повторяемость и validity: `#normalizingSameEventTwiceGivesEqualResult`, `#eamServiceDependencyIsIdempotent`, `#validityIsTakenOnlyFromSourceAndIsStableAcrossReplays`, `#structuralRelationsCarryValidityFromSource`.
 - [ ] TT-07 Тест, которого нет и который стоит добавить 🟡: «каждый `SourceSystemCode` кроме `MANUAL` имеет маппер и разбирается `sourceCode`» (Q-11); тест `normalize(event, null)`/поведения при исключении порта (Q-06). В тестах `*IT` нет.
@@ -72,4 +72,4 @@
 4. Порядок блокировок: `EamMapper.SERVICE_DEPENDENCY` использует `ScmMapper.SERVICE` (`NZ/EamMapper.java:107`), `DeployMapMapper` использует `ScmMapper.SERVICE` и `CmdbMapper.COMPUTE_INSTANCE` (`:128,210`).
 
 ## Lacunas Pendentes (🔴, открытые)
-См. [`questions.md`](questions.md): Q-01 (Javadoc про `UpsertNode`), Q-02 (docs/06:81), Q-03 (docs/06:82 `CloseAssertion`), Q-04 (docs/03:484), Q-05 (docs/06:74); 🟡 Q-06…Q-16.
+См. [`questions.md`](questions.md): Q-01 (Javadoc про `UpsertNode`), Q-02 (docs/06:81), Q-03 (docs/06:82, исправлено), Q-04 (docs/03:484), Q-05 (docs/06:74); 🟡 Q-06…Q-16.

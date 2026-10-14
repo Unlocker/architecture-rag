@@ -71,10 +71,9 @@
 
 | Команда | Поля | Проверки |
 |---|---|---|
-| `GraphCommand` (sealed) | — | `permits UpsertNode, UpsertRelation, CloseAssertion, TombstoneSourceRecord, DeferRelation` (`CM/command/GraphCommand.java:7-9`) |
+| `GraphCommand` (sealed) | — | `permits UpsertNode, UpsertRelation, TombstoneSourceRecord, DeferRelation` (`CM/command/GraphCommand.java:7-9`) |
 | `UpsertNode` | `(SourceRecord record, NodeData data)` | оба `!= null` (`CM/command/UpsertNode.java:10-13`) |
 | `UpsertRelation` | `(RelationType type, SourceKey from, NodeLabel fromLabel, SourceKey to, NodeLabel toLabel, Map<String,Object> properties, Validity validity, SourceKey assertedBy)` | см. Основной поток (`CM/command/UpsertRelation.java:21-42`) |
-| `CloseAssertion` | `(RelationType type, SourceKey from, SourceKey to, Instant validTo, SourceKey assertedBy)` | все `!= null`; `type.temporal()` (`CM/command/CloseAssertion.java:12-21`); `validTo` не сравнивается с `validFrom` связи |
 | `TombstoneSourceRecord` | `(SourceKey key, Instant deletedAt)` | оба `!= null`; «только после полного snapshot» — лишь Javadoc (`CM/command/TombstoneSourceRecord.java:7-13`) |
 | `DeferRelation` | `(UpsertRelation relation)` | `!= null` (`CM/command/DeferRelation.java:12-16`) |
 
@@ -138,7 +137,7 @@
 
 **Сквозное последствие (§3)**: «Новая метка узла или тип связи» затрагивает `canonical-model` → `normalizer` → `graph-projector (Neo4jSchema)` → `graph-query-core` (allowlist'ы) → `mcp-server` → `admin-console` → `admin-ui`; неявные связи № 9, № 4. Отдельно: `Neo4jSchema` генерирует `<label>_gid` UNIQUE-констрейнты из `NodeLabel.canonical()`, поэтому добавление канонической метки автоматически создаёт constraint (`ingestion/graph-projector/.../schema/Neo4jSchema.java:17, 43-44`) 🟢.
 
-**Связанные спецификации**: `_reversa_sdd/event-schemas/` (`CanonicalEvent` не зависит от моделей, но зависит от модуля), `_reversa_sdd/source-spi/`, `_reversa_sdd/normalizer/` (производитель `GraphCommand`), `_reversa_sdd/graph-projector/` (потребитель, исполняет семантику `CloseAssertion`/`DeferRelation`/`TombstoneSourceRecord`), `_reversa_sdd/identity-resolution/` (`SourceKey`, `AuthorityMatrix` в `PostgresSourceConflicts`), `_reversa_sdd/graph-query-core/`. Документы: `docs/02-data-model.md` §2–4; ADR [0003](../../docs/adr/0003-gid-and-source-record-identity.md), [0008](../../docs/adr/0008-authority-matrix-field-level.md), [0011](../../docs/adr/0011-namespace-cluster-modeled-not-populated.md), [0020](../../docs/adr/0020-tombstone-instead-of-hard-delete.md), [0024](../../docs/adr/0024-open-source-id-format.md), [0028](../../docs/adr/0028-structural-relations-temporal.md), [0029](../../docs/adr/0029-helm-chart-system-repo-commit.md), [0031](../../docs/adr/0031-it-system-platform-invariant.md) (см. [`decisions.md`](decisions.md)).
+**Связанные спецификации**: `_reversa_sdd/event-schemas/` (`CanonicalEvent` не зависит от моделей, но зависит от модуля), `_reversa_sdd/source-spi/`, `_reversa_sdd/normalizer/` (производитель `GraphCommand`), `_reversa_sdd/graph-projector/` (потребитель, исполняет семантику `DeferRelation`/`TombstoneSourceRecord`), `_reversa_sdd/identity-resolution/` (`SourceKey`, `AuthorityMatrix` в `PostgresSourceConflicts`), `_reversa_sdd/graph-query-core/`. Документы: `docs/02-data-model.md` §2–4; ADR [0003](../../docs/adr/0003-gid-and-source-record-identity.md), [0008](../../docs/adr/0008-authority-matrix-field-level.md), [0011](../../docs/adr/0011-namespace-cluster-modeled-not-populated.md), [0020](../../docs/adr/0020-tombstone-instead-of-hard-delete.md), [0024](../../docs/adr/0024-open-source-id-format.md), [0028](../../docs/adr/0028-structural-relations-temporal.md), [0029](../../docs/adr/0029-helm-chart-system-repo-commit.md), [0031](../../docs/adr/0031-it-system-platform-invariant.md) (см. [`decisions.md`](decisions.md)).
 
 ## Решения дизайна
 
@@ -169,9 +168,7 @@
 - 🟢 [UNLOCKER-280: реализовано] `SyncRunStatus.SUCCEEDED/FAILED`, `SyncRun.endedAt` и счётчики выставляет закрытие прогона (`SyncRunWriter`, вызывает `EventProcessor` по маркеру `snapshot-complete`); проектор создаёт узел только со `status = 'RUNNING'` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:698`; `CM/provenance/SyncRunStatus.java:5`). Источник: `_reversa_sdd/detective-gaps.md` Р-5. Формула счётчиков (`SyncRunCounts.of`, по журналу без маркера): `fetched` — все события прогона, `applied` — `PROJECTED`/`DUPLICATE`/`IGNORED_OLD_VERSION`, `failed` — `QUARANTINED` + `RETRYING`.
 - 🔴 `docs/02-data-model.md:170` не называет `platformId` среди явных правил `ITSystem`; код — называет (`CM/authority/AuthorityMatrix.java:95-96`, ADR 0031).
 - 🔴 ADR 0008 (`docs/adr/0008-authority-matrix-field-level.md:14`) называет только `DEPENDS_ON` — EAM; мастер `DECOMPOSED_INTO` = SCM существует лишь в коде (`CM/authority/AuthorityMatrix.java:108`) и `docs/02`.
-- 🔴 `CloseAssertion` нигде в `main` не создаётся (поиск по `ingestion/`, `adapters/`, `access/`, `platform/`): потребляют `ingestion/graph-projector/.../GraphProjector.java:347`, `EventProcessor.java:577`; производителя нет — неясно, мёртвая ли команда или задел.
 - 🟡 `UpsertRelation` допускает `validity == null` и у темпоральных типов (`CM/command/UpsertRelation.java:35`); обработку `null` определяет проектор.
-- 🟡 `CloseAssertion.validTo` не сравнивается с `validFrom` связи в модуле; `validTo = max(validFrom, validTo)` делает проектор (`docs/02-data-model.md` §4).
 - 🟡 `ITSystem.criticality` и `criticalityRaw` взаимоисключающи по Javadoc (`CM/node/ITSystem.java:6-11`), но конструктор этого не проверяет.
 - 🟡 `Repository.url` не нормализуется и не проверяется в конструкторе, тогда как `Deployment.repositoryUrl` обязан быть нормализован (`CM/node/Repository.java:10`, `CM/node/Deployment.java:30-32`).
 - 🟡 `HOSTED_ON` объявлена на `VIRTUAL_MACHINE → PHYSICAL_SERVER`; для `UNSPECIFIED` (`COMPUTE_INSTANCE`) недостижима; нормализатор её вообще не строит (`docs/02-data-model.md:79`).

@@ -25,7 +25,6 @@
 | `DeferRelation` | `PendingRelations.store(tx, key, request.version().value(), request.eventTime(), defer.relation())` |
 | `TombstoneSourceRecord` | `tombstone(tx, request, tombstone)` |
 | `UpsertRelation` | `upsertRelation(tx, relation, gids[from], gids[to], eventTime, skippedRelations)` |
-| `CloseAssertion` | `closeAssertion(tx, request, close)` |
 
 5. **Хвост.** `!isTombstone` → `closeReplacedRelations`; `isRelationOnly` → `markRelationOnlyRecord`; `writeConflictMarkers(request.conflicts())`; `linkSyncRun`; результат `new ProjectionResult(APPLIED, skippedProperties, skippedRelations)` (`GP/GraphProjector.java:350-358`).
 
@@ -87,10 +86,6 @@ SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END
 
 `$at = tombstone.deletedAt` (= `event.time()` либо `now` из `Reconciler`) 🟢. Физического удаления и снятия `ASSERTS` нет; `PendingRelation` записи удалены на шаге 3 `write`.
 
-## `closeAssertion`
-
-Если источник не авторитетен для типа — молча `return` (в `skippedRelations` не попадает) 🟡; иначе `MATCH (a:<корневые метки `RelationType.sources()`> {gid:$from})-[rel:<TYPE>]->(b:<корневые метки `RelationType.targets()`> {gid:$to}) WHERE rel.assertedBy* = запись AND rel.validTo IS NULL SET rel.validTo = CASE WHEN rel.validFrom > $validTo THEN rel.validFrom ELSE $validTo END`; нет связи — ничего не меняется (`GP/GraphProjector.java:668-685`). Мёртвый для production путь: Q-03.
-
 ## `writeConflictMarkers`, `markRelationOnlyRecord`, `linkSyncRun`
 
 - `writeConflictMarkers`: `records` = список `{source, sourceType, sourceId, properties}` из `markers.byRecord()`; корневые метки `roots` = все корни `NodeLabel.canonical()` через `|` (отсортированы); `MATCH (n:<roots> {gid: $gid})<-[a:ASSERTS]-(r:SourceRecord)` → для рёбер записей из набора `SET a.conflicts = hit[0].properties`, иначе `REMOVE a.conflicts` (`GP/GraphProjector.java:471-491`).
@@ -120,4 +115,4 @@ SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END
 
 ## Риски и пробелы
 
-🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1, 5)] [`../questions.md`](../questions.md) Q-03 (`CloseAssertion`), Q-04 (`SyncRun`); 🟡 Q-09 (пустой узел от неавторитетной записи), Q-13 (tombstone с применённой версией; tombstone неизвестной записи), Q-14 (`EPOCH`), Q-16 (ограничения замещения), Q-17 (допущение одного писателя). Сам по себе `GraphProjector` в модуле юнит-тестами не покрыт — только IT с Docker 🟡.
+🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 1)] [`../questions.md`](../questions.md) Q-04 (`SyncRun`); 🟡 Q-09 (пустой узел от неавторитетной записи), Q-13 (tombstone с применённой версией; tombstone неизвестной записи), Q-14 (`EPOCH`), Q-16 (ограничения замещения), Q-17 (допущение одного писателя). Сам по себе `GraphProjector` в модуле юнит-тестами не покрыт — только IT с Docker 🟡.

@@ -54,4 +54,4 @@
 
 ## Открытые 🔴
 
-- Q-1 `SyncRunStatus.SUCCEEDED/FAILED` не выставляются; Q-2 доки `docs/02` без `platformId`; Q-3 производитель `CloseAssertion`; Q-4 ADR 0008 без `DECOMPOSED_INTO` — детали и ссылки в [`questions.md`](questions.md).
+- Q-1 `SyncRunStatus.SUCCEEDED/FAILED` не выставляются; Q-2 доки `docs/02` без `platformId`; Q-3 `CloseAssertion` (удалён, UNLOCKER-284); Q-4 ADR 0008 без `DECOMPOSED_INTO` — детали и ссылки в [`questions.md`](questions.md).

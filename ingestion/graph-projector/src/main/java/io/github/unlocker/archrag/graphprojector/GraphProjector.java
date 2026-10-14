@@ -1,7 +1,6 @@
 package io.github.unlocker.archrag.graphprojector;
 
 import io.github.unlocker.archrag.canonicalmodel.authority.AuthorityMatrix;
-import io.github.unlocker.archrag.canonicalmodel.command.CloseAssertion;
 import io.github.unlocker.archrag.canonicalmodel.command.DeferRelation;
 import io.github.unlocker.archrag.canonicalmodel.command.GraphCommand;
 import io.github.unlocker.archrag.canonicalmodel.command.TombstoneSourceRecord;
@@ -344,7 +343,6 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                 request.gids().get(relation.to()),
                 request.eventTime(),
                 skippedRelations);
-        case CloseAssertion close -> closeAssertion(tx, request, close);
       }
     }
     // PARTIAL: список связей неполон, отсутствие связи не означает её закрытие.
@@ -664,25 +662,6 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
     return relation.type().temporal()
         && relation.assertedBy().equals(key)
         && matrix.isAuthoritative(relation.type(), key.source());
-  }
-
-  private void closeAssertion(TransactionContext tx, ProjectionRequest request, CloseAssertion close) {
-    if (!matrix.isAuthoritative(close.type(), close.assertedBy().source())) {
-      return;
-    }
-    Map<String, Object> params =
-        relationParams(
-            request.gids().get(close.from()), request.gids().get(close.to()), request.eventTime(), close.assertedBy());
-    params.put("validTo", NodeProperties.utc(close.validTo()));
-    // Нет подходящей открытой связи — ничего не меняется: повтор закрытия идемпотентен.
-    tx.run(
-            "MATCH (a:" + roots(close.type().sources()) + " {gid: $from})-[rel:" + close.type().name()
-                + "]->(b:" + roots(close.type().targets()) + " {gid: $to}) "
-                + "WHERE rel.assertedBySource = $source AND rel.assertedByType = $sourceType "
-                + "AND rel.assertedById = $sourceId AND rel.validTo IS NULL "
-                + "SET rel.validTo = CASE WHEN rel.validFrom > $validTo THEN rel.validFrom ELSE $validTo END",
-            params)
-        .consume();
   }
 
   private void linkSyncRun(TransactionContext tx, ProjectionRequest request) {
