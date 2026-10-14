@@ -33,6 +33,7 @@ class RepositoryUrlCompatibilityTest {
           Map.entry("http://git.example.org:8080/A/b.git", Optional.of("git.example.org:8080/a/b")),
           Map.entry("https://git.example.org/a/b/", Optional.of("git.example.org/a/b")),
           Map.entry("  https://git.example.org/a/b  ", Optional.of("git.example.org/a/b")),
+          Map.entry("https://git.example.org/a/Репо", Optional.of("git.example.org/a/репо")),
           Map.entry("   ", Optional.empty()));
 
   @Test
@@ -55,8 +56,18 @@ class RepositoryUrlCompatibilityTest {
     assertThat(legacy("https://git.example.org")).contains("git.example.org");
     assertThat(FeatureNormalizer.repositoryUrl("https://git.example.org")).isEmpty();
     // scp без user@: старая трактовала как схемный URL, новая распознаёт scp
-    assertThat(legacy("git.example.org:a/b")).isNotEqualTo(Optional.of("git.example.org/a/b"));
+    assertThat(legacy("git.example.org:a/b")).contains("git.example.org:a/b");
     assertThat(FeatureNormalizer.repositoryUrl("git.example.org:a/b")).contains("git.example.org/a/b");
+    // то же с «портом» без user@: scp-путь начинается с 2222
+    assertThat(legacy("git.example.org:2222/a/b")).contains("git.example.org:2222/a/b");
+    assertThat(FeatureNormalizer.repositoryUrl("git.example.org:2222/a/b"))
+        .contains("git.example.org/2222/a/b");
+    // хост, который java.net.URI не разбирает (подчёркивание): новая — признака нет
+    assertThat(legacy("https://git_srv/a/b")).contains("git_srv/a/b");
+    assertThat(FeatureNormalizer.repositoryUrl("https://git_srv/a/b")).isEmpty();
+    // URI-невалидный путь (пробел): новая — признака нет
+    assertThat(legacy("https://git.example.org/a/my repo")).contains("git.example.org/a/my repo");
+    assertThat(FeatureNormalizer.repositoryUrl("https://git.example.org/a/my repo")).isEmpty();
     // нераспознанная схема: старая принимала любое «host/path», новая — нет
     assertThat(legacy("host.example.org/a/b")).contains("host.example.org/a/b");
     assertThat(FeatureNormalizer.repositoryUrl("host.example.org/a/b")).isEmpty();
