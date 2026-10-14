@@ -21,7 +21,7 @@ ADR [0013](0013-operator-ops-via-admin-endpoint.md) вводит админск�
 
 Реализовано в UNLOCKER-280 (пп. 4–5) и UNLOCKER-285 (п. 6):
 
-4. Глубина хранения `admin_audit` задаётся параметром `archrag.admin.audit-retention` (по умолчанию `90d`, `ingestion/ingestion-service/.../application.yml:26`, `AdminProperties.java:30`); записи старше удаляет `HousekeepingJob.cleanAudit` (`HousekeepingJob.java:141-153`).
+4. Глубина хранения `admin_audit` задаётся параметром `archrag.admin.audit-retention` (по умолчанию `90d`, `ingestion/ingestion-service/.../application.yml:26`, `AdminProperties.java:20`); записи старше удаляет `HousekeepingJob.cleanAudit` (`HousekeepingJob.java:141-153`).
 5. Записи `STARTED`, оставшиеся после падения процесса или сбоя записи итога, переводятся в `FAILED` с `error = 'abandoned'` через `archrag.admin.audit-stale-after` (по умолчанию `24h`, `application.yml:24`; `HousekeepingJob.java:144-148`). Сбой записи итога после успешной операции по-прежнему только логируется, клиенту ошибка не отдаётся (`AdminOperations.java:56-67`); запись закроет чистка.
 6. Аудит отказов `ToolScopeFilter`: помимо `auditor.denied` для неизвестного tool и недостающего scope (`access/mcp-server/.../security/ToolScopeFilter.java:95`, `:100`), отказы `400` и `413` до разбора тела пишутся ровно одной записью через `auditor.rejected` с решениями `REJECTED_INVALID_REQUEST` и `REJECTED_TOO_LARGE` (`ToolScopeFilter.java:65`, `:73`, `:81`, `:86`; `audit/ToolCallAuditor.java:103`, `audit/ToolDecision.java:12-14`).
 
