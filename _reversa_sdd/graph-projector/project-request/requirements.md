@@ -19,7 +19,7 @@
 - PR-09. `UpsertRelation`: если источник не авторитетен для типа — тип в `skippedRelations`, ребро не пишется; иначе `MATCH (a:<root> {gid}), (b:<root> {gid})` + `MERGE (a)-[rel:<TYPE>{identity}]->(b)`, `SET rel += props, rel.assertedBy{Source,Type,Id}`; для темпоральных — правила открытия (BR-17); нет одного из узлов → `ProjectionException(UNRESOLVED_ENDPOINT)` 🟢 (`GP/GraphProjector.java:552-602`).
 - PR-10. Идентичность связи: свойства из `RelationType.identityProperties()` (в PoC — `commit` у `DEPLOYED_FROM`) входят в шаблон `MERGE` как `{commit: $id_commit}`; другое значение — другое ребро, прежнее закрывается замещением 🟢 (`GP/GraphProjector.java:580-584, 649-660`; `CM/relation/RelationType.java`; IT `DeployedFromIT` в `platform/integration-tests`).
 - PR-11. Замещение: для каждого типа с `UpsertRelation` (авторитетной, темпоральной, утверждённой этой записью) или `DeferRelation` той же записи собирается множество троек `[from.gid, to.gid, identity props в порядке имён]`; открытые связи типа с `assertedBy*` = ключ записи и тройкой вне множества получают `validTo = max(validFrom, eventTime)`. Не для tombstone 🟢 (`GP/GraphProjector.java:604-647, 662-666`).
-- PR-13. Tombstone: `SourceRecord.sourceVersion = version`, `active = false`, `deletedAt = tombstone.deletedAt`; закрываются открытые темпоральные связи, утверждённые записью (через узлы `ASSERTS` и отдельным циклом по каждому темпоральному типу по `assertedBy*` — для записей «только связь»); узлы, утверждённые записью, при отсутствии других активных MASTER-утверждений получают `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` 🟢 (`GP/GraphProjector.java:507-550`).
+- PR-13. Tombstone: `SourceRecord.sourceVersion = version`, `active = false`, `deletedAt = tombstone.deletedAt`; закрываются открытые темпоральные связи, утверждённые записью (через узлы `ASSERTS` и отдельным циклом по каждому темпоральному типу по `assertedBy*` — для записей «только связь»); узлы, утверждённые записью, при отсутствии других активных утверждений (любой авторитетности) получают `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` 🟢 (`GP/GraphProjector.java:507-550`).
 - PR-14. Запись без узла (`isRelationOnly`): `sourceVersion`, `active = true`, снятие `deletedAt`, `OWNS_RECORD`; без этого дедупликация и порядок версий не работали бы 🟢 (`GP/GraphProjector.java:493-505`).
 - PR-15. Маркеры конфликтов: `markers.isNone()` — ничего; иначе для `gid` на всех `ASSERTS` из узла: запись из набора → `SET a.conflicts = <имена свойств>`, остальные → `REMOVE a.conflicts` 🟢 (`GP/GraphProjector.java:471-491`).
 - PR-16. `SyncRun`: при `syncRunId != null` — `MERGE (s:SyncRun {runId})`, `ON CREATE SET adapter = $source, status = 'RUNNING'`, `startedAt` = минимум, `MERGE (s)-[:PROCESSED]->(r)`; счётчики не трогаются 🟢 (`GP/GraphProjector.java:687-703`).
@@ -93,9 +93,9 @@
 Тогда SourceRecord.active=false, deletedAt задан, связи закрыты, узел isCurrent=false, deletedAt задан (tombstoneDeactivatesRecordArchivesNodeAndClosesRelations)
 
 # AC-10 (негативный: другой мастер)
-Дано узел утверждён вторым активным MASTER
+Дано узел утверждён вторым активным assertion (MASTER или SUPPLEMENTARY)
 Когда одна запись получает tombstone
-Тогда узел остаётся isCurrent (tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains);
+Тогда узел остаётся isCurrent (tombstoneKeepsNodeWhileAnotherActiveMasterAssertionRemains, tombstoneOfMasterKeepsNodeWhileSupplementaryAssertionIsActiveAndClosesWithLastOne);
   upsert более новой версии реактивирует запись (upsertWithNewerVersionAfterTombstoneReactivates);
   delete раньше upsert блокирует старый upsert и не создаёт узел (deleteArrivingBeforeUpsertBlocksOlderUpsertAndCreatesNoNode)
 

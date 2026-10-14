@@ -816,6 +816,27 @@ class GraphProjectorIT {
   }
 
   @Test
+  void tombstoneOfMasterKeepsNodeWhileSupplementaryAssertionIsActiveAndClosesWithLastOne() {
+    String id = "svc-" + uid();
+    upsert("scm", "SERVICE", id, "1", Map.of("name", "pay", "language", "java"));
+    var scm = key(SourceSystemCode.SCM, "SERVICE", id);
+    var cmdb = key(SourceSystemCode.CMDB, "SERVICE", id);
+    identity.approve(new Crosswalk(scm, cmdb, "admin", "same service", T1));
+    projector.project(new ProjectionRequest(cmdb, new SourceVersion("1"), T2, null, Map.of(cmdb, identity.resolve(cmdb)),
+        List.of(new UpsertNode(new SourceRecord(cmdb, "1", "sha256:x", T2, true), new Service("pay", null, null, null)))));
+
+    handle(deleteEvent("d-" + uid(), "scm", "SERVICE", id, "2", T2));
+    var kept = single("MATCH (n:Service) RETURN n").get("n").asNode();
+    assertThat(kept.get("isCurrent").asBoolean()).isTrue();
+    assertThat(kept.containsKey("deletedAt")).isFalse();
+
+    handle(deleteEvent("d-" + uid(), "cmdb", "SERVICE", id, "2", T2));
+    var closed = single("MATCH (n:Service) RETURN n").get("n").asNode();
+    assertThat(closed.get("isCurrent").asBoolean()).isFalse();
+    assertThat(closed.containsKey("deletedAt")).isTrue();
+  }
+
+  @Test
   void deleteArrivingBeforeUpsertBlocksOlderUpsertAndCreatesNoNode() {
     String id = "t-" + uid();
     var delete = handle(deleteEvent("d-" + uid(), "eam", "TEAM", id, "5", T2));

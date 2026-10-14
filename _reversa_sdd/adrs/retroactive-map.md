@@ -56,11 +56,11 @@
 
 ### 3.1. ADR 0020 и «другие активные assertions»
 
-ADR: «канонический узел закрывается только при отсутствии других активных assertions». Код: узел архивируется, только если нет других активных **MASTER**-утверждений; активное SUPPLEMENTARY-утверждение узел не удерживает (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:543-548`). Это сужение, а не противоречие; нужно уточнение формулировки при следующем касании ADR 0020 🟡.
+ADR: «канонический узел закрывается только при отсутствии других активных assertions». Прежний код: только если нет других активных **MASTER**-утверждений (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/GraphProjector.java:543-548`). Расхождение снято в UNLOCKER-283: код закрывает узел только при отсутствии любых активных assertions, ADR 0020 не менялся по существу (уточнение 2026-10-14) 🟢.
 
 ### 3.2. ADR 0020 и high-water mark
 
-ADR: «High-water mark двигается после успешной проекции страницы». Код: курсор poller'а адаптера сдвигается **после `append` страницы в журнал** (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:22-25, 136`), а после коммита Neo4j сдвигается отдельный checkpoint `projector` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:612-617`). Это два разных «water mark», разделённых журналом — осознанное следствие ADR 0006, но формулировка 0020 их не различает 🟡.
+ADR: «High-water mark двигается после успешной проекции страницы». Код: курсор poller'а адаптера сдвигается **после `append` страницы в журнал** (`adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/Poller.java:22-25, 136`), а после коммита Neo4j сдвигается отдельный checkpoint `projector` (`ingestion/graph-projector/src/main/java/io/github/unlocker/archrag/graphprojector/EventProcessor.java:612-617`). Это два разных «water mark», разделённых журналом — осознанное следствие ADR 0006, но формулировка 0020 их не различала; развязка закреплена разделом «Уточнение 2026-10-14» в ADR 0020 (HWM = checkpoint `projector`) 🟢.
 
 ### 3.3. `docs/02-data-model.md` и состояния
 

@@ -117,7 +117,7 @@
 | Повтор пережил новую версию | `RETRYING`-событие перепроверяется до записи в PostgreSQL | `EventProcessor.java:324-344` 🟢 |
 | `eventId` конструкции | polling `poll:<type>/<id>/v<ver>`, snapshot `snap:<run>:<type>/<id>/v<ver>`, маркер `snapshot-complete:<run>`, replay `replay:<id>:<eventId>`, reconcile `reconcile:<run>:<type>/<id>` | `adapters/adapter-core/src/main/java/io/github/unlocker/archrag/adaptercore/EventMapper.java:99, 104`; `ReplayService.java:88-89`; `Reconciler.java:158` 🟢 |
 | Checkpoint только после коммита | `finish` → `saveCheckpoint("projector", source, eventId)` после перехода в конечный статус; при `RETRYING`/`QUARANTINED` не сдвигается | `EventProcessor.java:612-617` 🟢 |
-| Курсор poller'а | сдвигается после `append` всей страницы **в журнал** (не после проекции) | `Poller.java:22-25, 136` 🟢 / см. 🟡 в [`detective-gaps.md`](detective-gaps.md), П-7 |
+| Курсор poller'а | сдвигается после `append` всей страницы **в журнал** (не после проекции) | `Poller.java:22-25, 136` 🟢; уточнение ADR 0020 от 2026-10-14 ([`detective-gaps.md`](detective-gaps.md), П-7) |
 
 Для каждого объекта `(source, sourceType, sourceId)` порядок обработки сохраняется: диспетчер пропускает более поздние события объекта, если предыдущее ушло в `RETRYING` или упало (`JournalDispatcher.java:111-121`) 🟢.
 
@@ -129,7 +129,7 @@
 2. **Источник не отдал объект в полном snapshot:** `Reconciler` по маркеру `snapshot-complete` помечает tombstone только активные записи, которые (а) не вошли в прогон по журналу и (б) не затронуты никаким событием с начала прогона. Если событий прогона в журнале меньше `objectCount` маркера, бросается `IllegalStateException`, ничего не удаляется, маркер уйдёт в `RETRYING` (`Reconciler.java:100-142`; `EventProcessor.java:293-298`) 🟢.
 3. **Tombstone `Reconciler` пишется в журнал до записи в граф** событием `reconcile:<run>:<type>/<id>` с raw в S3, чтобы replay и rebuild воспроизводили удаления; повтор доводит строку до конечного статуса (`Reconciler.java:45-48, 156-194`) 🟢. В ADR этого нет — [`adrs/candidates.md`](adrs/candidates.md), К-5.
 4. **Tombstone с версией записи:** `Reconciler` берёт уже применённую версию; если объект успели обновить, проекция вернёт `IGNORED_OLD_VERSION` и новое состояние не удалится (`Reconciler.java:42-43, 130-135`) 🟢.
-5. **Канонический узел** архивируется, только если нет других активных MASTER-утверждений (`GraphProjector.java:543-548`), см. [`state-machines.md`](state-machines.md), §6. Рёбра закрываются через `validTo` (ADR 0028).
+5. **Канонический узел** архивируется, только если нет других активных утверждений любой авторитетности (`GraphProjector.closeNode`), см. [`state-machines.md`](state-machines.md), §6. Рёбра закрываются через `validTo` (ADR 0028).
 6. **Retention.** `inbox_event`, `dlq_entry`, `admin_audit`, S3 raw не чистятся — сознательный выбор PoC (`_reversa_sdd/database/business-rules.md`, §3) 🟡; политики архивации нет (ADR 0020, «Последствия»).
 7. 🟡 Ручной запуск `POST /admin/reconcile/{source}` не повторяет «missing set», а запускает *новый полный snapshot* в adapter-сервисе (`AdminController.java:94-115`; коммит `9656ce5`), поэтому «безопасность удаления» зависит от полноты нового snapshot, а не от какого-то сохранённого списка.
 

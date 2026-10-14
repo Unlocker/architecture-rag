@@ -47,7 +47,7 @@ import org.neo4j.driver.TransactionContext;
  *       только если источник авторитетен для типа; остальное пропускается и возвращается в результате;
  *       {@code null} никогда не записывается;</li>
  *   <li>удаления физического нет: tombstone ставит {@code active=false}, а каноничный узел архивируется
- *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных MASTER-утверждений;</li>
+ *       ({@code deletedAt}, {@code isCurrent=false}), только если нет других активных утверждений любой авторитетности;</li>
  *   <li>версия записи замещает свои темпоральные связи: открытая связь типа, который эта версия утверждает
  *       (или откладывает), от этой записи, но отсутствующая в версии, закрывается на {@code eventTime}; типы,
  *       которых в версии нет, не трогаются; tombstone и повтор версии ничего не замещают;</li>
@@ -461,7 +461,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
                 + staleLabels
                 + " SET n.firstSeenAt = CASE WHEN n.firstSeenAt IS NULL OR n.firstSeenAt > $at THEN $at ELSE n.firstSeenAt END, "
                 + "n.lastSeenAt = CASE WHEN n.lastSeenAt IS NULL OR n.lastSeenAt < $at THEN $at ELSE n.lastSeenAt END "
-                + "FOREACH (x IN CASE WHEN $master THEN [1] ELSE [] END | SET n.isCurrent = true REMOVE n.deletedAt) "
+                + "SET n.isCurrent = true REMOVE n.deletedAt "
                 + "MERGE (r)-[a:ASSERTS]->(n) "
                 + "SET a.confidence = 1.0, a.authority = $authority",
             params)
@@ -536,7 +536,7 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
               params)
           .consume();
     }
-    // Каноничный узел закрывается только без других активных MASTER-утверждений.
+    // Каноничный узел закрывается только без других активных утверждений (любой авторитетности).
     closeNode(tx, params, "");
   }
 
@@ -557,12 +557,12 @@ public final class GraphProjector implements GraphProjection, DeploymentLookup, 
 
   /**
    * Закрывает канонический узел записи ({@code isCurrent=false}, {@code deletedAt}), если у него нет других активных
-   * MASTER-утверждений; {@code nodeFilter} сужает узлы. Общий путь tombstone и закрытия прежнего узла при переносе.
+   * утверждений (любой авторитетности); {@code nodeFilter} сужает узлы. Общий путь tombstone и закрытия прежнего узла при переносе.
    */
   private void closeNode(TransactionContext tx, Map<String, Object> params, String nodeFilter) {
     tx.run(
             "MATCH (r:SourceRecord " + RECORD_KEY + ")-[:ASSERTS]->(n) "
-                + "WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS {authority: 'MASTER'}]->(n) "
+                + "WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS]->(n) "
                 + "WHERE o <> r }" + nodeFilter + " "
                 + "SET n.isCurrent = false, n.deletedAt = coalesce(n.deletedAt, $at)",
             params)

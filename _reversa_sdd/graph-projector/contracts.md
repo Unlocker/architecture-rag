@@ -36,9 +36,9 @@
 |---|---|---|
 | Новая версия записи | `SourceRecord.sourceVersion/contentHash/fetchedAt` обновлены, `active = true`, `deletedAt` снят | `GP/GraphProjector.java:448-452` 🟢 |
 | Запись только со связями/пустая | `sourceVersion`, `active = true`, `OWNS_RECORD`; `contentHash`/`fetchedAt` **не** пишутся; `ASSERTS` нет | `GP/GraphProjector.java:493-505` 🟢 |
-| Tombstone | `active = false`, `sourceVersion` = версия tombstone, `deletedAt = deletedAt` события; открытые темпоральные связи записи → `validTo = max(validFrom, at)`; узел `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` при отсутствии других активных MASTER | `GP/GraphProjector.java:507-550` 🟢 |
+| Tombstone | `active = false`, `sourceVersion` = версия tombstone, `deletedAt = deletedAt` события; открытые темпоральные связи записи → `validTo = max(validFrom, at)`; узел `isCurrent = false`, `deletedAt = coalesce(deletedAt, at)` при отсутствии других активных утверждений любой авторитетности | `GP/GraphProjector.java:507-550` 🟢 |
 | Повторное утверждение закрытой связи | `validFrom` = из источника, иначе `eventTime`; `validTo = $validTo` (обычно `null`) | `GP/GraphProjector.java:571-575` 🟢 |
-| Мастер архивированного узла вернулся | `isCurrent = true`, `deletedAt` снимается (только если запись — MASTER) | `GP/GraphProjector.java:460` 🟢 |
+| Запись архивированного узла вернулась (любая авторитетность) | `isCurrent = true`, `deletedAt` снимается | `GP/GraphProjector.java:460` 🟢 |
 
 ## 3. Схема Neo4j (`Neo4jSchema.statements`)
 

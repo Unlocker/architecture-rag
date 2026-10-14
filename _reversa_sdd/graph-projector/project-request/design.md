@@ -82,7 +82,7 @@ SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END
 1. `MATCH (r:SourceRecord …) SET r.sourceVersion = $version, r.active = false, r.deletedAt = $at MERGE (sys:SourceSystem {code}) MERGE (sys)-[:OWNS_RECORD]->(r)`.
 2. Закрытие временных связей узлов, которые утверждает запись: `MATCH (r)-[:ASSERTS]->(n)-[rel]-() WHERE type(rel) IN $temporalTypes AND rel.validTo IS NULL AND rel.assertedBy* = запись SET rel.validTo = CASE WHEN rel.validFrom > $at THEN rel.validFrom ELSE $at END`; `$temporalTypes` — имена `RelationType` с `temporal()` (`GP/GraphProjector.java:747-749`).
 3. Для записей «только связь» (нет `ASSERTS`): цикл по `RelationType.values()` с `temporal()`: `MATCH ()-[rel:<TYPE>]->() WHERE rel.validTo IS NULL AND rel.assertedBy* = запись SET rel.validTo = …` (тип — из enum).
-4. Архивация узла: `MATCH (r)-[:ASSERTS]->(n) WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS {authority: 'MASTER'}]->(n) WHERE o <> r } SET n.isCurrent = false, n.deletedAt = coalesce(n.deletedAt, $at)`.
+4. Архивация узла: `MATCH (r)-[:ASSERTS]->(n) WHERE NOT EXISTS { MATCH (o:SourceRecord {active: true})-[:ASSERTS]->(n) WHERE o <> r } SET n.isCurrent = false, n.deletedAt = coalesce(n.deletedAt, $at)`.
 
 `$at = tombstone.deletedAt` (= `event.time()` либо `now` из `Reconciler`) 🟢. Физического удаления и снятия `ASSERTS` нет; `PendingRelation` записи удалены на шаге 3 `write`.
 

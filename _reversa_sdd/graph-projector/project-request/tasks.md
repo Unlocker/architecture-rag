@@ -18,7 +18,7 @@
   Origin: `GP/GraphProjector.java:552-602, 649-660`. Критерий готовности: AC-05, AC-08; IT `temporalRelationGetsValidFromAndIsNotReopenedByRepeat`, `hostReturningInLaterVersionReopensRunsOn`, `DeployedFromIT`. Уверенность: 🟢.
 - [ ] **T-07. `closeReplacedRelations`.** Тройки, `kept` по типам (включая `DeferRelation`), закрытие вне набора.
   Origin: `GP/GraphProjector.java:604-647, 662-666`. Критерий готовности: AC-06, AC-07. Уверенность: 🟢.
-- [ ] **T-08. `tombstone`.** Четыре запроса (запись, связи через `ASSERTS`, связи «только связь» по enum, архивация узла без других MASTER).
+- [ ] **T-08. `tombstone`.** Четыре запроса (запись, связи через `ASSERTS`, связи «только связь» по enum, архивация узла без других активных утверждений).
   Origin: `GP/GraphProjector.java:507-550, 747-749`. Критерий готовности: AC-09, AC-10; `tombstoneClosesStructuralEdges`. Уверенность: 🟢.
 - [ ] **T-09. `markRelationOnlyRecord`, `writeConflictMarkers`, `linkSyncRun`.**
   Origin: `GP/GraphProjector.java:467-505, 687-703`. Критерий готовности: `relationOnlyEventIsProjectedNotQuarantined` (юнит); AC-12; IT `SourceConflictIT` (маркеры `ASSERTS.conflicts`). Уверенность: 🟢 (IT конфликтов — 🟡: тест вне этого модуля).
