@@ -24,7 +24,9 @@ import java.util.Objects;
  */
 public final class Normalizer {
 
-  private static final String SCHEMA_PREFIX = "urn:corp:schema:asset-upserted:";
+  /** Префикс {@code dataschema} без версии; выводится из {@link CanonicalEvent#SCHEMA_UPSERTED}. */
+  private static final String SCHEMA_PREFIX =
+      CanonicalEvent.SCHEMA_UPSERTED.substring(0, CanonicalEvent.SCHEMA_UPSERTED.lastIndexOf(':') + 1);
 
   private final Map<SourceSystemCode, CanonicalMapper> mappers = new EnumMap<>(SourceSystemCode.class);
   private final ReferenceResolver resolver;

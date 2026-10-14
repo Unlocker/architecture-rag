@@ -9,8 +9,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
@@ -153,10 +153,10 @@ public class HousekeepingJob {
 
   /** {@code SyncRun.adapter} ({@code EAM}) → {@code urn:corp:eam}; неизвестное значение отдаёт пустой журнал. */
   private static String sourceUrn(String adapter) {
-    return Arrays.stream(SourceSystemCode.values())
-        .filter(code -> code.name().equalsIgnoreCase(adapter))
-        .findFirst()
-        .map(SourceSystemCode::urn)
-        .orElse(adapter);
+    try {
+      return SourceSystemCode.valueOf(adapter.toUpperCase(Locale.ROOT)).urn();
+    } catch (IllegalArgumentException e) {
+      return SourceSystemCode.URN_PREFIX + adapter.toLowerCase(Locale.ROOT);
+    }
   }
 }
