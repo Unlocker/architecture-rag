@@ -195,6 +195,74 @@ class EventJournalIT {
     assertThat(dlqRows("urn:corp:eam", id)).hasSize(1);
   }
 
+  private static int openDlq(String source, String eventId) {
+    try (var c = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        var ps = c.prepareStatement(
+            "select count(*) from dlq_entry where source = ? and event_id = ? and replayed_at is null")) {
+      ps.setString(1, source);
+      ps.setString(2, eventId);
+      try (var rs = ps.executeQuery()) {
+        rs.next();
+        return rs.getInt(1);
+      }
+    } catch (java.sql.SQLException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Test
+  void releaseFromQuarantineResetsAttemptsClosesDlqAndAllowsNewDlqRecord() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+    journal.transition("urn:corp:eam", id, ProcessingStatus.RETRYING, "GRAPH_UNAVAILABLE", "down");
+    journal.transition("urn:corp:eam", id, ProcessingStatus.RETRYING, "GRAPH_UNAVAILABLE", "down");
+    journal.toDlq("urn:corp:eam", id, "RETRY_LIMIT_EXCEEDED", "GRAPH_UNAVAILABLE: down");
+    assertThat(openDlq("urn:corp:eam", id)).isEqualTo(1);
+
+    var released = journal.releaseFromQuarantine("urn:corp:eam", id);
+
+    assertThat(released.status()).isEqualTo(ProcessingStatus.RETRYING);
+    assertThat(released.attempts()).isZero();
+    assertThat(released.errorCode()).isNull();
+    assertThat(openDlq("urn:corp:eam", id)).isZero();
+    assertThat(dlqRows("urn:corp:eam", id)).hasSize(1);
+    // Повторный сбой: частичный уникальный индекс допускает новую открытую запись рядом с закрытой.
+    journal.toDlq("urn:corp:eam", id, "INVALID_COMMANDS", "again");
+    assertThat(openDlq("urn:corp:eam", id)).isEqualTo(1);
+    assertThat(dlqRows("urn:corp:eam", id)).hasSize(2);
+  }
+
+  @Test
+  void releaseFromQuarantineRejectsEventNotQuarantinedAndUnknownEvent() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+
+    assertThatThrownBy(() -> journal.releaseFromQuarantine("urn:corp:eam", id)).isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> journal.releaseFromQuarantine("urn:corp:eam", "missing"))
+        .isInstanceOf(IllegalArgumentException.class);
+    journal.toDlq("urn:corp:eam", id, "C", "r");
+    journal.releaseFromQuarantine("urn:corp:eam", id);
+    // Второй вызов подряд: событие уже в RETRYING.
+    assertThatThrownBy(() -> journal.releaseFromQuarantine("urn:corp:eam", id)).isInstanceOf(IllegalStateException.class);
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.RETRYING);
+  }
+
+  @Test
+  void closeDlqIsIdempotentAndLeavesEventStatusAlone() {
+    var journal = new PostgresEventJournal(dataSource());
+    String id = uid();
+    journal.append(event("urn:corp:eam", id, "1"), null, null);
+    journal.toDlq("urn:corp:eam", id, "C", "r");
+
+    assertThat(journal.closeDlq("urn:corp:eam", id)).isTrue();
+    assertThat(journal.closeDlq("urn:corp:eam", id)).isFalse();
+    assertThat(journal.closeDlq("urn:corp:eam", "missing")).isFalse();
+    assertThat(openDlq("urn:corp:eam", id)).isZero();
+    assertThat(journal.find("urn:corp:eam", id).orElseThrow().status()).isEqualTo(ProcessingStatus.QUARANTINED);
+  }
+
   @Test
   void dlqRejectsBlankCodeAndUnknownEvent() {
     var journal = new PostgresEventJournal(dataSource());

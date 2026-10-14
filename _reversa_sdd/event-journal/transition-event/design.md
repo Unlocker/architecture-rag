@@ -18,8 +18,7 @@
 | `RESOLVED` | `PROJECTED`, `RETRYING`, `QUARANTINED`, `IGNORED_OLD_VERSION` |
 | `RETRYING` | `VALIDATED`, `NORMALIZED`, `RESOLVED`, `PROJECTED`, `QUARANTINED`, `IGNORED_OLD_VERSION` |
 | `QUARANTINED` | `RETRYING` |
-| `PROJECTED` | `SUPERSEDED` |
-| `SUPERSEDED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда |
+| `PROJECTED`, `DUPLICATE`, `IGNORED_OLD_VERSION` | никуда |
 
 ## Основной поток `transition`
 
@@ -61,6 +60,6 @@
 
 ## Риски
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-1: `replayed_at` не заполняется; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-2: `QUARANTINED` без выхода; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-3: `SUPERSEDED` недостижим; 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-4: нет лимита `attempts` (см. [`../questions.md`](../questions.md)).
+- 🟢 [UNLOCKER-281: реализовано] R-1..R-4: `replayed_at` пишет `closeDlq`; выход из карантина — `releaseFromQuarantine` (`attempts = 0` отдельным SQL, обычный `transition` счётчик увеличивает); `SUPERSEDED` удалён; лимит попыток — в `EventProcessor.retry` (см. [`../questions.md`](../questions.md)).
 - 🟡 Повторный `toDlq` расходится: `inbox_event.error_*` — новые значения, `dlq_entry` — первые.
 - 🟡 Успешный переход затирает код последней ошибки (`RETRYING → PROJECTED`).

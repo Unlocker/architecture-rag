@@ -40,6 +40,23 @@ public interface EventJournal {
    */
   JournalEntry toDlq(String source, String eventId, String errorCode, String reason);
 
+  /**
+   * Возвращает событие из {@code QUARANTINED} в очередь повторов: одной транзакцией ставит {@code RETRYING} с
+   * {@code attempts = 0} (обычный переход счётчик увеличивает) и закрывает открытую запись DLQ. Дальше событие берёт
+   * диспетчер, как любой {@code RETRYING}; если оно упадёт снова, откроется новая запись DLQ.
+   *
+   * @throws IllegalArgumentException если события нет
+   * @throws IllegalStateException если событие не в {@code QUARANTINED}
+   */
+  JournalEntry releaseFromQuarantine(String source, String eventId);
+
+  /**
+   * Закрывает открытую запись DLQ события ({@code replayed_at = now()}): оператор её разобрал. Идемпотентно.
+   *
+   * @return {@code true}, если открытая запись была и закрыта
+   */
+  boolean closeDlq(String source, String eventId);
+
   /** Читает checkpoint consumer по источнику. */
   Optional<Checkpoint> loadCheckpoint(String consumer, String source);
 

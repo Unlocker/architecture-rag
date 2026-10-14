@@ -111,10 +111,11 @@ public class IngestionServiceConfiguration {
       Reconciler reconciliation,
       IdentityCandidates candidates,
       SourceConflicts conflicts,
+      DispatcherProperties dispatcher,
       IngestionMetrics metrics) {
     return new EventProcessor(
         journal, Normalizer.standard(projector::isActive, projector), identity, projector, reconciliation, candidates, conflicts,
-        projector, projector, metrics::recordWarnings);
+        projector, projector, metrics::recordWarnings, dispatcher.maxAttempts());
   }
 
   /** Метрики журнала; обновление gauges по {@code @Scheduled}. Экспорт включается флагом {@code management.otlp}. */

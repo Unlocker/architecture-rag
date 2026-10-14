@@ -12,6 +12,7 @@
 | `POST /admin/rebuild?confirm=true` | query `confirm` (по умолчанию `false`); тела нет | `200 ReplayResult` | `400 confirm=true is required`; `409` | `REBUILD`, `request={"confirm":true}`, `replay_id` (новый UUID), `result={total, statuses}` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:84-92` |
 | `POST /admin/reconcile/{source}` | path: короткий код или `urn:corp:<код>` | статус и тело ответа адаптера как есть (`202`/`409`), `Content-Type: application/json` | `400 source is invalid`; `404 {"error":"unknown source"}` (нет `control-url`; аудит не пишется); `502 adapter is unavailable`; `409` от замка | `RECONCILE`, `request={"source":"<код>"}`, `replay_id = NULL`, `result={"adapterStatus":<код>}` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:94-115` |
 | `POST /admin/crosswalks` | JSON-массив `CrosswalkItem{left{source,sourceType,sourceId}, right{...}, reason}`, 1..1000 элементов | `200 [CrosswalkResult{index, status, gid}]` | `400 items must contain 1..1000 elements`; `409` | запись `CROSSWALK` на каждый элемент | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java:31, 117-123` |
+| `POST /admin/quarantine/release` | JSON `{source, eventId}`; `source` — как в replay, `eventId` непустой, до 500 символов | `200 {source, eventId, status:"RETRYING", attempts:0}` | `400`; `404 unknown event`; `409 event is not quarantined` (повтор, событие не в карантине), `409` занятого замка | `QUARANTINE_RELEASE`, `request={source, eventId}`, `result={status, attempts}` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/AdminController.java` 🟢 [UNLOCKER-281] |
 
 Статусы `CrosswalkResult.Status`: `APPLIED` (gid заполнен), `CONFLICT`, `INVALID` (gid = `null`) (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/CrosswalkResult.java:12-19`) 🟢. Ключи `ReplayResult.statuses` — `ProcessingStatus.name()` плюс `SKIPPED_SNAPSHOT_MARKER`, `SKIPPED_NO_RAW` (`ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/ReplayService.java:35-36`) 🟢; карта отсортирована (`TreeMap`).
 
@@ -71,6 +72,7 @@
 | `archrag.dispatcher.poll-interval` | `ARCHRAG_DISPATCHER_POLL_INTERVAL` | `1s` | > 0 | `:45`, `DispatcherProperties.java:19, 25-27` |
 | `archrag.dispatcher.batch-size` | `ARCHRAG_DISPATCHER_BATCH_SIZE` | `100` | 1..1000 | `:46`, `DispatcherProperties.java:20, 31-33` |
 | `archrag.dispatcher.retry-delay` | `ARCHRAG_DISPATCHER_RETRY_DELAY` | `30s` | ≥ 0 | `:47`, `DispatcherProperties.java:21, 28-30` |
+| `archrag.dispatcher.max-attempts` | `ARCHRAG_DISPATCHER_MAX_ATTEMPTS` | `10` | ≥ 1 | `application.yml`, `DispatcherProperties.java` 🟢 [UNLOCKER-281] |
 | `archrag.dispatcher.shutdown-timeout` | `ARCHRAG_DISPATCHER_SHUTDOWN_TIMEOUT` | `30s` | | `:48`, `DispatcherProperties.java:22` |
 | `archrag.metrics.refresh-interval` | нет в yml | `15s` | | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/IngestionMetrics.java:131` |
 | `management.otlp.metrics.export.enabled` / `.step` | `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED` (в compose) | `false` / `10s` | | `:53-56` |
@@ -84,6 +86,8 @@
 | `NO_RAW_PAYLOAD` | у строки нет `payloadRef`, тип не `snapshot-complete` | `event has no raw payload` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:47-48, 143-145` 🟢 |
 | `MARKER_NO_RAW` | нет `payloadRef`, тип `architecture.sync.snapshot-complete.v1` | `event has no raw payload` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:49, 144-145` 🟢 |
 | `INVALID_RAW_PAYLOAD` | `StoredEventReader.toEvent` бросил `IllegalArgumentException` | `raw payload is not a valid event` | `ingestion/ingestion-service/src/main/java/io/github/unlocker/archrag/ingestionservice/JournalDispatcher.java:47, 150-154` 🟢 |
+
+`RETRY_LIMIT_EXCEEDED` ставит `EventProcessor.retry`, когда после перехода в `RETRYING` `attempts >= archrag.dispatcher.max-attempts`; `reason` — исходный код сбоя и текст (🟢 UNLOCKER-281).
 
 Остальные коды (`UNSUPPORTED_EVENT_TYPE`, `UNKNOWN_SOURCE`, `GRAPH_*` и др.) ставит `EventProcessor` — см. спецификацию graph-projector.
 

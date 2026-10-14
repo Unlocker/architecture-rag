@@ -80,7 +80,7 @@
 | Вопрос | Решение | Разрыв с кодом / что нужно сделать | Тип |
 |---|---|---|---|
 | 1 | Закрывать `SyncRun`, глубина хранения — параметр конфигурации | `GraphProjector.java:695-700` не закрывает; нет retention | задача кода |
-| 2 | Писать `replayed_at`, выход из `QUARANTINED`, лимит `RETRYING`, `SUPERSEDED` — привязать или удалить | см. R-1…R-4 `event-journal`, Р-1…Р-3 | задача кода + анализ `SUPERSEDED` |
+| 2 | ✅ Реализовано в UNLOCKER-281 | `closeDlq` в replay, `POST /admin/quarantine/release`, `archrag.dispatcher.max-attempts` (`RETRY_LIMIT_EXCEEDED`), `SUPERSEDED` удалён; кнопок в консоли нет (ADR 0026) | выполнено |
 | 3 | Перепроекция после `approve` | `PostgresIdentityMapping.java:80-145` трогает только crosswalk | задача кода |
 | 4 | Реализация по ADR 0020 | узел закрывается по любым активным assertions; HWM после коммита Neo4j | задача кода (при необходимости отдельная) |
 | 5 | Удалить `CloseAssertion` | `canonical-model`, `graph-projector`, `normalizer` | задача кода; поправить `docs/06:82` |

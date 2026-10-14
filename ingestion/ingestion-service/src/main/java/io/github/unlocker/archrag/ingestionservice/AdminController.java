@@ -1,5 +1,7 @@
 package io.github.unlocker.archrag.ingestionservice;
 
+import io.github.unlocker.archrag.eventschemas.EventJournal;
+import io.github.unlocker.archrag.eventschemas.JournalEntry;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk. Доступен только со scope
+ * Админский эндпоинт ingestion-сервиса: replay, rebuild, reconcile, crosswalk, возврат события из карантина. Доступен только со scope
  * {@value SecurityConfiguration#ADMIN_SCOPE} и ролью {@value SecurityConfiguration#ADMIN_ROLE} ({@link SecurityConfiguration}), во внешний ingress не публикуется.
  * Операции синхронные, идут под {@link AdminLock} и пишутся в аудит ({@link AdminOperations}).
  */
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
   static final int MAX_CROSSWALK_ITEMS = 1000;
+  static final int MAX_EVENT_ID_LENGTH = 500;
   private static final Pattern SOURCE = Pattern.compile("[A-Za-z0-9:._-]{1,200}");
 
   private final AdminOperations operations;
@@ -36,18 +39,21 @@ public class AdminController {
   private final RebuildService rebuild;
   private final CrosswalkService crosswalk;
   private final AdapterControlClient adapters;
+  private final EventJournal journal;
 
   public AdminController(
       AdminOperations operations,
       ReplayService replay,
       RebuildService rebuild,
       CrosswalkService crosswalk,
-      AdapterControlClient adapters) {
+      AdapterControlClient adapters,
+      EventJournal journal) {
     this.operations = operations;
     this.replay = replay;
     this.rebuild = rebuild;
     this.crosswalk = crosswalk;
     this.adapters = adapters;
+    this.journal = journal;
   }
 
   /**
@@ -79,6 +85,51 @@ public class AdminController {
         replayId,
         () -> replay.replay(request.source(), request.receivedFrom(), request.receivedTo(), replayId),
         AdminController::summary);
+  }
+
+  /**
+   * Тело запроса возврата из карантина.
+   *
+   * @param source источник события, например {@code urn:corp:eam}
+   * @param eventId идентификатор события в журнале, до {@value MAX_EVENT_ID_LENGTH} символов
+   */
+  public record QuarantineReleaseRequest(String source, String eventId) {}
+
+  /** Результат возврата из карантина: событие стоит в {@code RETRYING}, дальше его берёт диспетчер. */
+  public record QuarantineReleaseResult(String source, String eventId, String status, int attempts) {}
+
+  /**
+   * Возвращает событие из {@code QUARANTINED} в очередь повторов (счётчик попыток обнуляется) и закрывает его запись
+   * DLQ. {@code 404}, если события нет, {@code 409}, если оно не в карантине.
+   */
+  @PostMapping("/quarantine/release")
+  public ResponseEntity<Object> releaseFromQuarantine(
+      @RequestBody QuarantineReleaseRequest request, @AuthenticationPrincipal Jwt jwt) {
+    if (request.source() == null || !SOURCE.matcher(request.source()).matches()) {
+      throw new BadRequestException("source is required");
+    }
+    if (request.eventId() == null || request.eventId().isBlank() || request.eventId().length() > MAX_EVENT_ID_LENGTH) {
+      throw new BadRequestException("eventId must be 1.." + MAX_EVENT_ID_LENGTH + " characters");
+    }
+    Map<String, Object> audited = new LinkedHashMap<>();
+    audited.put("source", request.source());
+    audited.put("eventId", request.eventId());
+    try {
+      return ResponseEntity.ok(operations.run(
+          "QUARANTINE_RELEASE",
+          jwt.getSubject(),
+          audited,
+          null,
+          () -> {
+            JournalEntry e = journal.releaseFromQuarantine(request.source(), request.eventId());
+            return new QuarantineReleaseResult(e.source(), e.eventId(), e.status().name(), e.attempts());
+          },
+          r -> Map.of("status", r.status(), "attempts", r.attempts())));
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "unknown event"));
+    } catch (IllegalStateException e) {
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "event is not quarantined"));
+    }
   }
 
   @PostMapping("/rebuild")

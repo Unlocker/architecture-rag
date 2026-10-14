@@ -98,7 +98,7 @@
 Объектного состояния нет (поле `dataSource` / `s3`+`bucket`, final). Постоянное состояние:
 
 - Статус обработки `inbox_event.status` (10 значений `ProcessingStatus`); переходы — таблица в [`transition-event/design.md`](transition-event/design.md).
-- Запись DLQ: «открыта» (`replayed_at IS NULL`) / «переиграна». Код модуля создаёт только открытые записи; закрытие нигде в репозитории не выполняется 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] (R-1).
+- Запись DLQ: «открыта» (`replayed_at IS NULL`) / «переиграна». Код модуля создаёт только открытые записи; закрывают `closeDlq` (replay исходного события) и `releaseFromQuarantine` (возврат из карантина) 🟢 [UNLOCKER-281: реализовано] (R-1).
 
 ## Наблюдаемость
 
@@ -106,8 +106,8 @@
 
 ## Риски и пробелы
 
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-1: `dlq_entry.replayed_at` не записывается (`SQL:43`; в Java нет `UPDATE dlq_entry`); метрика открытых DLQ не уменьшается.
-- 🟡 [R.8: решение принято, реализация — UNLOCKER-276 (п. 2)] R-2: нет ограничений на значения `status` в БД (`SQL:13`) и нет перехода из `QUARANTINED` в вызывающем коде — см. [`questions.md`](questions.md).
+- 🟢 [UNLOCKER-281: реализовано] R-1: `dlq_entry.replayed_at` пишет `closeDlq`; метрика открытых DLQ уменьшается после replay и release.
+- 🟢 [UNLOCKER-281: реализовано] R-2: выход из `QUARANTINED` — `releaseFromQuarantine` (`RETRYING`, `attempts = 0`, DLQ закрыта, одна транзакция под `FOR UPDATE`). Ограничений на значения `status` в БД по-прежнему нет (`SQL:13`). R-3: `SUPERSEDED` удалён. R-4: лимит `archrag.dispatcher.max-attempts` в `EventProcessor.retry` (`RETRY_LIMIT_EXCEEDED`).
 - 🟡 `error_code`/`error_reason` затираются при каждом переходе; история причин не хранится (`PEJ:339-344`).
 - 🟡 Повторный `toDlq` для уже карантинного события затирает `error_code`/`error_reason` в `inbox_event` новыми значениями, а запись `dlq_entry` остаётся с первыми (`PEJ:139`, `PEJ:142`).
 - 🟡 Тело дубля не сравнивается с сохранённым (`PEJ:56-89`): повтор с тем же `eventId` и другим содержимым молча отбрасывается.

@@ -160,6 +160,71 @@ public final class PostgresEventJournal implements EventJournal, JournalReader, 
   }
 
   @Override
+  public JournalEntry releaseFromQuarantine(String source, String eventId) {
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      try {
+        JournalEntry current;
+        try (PreparedStatement ps = c.prepareStatement(
+            "SELECT " + COLUMNS + " FROM inbox_event WHERE source = ? AND event_id = ? FOR UPDATE")) {
+          ps.setString(1, source);
+          ps.setString(2, eventId);
+          try (ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+              throw new IllegalArgumentException("unknown event " + fingerprint(source, eventId));
+            }
+            current = map(rs);
+          }
+        }
+        if (current.status() != ProcessingStatus.QUARANTINED) {
+          throw new IllegalStateException("event " + fingerprint(source, eventId) + " is not quarantined");
+        }
+        // Отдельный SQL: update() прибавляет попытку при входе в RETRYING, а здесь счёт начинается заново.
+        JournalEntry released;
+        try (PreparedStatement ps = c.prepareStatement("UPDATE inbox_event SET status = ?, error_code = NULL,"
+            + " error_reason = NULL, attempts = 0, updated_at = ? WHERE source = ? AND event_id = ?"
+            + " RETURNING " + COLUMNS)) {
+          ps.setString(1, ProcessingStatus.RETRYING.name());
+          ps.setTimestamp(2, Timestamp.from(Instant.now()));
+          ps.setString(3, source);
+          ps.setString(4, eventId);
+          try (ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            released = map(rs);
+          }
+        }
+        closeDlq(c, source, eventId);
+        c.commit();
+        return released;
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    } catch (SQLException e) {
+      throw new JournalException("releaseFromQuarantine failed", e);
+    }
+  }
+
+  @Override
+  public boolean closeDlq(String source, String eventId) {
+    try (Connection c = dataSource.getConnection()) {
+      return closeDlq(c, source, eventId);
+    } catch (SQLException e) {
+      throw new JournalException("closeDlq failed", e);
+    }
+  }
+
+  private static boolean closeDlq(Connection c, String source, String eventId) throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(
+        "UPDATE dlq_entry SET replayed_at = ? WHERE source = ? AND event_id = ? AND replayed_at IS NULL")) {
+      ps.setTimestamp(1, Timestamp.from(Instant.now()));
+      ps.setString(2, source);
+      ps.setString(3, eventId);
+      return ps.executeUpdate() > 0;
+    }
+  }
+
+  @Override
   public List<StoredEvent> read(JournalQuery q) {
     // Условия собираются из фиксированных фрагментов, значения идут только параметрами.
     StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + ", type, subject FROM inbox_event WHERE true");

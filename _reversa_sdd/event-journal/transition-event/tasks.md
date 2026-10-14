@@ -40,4 +40,4 @@ T-T4 → T-T1 → T-T2 → T-T3.
 
 ## Открытые 🔴
 
-R-1 (`replayed_at`), R-2 (выход из карантина), R-3 (`SUPERSEDED`), R-4 (лимит попыток): [`../questions.md`](../questions.md). Воспроизводить текущее поведение, не исправлять.
+R-1 (`replayed_at`), R-2 (выход из карантина), R-3 (`SUPERSEDED`), R-4 (лимит попыток): [`../questions.md`](../questions.md). Закрыты UNLOCKER-281.

@@ -2,7 +2,7 @@
 
 > `ES/` = `contracts/event-schemas/src/main/java/io/github/unlocker/archrag/eventschemas/`. Модульные документы: [requirements](../requirements.md), [design](../design.md), [tasks](../tasks.md).
 
-- [ ] T-01 Enum `ProcessingStatus` в порядке RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION.
+- [ ] T-01 Enum `ProcessingStatus` в порядке RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, DUPLICATE, IGNORED_OLD_VERSION.
   - Origin: `ES/ProcessingStatus.java:8-18`
   - Критерий готовности: `values()` возвращает 10 значений в этом порядке.
   - Уверенность: 🟢

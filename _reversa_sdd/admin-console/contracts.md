@@ -49,7 +49,7 @@
 | `Page<T>` | `items, page, size, total` | `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/Page.java:13` 🟢 |
 | `ApiError` | `error, message` | `access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/ApiExceptionHandler.java:21` 🟢 |
 
-Допустимые значения `status` события: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, SUPERSEDED, DUPLICATE, IGNORED_OLD_VERSION`; `source`: `eam, scm, cmdb, deploymap` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:19-33`) 🟢. Поле `lagSeconds` = `max(0, now − max(updated_at) среди PROJECTED)`, `null`, если событий `PROJECTED` нет (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:69-70`) 🟢.
+Допустимые значения `status` события: `RECEIVED, VALIDATED, NORMALIZED, RESOLVED, PROJECTED, QUARANTINED, RETRYING, DUPLICATE, IGNORED_OLD_VERSION`; `source`: `eam, scm, cmdb, deploymap` (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/pg/SyncSources.java:19-33`) 🟢. Поле `lagSeconds` = `max(0, now − max(updated_at) среди PROJECTED)`, `null`, если событий `PROJECTED` нет (`access/admin-console/src/main/java/io/github/unlocker/archrag/adminconsole/api/SyncController.java:69-70`) 🟢.
 
 ## 2. PostgreSQL (только чтение)
 
