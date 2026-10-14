@@ -1,5 +1,7 @@
 package io.github.unlocker.archrag.graphquerycore.templates;
 
+import io.github.unlocker.archrag.canonicalmodel.node.NodeLabel;
+import io.github.unlocker.archrag.canonicalmodel.relation.RelationType;
 import io.github.unlocker.archrag.graphquerycore.QueryTemplate;
 import io.github.unlocker.archrag.graphquerycore.ResultKind;
 import java.util.ArrayList;
@@ -20,7 +22,7 @@ public final class ConsoleTemplates {
 
   static {
     List<String> labels = new ArrayList<>(DependencyTemplates.TRACE_LABELS);
-    labels.add("SourceRecord");
+    labels.add(NodeLabel.SOURCE_RECORD.label());
     STATS_LABELS = List.copyOf(labels);
   }
 
@@ -29,13 +31,13 @@ public final class ConsoleTemplates {
 
   static {
     List<String> types = new ArrayList<>(AssetTemplates.RELATION_TYPES);
-    types.add("HOSTED_ON");
-    types.add("ASSERTS");
+    types.add(RelationType.HOSTED_ON.name());
+    types.add(RelationType.ASSERTS.name());
     STATS_RELATION_TYPES = List.copyOf(types);
   }
 
   /** Типы связей, по которым консоль строит окрестность: allowlist для параметра {@code relTypes}. */
-  public static final List<String> NEIGHBORHOOD_RELATION_TYPES = concat(AssetTemplates.RELATION_TYPES, "HOSTED_ON");
+  public static final List<String> NEIGHBORHOOD_RELATION_TYPES = concat(AssetTemplates.RELATION_TYPES, RelationType.HOSTED_ON.name());
 
   private static final String NEIGHBOR_LABELS = String.join("|", DependencyTemplates.TRACE_LABELS);
 
