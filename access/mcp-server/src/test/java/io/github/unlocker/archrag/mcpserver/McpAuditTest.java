@@ -241,4 +241,21 @@ class McpAuditTest {
     assertThat(res.getStatusCode().value()).isEqualTo(413);
     assertThat(onlyRecord()).containsEntry("decision", ToolDecision.REJECTED_TOO_LARGE);
   }
+
+  @Test
+  void unsupportedCharsetIsAuditedOnceAsInvalidRequest() throws Exception {
+    // RestClient сам отвергает неизвестную кодировку, поэтому java.net.http.
+    var request =
+        java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://localhost:" + port + "/mcp"))
+            .header("Accept", "application/json, text/event-stream")
+            .header("Content-Type", "application/json;charset=bogus")
+            .header("Authorization", "Bearer " + TestJwt.token("architecture.read"))
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{}"))
+            .build();
+    var res =
+        java.net.http.HttpClient.newHttpClient()
+            .send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+    assertThat(res.statusCode()).isEqualTo(400);
+    assertThat(onlyRecord()).containsEntry("decision", ToolDecision.REJECTED_INVALID_REQUEST);
+  }
 }
