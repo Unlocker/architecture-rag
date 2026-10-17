@@ -6,6 +6,11 @@
 #   - строки, равные gid известного узла ответа, заменяются на «Метка:имя», чтобы пути и связи читались без gid;
 #     gid и моменты времени внутри текстов (warnings: «stale: Service <gid> lastSeenAt=<время>») заменяются так же;
 #   - массивы объектов и массивы строк (affected) сортируются; порядок узлов в пути (paths[].nodes) сохраняется.
+# Ключ сортировки не зависит от порядка полей в JSON сервера: поля упорядочены по имени.
+def canon:
+  if type == "object" then to_entries | sort_by(.key) | map({key, value: (.value | canon)}) | from_entries
+  elif type == "array" then map(canon)
+  else . end;
 def label_of: (.label // .type // "asset");
 def name_of: (.name // .hostname // .properties.name);
 ([.. | objects | select((.gid | type) == "string" and name_of != null)
@@ -16,7 +21,7 @@ def name_of: (.name // .hostname // .properties.name);
       to_entries | map(select(.key | dropped | not) | .key as $key | .value |= clean($key)) | from_entries
     elif type == "array" then
       map(clean(k))
-      | if length > 0 and all(.[]; type == "object") then sort_by(tojson)
+      | if length > 0 and all(.[]; type == "object") then sort_by(canon | tojson)
         elif length > 0 and all(.[]; type == "string") and k != "nodes" then sort
         else . end
     elif type == "string" then
