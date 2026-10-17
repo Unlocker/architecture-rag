@@ -3,6 +3,7 @@ package io.github.unlocker.archrag.demolauncher;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.unlocker.archrag.adaptercore.Json;
+import io.github.unlocker.archrag.sourcespi.ChangeOperation;
 import io.github.unlocker.archrag.sourcespi.WebhookEvent;
 import io.github.unlocker.archrag.sourcestubs.StubSource;
 import io.github.unlocker.archrag.sourcestubs.StubWebhookSender;
@@ -15,12 +16,13 @@ import java.util.Map;
 
 /**
  * Управляющий вход заглушки демо-стенда: {@code POST /control/upsert} с телом {@code {"type","id","payload"}} вызывает
- * {@link StubSource#upsert}. Поднимается только в режиме {@code stub} на отдельном порту, наружу не публикуется и
+ * {@link StubSource#upsert}, {@code POST /control/delete} с телом {@code {"type","id"}} — {@link StubSource#delete}
+ * (исчезновение объекта из источника: после него snapshot отдаёт набор без объекта). Поднимается только в режиме {@code stub} на отдельном порту, наружу не публикуется и
  * через proxy не отдаётся: вызов делается из контейнера ({@code docker compose exec stub-eam curl ...}). Через него
  * сценарий backup/restore вносит изменения в источник. Тело — недоверенный ввод: размер ограничен, ошибки разбора
  * дают 400 без эха содержимого.
  *
- * <p>Если задан {@link StubWebhookSender}, после успешного upsert заглушка шлёт адаптеру подписанный webhook об этом
+ * <p>Если задан {@link StubWebhookSender}, после успешного upsert или delete заглушка шлёт адаптеру подписанный webhook об этом
  * изменении (последнее событие {@code (type, id)} из {@link StubSource#webhookEvents()}); тело {@code "notify":false}
  * отключает отправку для вызова. Результат отражается в поле {@code webhookStatus} ответа: HTTP-статус адаптера или
  * {@code 0}, если доставить не удалось. Сбой доставки не превращает upsert в ошибку: изменение в источнике уже
@@ -41,7 +43,8 @@ final class StubControl implements AutoCloseable {
   /** @param webhooks отправитель webhook адаптеру или {@code null}, если webhook не нужен */
   StubControl(StubSource source, InetSocketAddress address, StubWebhookSender webhooks) throws IOException {
     this.server = HttpServer.create(address, 0);
-    server.createContext("/control/upsert", ex -> handleUpsert(source, webhooks, ex));
+    server.createContext("/control/upsert", ex -> handle(source, webhooks, ex, false));
+    server.createContext("/control/delete", ex -> handle(source, webhooks, ex, true));
     server.start();
   }
 
@@ -49,7 +52,8 @@ final class StubControl implements AutoCloseable {
     return server.getAddress().getPort();
   }
 
-  private static void handleUpsert(StubSource source, StubWebhookSender webhooks, HttpExchange ex) throws IOException {
+  private static void handle(StubSource source, StubWebhookSender webhooks, HttpExchange ex, boolean delete)
+      throws IOException {
     try (ex) {
       int status;
       String body;
@@ -61,13 +65,8 @@ final class StubControl implements AutoCloseable {
           Map<String, Object> request = Json.parseObject(readBody(ex.getRequestBody()));
           String type = text(request, "type");
           String id = text(request, "id");
-          if (!(request.get("payload") instanceof Map<?, ?> raw)) {
-            throw new IllegalArgumentException("payload must be an object");
-          }
-          Map<String, Object> payload = new LinkedHashMap<>();
-          raw.forEach((k, v) -> payload.put(String.valueOf(k), v));
           boolean notify = !Boolean.FALSE.equals(request.get("notify"));
-          long version = source.upsert(type, id, payload).sourceVersion();
+          long version = delete ? deleteObject(source, type, id) : upsertObject(source, request, type, id);
           status = 200;
           String webhookField = "";
           if (webhooks != null && notify) {
@@ -84,6 +83,23 @@ final class StubControl implements AutoCloseable {
       ex.sendResponseHeaders(status, bytes.length);
       ex.getResponseBody().write(bytes);
     }
+  }
+
+  private static long upsertObject(StubSource source, Map<String, Object> request, String type, String id) {
+    if (!(request.get("payload") instanceof Map<?, ?> raw)) {
+      throw new IllegalArgumentException("payload must be an object");
+    }
+    Map<String, Object> payload = new LinkedHashMap<>();
+    raw.forEach((k, v) -> payload.put(String.valueOf(k), v));
+    return source.upsert(type, id, payload).sourceVersion();
+  }
+
+  /** Объект, которого в заглушке нет, не удаляется: {@code 400}, иначе в журнале появилось бы изменение без смысла. */
+  private static long deleteObject(StubSource source, String type, String id) {
+    if (source.fetchById(type, id).filter(c -> c.operation() == ChangeOperation.UPSERT).isEmpty()) {
+      throw new IllegalArgumentException("object does not exist");
+    }
+    return source.delete(type, id).sourceVersion();
   }
 
   /** Шлёт webhook о последнем изменении объекта; возвращает HTTP-статус адаптера или 0 при сбое доставки. */

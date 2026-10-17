@@ -2,6 +2,7 @@ package io.github.unlocker.archrag.demolauncher;
 
 import io.github.unlocker.archrag.eamadapter.EamAdapter;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
+import io.github.unlocker.archrag.sourcestubs.StubProfile;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ public final class LauncherConfig {
   static final String CONTROL_JWKS_URI = "ARCHRAG_CONTROL_OIDC_JWKS_URI";
   static final String CONTROL_AUDIENCE = "ARCHRAG_CONTROL_AUDIENCE";
   static final String CONTROL_ROLE = "archrag-console-admin";
+  static final String STUB_PROFILE = "ARCHRAG_STUB_PROFILE";
   static final String EAM_MODE_LEGACY = "legacy";
   static final String EAM_MODE_API = "eam-api";
 
@@ -181,6 +183,11 @@ public final class LauncherConfig {
       throw new IllegalArgumentException(WEBHOOK_TARGET + " requires environment variables: " + missing);
     }
     return new Stub(system, port(env, STUB_PORT, 8080), URI.create(target.trim()), secret);
+  }
+
+  /** Профиль данных заглушек из {@code ARCHRAG_STUB_PROFILE}: по умолчанию {@code default}, неизвестное значение — ошибка. */
+  public static StubProfile stubProfile(Map<String, String> env) {
+    return StubProfile.parse(env.get(STUB_PROFILE));
   }
 
   /** Настройки заглушки EAM API из env; токен обязателен. */
