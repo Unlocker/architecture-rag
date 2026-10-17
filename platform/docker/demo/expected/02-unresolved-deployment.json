@@ -1,0 +1,46 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "deploymentKey": "dep-partner-gateway-prod",
+    "eamSystemId": 9999,
+    "name": "partner-gateway",
+    "repositoryUrl": "https://git.example.org/chan/partner-gateway-v2",
+    "sourceCommit": "251c1bd9414089a69f6c70b183d828188cb2872a",
+    "version": "0.5.0"
+  },
+  "relations": [
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "partner-gateway",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "Production",
+      "relationType": "IN_ENVIRONMENT",
+      "type": "Environment"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "vm-chan-03.prod.example.org",
+      "relationType": "RUNS_ON",
+      "type": "ComputeInstance"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "DEPLOYMAP",
+      "sourceId": "dep-partner-gateway-prod",
+      "sourceType": "DEPLOYMENT",
+      "sourceVersion": "1"
+    }
+  ],
+  "truncated": false,
+  "type": "Deployment"
+}

@@ -1,0 +1,60 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "criticality": "HIGH",
+    "description": "Domain: Payments. Payments processing system",
+    "eamCode": "EAM-1042",
+    "name": "Payments Core",
+    "platformId": 3101,
+    "status": "ACTIVE"
+  },
+  "relations": [
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "payments-api",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "payments-batch",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "payments-orchestrator",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "payments-router",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "Payments Team",
+      "relationType": "OWNED_BY",
+      "type": "Team"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5101",
+      "sourceType": "IT_SYSTEM",
+      "sourceVersion": "1"
+    }
+  ],
+  "truncated": false,
+  "type": "ITSystem"
+}

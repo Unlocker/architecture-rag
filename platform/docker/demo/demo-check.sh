@@ -12,23 +12,49 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib-mcp.sh"
 . "$HERE/lib-stubs.sh"
 
-# Узлы и рёбра базового состояния (docs/demo/dataset.md, п. 7.4). Строки «метка/тип, число».
+# Узлы и рёбра базового состояния (docs/demo/dataset.md, п. 7.4). Строки «метка/тип, число». Служебные SyncRun и PROCESSED
+# не сверяются: их число зависит от количества запусков snapshot при старте адаптеров. DEPLOYED_FROM = 41 развёртывание
+# минус два без репозитория в SCM (aml-case-mgmt и partner-gateway, К-8); SourceRecord = 180 записей источников минус
+# одна карантинная (К-11).
 EXPECTED_NODES='
-COUNTS_NODES_PLACEHOLDER
+ComputeInstance,27
+Deployment,41
+Environment,3
+ITSystem,10
+PendingRelation,3
+Platform,3
+Repository,26
+Service,27
+Solution,8
+SourceRecord,179
+SourceSystem,4
+Team,5
 '
 EXPECTED_RELATIONS='
-COUNTS_RELS_PLACEHOLDER
+ASSERTS,150
+DECOMPOSED_INTO,26
+DEFERS,3
+DEPENDS_ON,29
+DEPLOYED_FROM,39
+HAS_DEPLOYMENT,41
+IMPLEMENTED_IN,26
+IN_ENVIRONMENT,41
+OWNED_BY,10
+OWNS_RECORD,179
+RUNS_ON,52
+USES_PLATFORM,8
+USES_SOLUTION,10
 '
 EXPECTED_CANDIDATES=2   # К-5а и К-5б (dataset.md, 4.3)
 EXPECTED_CONFLICTS=2    # К-4а и К-4б
 
 graph_counts() { # nodes|relations
   if [ "$1" = nodes ]; then
-    cypher --format plain <<'CYPHER' | tail -n +2 | tr -d ' "'
+    cypher --format plain <<'CYPHER' | tail -n +2 | tr -d ' "' | grep -v '^SyncRun,'
 MATCH (n) RETURN labels(n)[0] AS label, count(*) AS n ORDER BY label;
 CYPHER
   else
-    cypher --format plain <<'CYPHER' | tail -n +2 | tr -d ' "'
+    cypher --format plain <<'CYPHER' | tail -n +2 | tr -d ' "' | grep -v '^PROCESSED,'
 MATCH ()-[r]->() RETURN type(r) AS type, count(*) AS n ORDER BY type;
 CYPHER
   fi

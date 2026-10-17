@@ -1,0 +1,20 @@
+{
+  "isCurrent": false,
+  "properties": {
+    "language": "cobol",
+    "name": "legacy-statements"
+  },
+  "relations": [],
+  "sources": [
+    {
+      "active": false,
+      "authority": "MASTER",
+      "source": "SCM",
+      "sourceId": "svc-legacy-statements",
+      "sourceType": "SERVICE",
+      "sourceVersion": "1"
+    }
+  ],
+  "truncated": false,
+  "type": "Service"
+}

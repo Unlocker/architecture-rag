@@ -1,0 +1,589 @@
+{
+  "affected": [
+    "Service:ledger-reporting",
+    "Service:aml-case-mgmt",
+    "Service:notification-gateway",
+    "Service:settlement-recon",
+    "Service:legacy-statements",
+    "ITSystem:Ledger",
+    "ITSystem:AML Monitoring",
+    "Service:mobile-bff",
+    "ITSystem:Notification Center",
+    "ITSystem:Settlement Hub",
+    "ITSystem:Mobile Banking"
+  ],
+  "direction": "upstream",
+  "environment": null,
+  "mode": "impact",
+  "nodes": [
+    {
+      "conflicts": [],
+      "label": "ComputeInstance",
+      "name": "vm-legacy-app-01.prod.example.org",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Deployment",
+      "name": "aml-case-mgmt",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Deployment",
+      "name": "ledger-reporting",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Deployment",
+      "name": "notification-gateway",
+      "stale": false
+    },
+    {
+      "conflicts": [
+        {
+          "properties": [
+            "eamSystemId"
+          ],
+          "source": "DEPLOYMAP",
+          "sourceId": "dep-settlement-recon-prod",
+          "sourceType": "DEPLOYMENT"
+        }
+      ],
+      "label": "Deployment",
+      "name": "settlement-recon",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "ITSystem",
+      "name": "AML Monitoring",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "ITSystem",
+      "name": "Ledger",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "ITSystem",
+      "name": "Mobile Banking",
+      "stale": false
+    },
+    {
+      "conflicts": [
+        {
+          "properties": [
+            "platformId"
+          ],
+          "source": "EAM",
+          "sourceId": "5303",
+          "sourceType": "IT_SYSTEM"
+        }
+      ],
+      "label": "ITSystem",
+      "name": "Notification Center",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "ITSystem",
+      "name": "Settlement Hub",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "aml-case-mgmt",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "ledger-reporting",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "legacy-statements",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "mobile-bff",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "notification-gateway",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "settlement-recon",
+      "stale": false
+    }
+  ],
+  "paths": [
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:aml-case-mgmt",
+        "Service:aml-case-mgmt",
+        "ITSystem:AML Monitoring"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:AML Monitoring",
+          "to": "Service:aml-case-mgmt",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:aml-case-mgmt",
+          "to": "Deployment:aml-case-mgmt",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:aml-case-mgmt",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:aml-case-mgmt",
+        "Service:aml-case-mgmt"
+      ],
+      "relations": [
+        {
+          "from": "Service:aml-case-mgmt",
+          "to": "Deployment:aml-case-mgmt",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:aml-case-mgmt",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:ledger-reporting",
+        "Service:ledger-reporting",
+        "ITSystem:Ledger"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Ledger",
+          "to": "Service:ledger-reporting",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:ledger-reporting",
+          "to": "Deployment:ledger-reporting",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:ledger-reporting",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:ledger-reporting",
+        "Service:ledger-reporting",
+        "Service:legacy-statements",
+        "ITSystem:Ledger"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Ledger",
+          "to": "Service:legacy-statements",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:legacy-statements",
+          "to": "Service:ledger-reporting",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ledger-reporting",
+          "to": "Deployment:ledger-reporting",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:ledger-reporting",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:ledger-reporting",
+        "Service:ledger-reporting",
+        "Service:legacy-statements"
+      ],
+      "relations": [
+        {
+          "from": "Service:legacy-statements",
+          "to": "Service:ledger-reporting",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ledger-reporting",
+          "to": "Deployment:ledger-reporting",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:ledger-reporting",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:ledger-reporting",
+        "Service:ledger-reporting"
+      ],
+      "relations": [
+        {
+          "from": "Service:ledger-reporting",
+          "to": "Deployment:ledger-reporting",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:ledger-reporting",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:notification-gateway",
+        "Service:notification-gateway",
+        "ITSystem:Notification Center"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Notification Center",
+          "to": "Service:notification-gateway",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:notification-gateway",
+          "to": "Deployment:notification-gateway",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:notification-gateway",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:notification-gateway",
+        "Service:notification-gateway",
+        "Service:mobile-bff",
+        "ITSystem:Mobile Banking"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Mobile Banking",
+          "to": "Service:mobile-bff",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:mobile-bff",
+          "to": "Service:notification-gateway",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:notification-gateway",
+          "to": "Deployment:notification-gateway",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:notification-gateway",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:notification-gateway",
+        "Service:notification-gateway",
+        "Service:mobile-bff"
+      ],
+      "relations": [
+        {
+          "from": "Service:mobile-bff",
+          "to": "Service:notification-gateway",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:notification-gateway",
+          "to": "Deployment:notification-gateway",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:notification-gateway",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:notification-gateway",
+        "Service:notification-gateway"
+      ],
+      "relations": [
+        {
+          "from": "Service:notification-gateway",
+          "to": "Deployment:notification-gateway",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:notification-gateway",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:settlement-recon",
+        "Service:settlement-recon",
+        "ITSystem:Settlement Hub"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Settlement Hub",
+          "to": "Service:settlement-recon",
+          "type": "DECOMPOSED_INTO"
+        },
+        {
+          "from": "Service:settlement-recon",
+          "to": "Deployment:settlement-recon",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:settlement-recon",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ComputeInstance:vm-legacy-app-01.prod.example.org",
+        "Deployment:settlement-recon",
+        "Service:settlement-recon"
+      ],
+      "relations": [
+        {
+          "from": "Service:settlement-recon",
+          "to": "Deployment:settlement-recon",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
+          "from": "Deployment:settlement-recon",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "assertedById": "svc-aml-case-mgmt",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:AML Monitoring",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:aml-case-mgmt",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-ledger-reporting",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Ledger",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:ledger-reporting",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-legacy-statements",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Ledger",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:legacy-statements",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-mobile-bff",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Mobile Banking",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:mobile-bff",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-notification-gateway",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Notification Center",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:notification-gateway",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-settlement-recon",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Settlement Hub",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:settlement-recon",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "dep-legacy-statements-ledger-reporting",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:legacy-statements",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:ledger-reporting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-mobile-bff-notification-gateway",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:mobile-bff",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:notification-gateway",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-aml-case-mgmt-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:aml-case-mgmt",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:aml-case-mgmt",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-ledger-reporting-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:ledger-reporting",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:ledger-reporting",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-notification-gateway-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:notification-gateway",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:notification-gateway",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-settlement-recon-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:settlement-recon",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:settlement-recon",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-aml-case-mgmt-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:aml-case-mgmt",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-ledger-reporting-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:ledger-reporting",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-notification-gateway-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:notification-gateway",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-settlement-recon-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:settlement-recon",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
+    }
+  ],
+  "staleAfter": "PT168H",
+  "startGid": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+  "truncated": false
+}

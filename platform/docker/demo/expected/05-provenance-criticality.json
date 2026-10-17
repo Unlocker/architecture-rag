@@ -1,0 +1,23 @@
+{
+  "authorities": [
+    "EAM"
+  ],
+  "conflictState": "NONE",
+  "isCurrent": true,
+  "property": "criticality",
+  "records": [
+    {
+      "active": true,
+      "authoritative": true,
+      "authority": "MASTER",
+      "confidence": 1.0,
+      "conflictProperties": [],
+      "contentHash": "e1809fd5760349f4b2053b733793aa80133f09d57da183014258395019029b47",
+      "source": "EAM",
+      "sourceId": "5201",
+      "sourceType": "IT_SYSTEM",
+      "sourceVersion": "1"
+    }
+  ],
+  "type": "ITSystem"
+}

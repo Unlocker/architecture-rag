@@ -1,0 +1,596 @@
+{
+  "affected": [],
+  "direction": "downstream",
+  "environment": null,
+  "mode": "trace",
+  "nodes": [
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "aml-screening",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "card-authorizer",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "card-gateway",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "card-tokenizer",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "customer-profile-api",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "fraud-scoring",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "fx-rates",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "ib-api",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "ib-web",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "ledger-api",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "ledger-posting",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "payments-api",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "payments-router",
+      "stale": false
+    }
+  ],
+  "paths": [
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:customer-profile-api"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:customer-profile-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:aml-screening",
+        "Service:customer-profile-api"
+      ],
+      "relations": [
+        {
+          "from": "Service:aml-screening",
+          "to": "Service:customer-profile-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:aml-screening",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:aml-screening"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:aml-screening",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:ledger-api",
+        "Service:ledger-posting"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ledger-api",
+          "to": "Service:ledger-posting",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:ledger-api",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:ledger-api"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:ledger-api",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router",
+        "Service:card-gateway",
+        "Service:card-authorizer",
+        "Service:card-tokenizer"
+      ],
+      "relations": [
+        {
+          "from": "Service:card-authorizer",
+          "to": "Service:card-tokenizer",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:card-gateway",
+          "to": "Service:card-authorizer",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router",
+        "Service:card-gateway",
+        "Service:card-authorizer",
+        "Service:fraud-scoring"
+      ],
+      "relations": [
+        {
+          "from": "Service:card-authorizer",
+          "to": "Service:fraud-scoring",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:card-gateway",
+          "to": "Service:card-authorizer",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router",
+        "Service:card-gateway",
+        "Service:card-authorizer"
+      ],
+      "relations": [
+        {
+          "from": "Service:card-gateway",
+          "to": "Service:card-authorizer",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router",
+        "Service:card-gateway"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router",
+        "Service:fx-rates"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-router",
+          "to": "Service:fx-rates",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api",
+        "Service:payments-router"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:payments-api",
+          "to": "Service:payments-router",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api",
+        "Service:payments-api"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-api",
+          "to": "Service:payments-api",
+          "type": "DEPENDS_ON"
+        },
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Service:ib-web",
+        "Service:ib-api"
+      ],
+      "relations": [
+        {
+          "from": "Service:ib-web",
+          "to": "Service:ib-api",
+          "type": "DEPENDS_ON"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "assertedById": "dep-aml-screening-customer-profile-api",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:aml-screening",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:customer-profile-api",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-card-authorizer-card-tokenizer",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:card-authorizer",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-tokenizer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-card-authorizer-fraud-scoring",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:card-authorizer",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:fraud-scoring",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-card-gateway-card-authorizer",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:card-gateway",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-authorizer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-ib-api-customer-profile-api",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:ib-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:customer-profile-api",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-ib-api-payments-api",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:ib-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:payments-api",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-ib-web-ib-api",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:ib-web",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:ib-api",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-ledger-api-ledger-posting",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:ledger-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:ledger-posting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-api-aml-screening",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:aml-screening",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-api-ledger-api",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:ledger-api",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-api-payments-router",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:payments-router",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-router-card-gateway",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-router",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-gateway",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-router-fx-rates",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-router",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:fx-rates",
+      "type": "DEPENDS_ON"
+    }
+  ],
+  "staleAfter": "PT168H",
+  "startGid": "Service:ib-web",
+  "truncated": false
+}

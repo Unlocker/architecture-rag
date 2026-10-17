@@ -1,0 +1,24 @@
+{
+  "isCurrent": false,
+  "properties": {
+    "deploymentKey": "dep-legacy-statements-prod",
+    "eamSystemId": 5102,
+    "name": "legacy-statements",
+    "repositoryUrl": "https://git.example.org/ledger/legacy-statements",
+    "sourceCommit": "1b3bee2da02e4e271f78b69de843f0d2e35097cc",
+    "version": "0.8.0"
+  },
+  "relations": [],
+  "sources": [
+    {
+      "active": false,
+      "authority": "MASTER",
+      "source": "DEPLOYMAP",
+      "sourceId": "dep-legacy-statements-prod",
+      "sourceType": "DEPLOYMENT",
+      "sourceVersion": "2"
+    }
+  ],
+  "truncated": false,
+  "type": "Deployment"
+}

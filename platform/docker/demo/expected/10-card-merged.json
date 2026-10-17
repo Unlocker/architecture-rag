@@ -1,0 +1,47 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "hostname": "VM-PAY-01.PROD.EXAMPLE.ORG",
+    "hypervisorRef": "ps-esx-prod-01",
+    "ip": "10.1.9.88",
+    "kind": "VIRTUAL_MACHINE",
+    "os": "RHEL 9",
+    "state": "RUNNING"
+  },
+  "relations": [
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "payments-api",
+      "relationType": "RUNS_ON",
+      "type": "Deployment"
+    },
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "payments-router",
+      "relationType": "RUNS_ON",
+      "type": "Deployment"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "CMDB",
+      "sourceId": "cmdb-ci-88014",
+      "sourceType": "COMPUTE_INSTANCE",
+      "sourceVersion": "1"
+    },
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "CMDB",
+      "sourceId": "vm-pay-01",
+      "sourceType": "COMPUTE_INSTANCE",
+      "sourceVersion": "1"
+    }
+  ],
+  "truncated": false,
+  "type": "ComputeInstance"
+}

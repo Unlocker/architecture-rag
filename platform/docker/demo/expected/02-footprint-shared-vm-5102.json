@@ -1,0 +1,331 @@
+{
+  "environment": "prod",
+  "services": [
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-ledger-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-ledger-api-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-ledger-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            },
+            {
+              "hostedOn": null,
+              "hostname": "vm-ledger-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-ledger-api-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-ledger-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "53fd9c243a36e79c15242597407ad179725dd18c",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-api-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-api-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "ledger-api",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/ledger/ledger-api"
+          },
+          "repositoryUrl": "https://git.example.org/ledger/ledger-api",
+          "sourceCommit": "53fd9c243a36e79c15242597407ad179725dd18c",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-ledger-api-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "3.2.1"
+        }
+      ],
+      "name": "ledger-api",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-ledger-api",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-ledger-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-ledger-posting-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-ledger-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            },
+            {
+              "hostedOn": null,
+              "hostname": "vm-ledger-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-ledger-posting-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-ledger-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "c0bc50f1459409eb1e21f4e7e0ed83470fa6c929",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-posting-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-posting-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "ledger-posting",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/ledger/ledger"
+          },
+          "repositoryUrl": "https://git.example.org/ledger/ledger",
+          "sourceCommit": "c0bc50f1459409eb1e21f4e7e0ed83470fa6c929",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-ledger-posting-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "3.2.1"
+        }
+      ],
+      "name": "ledger-posting",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-ledger-posting",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-ledger-reporting-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "69b66af15564d592344e7e4fa663752598f4e897",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-reporting-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-ledger-reporting-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "ledger-reporting",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/ledger/ledger"
+          },
+          "repositoryUrl": "https://git.example.org/ledger/ledger",
+          "sourceCommit": "69b66af15564d592344e7e4fa663752598f4e897",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-ledger-reporting-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "3.1.0"
+        }
+      ],
+      "name": "ledger-reporting",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-ledger-reporting",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-legacy-statements-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "MAINTENANCE",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "1b3bee2da02e4e271f78b69de843f0d2e35097cc",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-legacy-statements-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-legacy-statements-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "legacy-statements",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/ledger/legacy-statements"
+          },
+          "repositoryUrl": "https://git.example.org/ledger/legacy-statements",
+          "sourceCommit": "1b3bee2da02e4e271f78b69de843f0d2e35097cc",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-legacy-statements-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "0.8.0"
+        }
+      ],
+      "name": "legacy-statements",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-legacy-statements",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "staleAfter": "PT168H",
+  "systemGid": "<gid>",
+  "systemName": "Ledger",
+  "systemSources": [
+    {
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5102",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "systemStale": false,
+  "truncated": false,
+  "warnings": []
+}

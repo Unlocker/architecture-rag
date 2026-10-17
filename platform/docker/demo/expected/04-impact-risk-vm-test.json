@@ -1,0 +1,12 @@
+{
+  "affected": [],
+  "direction": "upstream",
+  "environment": "test",
+  "mode": "impact",
+  "nodes": [],
+  "paths": [],
+  "relations": [],
+  "staleAfter": "PT168H",
+  "startGid": "<gid>",
+  "truncated": false
+}

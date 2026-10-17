@@ -1,0 +1,88 @@
+{
+  "affected": [],
+  "direction": "downstream",
+  "environment": null,
+  "mode": "trace",
+  "nodes": [
+    {
+      "conflicts": [
+        {
+          "properties": [
+            "platformId"
+          ],
+          "source": "EAM",
+          "sourceId": "5303",
+          "sourceType": "IT_SYSTEM"
+        }
+      ],
+      "label": "ITSystem",
+      "name": "Notification Center",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "notification-gateway",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "sms-dispatcher",
+      "stale": true
+    }
+  ],
+  "paths": [
+    {
+      "nodes": [
+        "ITSystem:Notification Center",
+        "Service:notification-gateway"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Notification Center",
+          "to": "Service:notification-gateway",
+          "type": "DECOMPOSED_INTO"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "ITSystem:Notification Center",
+        "Service:sms-dispatcher"
+      ],
+      "relations": [
+        {
+          "from": "ITSystem:Notification Center",
+          "to": "Service:sms-dispatcher",
+          "type": "DECOMPOSED_INTO"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "assertedById": "svc-notification-gateway",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Notification Center",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Service:notification-gateway",
+      "type": "DECOMPOSED_INTO"
+    },
+    {
+      "assertedById": "svc-sms-dispatcher",
+      "assertedBySource": "SCM",
+      "assertedByType": "SERVICE",
+      "from": "ITSystem:Notification Center",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:sms-dispatcher",
+      "type": "DECOMPOSED_INTO"
+    }
+  ],
+  "staleAfter": "PT168H",
+  "startGid": "ITSystem:Notification Center",
+  "truncated": false
+}
