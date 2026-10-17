@@ -169,3 +169,24 @@ check() { # <описание> <jq-выражение>; ответ — в stdin
 
 # Заголовок сценария на экран.
 scenario() { printf '\n########## %s\n' "$*" >&2; }
+
+# Публичный адрес MCP для клиентов на хосте (Claude Code, Inspector) и каталог с CA стенда. CA — публичный сертификат,
+# не секрет; кладётся в кэш пользователя, чтобы Node-клиенты брали его из NODE_EXTRA_CA_CERTS.
+MCP_CLIENT_URL="https://127.0.0.1:$MCP_PORT/mcp"
+MCP_CLIENT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/archrag-demo"
+
+# Выгружает CA стенда в $MCP_CLIENT_DIR/ca.crt и печатает путь.
+mcp_export_ca() {
+  mcp_init_tmp
+  mkdir -p "$MCP_CLIENT_DIR"
+  cp "$(mcp_ca)" "$MCP_CLIENT_DIR/ca.crt"
+  echo "$MCP_CLIENT_DIR/ca.crt"
+}
+
+# Срок жизни токена в секундах по claim exp (подпись не проверяется, токен выдал Keycloak стенда секундой ранее).
+mcp_token_ttl() { # токен в stdin
+  local payload
+  payload=$(cut -d. -f2 | tr '_-' '/+')
+  while [ $((${#payload} % 4)) -ne 0 ]; do payload+="="; done
+  printf '%s' "$payload" | base64 -d 2>/dev/null | jq -r '.exp - now | floor'
+}
