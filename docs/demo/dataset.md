@@ -224,35 +224,37 @@ flowchart LR
 
 Ключ сервиса — `svc-<имя>`, ключ репозитория — `repo-<имя>`; `systemCode` — `eam_id` системы; `repositoryId` — ключ репозитория. URL: `https://git.example.org/<группа>/<репо>`.
 
-| Сервис (sourceId) | `systemCode` | Репозиторий (`repositoryId` → группа) | `language` |
-|---|---|---|---|
-| `svc-payments-api` | `EAM-1042` | `repo-payments-api` → `pay` (нынешний seed) | java |
-| `svc-payments-router` | `EAM-1042` | `repo-payments-router` → `pay` | java |
-| `svc-payments-orchestrator` | `EAM-1042` | `repo-payments-orchestrator` → `pay` | java |
-| `svc-payments-batch` | `EAM-1042` | `repo-payments-batch` → `pay` | java |
-| `svc-ledger-api` | `EAM-2001` | `repo-ledger-api` → `ledger` | java |
-| `svc-ledger-posting` | `EAM-2001` | `repo-ledger` → `ledger` (монорепо) | java |
-| `svc-ledger-reporting` | `EAM-2001` | `repo-ledger` → `ledger` (монорепо) | java |
-| `svc-legacy-statements` | `EAM-2001` | `repo-legacy-statements` → `ledger` | cobol |
-| `svc-card-gateway` | `EAM-1043` | `repo-card-gateway` → `card` | java |
-| `svc-card-authorizer` | `EAM-1043` | `repo-card-authorizer` → `card` | java |
-| `svc-card-tokenizer` | `EAM-1043` | `repo-card-tokenizer` → `card` | go |
-| `svc-settlement-engine` | `EAM-2002` | `repo-settlement-engine` → `settle` | java |
-| `svc-settlement-recon` | `EAM-2002` | `repo-settlement-recon` → `settle` | python |
-| `svc-fx-rates` | `EAM-2002` | `repo-fx-rates` → `settle` | go |
-| `svc-fraud-scoring` | `EAM-3001` | `repo-fraud-scoring` → `risk` | python |
-| `svc-fraud-rules` | `EAM-3001` | `repo-fraud-rules` → `risk` | java |
-| `svc-aml-screening` | `EAM-3002` | `repo-aml-screening` → `risk` | java |
-| `svc-aml-case-mgmt` | `EAM-3002` | — (**репозитория нет**, `IMPLEMENTED_IN` не строится) | java |
-| `svc-mobile-bff` | `EAM-4001` | `repo-mobile-bff` → `chan` | java |
-| `svc-mobile-auth` | `EAM-4001` | `repo-mobile-auth` → `chan` | java |
-| `svc-ib-web` | `EAM-4002` | `repo-ib-web` → `chan` | typescript |
-| `svc-ib-api` | `EAM-4002` | `repo-ib-api` → `chan` | java |
-| `svc-notification-gateway` | `EAM-4003` | `repo-notification-gateway` → `plat` | java |
-| `svc-sms-dispatcher` | `EAM-4003` | `repo-sms-dispatcher` → `plat` | java |
-| `svc-customer-profile-api` | `EAM-4004` | `repo-customer-profile-api` → `plat` | java |
-| `svc-customer-consent` | `EAM-4004` | `repo-customer-consent` → `plat` | java |
-| `svc-partner-gateway` | **`EAM-9999`** (в EAM нет, **кейс К-8**) | `repo-partner-gateway` → `chan` | java |
+| Сервис (sourceId) | `name` | `systemCode` | Репозиторий (`repositoryId` → группа) | `language` |
+|---|---|---|---|---|
+| `svc-payments-api` | `payments-api` | `EAM-1042` | `repo-payments-api` → `pay` (нынешний seed) | java |
+| `svc-payments-router` | `payments-router` | `EAM-1042` | `repo-payments-router` → `pay` | java |
+| `svc-payments-orchestrator` | `payments-orchestrator` | `EAM-1042` | `repo-payments-orchestrator` → `pay` | java |
+| `svc-payments-batch` | `payments-batch` | `EAM-1042` | `repo-payments-batch` → `pay` | java |
+| `svc-ledger-api` | `ledger-api` | `EAM-2001` | `repo-ledger-api` → `ledger` | java |
+| `svc-ledger-posting` | `ledger-posting` | `EAM-2001` | `repo-ledger` → `ledger` (монорепо) | java |
+| `svc-ledger-reporting` | `ledger-reporting` | `EAM-2001` | `repo-ledger` → `ledger` (монорепо) | java |
+| `svc-legacy-statements` | `legacy-statements` | `EAM-2001` | `repo-legacy-statements` → `ledger` | cobol |
+| `svc-card-gateway` | `card-gateway` | `EAM-1043` | `repo-card-gateway` → `card` | java |
+| `svc-card-authorizer` | `card-authorizer` | `EAM-1043` | `repo-card-authorizer` → `card` | java |
+| `svc-card-tokenizer` | `card-tokenizer` | `EAM-1043` | `repo-card-tokenizer` → `card` | go |
+| `svc-settlement-engine` | `settlement-engine` | `EAM-2002` | `repo-settlement-engine` → `settle` | java |
+| `svc-settlement-recon` | `settlement-recon` | `EAM-2002` | `repo-settlement-recon` → `settle` | python |
+| `svc-fx-rates` | `fx-rates` | `EAM-2002` | `repo-fx-rates` → `settle` | go |
+| `svc-fraud-scoring` | `fraud-scoring` | `EAM-3001` | `repo-fraud-scoring` → `risk` | python |
+| `svc-fraud-rules` | `fraud-rules` | `EAM-3001` | `repo-fraud-rules` → `risk` | java |
+| `svc-aml-screening` | `aml-screening` | `EAM-3002` | `repo-aml-screening` → `risk` | java |
+| `svc-aml-case-mgmt` | `aml-case-mgmt` | `EAM-3002` | — (**репозитория нет**, `IMPLEMENTED_IN` не строится) | java |
+| `svc-mobile-bff` | `mobile-bff` | `EAM-4001` | `repo-mobile-bff` → `chan` | java |
+| `svc-mobile-auth` | `mobile-auth` | `EAM-4001` | `repo-mobile-auth` → `chan` | java |
+| `svc-ib-web` | `ib-web` | `EAM-4002` | `repo-ib-web` → `chan` | typescript |
+| `svc-ib-api` | `ib-api` | `EAM-4002` | `repo-ib-api` → `chan` | java |
+| `svc-notification-gateway` | `notification-gateway` | `EAM-4003` | `repo-notification-gateway` → `plat` | java |
+| `svc-sms-dispatcher` | `sms-dispatcher` | `EAM-4003` | `repo-sms-dispatcher` → `plat` | java |
+| `svc-customer-profile-api` | `customer-profile-api` | `EAM-4004` | `repo-customer-profile-api` → `plat` | java |
+| `svc-customer-consent` | `customer-consent` | `EAM-4004` | `repo-customer-consent` → `plat` | java |
+| `svc-partner-gateway` | `partner-gateway` | **`EAM-9999`** (в EAM нет, **кейс К-8**) | `repo-partner-gateway` → `chan` | java |
+
+**Инвариант имён.** `name` сервиса — ключ без `svc-`, все 27 значений различны; имена систем ([4.1](#41-eam-платформы-решения-системы-команды)) и команд тоже различны. `FeatureExtractor` даёт `Service`, `ITSystem` и `Team` сильный признак `NAME` (0,4), поэтому совпадение нормализованных имён создало бы лишнего кандидата identity. После базового seed открыто ровно **2** кандидата: К-5а (`score=0.60`) и К-5б (`score=0.80`); `demo-check.sh` проверяет это число.
 
 Дополнительно:
 
@@ -294,7 +296,7 @@ flowchart LR
 | № | Кейс | Какие данные его создают | Где видно | Сценарий (рабочее имя) |
 |---|---|---|---|---|
 | К-1 | Цепочка `DEPENDS_ON` глубиной 4+ для impact | Зависимости [4.1](#41-eam-платформы-решения-системы-команды): `payments-router → card-gateway → card-authorizer → fraud-scoring → fraud-rules`; выше `payments-api`, `mobile-bff`, `ib-api`, `ib-web`. Старт impact: ВМ `vm-risk-02` (PROD) → deployment `dep-fraud-rules-prod` → сервис `fraud-rules` и вверх по `DEPENDS_ON` до `payments-router` на глубине 6. Обход от `ib-web` в `trace` длиной 7 упирается в `maxDepth=6` | `trace_dependencies` режимы `trace` и `impact`, параметры `maxDepth`, `environment`, `relationTypes`; поле `paths`, `truncated` | `trace-impact` |
-| К-2 | ВМ, на которой работают сервисы нескольких систем | `vm-legacy-app-01`: 4 развёртывания из 4 систем (Ledger, Settlement Hub, AML Monitoring, Notification Center) | `impact` от ВМ (затронуты 4 системы и их зависящие сервисы); `find_runtime_footprint` разных систем показывает одну и ту же ВМ | `trace-impact`, `runtime-footprint` |
+| К-2 | ВМ, на которой работают сервисы нескольких систем | `vm-legacy-app-01`: 4 развёртывания из 4 систем (Ledger, Settlement Hub, AML Monitoring, Notification Center) | `impact` от ВМ (затронуты 4 системы и их зависящие сервисы); `settlement-recon` приводит к системе `5104` через `DECOMPOSED_INTO` (граф строится по SCM), а не к `5102` из Helm — удобно показать рядом с К-4а; `find_runtime_footprint` разных систем показывает одну и ту же ВМ | `trace-impact`, `runtime-footprint` |
 | К-3 | Сервис с развёртываниями в трёх окружениях и разными commit | `payments-api`: DEV `1ffad212…` (1.5.0-rc1), TEST `1b4f0e98…` (1.4.3), PROD `9fceb02d…` (1.4.2); те же три окружения у `mobile-bff` и `fraud-scoring` (разные `chartVersion`) | `find_runtime_footprint` (`deployments[].sourceCommit`, `deployedFrom.commit`), фильтр `environment`; `search_assets` с `environment` | `runtime-footprint` |
 | К-4а | Конфликт: `eamSystemId` из Helm против системы сервиса в EAM | `dep-settlement-recon-prod`: аннотация `5102`, а сервис `settlement-recon` принадлежит `5104` ([ADR 0030](../adr/0030-deployment-system-conflict.md)) | `source_conflict` (`kind=RELATION`, `property=eamSystemId`), маркер `conflicts` в `trace_dependencies`, `conflictState=OPEN` в `explain_provenance` | `provenance-conflicts` |
 | К-4б | Конфликт: `platform_id` системы против `platform_id` решения | `5303` Notification Center: `platform_id=3101`, решение `7206` Messaging Hub: `3103` ([ADR 0031](../adr/0031-it-system-platform-invariant.md)) | то же, `property=platformId` у узла `ITSystem` `5303` | `provenance-conflicts` |
@@ -317,7 +319,7 @@ flowchart LR
 | `trace_dependencies` режим `trace` | К-1 (`maxDepth`, `relationTypes`), К-4 (маркеры `conflicts`) |
 | `trace_dependencies` режим `impact` | К-1, К-2, фильтр `environment` |
 | `explain_provenance` | К-4а, К-4б, К-6, К-10 |
-| Лимиты, `truncated`, ошибки | К-1 (`maxDepth` выше 6, широкий `trace` от `ib-web`), `limit` выше 50, невалидный `gid` |
+| Лимиты, `truncated`, ошибки | `truncated`: широкий `trace` от `ib-web` (К-1); ошибка валидации, а не `truncated`: `maxDepth` выше 6 (`maxDepth must be in 1..6`), `limit` выше 50, невалидный `gid` |
 | Синхронизация, admin REST, консоль | К-5, К-6, К-11, `snapshot-complete`, `replay` |
 | Scope, read-only | сценарий `access`: запрос без токена, с неверным scope, `tools/list` с `readOnlyHint` |
 
@@ -336,14 +338,15 @@ flowchart LR
 ## 7. Требования к профилю заглушек (для DEMO.2)
 
 1. Профиль `demo` — отдельные данные в `source-stubs`; профиль по умолчанию и тесты не меняются.
-2. **Исторические `updatedAt`.** `StubSource` ставит `clock.instant()` при каждом `upsert`; для К-7 нужен способ задать записи прошлое время (например, `upsertAt(type, id, payload, instant)`). Без этого устаревших записей не получить: адаптер переносит `updatedAt` в время события и `lastSeenAt`.
+2. **Исторические `updatedAt`.** `StubSource` ставит `clock.instant()` при каждом `upsert`; для К-7 нужен способ задать записи прошлое время (например, `upsertAt(type, id, payload, instant)`). Без этого устаревших записей не получить: адаптер переносит `updatedAt` в время события и `lastSeenAt`. Snapshot должен отдавать сохранённый `updatedAt`, а не текущее время: иначе snapshot SCM в К-6 обновит `lastSeenAt` у `svc-sms-dispatcher` и сотрёт К-7.
 3. EAM API заглушка отдаёт платформы, решения и системы; `TEAM` и `SERVICE_DEPENDENCY` отдаёт плоская заглушка EAM (как сейчас). Профиль наполняет обе.
 4. Ключи и значения берутся из этого документа; источник истины — этот документ: профиль и эталоны подгоняются под него, а расхождение исправляется правкой профиля; правка самого документа идёт отдельным PR в epic. Ожидаемое число узлов и рёбер сверяет `demo-check.sh` (подсчёт уточняет DEMO.2 при генерации).
+5. **Порядок загрузки.** `seed.sh demo` грузит строго: EAM (платформы → решения → системы → команды → зависимости) → SCM → CMDB → DEPLOY_MAP. Маркер `ASSERTS.conflicts` не пишется, если конфликт найден «встречным» событием (SCM после deploy map, решение после системы; ограничения [ADR 0030](../adr/0030-deployment-system-conflict.md) и [0031](../adr/0031-it-system-platform-invariant.md)): `source_conflict` будет, а `trace_dependencies` маркера не покажет. При указанном порядке маркер `conflicts` есть у `dep-settlement-recon-prod` и у `5303`, и `expected/` должен его содержать.
 
 ## 8. Вопросы архитектору и ограничения
 
-1. **Конфликт `criticality` CMDB против EAM (пример из решения 3) на текущем коде воспроизвести нельзя.** `CmdbMapper` принимает только `COMPUTE_INSTANCE`; в `SourceConflictIT` для этого используется специальный тестовый маппер. Нового кода в демо нет, поэтому конфликт полномочий показан двумя реальными `RELATION`-конфликтами (К-4а `eamSystemId`, К-4б `platformId`). Нужно решение: достаточно ли этого, или добавлять путь `CMDB → ITSystem` отдельной задачей вне демо.
-2. **Домен не узел графа.** В `NodeLabel` нет `Domain`; домен выражен текстом `Domain: …` в `description` и таблицей [раздела 3](#3-домены-команды-и-их-системы). Фильтр «по домену» в HTML-визуализации (DEMO.6) придётся строить по разбору `description` либо по таблице из этого документа. Подтвердить.
+1. **Конфликт `criticality` CMDB против EAM (пример из решения 3) на текущем коде воспроизвести нельзя.** `CmdbMapper` принимает только `COMPUTE_INSTANCE`; в `SourceConflictIT` для этого используется специальный тестовый маппер. Нового кода в демо нет, поэтому конфликт полномочий показан двумя реальными `RELATION`-конфликтами (К-4а `eamSystemId`, К-4б `platformId`). **Решение архитектора:** достаточно; путь `CMDB → ITSystem` не добавляется. Конфликт полномочий показан на `kind=RELATION` (`eamSystemId`, `platformId`); конфликт значения свойства между источниками на текущих мапперах не возникает, он покрыт `SourceConflictIT` (ответ на вопрос из зала в DEMO.5).
+2. **Домен не узел графа.** В `NodeLabel` нет `Domain`; домен выражен текстом `Domain: …` в `description` и таблицей [раздела 3](#3-домены-команды-и-их-системы). **Решение архитектора:** узел не вводится. `export-graph.sh` берёт домен из `ITSystem.description` шаблоном `^Domain: (Payments|Risk & Compliance|Customer Channels)\.`; `Service`, `Deployment` и `Repository` получают домен через `DECOMPOSED_INTO` от системы; узлы без системы (`svc-partner-gateway`, К-8), хосты и окружения идут в группу «без домена». `demo-check.sh` проверяет, что домен разобран у всех 10 систем.
 3. **Команда владеет только системой.** `OWNED_BY` строится от `ITSystem`; у `Service` владельца в SCM-маппере нет. «Кто владеет сервисом» отвечается через `DECOMPOSED_INTO` → система → `OWNED_BY`.
 4. **Все `DEPENDS_ON` всегда `stale=true`.** Связь, утверждённая записью `SERVICE_DEPENDENCY` без узла, не несёт `sourceFetchedAt` ([03, `trace_dependencies`](../03-interfaces.md#trace_dependencies)). Это известное ограничение; на сценарии `freshness` оно может сбить с толку, ведущий должен о нём знать. Чтобы показать свежесть корректно, `stale` в К-7 демонстрируется на узлах и на структурных связях.
 5. **Профиль не доказывает `truncated`.** Ожидаемо, что широкий `trace` от `ib-web` превысит `max-paths` (50) из-за ветвления сервис → развёртывание → хост; это подтверждается при генерации эталонов DEMO.3. Если нет, запасной вариант — понизить `archrag.query.limits.max-paths` на демо-стенде (конфиг, не код).
