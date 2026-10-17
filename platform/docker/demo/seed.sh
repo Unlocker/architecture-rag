@@ -14,7 +14,8 @@ set -euo pipefail
 
 log "profile $ARCHRAG_STUB_PROFILE, compose project '$PROJECT'"
 if [ "${SEED_RESET:-1}" != 0 ]; then
-  log "resetting the stand (down -v)"
+  log "WARNING: removing all containers and volumes of compose project '$PROJECT' (down -v); SEED_RESET=0 keeps them"
+  sleep "${SEED_RESET_GRACE:-5}"
   dc down -v --remove-orphans
 fi
 [ "${SEED_SKIP_BUILD:-0}" = 1 ] || dc build
