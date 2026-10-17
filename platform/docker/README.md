@@ -28,7 +28,7 @@ docker compose up -d --wait --wait-timeout 300
 | `ingestion` | normalizer, identity, projector, админский API; накатывает миграции PostgreSQL и схему Neo4j |
 | `mcp-server` | MCP на `/mcp`, масштабируется `--scale` |
 | `adapter-{eam,scm,cmdb,deploymap}` | по одному экземпляру на источник (`replicas: 1`), образ `demo-launcher` |
-| `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` |
+| `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` (профиль `ARCHRAG_STUB_PROFILE=default`) или `DemoSources` (`demo`, см. «Демо-набор») |
 | `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); её читает `adapter-eam` (`PLATFORM`, `SOLUTION`, `IT_SYSTEM` с ключом `id`) |
 | `reverse-proxy` | nginx, только TLS: `/mcp`, `/webhooks/<eam|scm|cmdb|deploymap>`, токен-endpoint Keycloak |
 | `certs` | одноразовый: демо-CA и серверные сертификаты в volume `certs` (идемпотентно) |
@@ -242,3 +242,17 @@ scripts/deployment-commit-check.sh   # приёмка фичи UNLOCKER-248 (ADR
 ```
 
 Скрипт ждёт пустой очереди журнала, читает `find_runtime_footprint` по `Payments Core` (токен и CA — как в разделе «Токен и проверка») и берёт у `dep-payments-api-prod` `sourceCommit` и `deployedFrom`. Затем через `POST /control/upsert` заглушки `stub-deploymap` отправляет ту же запись формата `deploymap-poc-1` с другим commit, ждёт события в inbox (webhook или polling) и пустой очереди. Повторное чтение MCP должно дать новый commit, а в Neo4j у развёртывания должно остаться ровно одно открытое ребро `DEPLOYED_FROM` (новый commit) и одно закрытое (`validTo` задан) со старым. При повторном запуске commit переключается обратно. Код выхода не 0 при любом расхождении.
+
+## Демо-набор (профиль заглушек `demo`)
+
+`ARCHRAG_STUB_PROFILE` выбирает данные всех пяти заглушек (`stub-*`, `eam-api-stub`) разом: `default` (по умолчанию, нынешний seed, на нём держатся тесты) или `demo` (вымышленный банк Nordhaven Bank, [docs/demo/dataset.md](../../docs/demo/dataset.md)). Неизвестное значение останавливает заглушку с кодом 2. Данные демо лежат в `DemoSources` (`source-stubs`); контрактный тест `DemoDatasetContractTest` сверяет их с таблицами документа.
+
+```bash
+cd platform/docker
+../../mvnw -B -ntp -f ../../pom.xml package -DskipTests && cp .env.example .env
+demo/seed.sh demo        # down -v -> заглушки demo -> адаптеры по очереди EAM, SCM, CMDB, deploy map (snapshot, reconcile, пустая очередь) -> остальной стенд
+```
+
+`seed.sh` сносит стенд и тома проекта (`SEED_RESET=0` оставляет), порядок загрузки нужен для маркера `conflicts` в `trace_dependencies` (раздел 7 документа). После него в базовом состоянии 2 открытых кандидата identity, 2 `source_conflict` и карантин записи `dep-card-tokenizer-test-badcommit` (`INVALID_PAYLOAD`; событий в карантине два: по одному от стартового snapshot адаптера и от reconcile). Остальные `docker compose`-команды демо-стенда выполняйте с `ARCHRAG_STUB_PROFILE=demo` (его выставляет `demo/lib.sh`), иначе compose пересоздаст заглушки с профилем по умолчанию.
+
+Кейсы «во времени» вызывают управляющие эндпоинты заглушек на порту 8091 (внутри контейнера): `POST /control/upsert` и `POST /control/delete` (`{"type","id"}`, исчезновение объекта; повторный и неизвестный объект дают 400) у `stub-*`, `upsert`/`archive` у `eam-api-stub`; затем `run_reconcile <источник>` из `demo/lib.sh`.

@@ -392,6 +392,7 @@ services:
     # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
     environment:
       ARCHRAG_WEBHOOK_TARGET: http://adapter-eam:8080/webhook
+      ARCHRAG_STUB_PROFILE: ${ARCHRAG_STUB_PROFILE:-default}
     secrets:
       - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: &stub-health
@@ -408,6 +409,7 @@ services:
     # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
     environment:
       ARCHRAG_WEBHOOK_TARGET: http://adapter-scm:8080/webhook
+      ARCHRAG_STUB_PROFILE: ${ARCHRAG_STUB_PROFILE:-default}
     secrets:
       - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
@@ -419,6 +421,7 @@ services:
     # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
     environment:
       ARCHRAG_WEBHOOK_TARGET: http://adapter-cmdb:8080/webhook
+      ARCHRAG_STUB_PROFILE: ${ARCHRAG_STUB_PROFILE:-default}
     secrets:
       - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
@@ -430,6 +433,7 @@ services:
     # Webhook напрямую адаптеру внутри edge (демо-допущение: «внешняя система» — тот же стенд, TLS-proxy не нужен).
     environment:
       ARCHRAG_WEBHOOK_TARGET: http://adapter-deploymap:8080/webhook
+      ARCHRAG_STUB_PROFILE: ${ARCHRAG_STUB_PROFILE:-default}
     secrets:
       - { source: webhook_secret, target: ARCHRAG_WEBHOOK_SECRET }
     healthcheck: *stub-health
@@ -442,6 +446,8 @@ services:
     <<: *demo-launcher
     command: ["eam-api-stub"]
     networks: [edge]
+    environment:
+      ARCHRAG_STUB_PROFILE: ${ARCHRAG_STUB_PROFILE:-default}
     secrets:
       - { source: eam_api_token, target: ARCHRAG_EAM_API_TOKEN }
     healthcheck:
