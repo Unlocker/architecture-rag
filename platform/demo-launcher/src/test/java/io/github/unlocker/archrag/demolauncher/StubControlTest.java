@@ -47,6 +47,11 @@ class StubControlTest {
         .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
   }
 
+  private HttpResponse<String> postDelete(String body) throws Exception {
+    return http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + control.port() + "/control/delete"))
+        .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+  }
+
   private String changes() throws Exception {
     return http.send(HttpRequest.newBuilder(server.baseUri().resolve("/changes?limit=100")).build(),
         HttpResponse.BodyHandlers.ofString()).body();
@@ -58,6 +63,38 @@ class StubControlTest {
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(response.body()).contains("sourceVersion");
     assertThat(changes()).contains("EAM-9").contains("Backup Probe");
+  }
+
+  @Test
+  void deleteRemovesTheObjectFromTheSnapshot() throws Exception {
+    post("{\"type\":\"SERVICE\",\"id\":\"svc-a\",\"payload\":{\"name\":\"a\"}}");
+    post("{\"type\":\"SERVICE\",\"id\":\"svc-b\",\"payload\":{\"name\":\"b\"}}");
+    var response = postDelete("{\"type\":\"SERVICE\",\"id\":\"svc-a\"}");
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.body()).contains("\"sourceVersion\":2");
+    var snapshot = source.fetchChanges(null, 100);
+    assertThat(snapshot.changes()).extracting(c -> c.sourceId()).containsExactly("svc-b");
+    assertThat(snapshot.snapshotComplete()).isTrue();
+  }
+
+  @Test
+  void deleteOfAnUnknownOrAlreadyDeletedObjectIsRejectedWithoutChangingSource() throws Exception {
+    post("{\"type\":\"SERVICE\",\"id\":\"svc-a\",\"payload\":{\"name\":\"a\"}}");
+    assertThat(postDelete("{\"type\":\"SERVICE\",\"id\":\"svc-a\"}").statusCode()).isEqualTo(200);
+    String before = changes();
+    assertThat(postDelete("{\"type\":\"SERVICE\",\"id\":\"svc-a\"}").statusCode()).isEqualTo(400);
+    assertThat(postDelete("{\"type\":\"SERVICE\",\"id\":\"svc-none\"}").statusCode()).isEqualTo(400);
+    for (String bad : new String[] {"not json", "{}", "{\"type\":\"SERVICE\"}", "{\"type\":\"SERVICE\",\"id\":\"\"}"}) {
+      assertThat(postDelete(bad).statusCode()).as(bad).isEqualTo(400);
+    }
+    assertThat(changes()).isEqualTo(before);
+  }
+
+  @Test
+  void deleteRequiresPost() throws Exception {
+    var response = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + control.port() + "/control/delete"))
+        .GET().build(), HttpResponse.BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(405);
   }
 
   @Test

@@ -170,4 +170,15 @@ class LauncherConfigTest {
     assertThatThrownBy(() -> LauncherConfig.adapter(SourceSystem.EAM, env)).isInstanceOf(IllegalArgumentException.class);
     assertThat(LauncherConfig.adapter(SourceSystem.SCM, env).eamApi()).isNull();
   }
+
+  @Test
+  void stubProfileIsDefaultUnlessSetAndRejectsUnknownValues() {
+    assertThat(LauncherConfig.stubProfile(Map.of())).isEqualTo(io.github.unlocker.archrag.sourcestubs.StubProfile.DEFAULT);
+    assertThat(LauncherConfig.stubProfile(Map.of("ARCHRAG_STUB_PROFILE", "demo")))
+        .isEqualTo(io.github.unlocker.archrag.sourcestubs.StubProfile.DEMO);
+    assertThatThrownBy(() -> LauncherConfig.stubProfile(Map.of("ARCHRAG_STUB_PROFILE", "staging")))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("ARCHRAG_STUB_PROFILE")
+        .hasMessageNotContaining("staging");
+  }
 }
