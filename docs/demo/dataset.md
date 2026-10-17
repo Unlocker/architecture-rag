@@ -144,7 +144,7 @@ flowchart LR
 | `svc-notification-gateway` | `svc-sms-dispatcher` (`ASYNC`) | |
 | `svc-legacy-statements` | `svc-ledger-reporting` | |
 
-Всего 31 ребро `DEPENDS_ON`. Самая длинная цепочка: `ib-web → ib-api → payments-api → payments-router → card-gateway → card-authorizer → fraud-scoring → fraud-rules` (7 рёбер).
+Всего 29 рёбер `DEPENDS_ON`. Самая длинная цепочка: `ib-web → ib-api → payments-api → payments-router → card-gateway → card-authorizer → fraud-scoring → fraud-rules` (7 рёбер).
 
 ### 4.2. Развёртывания: deploy map / Helm
 
@@ -300,7 +300,7 @@ flowchart LR
 | К-4б | Конфликт: `platform_id` системы против `platform_id` решения | `5303` Notification Center: `platform_id=3101`, решение `7206` Messaging Hub: `3103` ([ADR 0031](../adr/0031-it-system-platform-invariant.md)) | то же, `property=platformId` у узла `ITSystem` `5303` | `provenance-conflicts` |
 | К-5а | Пара записей для crosswalk | `vm-pay-01` и `cmdb-ci-88014`: одинаковый `hostname` с точностью до регистра, признак `HOSTNAME` (0,6) → кандидат со `score=0.60`. Оператор подтверждает кандидата, у пары остаётся один `gid` | admin REST `POST /admin/identity/candidates/approve`, консоль, `get_asset` до и после | `identity` |
 | К-5б | Кандидат identity, остающийся открытым | `repo-payments-api` и `repo-payments-api-legacy`: признак `REPOSITORY_URL` (0,8) → кандидат `score=0.80`. Не подтверждается: автослияния нет ([ADR 0019](../adr/0019-identity-resolution-no-auto-merge.md)) | консоль/admin REST (список кандидатов `OPEN`), в графе два узла | `identity` |
-| К-6 | Объект, исчезнувший из snapshot (логическое удаление) | `svc-legacy-statements` и `repo-legacy-statements` присутствуют в первом snapshot SCM, затем удаляются в заглушке и новый snapshot отдаёт маркер `snapshot-complete` без них | `get_asset`: `isCurrent=false`, `deletedAt`, неактивные записи в `sources`; `search_assets` его больше не находит; закрыты `DECOMPOSED_INTO`, `IMPLEMENTED_IN` (`validTo`) | `lifecycle` |
+| К-6 | Объект, исчезнувший из snapshot (логическое удаление) | `svc-legacy-statements` и `repo-legacy-statements` присутствуют в первом snapshot SCM, затем снимаются с вывода вместе с зависимыми записями: EAM `dep-legacy-statements-ledger-reporting` и DEPLOY_MAP `dep-legacy-statements-prod`; новые snapshot трёх источников отдают `snapshot-complete` без них | `get_asset`: `isCurrent=false`, `deletedAt`, неактивные записи в `sources`; `search_assets` его больше не находит; закрыты `DECOMPOSED_INTO`, `IMPLEMENTED_IN`, `DEPENDS_ON` на `ledger-reporting`, `HAS_DEPLOYMENT`, `IN_ENVIRONMENT`, `DEPLOYED_FROM`, `RUNS_ON` на `vm-legacy-app-02` (`validTo`); узел `Deployment` закрыт (`isCurrent=false`). После мутации `trace`/`impact` по `ledger-reporting` и по `vm-legacy-app-02` его не видят, у ВМ остаётся только `sms-dispatcher` | `lifecycle` |
 | К-7 | Устаревшая запись (stale) | `svc-sms-dispatcher` (SCM, `updatedAt` −30 дней), `dep-sms-dispatcher-dev` и `vm-dev-legacy-01` (−21 день): старше `stale-after` = 7 дней | `stale=true` в `search_assets`/`get_asset`/`find_runtime_footprint` (`warnings[]`) и `trace_dependencies`; порог в `staleAfter` | `freshness` |
 | К-8 | Неразрешённая ссылка | `svc-partner-gateway` ссылается на систему `EAM-9999` (нет в EAM): `DECOMPOSED_INTO` отложена (`PendingRelation`), у сервиса нет системы. `dep-partner-gateway-prod` ссылается на репозиторий, которого нет в SCM: `DEPLOYED_FROM` отложена по alias `REPOSITORY_URL`, поля `repositoryUrl`/`sourceCommit` на узле есть, связи нет | `get_asset` (нет связи с системой), `find_runtime_footprint` (`repository=null`, `deployedFrom=null`); при появлении системы или репозитория в SCM связь достраивается | `unresolved` |
 | К-9 | Расхождение системы в Helm chart | то же, что К-4а: `dep-settlement-recon-prod` | см. К-4а | `provenance-conflicts` |
@@ -327,7 +327,7 @@ flowchart LR
 
 | Мутация | Источник | Эффект | Кейс |
 |---|---|---|---|
-| Удалить `svc-legacy-statements` и `repo-legacy-statements`, затем snapshot SCM | SCM | tombstone записей, закрытие рёбер, `isCurrent=false` у узлов | К-6 |
+| Удалить `svc-legacy-statements`, `repo-legacy-statements` (SCM), `dep-legacy-statements-ledger-reporting` (EAM), `dep-legacy-statements-prod` (DEPLOY_MAP), затем snapshot трёх источников | SCM, EAM, DEPLOY_MAP | tombstone записей, закрытие всех рёбер записей, `isCurrent=false` у сервиса, репозитория и развёртывания; доли удалённых записей малы, порог 0,5 не срабатывает | К-6 |
 | Передеплой: `dep-card-gateway-prod` → `chartVersion` 4.0.3 и новый commit (по правилу) | DEPLOY_MAP | рост `sourceVersion`, закрытие прежнего ребра `DEPLOYED_FROM` (`validTo`), новое ребро с новым `commit` | К-3 (история) |
 | Подтвердить кандидата `vm-pay-01` / `cmdb-ci-88014` (выживший — `vm-pay-01`) | admin REST | кандидат `RESOLVED`, запись в `approved_crosswalk`, общий `gid` | К-5а |
 | Восстановить `dep-card-tokenizer-test-badcommit` с правильным commit и выпустить из карантина | DEPLOY_MAP + admin REST | событие `PROJECTED` | К-11 |
@@ -338,7 +338,7 @@ flowchart LR
 1. Профиль `demo` — отдельные данные в `source-stubs`; профиль по умолчанию и тесты не меняются.
 2. **Исторические `updatedAt`.** `StubSource` ставит `clock.instant()` при каждом `upsert`; для К-7 нужен способ задать записи прошлое время (например, `upsertAt(type, id, payload, instant)`). Без этого устаревших записей не получить: адаптер переносит `updatedAt` в время события и `lastSeenAt`.
 3. EAM API заглушка отдаёт платформы, решения и системы; `TEAM` и `SERVICE_DEPENDENCY` отдаёт плоская заглушка EAM (как сейчас). Профиль наполняет обе.
-4. Ключи и значения берутся из этого документа; расхождение документа и профиля — ошибка того, что позже. Ожидаемое число узлов и рёбер сверяет `demo-check.sh` (подсчёт уточняет DEMO.2 при генерации).
+4. Ключи и значения берутся из этого документа; источник истины — этот документ: профиль и эталоны подгоняются под него, а расхождение исправляется правкой профиля; правка самого документа идёт отдельным PR в epic. Ожидаемое число узлов и рёбер сверяет `demo-check.sh` (подсчёт уточняет DEMO.2 при генерации).
 
 ## 8. Вопросы архитектору и ограничения
 
