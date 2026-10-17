@@ -10,13 +10,6 @@
   },
   "relations": [
     {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "https://git.example.org/settle/settlement-recon",
-      "relationType": "DEPLOYED_FROM",
-      "type": "Repository"
-    },
-    {
       "direction": "IN",
       "isCurrent": true,
       "name": "settlement-recon",
@@ -33,6 +26,13 @@
     {
       "direction": "OUT",
       "isCurrent": true,
+      "name": "https://git.example.org/settle/settlement-recon",
+      "relationType": "DEPLOYED_FROM",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
       "name": "vm-legacy-app-01.prod.example.org",
       "relationType": "RUNS_ON",
       "type": "ComputeInstance"
@@ -44,8 +44,7 @@
       "authority": "MASTER",
       "source": "DEPLOYMAP",
       "sourceId": "dep-settlement-recon-prod",
-      "sourceType": "DEPLOYMENT",
-      "sourceVersion": "1"
+      "sourceType": "DEPLOYMENT"
     }
   ],
   "truncated": false,

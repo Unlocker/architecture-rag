@@ -11,8 +11,7 @@
       "authority": "MASTER",
       "source": "SCM",
       "sourceId": "svc-legacy-statements",
-      "sourceType": "SERVICE",
-      "sourceVersion": "1"
+      "sourceType": "SERVICE"
     }
   ],
   "truncated": false,

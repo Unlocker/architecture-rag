@@ -37,8 +37,7 @@
       "authority": "MASTER",
       "source": "DEPLOYMAP",
       "sourceId": "dep-partner-gateway-prod",
-      "sourceType": "DEPLOYMENT",
-      "sourceVersion": "1"
+      "sourceType": "DEPLOYMENT"
     }
   ],
   "truncated": false,

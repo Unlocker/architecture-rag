@@ -12,6 +12,13 @@
     {
       "direction": "OUT",
       "isCurrent": true,
+      "name": "Payments Team",
+      "relationType": "OWNED_BY",
+      "type": "Team"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
       "name": "payments-api",
       "relationType": "DECOMPOSED_INTO",
       "type": "Service"
@@ -36,13 +43,6 @@
       "name": "payments-router",
       "relationType": "DECOMPOSED_INTO",
       "type": "Service"
-    },
-    {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "Payments Team",
-      "relationType": "OWNED_BY",
-      "type": "Team"
     }
   ],
   "sources": [
@@ -51,8 +51,7 @@
       "authority": "MASTER",
       "source": "EAM",
       "sourceId": "5101",
-      "sourceType": "IT_SYSTEM",
-      "sourceVersion": "1"
+      "sourceType": "IT_SYSTEM"
     }
   ],
   "truncated": false,

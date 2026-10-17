@@ -15,6 +15,13 @@
     {
       "direction": "OUT",
       "isCurrent": true,
+      "name": "https://git.example.org/ledger/legacy-statements",
+      "relationType": "IMPLEMENTED_IN",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
       "name": "ledger-reporting",
       "relationType": "DEPENDS_ON",
       "type": "Service"
@@ -25,13 +32,6 @@
       "name": "legacy-statements",
       "relationType": "HAS_DEPLOYMENT",
       "type": "Deployment"
-    },
-    {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "https://git.example.org/ledger/legacy-statements",
-      "relationType": "IMPLEMENTED_IN",
-      "type": "Repository"
     }
   ],
   "sources": [
@@ -40,8 +40,7 @@
       "authority": "MASTER",
       "source": "SCM",
       "sourceId": "svc-legacy-statements",
-      "sourceType": "SERVICE",
-      "sourceVersion": "1"
+      "sourceType": "SERVICE"
     }
   ],
   "truncated": false,

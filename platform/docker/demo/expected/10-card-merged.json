@@ -30,16 +30,14 @@
       "authority": "MASTER",
       "source": "CMDB",
       "sourceId": "cmdb-ci-88014",
-      "sourceType": "COMPUTE_INSTANCE",
-      "sourceVersion": "1"
+      "sourceType": "COMPUTE_INSTANCE"
     },
     {
       "active": true,
       "authority": "MASTER",
       "source": "CMDB",
       "sourceId": "vm-pay-01",
-      "sourceType": "COMPUTE_INSTANCE",
-      "sourceVersion": "1"
+      "sourceType": "COMPUTE_INSTANCE"
     }
   ],
   "truncated": false,

@@ -8,16 +8,16 @@
     {
       "direction": "OUT",
       "isCurrent": true,
-      "name": "partner-gateway",
-      "relationType": "HAS_DEPLOYMENT",
-      "type": "Deployment"
+      "name": "https://git.example.org/chan/partner-gateway",
+      "relationType": "IMPLEMENTED_IN",
+      "type": "Repository"
     },
     {
       "direction": "OUT",
       "isCurrent": true,
-      "name": "https://git.example.org/chan/partner-gateway",
-      "relationType": "IMPLEMENTED_IN",
-      "type": "Repository"
+      "name": "partner-gateway",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
     }
   ],
   "sources": [
@@ -26,8 +26,7 @@
       "authority": "MASTER",
       "source": "SCM",
       "sourceId": "svc-partner-gateway",
-      "sourceType": "SERVICE",
-      "sourceVersion": "1"
+      "sourceType": "SERVICE"
     }
   ],
   "truncated": false,

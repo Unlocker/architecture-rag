@@ -22,23 +22,23 @@
     {
       "direction": "OUT",
       "isCurrent": true,
-      "name": "sms-dispatcher",
-      "relationType": "HAS_DEPLOYMENT",
-      "type": "Deployment"
-    },
-    {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "sms-dispatcher",
-      "relationType": "HAS_DEPLOYMENT",
-      "type": "Deployment"
-    },
-    {
-      "direction": "OUT",
-      "isCurrent": true,
       "name": "https://git.example.org/plat/sms-dispatcher",
       "relationType": "IMPLEMENTED_IN",
       "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "sms-dispatcher",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "sms-dispatcher",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
     }
   ],
   "sources": [
@@ -47,8 +47,7 @@
       "authority": "MASTER",
       "source": "SCM",
       "sourceId": "svc-sms-dispatcher",
-      "sourceType": "SERVICE",
-      "sourceVersion": "1"
+      "sourceType": "SERVICE"
     }
   ],
   "truncated": false,

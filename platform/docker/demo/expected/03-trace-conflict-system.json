@@ -5,6 +5,18 @@
   "mode": "trace",
   "nodes": [
     {
+      "conflicts": [],
+      "label": "Service",
+      "name": "notification-gateway",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Service",
+      "name": "sms-dispatcher",
+      "stale": true
+    },
+    {
       "conflicts": [
         {
           "properties": [
@@ -18,18 +30,6 @@
       "label": "ITSystem",
       "name": "Notification Center",
       "stale": false
-    },
-    {
-      "conflicts": [],
-      "label": "Service",
-      "name": "notification-gateway",
-      "stale": false
-    },
-    {
-      "conflicts": [],
-      "label": "Service",
-      "name": "sms-dispatcher",
-      "stale": true
     }
   ],
   "paths": [

@@ -14,11 +14,9 @@
       "conflictProperties": [
         "platformId"
       ],
-      "contentHash": "70c384e0444f26122ef6fe23675473177f95b309268fbfd8b6c5af65d947d981",
       "source": "EAM",
       "sourceId": "5303",
-      "sourceType": "IT_SYSTEM",
-      "sourceVersion": "1"
+      "sourceType": "IT_SYSTEM"
     }
   ],
   "type": "ITSystem"

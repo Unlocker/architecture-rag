@@ -7,6 +7,60 @@
           "compute": [
             {
               "hostedOn": null,
+              "hostname": "vm-dev-shared-01.dev.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-payments-api-dev",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-dev-shared-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "1ffad2123042d3bb82f6140bd07eee2d37a7c311",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-api-dev",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "dev",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-api-dev",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "payments-api",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/pay/payments-api"
+          },
+          "repositoryUrl": "https://git.example.org/pay/payments-api",
+          "sourceCommit": "1ffad2123042d3bb82f6140bd07eee2d37a7c311",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-payments-api-dev",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.5.0-rc1"
+        },
+        {
+          "compute": [
+            {
+              "hostedOn": null,
               "hostname": "vm-pay-01.prod.example.org",
               "runsOn": {
                 "source": "DEPLOYMAP",
@@ -130,60 +184,6 @@
           "stale": false,
           "status": null,
           "version": "1.4.3"
-        },
-        {
-          "compute": [
-            {
-              "hostedOn": null,
-              "hostname": "vm-dev-shared-01.dev.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-payments-api-dev",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-dev-shared-01",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            }
-          ],
-          "deployedFrom": {
-            "commit": "1ffad2123042d3bb82f6140bd07eee2d37a7c311",
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-api-dev",
-            "sourceType": "DEPLOYMENT"
-          },
-          "environment": "dev",
-          "hasDeployment": {
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-api-dev",
-            "sourceType": "DEPLOYMENT"
-          },
-          "name": "payments-api",
-          "repository": {
-            "name": null,
-            "url": "https://git.example.org/pay/payments-api"
-          },
-          "repositoryUrl": "https://git.example.org/pay/payments-api",
-          "sourceCommit": "1ffad2123042d3bb82f6140bd07eee2d37a7c311",
-          "sources": [
-            {
-              "authority": "MASTER",
-              "source": "DEPLOYMAP",
-              "sourceId": "dep-payments-api-dev",
-              "sourceType": "DEPLOYMENT"
-            }
-          ],
-          "stale": false,
-          "status": null,
-          "version": "1.5.0-rc1"
         }
       ],
       "name": "payments-api",
@@ -192,142 +192,6 @@
           "authority": "MASTER",
           "source": "SCM",
           "sourceId": "svc-payments-api",
-          "sourceType": "SERVICE"
-        }
-      ],
-      "stale": false
-    },
-    {
-      "deployments": [
-        {
-          "compute": [
-            {
-              "hostedOn": null,
-              "hostname": "vm-pay-03.prod.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-payments-batch-prod",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-pay-03",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            }
-          ],
-          "deployedFrom": {
-            "commit": "7c7ce77309e26a8bbbd6accd38089316398155b9",
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-batch-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "environment": "prod",
-          "hasDeployment": {
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-batch-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "name": "payments-batch",
-          "repository": {
-            "name": null,
-            "url": "https://git.example.org/pay/payments-batch"
-          },
-          "repositoryUrl": "https://git.example.org/pay/payments-batch",
-          "sourceCommit": "7c7ce77309e26a8bbbd6accd38089316398155b9",
-          "sources": [
-            {
-              "authority": "MASTER",
-              "source": "DEPLOYMAP",
-              "sourceId": "dep-payments-batch-prod",
-              "sourceType": "DEPLOYMENT"
-            }
-          ],
-          "stale": false,
-          "status": null,
-          "version": "1.1.0"
-        }
-      ],
-      "name": "payments-batch",
-      "sources": [
-        {
-          "authority": "MASTER",
-          "source": "SCM",
-          "sourceId": "svc-payments-batch",
-          "sourceType": "SERVICE"
-        }
-      ],
-      "stale": false
-    },
-    {
-      "deployments": [
-        {
-          "compute": [
-            {
-              "hostedOn": null,
-              "hostname": "vm-pay-03.prod.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-payments-orchestrator-prod",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-pay-03",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            }
-          ],
-          "deployedFrom": {
-            "commit": "3d57729ed3c9519ec04ac3db85ad8d2e58f27a28",
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-orchestrator-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "environment": "prod",
-          "hasDeployment": {
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-orchestrator-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "name": "payments-orchestrator",
-          "repository": {
-            "name": null,
-            "url": "https://git.example.org/pay/payments-orchestrator"
-          },
-          "repositoryUrl": "https://git.example.org/pay/payments-orchestrator",
-          "sourceCommit": "3d57729ed3c9519ec04ac3db85ad8d2e58f27a28",
-          "sources": [
-            {
-              "authority": "MASTER",
-              "source": "DEPLOYMAP",
-              "sourceId": "dep-payments-orchestrator-prod",
-              "sourceType": "DEPLOYMENT"
-            }
-          ],
-          "stale": false,
-          "status": null,
-          "version": "0.9.4"
-        }
-      ],
-      "name": "payments-orchestrator",
-      "sources": [
-        {
-          "authority": "MASTER",
-          "source": "SCM",
-          "sourceId": "svc-payments-orchestrator",
           "sourceType": "SERVICE"
         }
       ],
@@ -470,6 +334,142 @@
           "authority": "MASTER",
           "source": "SCM",
           "sourceId": "svc-payments-router",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-pay-03.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-payments-batch-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-pay-03",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "7c7ce77309e26a8bbbd6accd38089316398155b9",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-batch-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-batch-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "payments-batch",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/pay/payments-batch"
+          },
+          "repositoryUrl": "https://git.example.org/pay/payments-batch",
+          "sourceCommit": "7c7ce77309e26a8bbbd6accd38089316398155b9",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-payments-batch-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.1.0"
+        }
+      ],
+      "name": "payments-batch",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-payments-batch",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-pay-03.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-payments-orchestrator-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-pay-03",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "3d57729ed3c9519ec04ac3db85ad8d2e58f27a28",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-orchestrator-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-orchestrator-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "payments-orchestrator",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/pay/payments-orchestrator"
+          },
+          "repositoryUrl": "https://git.example.org/pay/payments-orchestrator",
+          "sourceCommit": "3d57729ed3c9519ec04ac3db85ad8d2e58f27a28",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-payments-orchestrator-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "0.9.4"
+        }
+      ],
+      "name": "payments-orchestrator",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-payments-orchestrator",
           "sourceType": "SERVICE"
         }
       ],

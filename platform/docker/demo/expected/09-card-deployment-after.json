@@ -15,8 +15,7 @@
       "authority": "MASTER",
       "source": "DEPLOYMAP",
       "sourceId": "dep-legacy-statements-prod",
-      "sourceType": "DEPLOYMENT",
-      "sourceVersion": "2"
+      "sourceType": "DEPLOYMENT"
     }
   ],
   "truncated": false,

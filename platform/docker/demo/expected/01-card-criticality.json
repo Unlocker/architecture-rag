@@ -12,6 +12,13 @@
     {
       "direction": "OUT",
       "isCurrent": true,
+      "name": "Risk Team",
+      "relationType": "OWNED_BY",
+      "type": "Team"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
       "name": "fraud-rules",
       "relationType": "DECOMPOSED_INTO",
       "type": "Service"
@@ -22,13 +29,6 @@
       "name": "fraud-scoring",
       "relationType": "DECOMPOSED_INTO",
       "type": "Service"
-    },
-    {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "Risk Team",
-      "relationType": "OWNED_BY",
-      "type": "Team"
     }
   ],
   "sources": [
@@ -37,8 +37,7 @@
       "authority": "MASTER",
       "source": "EAM",
       "sourceId": "5201",
-      "sourceType": "IT_SYSTEM",
-      "sourceVersion": "1"
+      "sourceType": "IT_SYSTEM"
     }
   ],
   "truncated": false,

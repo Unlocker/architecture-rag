@@ -11,6 +11,12 @@
       "stale": false
     },
     {
+      "conflicts": [],
+      "label": "Repository",
+      "name": "https://git.example.org/settle/settlement-recon",
+      "stale": false
+    },
+    {
       "conflicts": [
         {
           "properties": [
@@ -23,12 +29,6 @@
       ],
       "label": "Deployment",
       "name": "settlement-recon",
-      "stale": false
-    },
-    {
-      "conflicts": [],
-      "label": "Repository",
-      "name": "https://git.example.org/settle/settlement-recon",
       "stale": false
     }
   ],
@@ -68,8 +68,8 @@
       "from": "Deployment:settlement-recon",
       "sourceActive": true,
       "stale": false,
-      "to": "Repository:https://git.example.org/settle/settlement-recon",
-      "type": "DEPLOYED_FROM"
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
     },
     {
       "assertedById": "dep-settlement-recon-prod",
@@ -78,8 +78,8 @@
       "from": "Deployment:settlement-recon",
       "sourceActive": true,
       "stale": false,
-      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
-      "type": "RUNS_ON"
+      "to": "Repository:https://git.example.org/settle/settlement-recon",
+      "type": "DEPLOYED_FROM"
     }
   ],
   "staleAfter": "PT168H",

@@ -1,12 +1,12 @@
 {
   "affected": [
-    "Service:sms-dispatcher",
-    "Service:legacy-statements",
-    "Service:notification-gateway",
-    "ITSystem:Notification Center",
     "ITSystem:Ledger",
+    "ITSystem:Mobile Banking",
+    "ITSystem:Notification Center",
+    "Service:legacy-statements",
     "Service:mobile-bff",
-    "ITSystem:Mobile Banking"
+    "Service:notification-gateway",
+    "Service:sms-dispatcher"
   ],
   "direction": "upstream",
   "environment": null,
@@ -43,21 +43,6 @@
       "stale": false
     },
     {
-      "conflicts": [
-        {
-          "properties": [
-            "platformId"
-          ],
-          "source": "EAM",
-          "sourceId": "5303",
-          "sourceType": "IT_SYSTEM"
-        }
-      ],
-      "label": "ITSystem",
-      "name": "Notification Center",
-      "stale": false
-    },
-    {
       "conflicts": [],
       "label": "Service",
       "name": "legacy-statements",
@@ -80,6 +65,21 @@
       "label": "Service",
       "name": "sms-dispatcher",
       "stale": true
+    },
+    {
+      "conflicts": [
+        {
+          "properties": [
+            "platformId"
+          ],
+          "source": "EAM",
+          "sourceId": "5303",
+          "sourceType": "IT_SYSTEM"
+        }
+      ],
+      "label": "ITSystem",
+      "name": "Notification Center",
+      "stale": false
     }
   ],
   "paths": [
@@ -92,6 +92,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:legacy-statements",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Ledger",
           "to": "Service:legacy-statements",
           "type": "DECOMPOSED_INTO"
@@ -100,11 +105,6 @@
           "from": "Service:legacy-statements",
           "to": "Deployment:legacy-statements",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:legacy-statements",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -116,14 +116,14 @@
       ],
       "relations": [
         {
-          "from": "Service:legacy-statements",
-          "to": "Deployment:legacy-statements",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
           "from": "Deployment:legacy-statements",
           "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
           "type": "RUNS_ON"
+        },
+        {
+          "from": "Service:legacy-statements",
+          "to": "Deployment:legacy-statements",
+          "type": "HAS_DEPLOYMENT"
         }
       ]
     },
@@ -136,6 +136,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:sms-dispatcher",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Notification Center",
           "to": "Service:sms-dispatcher",
           "type": "DECOMPOSED_INTO"
@@ -144,11 +149,6 @@
           "from": "Service:sms-dispatcher",
           "to": "Deployment:sms-dispatcher",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:sms-dispatcher",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -161,6 +161,11 @@
         "ITSystem:Notification Center"
       ],
       "relations": [
+        {
+          "from": "Deployment:sms-dispatcher",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Notification Center",
           "to": "Service:notification-gateway",
@@ -175,11 +180,6 @@
           "from": "Service:sms-dispatcher",
           "to": "Deployment:sms-dispatcher",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:sms-dispatcher",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -193,6 +193,11 @@
         "ITSystem:Mobile Banking"
       ],
       "relations": [
+        {
+          "from": "Deployment:sms-dispatcher",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Mobile Banking",
           "to": "Service:mobile-bff",
@@ -212,11 +217,6 @@
           "from": "Service:sms-dispatcher",
           "to": "Deployment:sms-dispatcher",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:sms-dispatcher",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -229,6 +229,11 @@
         "Service:mobile-bff"
       ],
       "relations": [
+        {
+          "from": "Deployment:sms-dispatcher",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "Service:mobile-bff",
           "to": "Service:notification-gateway",
@@ -243,11 +248,6 @@
           "from": "Service:sms-dispatcher",
           "to": "Deployment:sms-dispatcher",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:sms-dispatcher",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -260,6 +260,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:sms-dispatcher",
+          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:notification-gateway",
           "to": "Service:sms-dispatcher",
           "type": "DEPENDS_ON"
@@ -268,11 +273,6 @@
           "from": "Service:sms-dispatcher",
           "to": "Deployment:sms-dispatcher",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:sms-dispatcher",
-          "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -284,19 +284,79 @@
       ],
       "relations": [
         {
-          "from": "Service:sms-dispatcher",
-          "to": "Deployment:sms-dispatcher",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
           "from": "Deployment:sms-dispatcher",
           "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
           "type": "RUNS_ON"
+        },
+        {
+          "from": "Service:sms-dispatcher",
+          "to": "Deployment:sms-dispatcher",
+          "type": "HAS_DEPLOYMENT"
         }
       ]
     }
   ],
   "relations": [
+    {
+      "assertedById": "dep-legacy-statements-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:legacy-statements",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-legacy-statements-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:legacy-statements",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:legacy-statements",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-mobile-bff-notification-gateway",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:mobile-bff",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:notification-gateway",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-notification-gateway-sms-dispatcher",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:notification-gateway",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:sms-dispatcher",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-sms-dispatcher-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:sms-dispatcher",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-sms-dispatcher-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:sms-dispatcher",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:sms-dispatcher",
+      "type": "HAS_DEPLOYMENT"
+    },
     {
       "assertedById": "svc-legacy-statements",
       "assertedBySource": "SCM",
@@ -336,66 +396,6 @@
       "stale": true,
       "to": "Service:sms-dispatcher",
       "type": "DECOMPOSED_INTO"
-    },
-    {
-      "assertedById": "dep-mobile-bff-notification-gateway",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:mobile-bff",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:notification-gateway",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-notification-gateway-sms-dispatcher",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:notification-gateway",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:sms-dispatcher",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-legacy-statements-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Service:legacy-statements",
-      "sourceActive": true,
-      "stale": false,
-      "to": "Deployment:legacy-statements",
-      "type": "HAS_DEPLOYMENT"
-    },
-    {
-      "assertedById": "dep-sms-dispatcher-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Service:sms-dispatcher",
-      "sourceActive": true,
-      "stale": false,
-      "to": "Deployment:sms-dispatcher",
-      "type": "HAS_DEPLOYMENT"
-    },
-    {
-      "assertedById": "dep-legacy-statements-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Deployment:legacy-statements",
-      "sourceActive": true,
-      "stale": false,
-      "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-      "type": "RUNS_ON"
-    },
-    {
-      "assertedById": "dep-sms-dispatcher-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Deployment:sms-dispatcher",
-      "sourceActive": true,
-      "stale": false,
-      "to": "ComputeInstance:vm-legacy-app-02.prod.example.org",
-      "type": "RUNS_ON"
     }
   ],
   "staleAfter": "PT168H",

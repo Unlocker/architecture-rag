@@ -1,18 +1,18 @@
 {
   "affected": [
-    "Service:fraud-scoring",
-    "Service:fraud-rules",
-    "ITSystem:Fraud Screening",
-    "Service:card-authorizer",
     "ITSystem:Card Gateway",
-    "Service:card-gateway",
-    "Service:settlement-engine",
-    "Service:payments-router",
-    "Service:settlement-recon",
-    "ITSystem:Settlement Hub",
+    "ITSystem:Fraud Screening",
     "ITSystem:Payments Core",
+    "ITSystem:Settlement Hub",
+    "Service:card-authorizer",
+    "Service:card-gateway",
+    "Service:fraud-rules",
+    "Service:fraud-scoring",
+    "Service:payments-api",
     "Service:payments-orchestrator",
-    "Service:payments-api"
+    "Service:payments-router",
+    "Service:settlement-engine",
+    "Service:settlement-recon"
   ],
   "direction": "upstream",
   "environment": null,
@@ -125,6 +125,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Fraud Screening",
           "to": "Service:fraud-rules",
           "type": "DECOMPOSED_INTO"
@@ -133,11 +138,6 @@
           "from": "Service:fraud-rules",
           "to": "Deployment:fraud-rules",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -151,14 +151,14 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Fraud Screening",
           "to": "Service:fraud-scoring",
           "type": "DECOMPOSED_INTO"
-        },
-        {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
-          "type": "DEPENDS_ON"
         },
         {
           "from": "Service:fraud-rules",
@@ -166,9 +166,9 @@
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -183,6 +183,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Card Gateway",
           "to": "Service:card-authorizer",
           "type": "DECOMPOSED_INTO"
@@ -193,19 +198,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-rules",
           "to": "Deployment:fraud-rules",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -220,6 +220,11 @@
         "ITSystem:Card Gateway"
       ],
       "relations": [
+        {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Card Gateway",
           "to": "Service:card-gateway",
@@ -236,19 +241,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-rules",
           "to": "Deployment:fraud-rules",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -264,6 +264,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -274,6 +279,11 @@
           "type": "DEPENDS_ON"
         },
         {
+          "from": "Service:fraud-rules",
+          "to": "Deployment:fraud-rules",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
           "from": "Service:fraud-scoring",
           "to": "Service:fraud-rules",
           "type": "DEPENDS_ON"
@@ -282,16 +292,6 @@
           "from": "Service:payments-router",
           "to": "Service:card-gateway",
           "type": "DEPENDS_ON"
-        },
-        {
-          "from": "Service:fraud-rules",
-          "to": "Deployment:fraud-rules",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -307,6 +307,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -317,6 +322,11 @@
           "type": "DEPENDS_ON"
         },
         {
+          "from": "Service:fraud-rules",
+          "to": "Deployment:fraud-rules",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
           "from": "Service:fraud-scoring",
           "to": "Service:fraud-rules",
           "type": "DEPENDS_ON"
@@ -325,16 +335,6 @@
           "from": "Service:settlement-engine",
           "to": "Service:card-gateway",
           "type": "DEPENDS_ON"
-        },
-        {
-          "from": "Service:fraud-rules",
-          "to": "Deployment:fraud-rules",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -349,6 +349,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -359,19 +364,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-rules",
           "to": "Deployment:fraud-rules",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -385,13 +385,13 @@
       ],
       "relations": [
         {
-          "from": "Service:card-authorizer",
-          "to": "Service:fraud-scoring",
-          "type": "DEPENDS_ON"
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
         },
         {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
+          "from": "Service:card-authorizer",
+          "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
         },
         {
@@ -400,9 +400,9 @@
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -415,9 +415,9 @@
       ],
       "relations": [
         {
-          "from": "Service:fraud-scoring",
-          "to": "Service:fraud-rules",
-          "type": "DEPENDS_ON"
+          "from": "Deployment:fraud-rules",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
         },
         {
           "from": "Service:fraud-rules",
@@ -425,9 +425,9 @@
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-rules",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:fraud-scoring",
+          "to": "Service:fraud-rules",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -439,14 +439,14 @@
       ],
       "relations": [
         {
-          "from": "Service:fraud-rules",
-          "to": "Deployment:fraud-rules",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
           "from": "Deployment:fraud-rules",
           "to": "ComputeInstance:vm-risk-02.prod.example.org",
           "type": "RUNS_ON"
+        },
+        {
+          "from": "Service:fraud-rules",
+          "to": "Deployment:fraud-rules",
+          "type": "HAS_DEPLOYMENT"
         }
       ]
     },
@@ -459,6 +459,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "ITSystem:Fraud Screening",
           "to": "Service:fraud-scoring",
           "type": "DECOMPOSED_INTO"
@@ -467,11 +472,6 @@
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -484,6 +484,11 @@
         "ITSystem:Card Gateway"
       ],
       "relations": [
+        {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Card Gateway",
           "to": "Service:card-authorizer",
@@ -498,11 +503,6 @@
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -516,6 +516,11 @@
         "ITSystem:Card Gateway"
       ],
       "relations": [
+        {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Card Gateway",
           "to": "Service:card-gateway",
@@ -535,11 +540,6 @@
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -554,6 +554,11 @@
         "ITSystem:Payments Core"
       ],
       "relations": [
+        {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Payments Core",
           "to": "Service:payments-router",
@@ -570,19 +575,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:payments-router",
-          "to": "Service:card-gateway",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -598,6 +598,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -608,6 +613,11 @@
           "type": "DEPENDS_ON"
         },
         {
+          "from": "Service:fraud-scoring",
+          "to": "Deployment:fraud-scoring",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
           "from": "Service:payments-api",
           "to": "Service:payments-router",
           "type": "DEPENDS_ON"
@@ -616,16 +626,6 @@
           "from": "Service:payments-router",
           "to": "Service:card-gateway",
           "type": "DEPENDS_ON"
-        },
-        {
-          "from": "Service:fraud-scoring",
-          "to": "Deployment:fraud-scoring",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -641,6 +641,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -651,6 +656,11 @@
           "type": "DEPENDS_ON"
         },
         {
+          "from": "Service:fraud-scoring",
+          "to": "Deployment:fraud-scoring",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
           "from": "Service:payments-orchestrator",
           "to": "Service:payments-router",
           "type": "DEPENDS_ON"
@@ -659,16 +669,6 @@
           "from": "Service:payments-router",
           "to": "Service:card-gateway",
           "type": "DEPENDS_ON"
-        },
-        {
-          "from": "Service:fraud-scoring",
-          "to": "Deployment:fraud-scoring",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -683,6 +683,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -693,19 +698,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:payments-router",
-          "to": "Service:card-gateway",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:payments-router",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -720,6 +720,11 @@
         "ITSystem:Settlement Hub"
       ],
       "relations": [
+        {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
         {
           "from": "ITSystem:Settlement Hub",
           "to": "Service:settlement-engine",
@@ -736,19 +741,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:settlement-engine",
-          "to": "Service:card-gateway",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:settlement-engine",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -764,6 +764,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -774,6 +779,11 @@
           "type": "DEPENDS_ON"
         },
         {
+          "from": "Service:fraud-scoring",
+          "to": "Deployment:fraud-scoring",
+          "type": "HAS_DEPLOYMENT"
+        },
+        {
           "from": "Service:settlement-engine",
           "to": "Service:card-gateway",
           "type": "DEPENDS_ON"
@@ -782,16 +792,6 @@
           "from": "Service:settlement-recon",
           "to": "Service:settlement-engine",
           "type": "DEPENDS_ON"
-        },
-        {
-          "from": "Service:fraud-scoring",
-          "to": "Deployment:fraud-scoring",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -806,6 +806,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -816,19 +821,14 @@
           "type": "DEPENDS_ON"
         },
         {
-          "from": "Service:settlement-engine",
-          "to": "Service:card-gateway",
-          "type": "DEPENDS_ON"
-        },
-        {
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
         },
         {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
+          "from": "Service:settlement-engine",
+          "to": "Service:card-gateway",
+          "type": "DEPENDS_ON"
         }
       ]
     },
@@ -842,6 +842,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -855,11 +860,6 @@
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -872,6 +872,11 @@
       ],
       "relations": [
         {
+          "from": "Deployment:fraud-scoring",
+          "to": "ComputeInstance:vm-risk-02.prod.example.org",
+          "type": "RUNS_ON"
+        },
+        {
           "from": "Service:card-authorizer",
           "to": "Service:fraud-scoring",
           "type": "DEPENDS_ON"
@@ -880,11 +885,6 @@
           "from": "Service:fraud-scoring",
           "to": "Deployment:fraud-scoring",
           "type": "HAS_DEPLOYMENT"
-        },
-        {
-          "from": "Deployment:fraud-scoring",
-          "to": "ComputeInstance:vm-risk-02.prod.example.org",
-          "type": "RUNS_ON"
         }
       ]
     },
@@ -896,19 +896,139 @@
       ],
       "relations": [
         {
-          "from": "Service:fraud-scoring",
-          "to": "Deployment:fraud-scoring",
-          "type": "HAS_DEPLOYMENT"
-        },
-        {
           "from": "Deployment:fraud-scoring",
           "to": "ComputeInstance:vm-risk-02.prod.example.org",
           "type": "RUNS_ON"
+        },
+        {
+          "from": "Service:fraud-scoring",
+          "to": "Deployment:fraud-scoring",
+          "type": "HAS_DEPLOYMENT"
         }
       ]
     }
   ],
   "relations": [
+    {
+      "assertedById": "dep-card-authorizer-fraud-scoring",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:card-authorizer",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:fraud-scoring",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-card-gateway-card-authorizer",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:card-gateway",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-authorizer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-fraud-rules-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:fraud-rules",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-risk-02.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-fraud-rules-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:fraud-rules",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:fraud-rules",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-fraud-scoring-fraud-rules",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:fraud-scoring",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:fraud-rules",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-fraud-scoring-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:fraud-scoring",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-risk-02.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-fraud-scoring-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Service:fraud-scoring",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Deployment:fraud-scoring",
+      "type": "HAS_DEPLOYMENT"
+    },
+    {
+      "assertedById": "dep-payments-api-payments-router",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-api",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:payments-router",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-orchestrator-payments-router",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-orchestrator",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:payments-router",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-payments-router-card-gateway",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:payments-router",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-gateway",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-settlement-engine-card-gateway",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:settlement-engine",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:card-gateway",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "assertedById": "dep-settlement-recon-settlement-engine",
+      "assertedBySource": "EAM",
+      "assertedByType": "SERVICE_DEPENDENCY",
+      "from": "Service:settlement-recon",
+      "sourceActive": true,
+      "stale": true,
+      "to": "Service:settlement-engine",
+      "type": "DEPENDS_ON"
+    },
     {
       "assertedById": "svc-card-authorizer",
       "assertedBySource": "SCM",
@@ -968,126 +1088,6 @@
       "stale": false,
       "to": "Service:settlement-engine",
       "type": "DECOMPOSED_INTO"
-    },
-    {
-      "assertedById": "dep-card-authorizer-fraud-scoring",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:card-authorizer",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:fraud-scoring",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-card-gateway-card-authorizer",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:card-gateway",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:card-authorizer",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-fraud-scoring-fraud-rules",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:fraud-scoring",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:fraud-rules",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-payments-api-payments-router",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:payments-api",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:payments-router",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-payments-orchestrator-payments-router",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:payments-orchestrator",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:payments-router",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-payments-router-card-gateway",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:payments-router",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:card-gateway",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-settlement-engine-card-gateway",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:settlement-engine",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:card-gateway",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-settlement-recon-settlement-engine",
-      "assertedBySource": "EAM",
-      "assertedByType": "SERVICE_DEPENDENCY",
-      "from": "Service:settlement-recon",
-      "sourceActive": true,
-      "stale": true,
-      "to": "Service:settlement-engine",
-      "type": "DEPENDS_ON"
-    },
-    {
-      "assertedById": "dep-fraud-rules-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Service:fraud-rules",
-      "sourceActive": true,
-      "stale": false,
-      "to": "Deployment:fraud-rules",
-      "type": "HAS_DEPLOYMENT"
-    },
-    {
-      "assertedById": "dep-fraud-scoring-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Service:fraud-scoring",
-      "sourceActive": true,
-      "stale": false,
-      "to": "Deployment:fraud-scoring",
-      "type": "HAS_DEPLOYMENT"
-    },
-    {
-      "assertedById": "dep-fraud-rules-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Deployment:fraud-rules",
-      "sourceActive": true,
-      "stale": false,
-      "to": "ComputeInstance:vm-risk-02.prod.example.org",
-      "type": "RUNS_ON"
-    },
-    {
-      "assertedById": "dep-fraud-scoring-prod",
-      "assertedBySource": "DEPLOYMAP",
-      "assertedByType": "DEPLOYMENT",
-      "from": "Deployment:fraud-scoring",
-      "sourceActive": true,
-      "stale": false,
-      "to": "ComputeInstance:vm-risk-02.prod.example.org",
-      "type": "RUNS_ON"
     }
   ],
   "staleAfter": "PT168H",

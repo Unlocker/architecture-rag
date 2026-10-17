@@ -23,6 +23,7 @@ case "${1:-}" in
   *) echo "usage: $0 [--register|--check]" >&2; exit 2 ;;
 esac
 
+mcp_init_tmp
 ca=$(mcp_export_ca)
 token=$(mcp_fetch_token) || die "cannot get an access token (is the stand up? run demo/seed.sh demo)"
 ttl=$(mcp_token_ttl <<<"$token")

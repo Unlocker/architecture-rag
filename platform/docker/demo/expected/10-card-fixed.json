@@ -10,13 +10,6 @@
   },
   "relations": [
     {
-      "direction": "OUT",
-      "isCurrent": true,
-      "name": "https://git.example.org/card/card-tokenizer",
-      "relationType": "DEPLOYED_FROM",
-      "type": "Repository"
-    },
-    {
       "direction": "IN",
       "isCurrent": true,
       "name": "card-tokenizer",
@@ -33,6 +26,13 @@
     {
       "direction": "OUT",
       "isCurrent": true,
+      "name": "https://git.example.org/card/card-tokenizer",
+      "relationType": "DEPLOYED_FROM",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
       "name": "vm-card-test-01.test.example.org",
       "relationType": "RUNS_ON",
       "type": "ComputeInstance"
@@ -44,8 +44,7 @@
       "authority": "MASTER",
       "source": "DEPLOYMAP",
       "sourceId": "dep-card-tokenizer-test-badcommit",
-      "sourceType": "DEPLOYMENT",
-      "sourceVersion": "2"
+      "sourceType": "DEPLOYMENT"
     }
   ],
   "truncated": false,

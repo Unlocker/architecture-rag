@@ -10,6 +10,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 . "$HERE/lib-mcp.sh"
 
 command -v npx >/dev/null || die "npx not found: install Node.js"
+mcp_init_tmp
 ca=$(mcp_export_ca)
 token=$(mcp_fetch_token) || die "cannot get an access token (is the stand up? run demo/seed.sh demo)"
 {

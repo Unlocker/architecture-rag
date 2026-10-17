@@ -95,6 +95,94 @@
           "compute": [
             {
               "hostedOn": null,
+              "hostname": "vm-pay-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-payments-router-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-pay-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            },
+            {
+              "hostedOn": null,
+              "hostname": "vm-pay-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-payments-router-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-pay-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "d183f71e17f07f8f19b6014ba9dc5bb0e6d3b787",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-router-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-payments-router-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "payments-router",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/pay/payments-router"
+          },
+          "repositoryUrl": "https://git.example.org/pay/payments-router",
+          "sourceCommit": "d183f71e17f07f8f19b6014ba9dc5bb0e6d3b787",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-payments-router-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "2.3.0"
+        }
+      ],
+      "name": "payments-router",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-payments-router",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
               "hostname": "vm-pay-03.prod.example.org",
               "runsOn": {
                 "source": "DEPLOYMAP",
@@ -220,94 +308,6 @@
           "authority": "MASTER",
           "source": "SCM",
           "sourceId": "svc-payments-orchestrator",
-          "sourceType": "SERVICE"
-        }
-      ],
-      "stale": false
-    },
-    {
-      "deployments": [
-        {
-          "compute": [
-            {
-              "hostedOn": null,
-              "hostname": "vm-pay-01.prod.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-payments-router-prod",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-pay-01",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            },
-            {
-              "hostedOn": null,
-              "hostname": "vm-pay-02.prod.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-payments-router-prod",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-pay-02",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            }
-          ],
-          "deployedFrom": {
-            "commit": "d183f71e17f07f8f19b6014ba9dc5bb0e6d3b787",
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-router-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "environment": "prod",
-          "hasDeployment": {
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-payments-router-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "name": "payments-router",
-          "repository": {
-            "name": null,
-            "url": "https://git.example.org/pay/payments-router"
-          },
-          "repositoryUrl": "https://git.example.org/pay/payments-router",
-          "sourceCommit": "d183f71e17f07f8f19b6014ba9dc5bb0e6d3b787",
-          "sources": [
-            {
-              "authority": "MASTER",
-              "source": "DEPLOYMAP",
-              "sourceId": "dep-payments-router-prod",
-              "sourceType": "DEPLOYMENT"
-            }
-          ],
-          "stale": false,
-          "status": null,
-          "version": "2.3.0"
-        }
-      ],
-      "name": "payments-router",
-      "sources": [
-        {
-          "authority": "MASTER",
-          "source": "SCM",
-          "sourceId": "svc-payments-router",
           "sourceType": "SERVICE"
         }
       ],

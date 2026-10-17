@@ -14,11 +14,9 @@
       "conflictProperties": [
         "eamSystemId"
       ],
-      "contentHash": "4440c49cdd78232088a2fadc84b95dc00bb9244666364042711ef1eb50c6535f",
       "source": "DEPLOYMAP",
       "sourceId": "dep-settlement-recon-prod",
-      "sourceType": "DEPLOYMENT",
-      "sourceVersion": "1"
+      "sourceType": "DEPLOYMENT"
     }
   ],
   "type": "Deployment"

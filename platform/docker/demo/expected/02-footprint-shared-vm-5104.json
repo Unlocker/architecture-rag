@@ -7,6 +7,74 @@
           "compute": [
             {
               "hostedOn": null,
+              "hostname": "vm-legacy-app-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-settlement-recon-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-recon-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-recon-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "settlement-recon",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/settle/settlement-recon"
+          },
+          "repositoryUrl": "https://git.example.org/settle/settlement-recon",
+          "sourceCommit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-settlement-recon-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.3.5"
+        }
+      ],
+      "name": "settlement-recon",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-settlement-recon",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
               "hostname": "vm-settle-01.prod.example.org",
               "runsOn": {
                 "source": "DEPLOYMAP",
@@ -132,74 +200,6 @@
           "authority": "MASTER",
           "source": "SCM",
           "sourceId": "svc-settlement-engine",
-          "sourceType": "SERVICE"
-        }
-      ],
-      "stale": false
-    },
-    {
-      "deployments": [
-        {
-          "compute": [
-            {
-              "hostedOn": null,
-              "hostname": "vm-legacy-app-01.prod.example.org",
-              "runsOn": {
-                "source": "DEPLOYMAP",
-                "sourceId": "dep-settlement-recon-prod",
-                "sourceType": "DEPLOYMENT"
-              },
-              "sources": [
-                {
-                  "authority": "MASTER",
-                  "source": "CMDB",
-                  "sourceId": "vm-legacy-app-01",
-                  "sourceType": "COMPUTE_INSTANCE"
-                }
-              ],
-              "stale": false,
-              "state": "RUNNING",
-              "type": "VirtualMachine"
-            }
-          ],
-          "deployedFrom": {
-            "commit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-settlement-recon-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "environment": "prod",
-          "hasDeployment": {
-            "source": "DEPLOYMAP",
-            "sourceId": "dep-settlement-recon-prod",
-            "sourceType": "DEPLOYMENT"
-          },
-          "name": "settlement-recon",
-          "repository": {
-            "name": null,
-            "url": "https://git.example.org/settle/settlement-recon"
-          },
-          "repositoryUrl": "https://git.example.org/settle/settlement-recon",
-          "sourceCommit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
-          "sources": [
-            {
-              "authority": "MASTER",
-              "source": "DEPLOYMAP",
-              "sourceId": "dep-settlement-recon-prod",
-              "sourceType": "DEPLOYMENT"
-            }
-          ],
-          "stale": false,
-          "status": null,
-          "version": "1.3.5"
-        }
-      ],
-      "name": "settlement-recon",
-      "sources": [
-        {
-          "authority": "MASTER",
-          "source": "SCM",
-          "sourceId": "svc-settlement-recon",
           "sourceType": "SERVICE"
         }
       ],
