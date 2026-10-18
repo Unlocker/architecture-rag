@@ -96,7 +96,7 @@ CYPHER
 echo "  [ok] домен разобран у 10 из 10 систем" >&2
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work"; mcp_cleanup' EXIT
 DEMO_OUT="$work/actual" "$HERE/run-all.sh"
 
 if [ "$mode" = update ]; then

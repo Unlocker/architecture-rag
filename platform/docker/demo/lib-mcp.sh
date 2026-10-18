@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Клиент MCP для сценариев (DEMO.3) и scripts/deployment-commit-check.sh: токен Keycloak, initialize, tools/call, вывод
+# Клиент MCP для сценариев (DEMO.3): токен Keycloak, initialize, tools/call, вывод
 # запроса и ответа с подсветкой. Подключается через `. "$(dirname "$0")/lib-mcp.sh"` (подключает scripts/lib.sh сам).
 #
 # Токен и секрет клиента идут только через stdin curl (`--config -`, `client_secret@-`): ни в argv, ни в файлы, ни в лог.
