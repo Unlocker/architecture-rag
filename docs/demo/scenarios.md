@@ -271,7 +271,7 @@ demo/agent-setup.sh --register   # заменяет запись archrag све�
 **Типичные вопросы.**
 
 - *Почему нет Kubernetes-кластера и namespace?* Они смоделированы, но не наполняются ([ADR 0011](../adr/0011-namespace-cluster-modeled-not-populated.md)); развёртывания привязаны к ВМ.
-- *Откуда имя окружения `prod`?* Из аннотаций Helm; код окружения — ключ узла `Environment`.
+- *Откуда код окружения `prod`?* Из записи `ENVIRONMENT` (ключ — код) и поля `environment` развёртывания в deploy map.
 - *Почему `find_runtime_footprint` не находит `partner-gateway`?* У сервиса нет системы (`EAM-9999` в EAM нет), а tool стартует от системы.
 
 ---
@@ -344,7 +344,7 @@ demo/agent-setup.sh --register   # заменяет запись archrag све�
 
 **Типичные вопросы.**
 
-- *Почему максимум 6?* Это потолок сервера (`archrag.query.limits.max-depth`); даже при настройке выше тот же потолок режет запрос.
+- *Почему максимум 6?* Это потолок сервера (`archrag.query.limits.max-depth`); запрос выше потолка отклоняется ошибкой.
 - *Что значит «50 путей»?* `max-paths`; при ветвлении набор путей между вызовами может отличаться.
 - *Почему у всех `DEPENDS_ON` `stale=true`?* См. ограничение выше: у них нет `sourceFetchedAt`.
 
@@ -554,7 +554,7 @@ demo/agent-setup.sh --register   # заменяет запись archrag све�
 
 - *Почему именно 7 суток?* Настройка `archrag.query.stale-after`; на демо — `P7D`.
 - *Почему у `trace_dependencies` все `DEPENDS_ON` устарели?* Ограничение: см. [сценарий 3](#сценарий-3-зависимости-trace).
-- *Что будет, если появится `EAM-9999`?* Отложенная связь `DECOMPOSED_INTO` достроится при следующем событии.
+- *Что будет, если появится `EAM-9999`?* Отложенная связь `DECOMPOSED_INTO` достроится ([dataset.md, К-8](dataset.md#5-кейсы--данные--сценарий)).
 
 ---
 
@@ -584,7 +584,7 @@ demo/agent-setup.sh --register   # заменяет запись archrag све�
 | Аутентификация | OAuth2 resource server: JWT проверяется на каждый запрос (подпись, `issuer`, `audience`). Без проверки токена доступны только `/actuator/health/**` и `/.well-known/oauth-protected-resource/**` |
 | Отказ | без токена или невалидный → 401 с `WWW-Authenticate: Bearer resource_metadata=…`; нет scope → 403 с `error="insufficient_scope", scope="architecture.read"` |
 | Scope | `architecture.read` на каждом tool. Spring AI MCP starter сам аутентификацию не включает: scope проверяет `ToolScopeFilter`, tool без записи в `archrag.mcp.security.tool-scopes` закрыт по умолчанию |
-| Read-only | `executeRead`, сессия `AccessMode.READ`, `EXPLAIN` обязан дать `READ_ONLY`. Reader-учётка `archrag_reader` есть и у Neo4j-пользователя, но ролей в Community нет: защита в приложении |
+| Read-only | `executeRead`, сессия `AccessMode.READ`, `EXPLAIN` обязан дать `READ_ONLY`. MCP читает граф под учёткой `archrag_reader`, но ролей в Neo4j Community нет: read-only обеспечивает приложение |
 | Границы | `maxDepth` 1..6, `limit` 1..50, `query` ≤ 200, тело ≤ 1 МБ (иначе 413), невалидный JSON → 400. Нарушение границы — ошибка, а не молчаливое усечение |
 | Аудит | каждый `tools/call` → запись в `archrag.audit.mcp` и метрика `archrag.mcp.tool.call` (теги `tool`, `decision`: `ALLOWED`, `DENIED_SCOPE`, `DENIED_UNKNOWN_TOOL`, `TIMEOUT`, `ERROR`); токены и аргументы в логи и теги не попадают |
 | Недоверенные тексты | описания и документы из источников — данные, не инструкции; они не исполняются и не логируются целиком |
@@ -618,7 +618,7 @@ tools/list                              -> 6 tools, у каждого readOnlyHi
 
 - *Токен агента можно использовать для admin?* Нет: scope `architecture.admin` не выдаётся клиенту агента, а admin REST публикуется только внутри сети стенда.
 - *Что если агент подставит Cypher в `query`?* Это обычная строка поиска: параметр, а не часть запроса.
-- *Как ограничить агента по домену?* Фильтрация по домену — на стороне приложения (read-only и domain-фильтрация), в демо не используется.
+- *Токен агента — это пользователь?* Нет, это сервисный клиент `archrag-demo` с ролью `archrag-reader`; пользовательский вход есть только в админ-консоли.
 
 ---
 
@@ -648,7 +648,7 @@ MCP-запрос — тот же `find_runtime_footprint` ([сценарий 2](
 | История | прежнее ребро `DEPLOYED_FROM` закрывается (`validTo`), открывается новое с новым `commit` ([ADR 0028](../adr/0028-structural-relations-temporal.md)); MCP отдаёт только открытое |
 | Порядок | checkpoint и high-water mark сдвигаются только после коммита транзакции Neo4j |
 | Webhook | только триггер: данные забирает адаптер ([ADR 0039](../adr/0039-webhook-is-trigger-only.md)) |
-| Чего MCP не делает | Не показывает закрытые связи и прежний commit: историю читает администратор (консоль, Neo4j reader); `get_asset`/`explain_provenance` показывают только закрытый **актив**, не закрытую связь |
+| Чего MCP не делает | Не показывает закрытые связи и прежний commit: историю связей через MCP не получить; `get_asset`/`explain_provenance` показывают только закрытый **актив**, не закрытую связь |
 
 ### Ожидаемый ответ (сокращённо)
 
@@ -662,13 +662,13 @@ MCP-запрос — тот же `find_runtime_footprint` ([сценарий 2](
 
 Эталоны: `expected/08-footprint-before.json`, `08-footprint-after.json`.
 
-**Что подчеркнуть.** Агент отвечает по состоянию, которое отстаёт от мастера на время цикла адаптера, а не на день. Изменение не затирает прошлое: оно закрывается, а не перезаписывается.
+**Что подчеркнуть.** Агент отвечает по состоянию, которое отстаёт от мастера на время цикла адаптера (опрос раз в 30 с и webhook-триггер). Изменение не затирает прошлое: оно закрывается, а не перезаписывается.
 
 **Живой агент.** Удобная связка: агент отвечает «Какая версия card-gateway сейчас в проде?» **до** запуска скрипта (4.0.2), затем ведущий запускает `demo/08-redeploy.sh` в соседнем терминале и просит агента повторить вопрос (4.0.3). Вызов: `find_runtime_footprint` с `environment=prod`. **Откат:** агент ответил из памяти беседы — «обнови данные запросом к tool»; не сработало — скрипт покажет «до» и «после» сам.
 
 **Типичные вопросы.**
 
-- *Сколько занимает путь до графа?* Ограничен циклом опроса адаптера; на стенде скрипт ждёт до 5 минут и обычно управляется быстрее.
+- *Сколько занимает путь до графа?* Ограничен циклом опроса адаптера; на стенде скрипт ждёт появления события в журнале до 5 минут.
 - *Что, если события придут не по порядку?* Старая версия получит `IGNORED_OLD_VERSION`.
 - *Можно ли посмотреть прежний commit через агента?* Нет, через MCP — нет ([ADR 0018](../adr/0018-domain-tools-not-arbitrary-cypher.md): новый вопрос — новый шаблон).
 
@@ -784,7 +784,7 @@ Admin REST ([03, раздел 4](../03-interfaces.md#4-admin-rest-ingestion-се
 
 - *Почему кнопки подтверждения нет в консоли?* Консоль только читает ([ADR 0026](../adr/0026-admin-console-readonly-loopback.md)); действие — admin REST.
 - *Что с `cmdb-ci-88014` дальше?* Его записи отображаются на `gid` выжившего.
-- *Откат слияния?* Не предусмотрен в PoC (см. список разрывов до production, [05](../05-production-gap-list.md)).
+- *Откат слияния?* В демо не показывается; операция фиксируется в `admin_audit`.
 
 ---
 
@@ -813,7 +813,7 @@ MCP_INSPECTOR_VERSION=<проверенная версия> demo/inspector.sh
    {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_assets","arguments":{"query":"EAM-1042"}}}
    ```
    В ответе `result.content[0].text` — **строка с JSON** (не вложенный объект), `result.isError=false`. Затем тот же вызов с `{"query":"payments","limit":51}`: `HTTP 200`, `result.isError=true`, текст `limit must be in 1..50` — ошибка tool возвращается как результат, а не как ошибка протокола.
-4. **Отказ без scope/токена.** В Inspector очистить заголовок `Authorization` и повторить List Tools: `HTTP 401` с `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`. Вызвать tool, которого нет в списке (`upsert_asset`, через вкладку с произвольным запросом или `curl`): `HTTP 403` — tool без записи в `tool-scopes` закрыт по умолчанию. Метаданные защищённого ресурса (RFC 9728) — `GET /.well-known/oauth-protected-resource` без токена.
+4. **Отказ без scope/токена.** В Inspector очистить заголовок `Authorization` и повторить List Tools: `HTTP 401` с `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`. Вызвать tool, которого нет в списке (`upsert_asset`; `curl` с заголовком `Authorization`, как в `07-access.sh`): `HTTP 403` — tool без записи в `tool-scopes` закрыт по умолчанию. Метаданные защищённого ресурса (RFC 9728) — `GET /.well-known/oauth-protected-resource` без токена.
 
    Токен «с токеном, но без нужного scope» на стенде не выпускается (см. [сценарий 7](#сценарий-7-безопасность-и-границы)); `insufficient_scope` показывают тесты mcp-server.
 
