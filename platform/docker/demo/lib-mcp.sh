@@ -73,18 +73,25 @@ mcp_initialize() {
 # tools/call <name> <arguments-json> -> текст result.content[0].text (JSON ответа tool). Ошибка tool (isError) или
 # JSON-RPC error: короткий текст в stderr и код 1. Три попытки: сразу после старта индексы Neo4j могут быть не готовы.
 mcp_call() {
-  local body out
+  local body out text err=""
   mcp_token
   body=$(jq -cn --arg n "$1" --argjson a "$2" '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:$n,arguments:$a}}')
   for _ in 1 2 3; do
     if out=$(mcp_post "$body"); then
-      jq -er 'if .error then "rpc error: \(.error.message[:200])" | halt_error(1)
-              elif .result.isError then "tool error: \(.result.content[0].text | split("\n")[0] | .[:200])" | halt_error(1)
-              else .result.content[0].text end' <<<"$out" && return 0
-      return 1
+      # Ошибка валидации (isError) — ожидаемый ответ негативных сценариев и не повторяется; повтор только для таймаута
+      # шаблона запроса: на холодном старте Neo4j первый запрос может не уложиться в лимит.
+      if text=$(jq -er 'if .error then "rpc error: \(.error.message[:200])" | halt_error(1)
+                        elif .result.isError then "tool error: \(.result.content[0].text | split("\n")[0] | .[:200])" | halt_error(1)
+                        else .result.content[0].text end' <<<"$out" 2>&1); then
+        printf '%s\n' "$text"
+        return 0
+      fi
+      err=$text
+      case $err in *"timed out"*) ;; *) printf '%s\n' "$err" >&2; return 1 ;; esac
     fi
     sleep 5
   done
+  [ -z "$err" ] || printf '%s\n' "$err" >&2
   return 1
 }
 
