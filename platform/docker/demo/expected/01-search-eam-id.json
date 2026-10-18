@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "matchType": "EXACT",
+      "name": "Payments Core",
+      "score": 1000.0,
+      "sources": [
+        "EAM"
+      ],
+      "type": "ITSystem"
+    }
+  ],
+  "truncated": false
+}

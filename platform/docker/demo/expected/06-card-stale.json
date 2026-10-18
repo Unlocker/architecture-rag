@@ -1,0 +1,55 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "language": "java",
+    "name": "sms-dispatcher"
+  },
+  "relations": [
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "Notification Center",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "ITSystem"
+    },
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "notification-gateway",
+      "relationType": "DEPENDS_ON",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "https://git.example.org/plat/sms-dispatcher",
+      "relationType": "IMPLEMENTED_IN",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "sms-dispatcher",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "sms-dispatcher",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "SCM",
+      "sourceId": "svc-sms-dispatcher",
+      "sourceType": "SERVICE"
+    }
+  ],
+  "truncated": false,
+  "type": "Service"
+}

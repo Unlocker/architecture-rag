@@ -1,0 +1,21 @@
+{
+  "authorities": [
+    "EAM"
+  ],
+  "conflictState": "NONE",
+  "isCurrent": true,
+  "property": "criticality",
+  "records": [
+    {
+      "active": true,
+      "authoritative": true,
+      "authority": "MASTER",
+      "confidence": 1.0,
+      "conflictProperties": [],
+      "source": "EAM",
+      "sourceId": "5201",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "type": "ITSystem"
+}

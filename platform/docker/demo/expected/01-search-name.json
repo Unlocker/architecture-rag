@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "matchType": "FULLTEXT",
+      "name": "Card Gateway",
+      "score": 3.7924633026123047,
+      "sources": [
+        "EAM"
+      ],
+      "type": "ITSystem"
+    }
+  ],
+  "truncated": false
+}

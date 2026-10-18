@@ -1,0 +1,34 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "language": "java",
+    "name": "partner-gateway"
+  },
+  "relations": [
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "https://git.example.org/chan/partner-gateway",
+      "relationType": "IMPLEMENTED_IN",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "partner-gateway",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "SCM",
+      "sourceId": "svc-partner-gateway",
+      "sourceType": "SERVICE"
+    }
+  ],
+  "truncated": false,
+  "type": "Service"
+}

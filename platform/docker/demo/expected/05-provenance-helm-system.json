@@ -1,0 +1,23 @@
+{
+  "authorities": [
+    "DEPLOYMAP"
+  ],
+  "conflictState": "OPEN",
+  "isCurrent": true,
+  "property": null,
+  "records": [
+    {
+      "active": true,
+      "authoritative": true,
+      "authority": "MASTER",
+      "confidence": 1.0,
+      "conflictProperties": [
+        "eamSystemId"
+      ],
+      "source": "DEPLOYMAP",
+      "sourceId": "dep-settlement-recon-prod",
+      "sourceType": "DEPLOYMENT"
+    }
+  ],
+  "type": "Deployment"
+}

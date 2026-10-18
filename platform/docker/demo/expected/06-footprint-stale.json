@@ -1,0 +1,213 @@
+{
+  "environment": null,
+  "services": [
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-dev-legacy-01.dev.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-sms-dispatcher-dev",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-dev-legacy-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": true,
+              "state": "STOPPED",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "794d197098d07a7666224fdc6807c8197f511f43",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-sms-dispatcher-dev",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "dev",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-sms-dispatcher-dev",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "sms-dispatcher",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/plat/sms-dispatcher"
+          },
+          "repositoryUrl": "https://git.example.org/plat/sms-dispatcher",
+          "sourceCommit": "794d197098d07a7666224fdc6807c8197f511f43",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-sms-dispatcher-dev",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": true,
+          "status": null,
+          "version": "1.2.4"
+        },
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-sms-dispatcher-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "MAINTENANCE",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "794d197098d07a7666224fdc6807c8197f511f43",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-sms-dispatcher-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-sms-dispatcher-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "sms-dispatcher",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/plat/sms-dispatcher"
+          },
+          "repositoryUrl": "https://git.example.org/plat/sms-dispatcher",
+          "sourceCommit": "794d197098d07a7666224fdc6807c8197f511f43",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-sms-dispatcher-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.2.4"
+        }
+      ],
+      "name": "sms-dispatcher",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-sms-dispatcher",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": true
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-notification-gateway-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "dedca9ba25677580f16e2d5d9b35d654ecc1e4b2",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-notification-gateway-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-notification-gateway-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "notification-gateway",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/plat/notification-gateway"
+          },
+          "repositoryUrl": "https://git.example.org/plat/notification-gateway",
+          "sourceCommit": "dedca9ba25677580f16e2d5d9b35d654ecc1e4b2",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-notification-gateway-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.9.2"
+        }
+      ],
+      "name": "notification-gateway",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-notification-gateway",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "staleAfter": "PT168H",
+  "systemGid": "<gid>",
+  "systemName": "Notification Center",
+  "systemSources": [
+    {
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5303",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "systemStale": false,
+  "truncated": false,
+  "warnings": [
+    "stale: Deployment asset:sms-dispatcher lastSeenAt=<time>",
+    "stale: Service asset:sms-dispatcher lastSeenAt=<time>",
+    "stale: VirtualMachine VirtualMachine:vm-dev-legacy-01.dev.example.org lastSeenAt=<time>"
+  ]
+}

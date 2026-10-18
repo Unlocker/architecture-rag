@@ -1,0 +1,147 @@
+{
+  "environment": "prod",
+  "services": [
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-aml-case-mgmt-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": null,
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-aml-case-mgmt-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "aml-case-mgmt",
+          "repository": null,
+          "repositoryUrl": "https://git.example.org/risk/aml-case-mgmt",
+          "sourceCommit": "6d69b7b0e033ffdd82fca2f0e67b4be9d95343aa",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-aml-case-mgmt-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.8.0"
+        }
+      ],
+      "name": "aml-case-mgmt",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-aml-case-mgmt",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-risk-03.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-aml-screening-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-risk-03",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "6e5363f89ec6333976b67935f1f7e52afc94a453",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-aml-screening-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-aml-screening-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "aml-screening",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/risk/aml-screening"
+          },
+          "repositoryUrl": "https://git.example.org/risk/aml-screening",
+          "sourceCommit": "6e5363f89ec6333976b67935f1f7e52afc94a453",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-aml-screening-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "2.4.1"
+        }
+      ],
+      "name": "aml-screening",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-aml-screening",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "staleAfter": "PT168H",
+  "systemGid": "<gid>",
+  "systemName": "AML Monitoring",
+  "systemSources": [
+    {
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5202",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "systemStale": false,
+  "truncated": false,
+  "warnings": []
+}

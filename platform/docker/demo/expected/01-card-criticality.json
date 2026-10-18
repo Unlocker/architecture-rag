@@ -1,0 +1,45 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "criticalityRaw": "CRITICAL",
+    "description": "Domain: Risk & Compliance. Real-time transaction fraud scoring",
+    "eamCode": "EAM-3001",
+    "name": "Fraud Screening",
+    "platformId": 3101,
+    "status": "ACTIVE"
+  },
+  "relations": [
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "Risk Team",
+      "relationType": "OWNED_BY",
+      "type": "Team"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "fraud-rules",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "fraud-scoring",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "Service"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5201",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "truncated": false,
+  "type": "ITSystem"
+}
