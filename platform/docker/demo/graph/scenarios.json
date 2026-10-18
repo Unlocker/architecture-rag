@@ -1,0 +1,362 @@
+{
+ "scenarios": [
+  {
+   "id": 1,
+   "title": "Поиск и карточка актива",
+   "cases": "К-10",
+   "note": "Payments Core (EAM-1042) и Fraud Screening: критичность вне словаря уходит в criticalityRaw.",
+   "nodes": [
+    [
+     "ITSystem",
+     "5101"
+    ],
+    [
+     "ITSystem",
+     "5201"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 2,
+   "title": "Где развёрнута система",
+   "cases": "К-2, К-3, К-8",
+   "note": "Payments Core: payments-api в трёх окружениях с разными commit; vm-legacy-app-01 несёт развёртывания четырёх систем; aml-case-mgmt без репозитория.",
+   "nodes": [
+    [
+     "ITSystem",
+     "5101"
+    ],
+    [
+     "Service",
+     "svc-payments-api"
+    ],
+    [
+     "Deployment",
+     "dep-payments-api-dev"
+    ],
+    [
+     "Deployment",
+     "dep-payments-api-test"
+    ],
+    [
+     "Deployment",
+     "dep-payments-api-prod"
+    ],
+    [
+     "Environment",
+     "dev"
+    ],
+    [
+     "Environment",
+     "test"
+    ],
+    [
+     "Environment",
+     "prod"
+    ],
+    [
+     "Repository",
+     "repo-payments-api"
+    ],
+    [
+     "ComputeInstance",
+     "vm-legacy-app-01"
+    ],
+    [
+     "Deployment",
+     "dep-ledger-reporting-prod"
+    ],
+    [
+     "Deployment",
+     "dep-settlement-recon-prod"
+    ],
+    [
+     "Deployment",
+     "dep-aml-case-mgmt-prod"
+    ],
+    [
+     "Deployment",
+     "dep-notification-gateway-prod"
+    ],
+    [
+     "Service",
+     "svc-aml-case-mgmt"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 3,
+   "title": "Зависимости: trace",
+   "cases": "К-1, К-4",
+   "note": "Цепочка DEPENDS_ON от ib-web глубиной 7; обход упирается в maxDepth=6.",
+   "nodes": [],
+   "paths": [
+    [
+     [
+      "Service",
+      "svc-ib-web"
+     ],
+     [
+      "Service",
+      "svc-ib-api"
+     ],
+     [
+      "Service",
+      "svc-payments-api"
+     ],
+     [
+      "Service",
+      "svc-payments-router"
+     ],
+     [
+      "Service",
+      "svc-card-gateway"
+     ],
+     [
+      "Service",
+      "svc-card-authorizer"
+     ],
+     [
+      "Service",
+      "svc-fraud-scoring"
+     ],
+     [
+      "Service",
+      "svc-fraud-rules"
+     ]
+    ]
+   ]
+  },
+  {
+   "id": 4,
+   "title": "Impact отказа ВМ",
+   "cases": "К-1, К-2",
+   "note": "Отказ vm-risk-02 поднимается по DEPENDS_ON до payments-router на глубине 6; vm-legacy-app-01 задевает четыре системы.",
+   "nodes": [
+    [
+     "ComputeInstance",
+     "vm-legacy-app-01"
+    ],
+    [
+     "Deployment",
+     "dep-ledger-reporting-prod"
+    ],
+    [
+     "Deployment",
+     "dep-settlement-recon-prod"
+    ],
+    [
+     "Deployment",
+     "dep-aml-case-mgmt-prod"
+    ],
+    [
+     "Deployment",
+     "dep-notification-gateway-prod"
+    ]
+   ],
+   "paths": [
+    [
+     [
+      "ComputeInstance",
+      "vm-risk-02"
+     ],
+     [
+      "Deployment",
+      "dep-fraud-rules-prod"
+     ],
+     [
+      "Service",
+      "svc-fraud-rules"
+     ],
+     [
+      "Service",
+      "svc-fraud-scoring"
+     ],
+     [
+      "Service",
+      "svc-card-authorizer"
+     ],
+     [
+      "Service",
+      "svc-card-gateway"
+     ],
+     [
+      "Service",
+      "svc-payments-router"
+     ]
+    ]
+   ]
+  },
+  {
+   "id": 5,
+   "title": "Provenance и конфликты",
+   "cases": "К-4а, К-4б, К-9, К-10",
+   "note": "Конфликты: eamSystemId у dep-settlement-recon-prod (Helm 5102, сервис в 5104) и platformId у системы 5303.",
+   "nodes": [
+    [
+     "Deployment",
+     "dep-settlement-recon-prod"
+    ],
+    [
+     "Service",
+     "svc-settlement-recon"
+    ],
+    [
+     "ITSystem",
+     "5104"
+    ],
+    [
+     "ITSystem",
+     "5102"
+    ],
+    [
+     "ITSystem",
+     "5303"
+    ],
+    [
+     "Solution",
+     "7206"
+    ],
+    [
+     "Platform",
+     "3101"
+    ],
+    [
+     "Platform",
+     "3103"
+    ],
+    [
+     "ITSystem",
+     "5201"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 6,
+   "title": "Свежесть и неразрешённые ссылки",
+   "cases": "К-7, К-8",
+   "note": "Stale: sms-dispatcher, dep-sms-dispatcher-dev, vm-dev-legacy-01. Неразрешённые ссылки: partner-gateway (EAM-9999) и его репозиторий.",
+   "nodes": [
+    [
+     "Service",
+     "svc-sms-dispatcher"
+    ],
+    [
+     "Deployment",
+     "dep-sms-dispatcher-dev"
+    ],
+    [
+     "ComputeInstance",
+     "vm-dev-legacy-01"
+    ],
+    [
+     "Service",
+     "svc-partner-gateway"
+    ],
+    [
+     "Deployment",
+     "dep-partner-gateway-prod"
+    ],
+    [
+     "Deployment",
+     "dep-aml-case-mgmt-prod"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 7,
+   "title": "Безопасность MCP",
+   "cases": "scope, read-only",
+   "note": "Сценарий проверяет доступ к MCP, а не объекты графа: подсвечивать нечего.",
+   "nodes": [],
+   "paths": []
+  },
+  {
+   "id": 8,
+   "title": "Передеплой: смена commit",
+   "cases": "К-3 (история)",
+   "note": "Мутирующий сценарий. Показано состояние «до»: dep-card-gateway-prod и его репозиторий.",
+   "nodes": [
+    [
+     "Service",
+     "svc-card-gateway"
+    ],
+    [
+     "Deployment",
+     "dep-card-gateway-prod"
+    ],
+    [
+     "Repository",
+     "repo-card-gateway"
+    ],
+    [
+     "Environment",
+     "prod"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 9,
+   "title": "Логическое удаление и reconcile",
+   "cases": "К-6",
+   "note": "Мутирующий сценарий. Показано состояние «до»: legacy-statements, его репозиторий и развёртывание.",
+   "nodes": [
+    [
+     "ITSystem",
+     "5102"
+    ],
+    [
+     "Service",
+     "svc-legacy-statements"
+    ],
+    [
+     "Repository",
+     "repo-legacy-statements"
+    ],
+    [
+     "Deployment",
+     "dep-legacy-statements-prod"
+    ],
+    [
+     "ComputeInstance",
+     "vm-legacy-app-02"
+    ],
+    [
+     "Service",
+     "svc-ledger-reporting"
+    ]
+   ],
+   "paths": []
+  },
+  {
+   "id": 10,
+   "title": "Администрирование",
+   "cases": "К-5а, К-5б, К-11",
+   "note": "Мутирующий сценарий. Пары для crosswalk: vm-pay-01 и cmdb-ci-88014, repo-payments-api и repo-payments-api-legacy. Событие К-11 в карантине, в графе его нет.",
+   "nodes": [
+    [
+     "ComputeInstance",
+     "vm-pay-01"
+    ],
+    [
+     "ComputeInstance",
+     "cmdb-ci-88014"
+    ],
+    [
+     "Repository",
+     "repo-payments-api"
+    ],
+    [
+     "Repository",
+     "repo-payments-api-legacy"
+    ]
+   ],
+   "paths": []
+  }
+ ]
+}
