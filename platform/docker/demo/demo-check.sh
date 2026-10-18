@@ -95,6 +95,19 @@ CYPHER
 [ "$domains" = 10 ] || die "domain is parsed for $domains of 10 ITSystem nodes (expected 10)"
 echo "  [ok] домен разобран у 10 из 10 систем" >&2
 
+# docs/demo/graph.html (DEMO.5): число узлов и рёбер вшитой выгрузки должно совпасть со стендом. Свежая выгрузка идёт под
+# reader-учёткой во временный файл; расхождение — граф или профиль изменились, а страницу не пересобрали.
+GRAPH_HTML="$HERE/../../../docs/demo/graph.html"
+[ -f "$GRAPH_HTML" ] || die "docs/demo/graph.html not found: run demo/build-graph.sh"
+fresh_json=$(mktemp)
+"$HERE/export-graph.sh" > "$fresh_json" || { rm -f "$fresh_json"; die "graph export failed"; }
+fresh_counts=$(jq -c '.meta.counts' "$fresh_json")
+rm -f "$fresh_json"
+embedded_counts=$(sed -n '/<script type="application\/json" id="graph-data">/,/<\/script>/p' "$GRAPH_HTML" | sed '1d;$d' | jq -c '.meta.counts') \
+  || die "docs/demo/graph.html has no embedded graph data: run demo/build-graph.sh"
+[ "$fresh_counts" = "$embedded_counts" ] || die "docs/demo/graph.html is out of date (stand $fresh_counts, page $embedded_counts): rebuild with demo/build-graph.sh"
+echo "  [ok] docs/demo/graph.html совпадает со стендом: $fresh_counts" >&2
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"; mcp_cleanup' EXIT
 DEMO_OUT="$work/actual" "$HERE/run-all.sh"

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<!--
+  Шаблон интерактивной визуализации демо-графа (DEMO.5). Не открывайте его напрямую: build-graph.sh подставляет
+  Cytoscape.js, данные выгрузки (export-graph.sh) и сценарии (scenarios.json) на место строк-маркеров (GRAPH_DATA, SCENARIOS, CYTOSCAPE в обрамлении @@) и пишет
+  docs/demo/graph.html. Все тексты из данных выводятся только через textContent/createTextNode: тексты источников
+  недоверенные, innerHTML с данными не используется.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arch RAG: демо-граф Nordhaven Bank</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f24; --muted: #59636e; --line: #d0d7de; --accent: #0969da;
+  --band: rgba(9, 105, 218, 0.06); --edge: #8c959f; --danger: #cf222e; --warn: #9a6700; --ok: #1a7f37;
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  --bg: #0d1117; --panel: #161b22; --fg: #e6edf3; --muted: #9198a1; --line: #30363d; --accent: #4493f8;
+  --band: rgba(68, 147, 248, 0.08); --edge: #6e7681; --danger: #ff7b72; --warn: #d29922; --ok: #3fb950;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0; }
+header .meta { color: var(--muted); font-size: 12px; }
+header .spacer { flex: 1; }
+input[type="search"], select, button { font: inherit; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#search { width: 220px; }
+main { flex: 1; display: flex; min-height: 0; }
+aside { width: 230px; padding: 10px 12px; overflow: auto; background: var(--panel); border-right: 1px solid var(--line); }
+#cardPane { width: 340px; padding: 10px 12px; overflow: auto; background: var(--panel); border-left: 1px solid var(--line); }
+#cy { flex: 1; min-width: 0; }
+aside h2, #cardPane h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
+aside h2:first-child { margin-top: 0; }
+label.check { display: flex; align-items: center; gap: 6px; padding: 1px 0; cursor: pointer; }
+.swatch { display: inline-block; width: 12px; height: 12px; border: 2px solid transparent; flex: none; }
+.row { display: flex; align-items: center; gap: 6px; padding: 1px 0; color: var(--muted); font-size: 12px; }
+#results { list-style: none; margin: 4px 0 0; padding: 0; }
+#results li { padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+#results li:hover, #results li:focus-visible { background: var(--band); }
+#scenarioNote { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.badge { display: inline-block; padding: 0 6px; margin: 0 4px 4px 0; border-radius: 10px; font-size: 11px;
+  border: 1px solid var(--line); color: var(--muted); }
+.badge.conflict { color: var(--danger); border-color: var(--danger); }
+.badge.stale { color: var(--warn); border-color: var(--warn); }
+.badge.deleted { color: var(--muted); text-decoration: line-through; }
+.badge.pending { color: var(--accent); border-color: var(--accent); }
+#cardPane h3 { margin: 0 0 2px; font-size: 16px; overflow-wrap: anywhere; }
+#cardPane .sub { color: var(--muted); margin-bottom: 8px; }
+table.props { border-collapse: collapse; width: 100%; }
+table.props th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 8px 2px 0; vertical-align: top; white-space: nowrap; }
+table.props td { padding: 2px 0; overflow-wrap: anywhere; }
+.rec { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.rec.inactive { opacity: .6; }
+.rec .conf { color: var(--danger); }
+ul.rel { list-style: none; margin: 0; padding: 0; }
+ul.rel li { padding: 1px 0; overflow-wrap: anywhere; }
+ul.rel a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+ul.rel button { all: unset; color: var(--accent); cursor: pointer; text-decoration: underline; }
+ul.rel button:focus-visible { outline: 2px solid var(--accent); }
+.hint { color: var(--muted); }
+#status { padding: 3px 12px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; min-height: 24px; }
+noscript { padding: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Демо-граф: Nordhaven Bank</h1>
+  <input id="search" type="search" placeholder="Поиск по имени" aria-label="Поиск по имени" autocomplete="off">
+  <label>Раскладка
+    <select id="view" aria-label="Раскладка">
+      <option value="layers">по слоям и доменам</option>
+      <option value="envs">по окружениям</option>
+    </select>
+  </label>
+  <label>Сценарий
+    <select id="scenario" aria-label="Сценарий"><option value="">нет</option></select>
+  </label>
+  <button id="fit" type="button">Показать всё</button>
+  <button id="theme" type="button" aria-label="Тема">Тема</button>
+  <span class="spacer"></span>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <aside aria-label="Фильтры и легенда">
+    <h2>Сценарий</h2>
+    <p id="scenarioNote" class="hint">Не выбран.</p>
+    <h2>Результаты поиска</h2>
+    <ul id="results"></ul>
+    <h2>Метки</h2><div id="fLabels"></div>
+    <h2>Окружения</h2><div id="fEnvs"></div>
+    <h2>Источники</h2><div id="fSources"></div>
+    <h2>Легенда</h2>
+    <div id="legend"></div>
+  </aside>
+  <div id="cy" role="img" aria-label="Граф активов"></div>
+  <section id="cardPane" aria-live="polite" aria-label="Карточка">
+    <p class="hint">Выберите узел или связь на графе.</p>
+  </section>
+</main>
+<div id="status"></div>
+<noscript>Для визуализации нужен JavaScript.</noscript>
+
+<script type="application/json" id="graph-data">
+@@GRAPH_DATA@@
+</script>
+<script type="application/json" id="scenario-data">
+@@SCENARIOS@@
+</script>
+<script>
+@@CYTOSCAPE@@
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var DATA = JSON.parse(document.getElementById('graph-data').textContent);
+  var SCENARIOS = JSON.parse(document.getElementById('scenario-data').textContent).scenarios;
+
+  var LAYERS = ['Governance', 'Delivery', 'Runtime'];
+  var LAYER_OF = {
+    Team: 'Governance', ITSystem: 'Governance', Solution: 'Governance', Platform: 'Governance',
+    Service: 'Delivery', Repository: 'Delivery',
+    Deployment: 'Runtime', Environment: 'Runtime', ComputeInstance: 'Runtime'
+  };
+  var LABEL_ORDER = ['Platform', 'Solution', 'ITSystem', 'Team', 'Service', 'Repository', 'Deployment', 'Environment', 'ComputeInstance'];
+  var SHAPE = { Governance: 'round-rectangle', Delivery: 'ellipse', Runtime: 'hexagon' };
+  var COLORS = {
+    light: { Team: '#8250df', ITSystem: '#0969da', Solution: '#1f6feb', Platform: '#6639ba', Service: '#1a7f37',
+             Repository: '#2da44e', Deployment: '#bc4c00', Environment: '#9a6700', ComputeInstance: '#cf222e' },
+    dark:  { Team: '#a371f7', ITSystem: '#58a6ff', Solution: '#79c0ff', Platform: '#bc8cff', Service: '#3fb950',
+             Repository: '#56d364', Deployment: '#f0883e', Environment: '#d29922', ComputeInstance: '#ff7b72' }
+  };
+  var NO_DOMAIN = 'без домена';
+  var DOMAIN_RE = /^Domain: (Payments|Risk & Compliance|Customer Channels)\./;
+  var SOURCES = ['EAM', 'SCM', 'CMDB', 'DEPLOYMAP'];
+  var ENV_CODES = ['dev', 'test', 'prod'];
+
+  // ---------- вспомогательное: только текст, никакого innerHTML ----------
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text !== undefined && text !== null) { e.appendChild(document.createTextNode(String(text))); }
+    if (cls) { e.className = cls; }
+    return e;
+  }
+  function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+  function byId(id) { return document.getElementById(id); }
+  function status(text) { byId('status').textContent = text; }
+
+  // ---------- модель ----------
+  var nodeById = {};
+  DATA.nodes.forEach(function (n) { nodeById[n.id] = n; });
+
+  function displayName(n) {
+    var p = n.props;
+    switch (n.label) {
+      case 'Deployment': return p.deploymentKey || p.name || n.id;
+      case 'Repository': return (p.url || n.id).replace(/^https?:\/\/[^/]+\//, '');
+      case 'ComputeInstance': return String(p.hostname || n.id).split('.')[0];
+      case 'Environment': return p.code || p.name || n.id;
+      default: return p.name || n.id;
+    }
+  }
+  // Ключи, по которым узел находится из scenarios.json: sourceId записей источников и основное имя.
+  function nodeKeys(n) {
+    var keys = n.sources.map(function (s) { return s.sourceId; });
+    ['name', 'deploymentKey', 'url', 'hostname', 'code'].forEach(function (k) { if (n.props[k]) { keys.push(String(n.props[k])); } });
+    return keys;
+  }
+  var byLabelKey = {};
+  DATA.nodes.forEach(function (n) {
+    nodeKeys(n).forEach(function (k) { byLabelKey[n.label + '\u0000' + k] = n; });
+  });
+
+  var adjacency = {};
+  DATA.nodes.forEach(function (n) { adjacency[n.id] = []; });
+  DATA.edges.forEach(function (e) {
+    adjacency[e.source].push({ edge: e, other: e.target, out: true });
+    adjacency[e.target].push({ edge: e, other: e.source, out: false });
+  });
+  function neighbours(n, type, out) {
+    return adjacency[n.id].filter(function (a) { return a.edge.type === type && a.out === out; }).map(function (a) { return nodeById[a.other]; });
+  }
+
+  // Домен (dataset.md, 8, п. 2): шаблон из ITSystem.description (и Solution), остальные наследуют через связи.
+  function ownDomain(n) {
+    var m = DOMAIN_RE.exec(n.props.description || '');
+    return m ? m[1] : null;
+  }
+  var domainOf = {};
+  DATA.nodes.forEach(function (n) {
+    if (n.label === 'ITSystem' || n.label === 'Solution') { domainOf[n.id] = ownDomain(n) || NO_DOMAIN; }
+  });
+  function serviceDomain(s) {
+    var sys = neighbours(s, 'DECOMPOSED_INTO', false)[0];
+    return sys ? (domainOf[sys.id] || NO_DOMAIN) : NO_DOMAIN;
+  }
+  DATA.nodes.forEach(function (n) { if (n.label === 'Service') { domainOf[n.id] = serviceDomain(n); } });
+  DATA.nodes.forEach(function (n) {
+    if (n.label === 'Repository') {
+      var svc = neighbours(n, 'IMPLEMENTED_IN', false)[0];
+      domainOf[n.id] = svc ? domainOf[svc.id] : NO_DOMAIN;
+    } else if (n.label === 'Deployment') {
+      var s = neighbours(n, 'HAS_DEPLOYMENT', false)[0];
+      domainOf[n.id] = s ? domainOf[s.id] : NO_DOMAIN;
+    }
+  });
+  DATA.nodes.forEach(function (n) { if (!domainOf[n.id]) { domainOf[n.id] = NO_DOMAIN; } });
+
+  // Окружения: развёртывание через IN_ENVIRONMENT, хост через развёртывания, которые на нём работают.
+  var envsOf = {};
+  DATA.nodes.forEach(function (n) {
+    if (n.label === 'Environment') { envsOf[n.id] = [displayName(n)]; }
+    if (n.label === 'Deployment') { envsOf[n.id] = neighbours(n, 'IN_ENVIRONMENT', true).map(displayName); }
+  });
+  DATA.nodes.forEach(function (n) {
+    if (n.label === 'ComputeInstance') {
+      var set = {};
+      neighbours(n, 'RUNS_ON', false).forEach(function (d) { (envsOf[d.id] || []).forEach(function (c) { set[c] = true; }); });
+      envsOf[n.id] = Object.keys(set);
+    }
+  });
+
+  function marks(n) {
+    return {
+      conflict: n.sources.some(function (s) { return s.conflicts.length > 0; }),
+      stale: !!n.stale,
+      deleted: n.props.isCurrent === false || !!n.props.deletedAt,
+      pending: n.pending.length > 0
+    };
+  }
+
+  // ---------- раскладка (preset) ----------
+  var ROWS = 14, STEP_X = 118, STEP_Y = 34, LAYER_GAP = 90;
+
+  function groupsFor(layer, view) {
+    var nodes = DATA.nodes.filter(function (n) { return LAYER_OF[n.label] === layer; });
+    var groups = {};
+    nodes.forEach(function (n) {
+      var key;
+      if (layer === 'Runtime' && view === 'envs') {
+        var envs = envsOf[n.id] || [];
+        key = envs.length ? envs.slice().sort().join(' + ') : 'без окружения';
+      } else {
+        key = domainOf[n.id];
+      }
+      (groups[key] = groups[key] || []).push(n);
+    });
+    var names = Object.keys(groups).sort(function (a, b) {
+      var order = layer === 'Runtime' && view === 'envs' ? ENV_CODES : [];
+      var ia = order.indexOf(a), ib = order.indexOf(b);
+      if (ia !== ib) { return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); }
+      if (a === NO_DOMAIN || a === 'без окружения') { return 1; }
+      if (b === NO_DOMAIN || b === 'без окружения') { return -1; }
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    return names.map(function (name) {
+      groups[name].sort(function (a, b) {
+        var d = LABEL_ORDER.indexOf(a.label) - LABEL_ORDER.indexOf(b.label);
+        if (d) { return d; }
+        var x = displayName(a), y = displayName(b);
+        return x < y ? -1 : x > y ? 1 : 0;
+      });
+      return { name: name, nodes: groups[name] };
+    });
+  }
+
+  // Возвращает {pos: {id: {x, y}}, decor: [элементы-подписи слоёв и групп]}.
+  function computeLayout(view) {
+    var pos = {}, decor = [], x0 = 0;
+    LAYERS.forEach(function (layer) {
+      var col = 0, minY = 0, maxY = 0, startX = x0;
+      groupsFor(layer, view).forEach(function (g) {
+        var groupCol = col;
+        g.nodes.forEach(function (n, i) {
+          var c = groupCol + Math.floor(i / ROWS), r = i % ROWS;
+          pos[n.id] = { x: startX + c * STEP_X, y: 40 + r * STEP_Y };
+          maxY = Math.max(maxY, 40 + r * STEP_Y);
+        });
+        decor.push({ group: 'nodes', data: { id: 'grp:' + layer + ':' + g.name, title: g.name + ' (' + g.nodes.length + ')' },
+                     position: { x: startX + groupCol * STEP_X + 36, y: 8 }, classes: 'grouplabel' });
+        col += Math.max(1, Math.ceil(g.nodes.length / ROWS));
+      });
+      var width = Math.max(1, col) * STEP_X;
+      decor.push({ group: 'nodes', data: { id: 'band:' + layer, title: layer, w: width + 20, h: maxY + 90 },
+                   position: { x: startX + (width - STEP_X) / 2, y: (maxY + 40) / 2 }, classes: 'band' });
+      x0 = startX + width + LAYER_GAP;
+    });
+    return { pos: pos, decor: decor };
+  }
+
+  // ---------- стили ----------
+  function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function makeStyle() {
+    var palette = COLORS[theme()], fg = css('--fg'), muted = css('--muted'), edge = css('--edge'), accent = css('--accent');
+    var danger = css('--danger'), warn = css('--warn');
+    var st = [
+      { selector: 'node.n', style: {
+        'label': 'data(title)', 'font-size': 9, 'color': fg, 'text-valign': 'bottom', 'text-margin-y': 2,
+        'text-wrap': 'ellipsis', 'text-max-width': 100, 'min-zoomed-font-size': 7,
+        'width': 16, 'height': 16, 'border-width': 1.5, 'border-color': css('--panel'), 'z-index': 10 } },
+      { selector: 'node.n.hidden, edge.hidden', style: { 'display': 'none' } },
+      { selector: 'node.band', style: {
+        'shape': 'round-rectangle', 'width': 'data(w)', 'height': 'data(h)', 'background-color': accent, 'background-opacity': 0.06,
+        'border-width': 1, 'border-color': accent, 'border-opacity': 0.25, 'label': 'data(title)', 'text-valign': 'top',
+        'text-halign': 'center', 'text-margin-y': -4, 'font-size': 14, 'font-weight': 'bold', 'color': muted,
+        'events': 'no', 'z-index': 0 } },
+      { selector: 'node.grouplabel', style: {
+        'shape': 'rectangle', 'width': 1, 'height': 1, 'background-opacity': 0, 'border-width': 0, 'label': 'data(title)',
+        'font-size': 10, 'color': muted, 'text-valign': 'center', 'text-halign': 'right', 'events': 'no', 'z-index': 1 } },
+      { selector: 'edge', style: {
+        'width': 1, 'line-color': edge, 'target-arrow-color': edge, 'target-arrow-shape': 'triangle', 'arrow-scale': 0.6,
+        'curve-style': 'bezier', 'opacity': 0.35, 'z-index': 5 } },
+      { selector: 'edge[type = "DEPENDS_ON"]', style: { 'line-color': accent, 'target-arrow-color': accent, 'opacity': 0.55 } },
+      { selector: 'edge[type = "DEPLOYED_FROM"]', style: { 'line-style': 'dashed' } },
+      { selector: 'edge[type = "RUNS_ON"]', style: { 'line-style': 'dotted' } },
+      { selector: 'node.n.stale', style: { 'border-style': 'dashed', 'border-color': warn, 'border-width': 2.5 } },
+      { selector: 'node.n.conflict', style: { 'border-color': danger, 'border-width': 3.5 } },
+      { selector: 'node.n.pending', style: { 'underlay-color': accent, 'underlay-padding': 3, 'underlay-opacity': 0.35 } },
+      { selector: 'node.n.deleted', style: { 'opacity': 0.4 } },
+      { selector: '.dim', style: { 'opacity': 0.12 } },
+      { selector: 'node.n.match, node.n.sc', style: { 'border-color': accent, 'border-width': 4, 'opacity': 1, 'z-index': 20 } },
+      { selector: 'edge.sc', style: { 'width': 3, 'line-color': accent, 'target-arrow-color': accent, 'opacity': 1, 'z-index': 15 } },
+      { selector: 'node.n.hl', style: { 'opacity': 1 } },
+      { selector: 'edge.hl', style: { 'opacity': 0.95, 'width': 2, 'z-index': 15 } },
+      { selector: 'node.n:selected', style: { 'border-color': fg, 'border-width': 4, 'opacity': 1 } },
+      { selector: 'edge:selected', style: { 'width': 3, 'opacity': 1 } }
+    ];
+    Object.keys(palette).forEach(function (label) {
+      st.push({ selector: 'node.n[label = "' + label + '"]', style: {
+        'background-color': palette[label], 'shape': SHAPE[LAYER_OF[label]] } });
+    });
+    return st;
+  }
+
+  // ---------- граф ----------
+  var cy = cytoscape({
+    container: byId('cy'), elements: [], minZoom: 0.1, maxZoom: 3,
+    style: makeStyle(), boxSelectionEnabled: false
+  });
+  var currentView = 'layers';
+
+  function buildElements() {
+    var lay = computeLayout(currentView), els = [];
+    DATA.nodes.forEach(function (n) {
+      var m = marks(n), cls = ['n'];
+      Object.keys(m).forEach(function (k) { if (m[k]) { cls.push(k); } });
+      els.push({ group: 'nodes', data: { id: n.id, label: n.label, title: displayName(n) }, position: lay.pos[n.id], classes: cls.join(' ') });
+    });
+    DATA.edges.forEach(function (e) {
+      els.push({ group: 'edges', data: { id: 'e:' + e.id, source: e.source, target: e.target, type: e.type, ref: e.id } });
+    });
+    return lay.decor.concat(els);
+  }
+  function rebuild() {
+    cy.elements().remove();
+    cy.add(buildElements());
+    applyFilters();
+    applyScenario();
+    cy.fit(undefined, 30);
+  }
+
+  // ---------- фильтры ----------
+  var filters = { labels: {}, envs: {}, sources: {} };
+  LABEL_ORDER.forEach(function (l) { filters.labels[l] = true; });
+  ENV_CODES.forEach(function (c) { filters.envs[c] = true; });
+  SOURCES.forEach(function (s) { filters.sources[s] = true; });
+
+  function visible(n) {
+    if (!filters.labels[n.label]) { return false; }
+    var envs = envsOf[n.id];
+    if (envs && envs.length && !envs.some(function (c) { return filters.envs[c] !== false; })) { return false; }
+    if (!n.sources.some(function (s) { return filters.sources[s.source] !== false; })) { return false; }
+    return true;
+  }
+  function applyFilters() {
+    cy.batch(function () {
+      DATA.nodes.forEach(function (n) {
+        var node = cy.getElementById(n.id);
+        if (node.nonempty()) { node.toggleClass('hidden', !visible(n)); }
+      });
+      cy.edges().forEach(function (e) {
+        e.toggleClass('hidden', e.source().hasClass('hidden') || e.target().hasClass('hidden'));
+      });
+    });
+  }
+  function buildFilter(containerId, group, items, colorFn) {
+    var box = byId(containerId);
+    items.forEach(function (item) {
+      var label = el('label', null, 'check'), input = document.createElement('input');
+      input.type = 'checkbox'; input.checked = true;
+      input.addEventListener('change', function () { filters[group][item] = input.checked; applyFilters(); });
+      label.appendChild(input);
+      if (colorFn) { var sw = el('span', null, 'swatch'); sw.style.background = colorFn(item); label.appendChild(sw); }
+      label.appendChild(document.createTextNode(item));
+      box.appendChild(label);
+    });
+  }
+
+  // ---------- карточка ----------
+  function relText(a) {
+    var other = nodeById[a.other];
+    return a.edge.type + (a.out ? ' → ' : ' ← ') + displayName(other) + ' (' + other.label + ')';
+  }
+  function addSection(card, title) { card.appendChild(el('h2', title)); }
+
+  function showNode(n) {
+    var card = byId('cardPane'), m = marks(n);
+    clear(card);
+    card.appendChild(el('h3', displayName(n)));
+    var layer = LAYER_OF[n.label], sub = n.label + (n.subtypes.length ? ' / ' + n.subtypes.join(', ') : '') + ' · ' + layer;
+    if (domainOf[n.id] !== NO_DOMAIN) { sub += ' · домен ' + domainOf[n.id]; }
+    card.appendChild(el('div', sub, 'sub'));
+    var badges = el('div');
+    if (m.conflict) { badges.appendChild(el('span', 'конфликт', 'badge conflict')); }
+    if (m.stale) { badges.appendChild(el('span', 'stale', 'badge stale')); }
+    if (m.deleted) { badges.appendChild(el('span', 'удалён', 'badge deleted')); }
+    if (m.pending) { badges.appendChild(el('span', 'неразрешённая ссылка', 'badge pending')); }
+    if (badges.childNodes.length) { card.appendChild(badges); }
+
+    addSection(card, 'Свойства');
+    var table = el('table', null, 'props');
+    Object.keys(n.props).sort().forEach(function (k) {
+      var tr = document.createElement('tr');
+      tr.appendChild(el('th', k)); tr.appendChild(el('td', n.props[k]));
+      table.appendChild(tr);
+    });
+    card.appendChild(table);
+
+    addSection(card, 'Источники (' + n.sources.length + ')');
+    if (!n.sources.length) { card.appendChild(el('div', 'нет записей источников', 'hint')); }
+    n.sources.forEach(function (s) {
+      var rec = el('div', null, 'rec' + (s.active ? '' : ' inactive'));
+      rec.appendChild(el('div', s.source + ' / ' + s.sourceType + ' / ' + s.sourceId));
+      rec.appendChild(el('div', s.authority + (s.confidence !== null ? ' (' + s.confidence + ')' : '') + ' · версия ' + s.sourceVersion +
+        ' · ' + (s.active ? 'активна' : 'неактивна' + (s.deletedAt ? ', удалена ' + s.deletedAt : '')), 'hint'));
+      rec.appendChild(el('div', 'получена ' + s.fetchedAt, 'hint'));
+      if (s.conflicts.length) { rec.appendChild(el('div', 'конфликт: ' + s.conflicts.join(', '), 'conf')); }
+      card.appendChild(rec);
+    });
+    card.appendChild(el('div', 'lastSeenAt ' + (n.props.lastSeenAt || '—') + ' · порог stale ' + DATA.meta.staleAfter, 'hint'));
+
+    if (n.pending.length) {
+      addSection(card, 'Неразрешённые ссылки');
+      n.pending.forEach(function (p) {
+        var f = p.from, t = p.to;
+        card.appendChild(el('div', p.type + ': ' + f.source + '/' + f.type + '/' + f.id + ' → ' + t.source + '/' + t.type + '/' + t.id, 'rec'));
+      });
+    }
+
+    addSection(card, 'Связи (' + adjacency[n.id].length + ')');
+    var ul = el('ul', null, 'rel');
+    adjacency[n.id].slice().sort(function (a, b) { return relText(a) < relText(b) ? -1 : 1; }).forEach(function (a) {
+      var li = document.createElement('li'), btn = el('button', relText(a));
+      btn.type = 'button';
+      btn.addEventListener('click', function () { selectNode(a.other, true); });
+      li.appendChild(btn); ul.appendChild(li);
+    });
+    card.appendChild(ul);
+  }
+  function showEdge(e) {
+    var card = byId('cardPane'), s = nodeById[e.source], t = nodeById[e.target];
+    clear(card);
+    card.appendChild(el('h3', e.type));
+    card.appendChild(el('div', displayName(s) + ' (' + s.label + ') → ' + displayName(t) + ' (' + t.label + ')', 'sub'));
+    addSection(card, 'Свойства связи');
+    var table = el('table', null, 'props');
+    Object.keys(e.props).sort().forEach(function (k) {
+      var tr = document.createElement('tr');
+      tr.appendChild(el('th', k)); tr.appendChild(el('td', e.props[k]));
+      table.appendChild(tr);
+    });
+    card.appendChild(table);
+  }
+
+  function highlightNeighbourhood(node) {
+    cy.batch(function () {
+      cy.elements().removeClass('hl');
+      if (node && node.nonempty()) { node.closedNeighborhood().addClass('hl'); }
+    });
+  }
+  function selectNode(id, focus) {
+    var node = cy.getElementById(id);
+    if (node.empty()) { return; }
+    cy.elements().unselect();
+    node.select();
+    showNode(nodeById[id]);
+    highlightNeighbourhood(node);
+    if (focus) { cy.animate({ center: { eles: node }, duration: 200 }); }
+  }
+  cy.on('tap', 'node.n', function (ev) { selectNode(ev.target.id()); });
+  cy.on('tap', 'edge', function (ev) {
+    var ref = ev.target.data('ref'), edge = DATA.edges.filter(function (e) { return e.id === ref; })[0];
+    if (edge) { showEdge(edge); highlightNeighbourhood(ev.target.connectedNodes().union(ev.target)); }
+  });
+  cy.on('tap', function (ev) {
+    if (ev.target === cy) { highlightNeighbourhood(null); clear(byId('cardPane')); byId('cardPane').appendChild(el('p', 'Выберите узел или связь на графе.', 'hint')); }
+  });
+  cy.on('mouseover', 'node.n', function (ev) { var n = nodeById[ev.target.id()]; status(n.label + ': ' + displayName(n)); });
+  cy.on('mouseover', 'edge', function (ev) {
+    var s = nodeById[ev.target.data('source')], t = nodeById[ev.target.data('target')];
+    status(ev.target.data('type') + ': ' + displayName(s) + ' → ' + displayName(t));
+  });
+  cy.on('mouseout', 'node, edge', function () { status(''); });
+
+  // ---------- поиск ----------
+  function runSearch() {
+    var q = byId('search').value.trim().toLowerCase(), list = byId('results');
+    clear(list);
+    cy.batch(function () {
+      cy.nodes('.n').removeClass('match');
+      if (!q) { cy.elements('.n, edge').removeClass('dim'); return; }
+      var hits = DATA.nodes.filter(function (n) { return displayName(n).toLowerCase().indexOf(q) >= 0 || nodeKeys(n).some(function (k) { return k.toLowerCase().indexOf(q) >= 0; }); });
+      cy.elements().addClass('dim');
+      hits.forEach(function (n) { cy.getElementById(n.id).removeClass('dim').addClass('match'); });
+      hits.slice(0, 12).forEach(function (n) {
+        var li = el('li', displayName(n) + ' · ' + n.label);
+        li.tabIndex = 0;
+        var go = function () { selectNode(n.id, true); };
+        li.addEventListener('click', go);
+        li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { go(); } });
+        list.appendChild(li);
+      });
+      if (hits.length > 12) { list.appendChild(el('li', 'ещё ' + (hits.length - 12) + '…', 'hint')); }
+      if (!hits.length) { list.appendChild(el('li', 'ничего не найдено', 'hint')); }
+    });
+  }
+  byId('search').addEventListener('input', function () { byId('scenario').value = ''; applyScenario(); runSearch(); });
+  byId('search').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') { var first = byId('results').firstChild; if (first && first.tabIndex === 0) { first.click(); } }
+  });
+
+  // ---------- сценарии ----------
+  function resolve(ref) { return byLabelKey[ref[0] + '\u0000' + ref[1]] || null; }
+  function applyScenario() {
+    var sel = byId('scenario').value, note = byId('scenarioNote');
+    clear(note);
+    if (!sel) { note.appendChild(document.createTextNode('Не выбран.')); }
+    cy.batch(function () {
+      cy.elements().removeClass('sc');
+      if (!sel) { if (!byId('search').value.trim()) { cy.elements('.n, edge').removeClass('dim'); } return; }
+      var sc = SCENARIOS.filter(function (s) { return String(s.id) === sel; })[0];
+      if (!sc) { return; }
+      var ids = {}, missing = [], pairs = [];
+      function take(ref) { var n = resolve(ref); if (n) { ids[n.id] = true; return n; } missing.push(ref[0] + ' ' + ref[1]); return null; }
+      sc.nodes.forEach(take);
+      sc.paths.forEach(function (path) {
+        var prev = null;
+        path.forEach(function (ref) { var n = take(ref); if (n && prev) { pairs.push([prev.id, n.id]); } prev = n; });
+      });
+      var onPath = {};
+      pairs.forEach(function (p) { onPath[p[0] + '|' + p[1]] = true; onPath[p[1] + '|' + p[0]] = true; });
+      var listed = {};
+      sc.nodes.forEach(function (ref) { var n = resolve(ref); if (n) { listed[n.id] = true; } });
+      cy.elements('.n, edge').addClass('dim');
+      Object.keys(ids).forEach(function (id) { cy.getElementById(id).removeClass('dim').addClass('sc'); });
+      cy.edges().forEach(function (e) {
+        var s = e.data('source'), t = e.data('target');
+        if (onPath[s + '|' + t] || (listed[s] && listed[t])) { e.removeClass('dim').addClass('sc'); }
+      });
+      note.appendChild(document.createTextNode('Кейсы: ' + sc.cases + '. ' + sc.note));
+      if (missing.length) { note.appendChild(el('div', 'Не найдено в выгрузке: ' + missing.join('; '), 'badge conflict')); }
+      var target = cy.nodes('.sc');
+      if (target.nonempty()) { cy.animate({ fit: { eles: target, padding: 60 }, duration: 250 }); }
+    });
+  }
+  SCENARIOS.forEach(function (s) {
+    var o = el('option', s.id + '. ' + s.title); o.value = String(s.id);
+    byId('scenario').appendChild(o);
+  });
+  byId('scenario').addEventListener('change', function () { byId('search').value = ''; runSearch(); applyScenario(); });
+
+  // ---------- легенда ----------
+  function buildLegend() {
+    var box = byId('legend'), palette = COLORS[theme()];
+    clear(box);
+    LAYERS.forEach(function (layer) {
+      box.appendChild(el('div', layer + ' — ' + { Governance: 'круглый прямоугольник', Delivery: 'эллипс', Runtime: 'шестиугольник' }[layer], 'row'));
+    });
+    var items = [
+      ['конфликт: красная рамка', 'conflict'], ['stale: пунктирная рамка', 'stale'],
+      ['удалён: полупрозрачный', 'deleted'], ['неразрешённая ссылка: подсветка', 'pending']
+    ];
+    items.forEach(function (it) { box.appendChild(el('div', it[0], 'row')); });
+    box.appendChild(el('div', 'DEPENDS_ON — синяя, DEPLOYED_FROM — штрих, RUNS_ON — точки; остальные серые. Тип связи — в карточке.', 'row'));
+    return palette;
+  }
+
+  // ---------- тема ----------
+  function setTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    cy.style(makeStyle());
+    var palette = COLORS[t];
+    Array.prototype.forEach.call(byId('fLabels').querySelectorAll('.swatch'), function (sw, i) { sw.style.background = palette[LABEL_ORDER[i]]; });
+    buildLegend();
+  }
+  byId('theme').addEventListener('click', function () { setTheme(theme() === 'dark' ? 'light' : 'dark'); });
+  byId('fit').addEventListener('click', function () { cy.fit(undefined, 30); });
+  byId('view').addEventListener('change', function () { currentView = byId('view').value; rebuild(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') { byId('search').value = ''; byId('scenario').value = ''; runSearch(); applyScenario(); cy.elements().unselect(); highlightNeighbourhood(null); }
+  });
+
+  // ---------- старт ----------
+  var m = DATA.meta;
+  byId('meta').textContent = 'Выгрузка ' + m.generatedAt + ' · узлов ' + m.counts.nodes + ' · связей ' + m.counts.edges;
+  buildFilter('fLabels', 'labels', LABEL_ORDER, function (l) { return COLORS[theme()][l]; });
+  buildFilter('fEnvs', 'envs', ENV_CODES);
+  buildFilter('fSources', 'sources', SOURCES);
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+  rebuild();
+  setTheme(theme());
+  // Доступно для проверки из консоли: число отрисованных узлов и связей.
+  window.__graphStats = function () { return { nodes: cy.nodes('.n').length, edges: cy.edges().length }; };
+})();
+</script>
+</body>
+</html>
