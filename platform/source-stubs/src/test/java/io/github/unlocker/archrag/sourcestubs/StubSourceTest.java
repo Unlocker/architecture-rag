@@ -250,4 +250,21 @@ class StubSourceTest {
   void unknownObjectIsEmpty() {
     assertThat(StubSources.eam(clock).fetchById("IT_SYSTEM", "nope")).isEmpty();
   }
+
+  @Test
+  void upsertAtKeepsTheGivenTimeInSnapshotAndFetchById() {
+    StubSource scm = new StubSource(SourceSystem.SCM, clock);
+    Instant old = clock.instant().minus(Duration.ofDays(30));
+    scm.upsertAt("SERVICE", "svc-old", fields("name", "old"), old);
+    scm.upsert("SERVICE", "svc-new", fields("name", "new"));
+    assertThat(scm.fetchById("SERVICE", "svc-old").orElseThrow().updatedAt()).isEqualTo(old);
+    // Snapshot отдаёт сохранённое время, а не текущее: иначе новый snapshot стёр бы признак «устарела».
+    assertThat(scm.fetchChanges(null, 100).changes())
+        .extracting(SourceChange::sourceId, SourceChange::updatedAt)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple("svc-old", old),
+            org.assertj.core.groups.Tuple.tuple("svc-new", clock.instant()));
+    scm.upsert("SERVICE", "svc-new", fields("name", "newer"));
+    assertThat(scm.fetchChanges(null, 100).changes().getFirst().updatedAt()).isEqualTo(old);
+  }
 }

@@ -1,0 +1,14 @@
+{
+  "mode": "impact",
+  "direction": "upstream",
+  "truncated": false,
+  "affected": [
+    "ITSystem:Card Gateway",
+    "ITSystem:Fraud Screening",
+    "ITSystem:Payments Core",
+    "ITSystem:Settlement Hub",
+    "Service:card-authorizer",
+    "Service:card-gateway",
+    "..."
+  ]
+}

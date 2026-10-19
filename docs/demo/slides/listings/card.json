@@ -1,0 +1,7 @@
+{
+  "type": "ITSystem",
+  "properties": {
+    "name": "Fraud Screening",
+    "criticalityRaw": "CRITICAL"
+  }
+}

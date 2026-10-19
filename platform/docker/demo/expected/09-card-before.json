@@ -1,0 +1,48 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "language": "cobol",
+    "name": "legacy-statements"
+  },
+  "relations": [
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "Ledger",
+      "relationType": "DECOMPOSED_INTO",
+      "type": "ITSystem"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "https://git.example.org/ledger/legacy-statements",
+      "relationType": "IMPLEMENTED_IN",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "ledger-reporting",
+      "relationType": "DEPENDS_ON",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "legacy-statements",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Deployment"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "SCM",
+      "sourceId": "svc-legacy-statements",
+      "sourceType": "SERVICE"
+    }
+  ],
+  "truncated": false,
+  "type": "Service"
+}

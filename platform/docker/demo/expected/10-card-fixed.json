@@ -1,0 +1,52 @@
+{
+  "isCurrent": true,
+  "properties": {
+    "deploymentKey": "dep-card-tokenizer-test-badcommit",
+    "eamSystemId": 5103,
+    "name": "card-tokenizer",
+    "repositoryUrl": "https://git.example.org/card/card-tokenizer",
+    "sourceCommit": "509e354bd585883bcf67fe73b8f27c43f00ce9bc",
+    "version": "1.2.1"
+  },
+  "relations": [
+    {
+      "direction": "IN",
+      "isCurrent": true,
+      "name": "card-tokenizer",
+      "relationType": "HAS_DEPLOYMENT",
+      "type": "Service"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "Test",
+      "relationType": "IN_ENVIRONMENT",
+      "type": "Environment"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "https://git.example.org/card/card-tokenizer",
+      "relationType": "DEPLOYED_FROM",
+      "type": "Repository"
+    },
+    {
+      "direction": "OUT",
+      "isCurrent": true,
+      "name": "vm-card-test-01.test.example.org",
+      "relationType": "RUNS_ON",
+      "type": "ComputeInstance"
+    }
+  ],
+  "sources": [
+    {
+      "active": true,
+      "authority": "MASTER",
+      "source": "DEPLOYMAP",
+      "sourceId": "dep-card-tokenizer-test-badcommit",
+      "sourceType": "DEPLOYMENT"
+    }
+  ],
+  "truncated": false,
+  "type": "Deployment"
+}

@@ -1,0 +1,88 @@
+{
+  "affected": [],
+  "direction": "downstream",
+  "environment": null,
+  "mode": "trace",
+  "nodes": [
+    {
+      "conflicts": [],
+      "label": "ComputeInstance",
+      "name": "vm-legacy-app-01.prod.example.org",
+      "stale": false
+    },
+    {
+      "conflicts": [],
+      "label": "Repository",
+      "name": "https://git.example.org/settle/settlement-recon",
+      "stale": false
+    },
+    {
+      "conflicts": [
+        {
+          "properties": [
+            "eamSystemId"
+          ],
+          "source": "DEPLOYMAP",
+          "sourceId": "dep-settlement-recon-prod",
+          "sourceType": "DEPLOYMENT"
+        }
+      ],
+      "label": "Deployment",
+      "name": "settlement-recon",
+      "stale": false
+    }
+  ],
+  "paths": [
+    {
+      "nodes": [
+        "Deployment:settlement-recon",
+        "ComputeInstance:vm-legacy-app-01.prod.example.org"
+      ],
+      "relations": [
+        {
+          "from": "Deployment:settlement-recon",
+          "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+          "type": "RUNS_ON"
+        }
+      ]
+    },
+    {
+      "nodes": [
+        "Deployment:settlement-recon",
+        "Repository:https://git.example.org/settle/settlement-recon"
+      ],
+      "relations": [
+        {
+          "from": "Deployment:settlement-recon",
+          "to": "Repository:https://git.example.org/settle/settlement-recon",
+          "type": "DEPLOYED_FROM"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "assertedById": "dep-settlement-recon-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:settlement-recon",
+      "sourceActive": true,
+      "stale": false,
+      "to": "ComputeInstance:vm-legacy-app-01.prod.example.org",
+      "type": "RUNS_ON"
+    },
+    {
+      "assertedById": "dep-settlement-recon-prod",
+      "assertedBySource": "DEPLOYMAP",
+      "assertedByType": "DEPLOYMENT",
+      "from": "Deployment:settlement-recon",
+      "sourceActive": true,
+      "stale": false,
+      "to": "Repository:https://git.example.org/settle/settlement-recon",
+      "type": "DEPLOYED_FROM"
+    }
+  ],
+  "staleAfter": "PT168H",
+  "startGid": "Deployment:settlement-recon",
+  "truncated": false
+}

@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "matchType": "FULLTEXT",
+      "name": "AML Monitoring",
+      "score": 1.169898509979248,
+      "sources": [
+        "EAM"
+      ],
+      "type": "ITSystem"
+    },
+    {
+      "matchType": "FULLTEXT",
+      "name": "Fraud Screening",
+      "score": 1.2960710525512695,
+      "sources": [
+        "EAM"
+      ],
+      "type": "ITSystem"
+    }
+  ],
+  "truncated": false
+}

@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "matchType": "EXACT",
+      "name": "vm-dev-legacy-01.dev.example.org",
+      "score": 1000.0,
+      "sources": [
+        "CMDB"
+      ],
+      "type": "ComputeInstance"
+    },
+    {
+      "matchType": "FULLTEXT",
+      "name": "legacy-statements",
+      "score": 1.477203369140625,
+      "sources": [
+        "SCM"
+      ],
+      "type": "Service"
+    }
+  ],
+  "truncated": false
+}

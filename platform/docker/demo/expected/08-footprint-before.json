@@ -1,0 +1,263 @@
+{
+  "environment": "prod",
+  "services": [
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-card-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-card-authorizer-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-card-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            },
+            {
+              "hostedOn": null,
+              "hostname": "vm-card-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-card-authorizer-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-card-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "74762a471556b8f1bf6e2abe1d61d2c29f9f1307",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-authorizer-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-authorizer-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "card-authorizer",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/card/card-authorizer"
+          },
+          "repositoryUrl": "https://git.example.org/card/card-authorizer",
+          "sourceCommit": "74762a471556b8f1bf6e2abe1d61d2c29f9f1307",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-card-authorizer-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "4.0.2"
+        }
+      ],
+      "name": "card-authorizer",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-card-authorizer",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-card-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-card-gateway-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-card-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            },
+            {
+              "hostedOn": null,
+              "hostname": "vm-card-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-card-gateway-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-card-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "320ec0a9825d1fde08f7782c5ee82e440eb66a75",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-gateway-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-gateway-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "card-gateway",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/card/card-gateway"
+          },
+          "repositoryUrl": "https://git.example.org/card/card-gateway",
+          "sourceCommit": "320ec0a9825d1fde08f7782c5ee82e440eb66a75",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-card-gateway-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "4.0.2"
+        }
+      ],
+      "name": "card-gateway",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-card-gateway",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-card-02.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-card-tokenizer-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-card-02",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "6f74e18484781a8c2ad8f021729628fd32a905c3",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-tokenizer-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-card-tokenizer-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "card-tokenizer",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/card/card-tokenizer"
+          },
+          "repositoryUrl": "https://git.example.org/card/card-tokenizer",
+          "sourceCommit": "6f74e18484781a8c2ad8f021729628fd32a905c3",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-card-tokenizer-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.2.0"
+        }
+      ],
+      "name": "card-tokenizer",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-card-tokenizer",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "staleAfter": "PT168H",
+  "systemGid": "<gid>",
+  "systemName": "Card Gateway",
+  "systemSources": [
+    {
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5103",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "systemStale": false,
+  "truncated": false,
+  "warnings": []
+}

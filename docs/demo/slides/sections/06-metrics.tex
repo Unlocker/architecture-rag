@@ -1,0 +1,60 @@
+\section{Метрики PoC}
+
+\begin{frame}{Latency tools}
+  \small
+  \begin{tabular}{@{}lrrr@{}}
+    \toprule
+    tool & p50 посл. & p95 посл. & p95, 4 потока \\
+    \midrule
+    \texttt{search\_assets} & 77 мс & 196 мс & 421 мс \\
+    \texttt{get\_asset} & 122 мс & 273 мс & 581 мс \\
+    \texttt{find\_runtime\_footprint} & 192 мс & 433 мс & 490 мс \\
+    \texttt{trace\_dependencies} & 109 мс & 259 мс & 247 мс \\
+    \texttt{explain\_provenance} & 149 мс & 385 мс & 509 мс \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{2mm}
+  Клиентский p95 через TLS"=proxy и OIDC; ошибок "--- 0 из 1200 вызовов.
+  \note{Источник: 04-poc-measurements.md, <<MCP tools>> (ping в таблицу слайда не вынесен). Цифры "--- ориентир на заглушках и одном загруженном хосте, не SLO. Оговорки произнести: хост общий (load average 11--20 на 8 ядрах), граф крошечный, N=20 даёт грубый p95, webhook-путь идёт мимо TLS-proxy. Прогноз на десятки тысяч активов в документе "--- оценка по одному числу, не называть как факт. Живой прогон measure.sh на показе не делается (около 18 минут). [Сокр. блока 6 (2 мин): пункты 1, 2 и оговорка.]}
+\end{frame}
+
+\begin{frame}{Источник \ar{} граф и ingestion}
+  \small
+  \begin{tabular}{@{}lrrr@{}}
+    \toprule
+    путь & p50 & p95 & порог p95 \\
+    \midrule
+    webhook & 1,0 с & 2,1 с & 30 с \textbf{OK} \\
+    polling (интервал 30 с) & 18,6 с & 28,6 с & 35 с \textbf{OK} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{2mm}
+  $N=20$ на путь.
+  \begin{itemize}\small
+    \item Throughput ingestion $\approx$ 3,4 события/с; burst 200 из 200 \texttt{PROJECTED}.
+    \item Sync lag: максимум 23,6 с во время burst, 0 после.
+    \item \texttt{QUARANTINED} и рост DLQ "--- нет; \texttt{IGNORED\_OLD\_VERSION} 18 и \texttt{DUPLICATE} 2 "--- штатная дедупликация.
+  \end{itemize}
+  \note{Вопрос: почему polling p95 так близок к порогу? Задержку задаёт ожидание следующего цикла адаптера (равномерно от 0 до 30 с), а не проекция; поэтому гейтом выбран webhook-путь по решению владельца. Почему throughput так низок? Один ingestion разбирает очередь последовательно; для объёма нужны Kafka и параллельные потребители (gap list 1.4). Выдержит ли реальный объём? Не проверено (gap list 3.3).}
+\end{frame}
+
+\begin{frame}{Лимиты обхода}
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    Параметр & Значение \\
+    \midrule
+    глубина & 6 (\texttt{maxDepth} 1..6; 0 и 7 "--- ошибка) \\
+    узлов в ответе & 500 \\
+    путей & 50 \\
+    таймаут запроса & 5 с \\
+    размер ответа & 512 КБ \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{2mm}
+  На демо-графе достижимо 6 узлов и 5 путей: бюджеты узлов и путей не срабатывают.
+  \note{04-poc-measurements.md, <<Ограничения глубины и бюджета>>. Эти лимиты "--- ответ на вопрос из сценария 3 про стоимость запроса.}
+\end{frame}

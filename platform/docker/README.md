@@ -28,7 +28,7 @@ docker compose up -d --wait --wait-timeout 300
 | `ingestion` | normalizer, identity, projector, админский API; накатывает миграции PostgreSQL и схему Neo4j |
 | `mcp-server` | MCP на `/mcp`, масштабируется `--scale` |
 | `adapter-{eam,scm,cmdb,deploymap}` | по одному экземпляру на источник (`replicas: 1`), образ `demo-launcher` |
-| `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` |
+| `stub-{eam,scm,cmdb,deploymap}` | заглушки мастер-систем с seed из `StubSources` (профиль `ARCHRAG_STUB_PROFILE=default`) или `DemoSources` (`demo`, см. «Демо-набор») |
 | `eam-api-stub` | заглушка EAM в формате реального API (`docs/eam-api.yaml`, seed `EamApiSeed`); её читает `adapter-eam` (`PLATFORM`, `SOLUTION`, `IT_SYSTEM` с ключом `id`) |
 | `reverse-proxy` | nginx, только TLS: `/mcp`, `/webhooks/<eam|scm|cmdb|deploymap>`, токен-endpoint Keycloak |
 | `certs` | одноразовый: демо-CA и серверные сертификаты в volume `certs` (идемпотентно) |
@@ -242,3 +242,55 @@ scripts/deployment-commit-check.sh   # приёмка фичи UNLOCKER-248 (ADR
 ```
 
 Скрипт ждёт пустой очереди журнала, читает `find_runtime_footprint` по `Payments Core` (токен и CA — как в разделе «Токен и проверка») и берёт у `dep-payments-api-prod` `sourceCommit` и `deployedFrom`. Затем через `POST /control/upsert` заглушки `stub-deploymap` отправляет ту же запись формата `deploymap-poc-1` с другим commit, ждёт события в inbox (webhook или polling) и пустой очереди. Повторное чтение MCP должно дать новый commit, а в Neo4j у развёртывания должно остаться ровно одно открытое ребро `DEPLOYED_FROM` (новый commit) и одно закрытое (`validTo` задан) со старым. При повторном запуске commit переключается обратно. Код выхода не 0 при любом расхождении.
+
+## Демо-набор (профиль заглушек `demo`)
+
+`ARCHRAG_STUB_PROFILE` выбирает данные всех пяти заглушек (`stub-*`, `eam-api-stub`) разом: `default` (по умолчанию, нынешний seed, на нём держатся тесты) или `demo` (вымышленный банк Nordhaven Bank, [docs/demo/dataset.md](../../docs/demo/dataset.md)). Неизвестное значение останавливает заглушку с кодом 2. Данные демо лежат в `DemoSources` (`source-stubs`); контрактный тест `DemoDatasetContractTest` сверяет их с таблицами документа.
+
+```bash
+cd platform/docker
+../../mvnw -B -ntp -f ../../pom.xml package -DskipTests && cp .env.example .env
+demo/seed.sh demo        # down -v -> заглушки demo -> адаптеры по очереди EAM, SCM, CMDB, deploy map (snapshot, reconcile, пустая очередь) -> остальной стенд
+```
+
+`seed.sh` сносит стенд и тома проекта (`SEED_RESET=0` оставляет), порядок загрузки нужен для маркера `conflicts` в `trace_dependencies` (раздел 7 документа). После него в базовом состоянии 2 открытых кандидата identity, 2 `source_conflict` и карантин записи `dep-card-tokenizer-test-badcommit` (`INVALID_PAYLOAD`; событий в карантине два: по одному от стартового snapshot адаптера и от reconcile). Остальные `docker compose`-команды демо-стенда выполняйте с `ARCHRAG_STUB_PROFILE=demo` (его выставляет `demo/lib.sh`), иначе compose пересоздаст заглушки с профилем по умолчанию.
+
+Кейсы «во времени» вызывают управляющие эндпоинты заглушек на порту 8091 (внутри контейнера): `POST /control/upsert` и `POST /control/delete` (`{"type","id"}`, исчезновение объекта; повторный и неизвестный объект дают 400) у `stub-*`, `upsert`/`archive` у `eam-api-stub`; затем `run_reconcile <источник>` из `demo/lib.sh`.
+
+### Сценарии демо и проверка (`demo/`)
+
+Скрипты ходят в MCP стенда по HTTPS: токен Keycloak (`architecture.read`), `initialize`, `tools/call`; запрос и ответ печатаются через `jq`, поля `truncated`, `provenance`, `stale`/`lastSeenAt`, `conflicts` подсвечиваются (цвет только на TTY, в CI и при перенаправлении вывод без ANSI). Токен и секрет клиента идут через stdin `curl`, в argv и файлы не попадают.
+
+| № | Скрипт | Кейсы | Мутирует |
+|---|---|---|---|
+| 01 | `01-search-card.sh` | поиск по `eam_id`/имени/домену, `get_asset`, К-10 | нет |
+| 02 | `02-runtime-footprint.sh` | К-2, К-3, К-8 | нет |
+| 03 | `03-trace.sh` | К-1 `trace`, `relationTypes`, `truncated`, маркер `conflicts` | нет |
+| 04 | `04-impact.sh` | К-1 и К-2 `impact`, `environment` | нет |
+| 05 | `05-provenance-conflicts.sh` | К-4а, К-4б, К-9, К-10, `explain_provenance` | нет |
+| 06 | `06-freshness-unresolved.sh` | К-7, К-8 | нет |
+| 07 | `07-access.sh` | 401 без токена и с поддельным, закрытый по умолчанию tool, `maxDepth=7`/`limit=51`, `readOnlyHint` | нет |
+| 08 | `08-redeploy.sh` | смена commit `dep-card-gateway-prod` → webhook → граф → MCP | да |
+| 09 | `09-lifecycle.sh` | К-6: логическое удаление и reconcile | да |
+| 10 | `10-admin.sh` | К-5а approve, К-5б остаётся `OPEN`, К-11 карантин, шаги для консоли | да |
+
+```bash
+demo/seed.sh demo                # базовое состояние (около 10 минут)
+demo/run-all.sh                  # все сценарии; `run-all.sh 01 04` — выборочно
+demo/demo-check.sh               # узлы и рёбра, домены, сценарии, сверка ответов с expected/*.json
+demo/demo-check.sh --update      # переписать эталоны (после правки данных или кода; сверить глазами с dataset.md, раздел 5)
+```
+
+`run-all.sh` и `demo-check.sh` работают только на базовом состоянии: мутации (08–10) не откатываются, на изменённом стенде скрипты завершаются с кодом 2 и просят `demo/seed.sh demo`. Эталоны нормализует `normalize.jq` (убирает `gid` и моменты времени, подставляет «Метка:имя» вместо `gid`, сортирует массивы); `demo-check.sh` возвращает 1 с `diff -u` при расхождении. Широкий `trace` от `ib-web` хранит в эталоне только `truncated` и число путей: какие именно 50 путей войдут в ответ, не гарантируется.
+
+Визуализация графа: `docs/demo/graph.html` — один офлайн-файл (Cytoscape.js 3.30.4 и данные внутри, внешних запросов нет), открывается двойным кликом. Слои Governance/Delivery/Runtime, фильтры по меткам, окружениям и источникам, поиск по имени, карточка узла с provenance и пометками «конфликт», «stale», «удалён», «неразрешённая ссылка», переключатель «сценарий N» (`demo/graph/scenarios.json`), светлая и тёмная темы. Пересборка на базовом состоянии стенда: `demo/build-graph.sh` (`demo/export-graph.sh` выгружает узлы и рёбра под reader-учёткой из одноразового контейнера `neo4j-init`, шаблон и Cytoscape лежат в `demo/graph/`; `build-graph.sh --from <json>` собирает из готовой выгрузки). `demo-check.sh` сверяет число узлов и рёбер в странице со стендом и просит пересобрать её при расхождении.
+
+Внешний агент: `demo/agent-setup.sh` печатает `NODE_EXTRA_CA_CERTS` (CA стенда копируется в `~/.cache/archrag-demo/ca.crt`), команду `claude mcp add --transport http archrag https://127.0.0.1:8443/mcp --header "Authorization: Bearer …"` и срок жизни токена (около 5 минут; для обновления запустить скрипт снова, `--register` сам вызывает `claude mcp`: токен попадает в argv `claude mcp add` и сохраняется в `~/.claude.json`, удалить — `claude mcp remove archrag`). `demo/agent-setup.sh --check` делает `initialize` и `tools/list` по адресу агента и сверяет набор tools с `expected/tools-list.json`. `demo/inspector.sh` (нужен `MCP_INSPECTOR_VERSION`: версия пакета не плавающая) запускает MCP Inspector (`npx`) и печатает URL и заголовок для него.
+
+**Шаг CI** (в конец job `docker-stand`, перед `if: failure()`; `ci.yml` агент не пушит, у токена нет scope `workflow`, шаг вставляет владелец):
+
+```yaml
+      # DEMO.3: сценарии демо и эталоны на профиле demo (seed.sh сносит стенд, поэтому шаг последний)
+      - name: demo scenarios
+        run: SEED_SKIP_BUILD=1 SEED_RESET_GRACE=0 demo/seed.sh demo && demo/demo-check.sh && demo/agent-setup.sh --check
+```

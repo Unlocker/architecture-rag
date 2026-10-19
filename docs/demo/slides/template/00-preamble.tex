@@ -1,0 +1,84 @@
+% !TeX spellcheck = ru_RU
+\documentclass[12pt,usenames,dvipsnames]{beamer}
+
+%
+% Choose how your presentation looks.
+%
+% For more themes, color themes and font themes, see:
+% http://deic.uab.es/~iblanes/beamer_gallery/index_by_theme.html
+%
+\mode<presentation>
+{
+  \usetheme{Madrid}      % or try Darmstadt, Madrid, Warsaw, ...
+  \usecolortheme{beaver} % or try albatross, beaver, crane, ...
+  \usefonttheme{serif}  % or try serif, structurebold, ...
+  \setbeamertemplate{navigation symbols}{}
+  \setbeamertemplate{caption}[numbered]
+
+}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8x]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{pifont}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{textpos}
+\usepackage{minted}
+\hypersetup{
+	colorlinks=true,urlcolor=blue,linkcolor=black
+}
+
+\lstset
+{
+    language=[LaTeX]TeX,
+    breaklines=true,
+    basicstyle=\tt\scriptsize,
+    %commentstyle=\color{green}
+    keywordstyle=\color{blue},
+    %stringstyle=\color{black}
+    identifierstyle=\color{magenta},
+}
+
+\lstdefinestyle{yaml}{
+	basicstyle=\color{blue}\footnotesize,
+	rulecolor=\color{black},
+	string=[s]{'}{'},
+	stringstyle=\color{blue},
+	comment=[l]{:},
+	commentstyle=\color{black},
+	morecomment=[l]{-}
+}
+
+\title[Camunda MOEX]{Camunda BPM на Московской Бирже}
+\subtitle{Зачем он нужен и с чем его едят?}
+\author{Сергей Максимов}
+\institute[MOEX]{\includegraphics[height=1cm]{images/moex.png}}
+\date{19 сентября 2024г.}
+
+\AtBeginSection[]
+{
+  \begin{frame}<beamer>
+    \frametitle{План вебинара}
+    \tableofcontents[currentsection,currentsubsection]
+  \end{frame}
+}
+
+\setbeamerfont{section number projected}{%
+	family=\rmfamily,series=\bfseries,size=\normalsize}
+\setbeamercolor{section number projected}{bg=gray,fg=white}
+
+\setbeamertemplate{enumerate item}{%
+	\usebeamercolor[bg]{item projected}%
+	\raisebox{1.5pt}{\colorbox{bg}{\color{fg}\footnotesize\insertenumlabel}}%
+}
+
+% some helpers
+\newcommand{\highlighttext}[1]{\textcolor{ForestGreen}{\textit{\textbf{#1}}}}
+
+\newcommand{\highlightthesis}[1]{\textcolor{ForestGreen}{\textsc{\textbf{#1}}}}
+
+% Define a counter
+\newcounter{currentenumi}
+

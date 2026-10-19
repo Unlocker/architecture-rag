@@ -1,0 +1,223 @@
+{
+  "environment": "prod",
+  "services": [
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-legacy-app-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-settlement-recon-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-legacy-app-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-recon-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-recon-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "settlement-recon",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/settle/settlement-recon"
+          },
+          "repositoryUrl": "https://git.example.org/settle/settlement-recon",
+          "sourceCommit": "80b0f37c805c0fd6ce0499ed455f33e2db3cde49",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-settlement-recon-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.3.5"
+        }
+      ],
+      "name": "settlement-recon",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-settlement-recon",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-settle-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-fx-rates-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-settle-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "d7f54aca3a1ef290825c590b6a5604133abc2e81",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-fx-rates-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-fx-rates-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "fx-rates",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/settle/fx-rates"
+          },
+          "repositoryUrl": "https://git.example.org/settle/fx-rates",
+          "sourceCommit": "d7f54aca3a1ef290825c590b6a5604133abc2e81",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-fx-rates-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "1.0.7"
+        }
+      ],
+      "name": "fx-rates",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-fx-rates",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    },
+    {
+      "deployments": [
+        {
+          "compute": [
+            {
+              "hostedOn": null,
+              "hostname": "vm-settle-01.prod.example.org",
+              "runsOn": {
+                "source": "DEPLOYMAP",
+                "sourceId": "dep-settlement-engine-prod",
+                "sourceType": "DEPLOYMENT"
+              },
+              "sources": [
+                {
+                  "authority": "MASTER",
+                  "source": "CMDB",
+                  "sourceId": "vm-settle-01",
+                  "sourceType": "COMPUTE_INSTANCE"
+                }
+              ],
+              "stale": false,
+              "state": "RUNNING",
+              "type": "VirtualMachine"
+            }
+          ],
+          "deployedFrom": {
+            "commit": "649b20a1d162a77bea884a964be8fda500d18484",
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-engine-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "environment": "prod",
+          "hasDeployment": {
+            "source": "DEPLOYMAP",
+            "sourceId": "dep-settlement-engine-prod",
+            "sourceType": "DEPLOYMENT"
+          },
+          "name": "settlement-engine",
+          "repository": {
+            "name": null,
+            "url": "https://git.example.org/settle/settlement-engine"
+          },
+          "repositoryUrl": "https://git.example.org/settle/settlement-engine",
+          "sourceCommit": "649b20a1d162a77bea884a964be8fda500d18484",
+          "sources": [
+            {
+              "authority": "MASTER",
+              "source": "DEPLOYMAP",
+              "sourceId": "dep-settlement-engine-prod",
+              "sourceType": "DEPLOYMENT"
+            }
+          ],
+          "stale": false,
+          "status": null,
+          "version": "2.0.0"
+        }
+      ],
+      "name": "settlement-engine",
+      "sources": [
+        {
+          "authority": "MASTER",
+          "source": "SCM",
+          "sourceId": "svc-settlement-engine",
+          "sourceType": "SERVICE"
+        }
+      ],
+      "stale": false
+    }
+  ],
+  "staleAfter": "PT168H",
+  "systemGid": "<gid>",
+  "systemName": "Settlement Hub",
+  "systemSources": [
+    {
+      "authority": "MASTER",
+      "source": "EAM",
+      "sourceId": "5104",
+      "sourceType": "IT_SYSTEM"
+    }
+  ],
+  "systemStale": false,
+  "truncated": false,
+  "warnings": []
+}

@@ -10,6 +10,7 @@ import io.github.unlocker.archrag.sourcespi.SourceUnavailableException;
 import io.github.unlocker.archrag.sourcespi.WebhookEvent;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -52,7 +53,16 @@ public final class StubSource implements SourceConnector {
 
   /** Создаёт или обновляет объект полной записью; возвращает новое состояние. */
   public synchronized SourceChange upsert(String type, String id, Map<String, Object> payload) {
-    return append(type, id, ChangeOperation.UPSERT, Completeness.COMPLETE, payload);
+    return append(type, id, ChangeOperation.UPSERT, Completeness.COMPLETE, payload, clock.instant());
+  }
+
+  /**
+   * Как {@link #upsert}, но с заданным временем изменения {@code updatedAt} (в прошлом): так демо-профиль
+   * получает устаревшие записи. Snapshot и {@link #fetchById} отдают это время без изменений.
+   */
+  public synchronized SourceChange upsertAt(
+      String type, String id, Map<String, Object> payload, Instant updatedAt) {
+    return append(type, id, ChangeOperation.UPSERT, Completeness.COMPLETE, payload, updatedAt);
   }
 
   /**
@@ -61,12 +71,12 @@ public final class StubSource implements SourceConnector {
    */
   public synchronized SourceChange upsertPartial(
       String type, String id, Map<String, Object> payload) {
-    return append(type, id, ChangeOperation.UPSERT, Completeness.PARTIAL, payload);
+    return append(type, id, ChangeOperation.UPSERT, Completeness.PARTIAL, payload, clock.instant());
   }
 
   /** Удаляет объект: в журнале появляется изменение {@code DELETE} с новой версией. */
   public synchronized SourceChange delete(String type, String id) {
-    return append(type, id, ChangeOperation.DELETE, Completeness.COMPLETE, Map.of());
+    return append(type, id, ChangeOperation.DELETE, Completeness.COMPLETE, Map.of(), clock.instant());
   }
 
   /** Пока включено, новые изменения не порождают webhook (имитация потерянного события). */
@@ -181,10 +191,10 @@ public final class StubSource implements SourceConnector {
 
   private SourceChange append(
       String type, String id, ChangeOperation op, Completeness completeness, Map<String,
-          Object> p) {
+          Object> p, Instant updatedAt) {
     long version = versions.merge(key(type, id), 1L, Long::sum);
     SourceChange change =
-        new SourceChange(type, id, version, op, completeness, clock.instant(), p);
+        new SourceChange(type, id, version, op, completeness, updatedAt, p);
     journal.add(new Entry(journal.size() + 1L, change, !webhooksSuppressed));
     return change;
   }

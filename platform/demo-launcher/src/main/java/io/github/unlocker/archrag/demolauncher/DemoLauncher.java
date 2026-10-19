@@ -13,10 +13,8 @@ import io.github.unlocker.archrag.eventjournal.PostgresEventJournal;
 import io.github.unlocker.archrag.eventjournal.S3RawPayloadStore;
 import io.github.unlocker.archrag.scmadapter.ScmAdapter;
 import io.github.unlocker.archrag.sourcespi.SourceSystem;
-import io.github.unlocker.archrag.sourcestubs.EamApiSeed;
 import io.github.unlocker.archrag.sourcestubs.EamApiStub;
 import io.github.unlocker.archrag.sourcestubs.StubSourceServer;
-import io.github.unlocker.archrag.sourcestubs.StubSources;
 import io.github.unlocker.archrag.sourcestubs.StubWebhookSender;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -38,6 +36,9 @@ import org.postgresql.ds.PGSimpleDataSource;
  * <p>{@code DemoLauncher adapter EAM}: при {@code ARCHRAG_EAM_MODE=eam-api} читает {@code eam-api} по
  * {@code ARCHRAG_EAM_API_URL} с токеном {@code ARCHRAG_EAM_API_TOKEN}, а {@code TEAM} и {@code SERVICE_DEPENDENCY}
  * по-прежнему из старой заглушки {@code ARCHRAG_SOURCE_URL}; по умолчанию ({@code legacy}) работает только старая.
+ *
+ * <p>Профиль данных заглушек ({@code stub} и {@code eam-api-stub}) задаёт {@code ARCHRAG_STUB_PROFILE}: {@code default}
+ * (по умолчанию) или {@code demo}; неизвестное значение — код 2.
  *
  * <p>Заглушка: источник на {@code ARCHRAG_STUB_PORT} и управляющий {@code POST /control/upsert} на порту
  * {@value #STUB_CONTROL_PORT} (только в режиме stub). Если задан {@code ARCHRAG_WEBHOOK_TARGET} (и
@@ -85,7 +86,7 @@ public final class DemoLauncher {
   }
 
   private static void runStub(LauncherConfig.Stub config) throws IOException, InterruptedException {
-    var source = StubSources.seeded(Clock.systemUTC()).get(config.system());
+    var source = LauncherConfig.stubProfile(System.getenv()).sources(Clock.systemUTC()).get(config.system());
     StubWebhookSender webhooks = config.webhookTarget() == null ? null
         : new StubWebhookSender(config.webhookTarget(), config.webhookSecret(), Clock.systemUTC());
     try (var server = new StubSourceServer(source, new InetSocketAddress(config.port()));
@@ -97,7 +98,7 @@ public final class DemoLauncher {
   }
 
   private static void runEamApiStub(LauncherConfig.EamApiStub config) throws InterruptedException {
-    var store = EamApiSeed.seeded(Clock.systemUTC());
+    var store = LauncherConfig.stubProfile(System.getenv()).eamApi(Clock.systemUTC());
     try (var server = new EamApiStub(store, config.token(), new InetSocketAddress(config.port()));
         var control = new EamApiControl(store, new InetSocketAddress(STUB_CONTROL_PORT))) {
       LOG.log(System.Logger.Level.INFO, "EAM API stub listens on " + server.port() + ", control on " + control.port());

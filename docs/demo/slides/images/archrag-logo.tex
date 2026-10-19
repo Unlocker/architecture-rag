@@ -1,0 +1,45 @@
+% Логотип проекта Arch RAG для шаблона Beamer (тема Madrid / beaver).
+% Пропорции как у прежнего логотипа: 200x62 px (≈ 3.23 : 1).
+\documentclass[tikz,border=0pt]{standalone}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usetikzlibrary{shapes.geometric,calc}
+\definecolor{darkred}{rgb}{0.8,0,0}      % beaver: titlelike fg
+\definecolor{beaverred}{rgb}{0.6,0,0}    % тёмный акцент
+\definecolor{beavergray}{gray}{0.35}
+\begin{document}
+\begin{tikzpicture}[x=1mm,y=1mm,line width=0.55pt]
+  % холст 64.5 x 20 мм  (3.23:1)
+  \path[use as bounding box] (0,0) rectangle (64.5,20);
+
+  % --- база данных (цилиндр) ---
+  \node[cylinder, shape border rotate=90, draw=beaverred, fill=darkred!12,
+        minimum width=6.2mm, minimum height=8.2mm, aspect=0.32,
+        line width=0.6pt] (db) at (5,10) {};
+  \draw[beaverred,line width=0.4pt] ($(db.west)+(0,0.6)$) arc[start angle=180,end angle=360,x radius=3.1mm,y radius=0.75mm];
+
+  % --- очередь сообщений (сегменты) ---
+  \foreach \i in {0,1,2,3}
+    \draw[draw=beavergray, fill=gray!15] (11.2+\i*2.4,7.6) rectangle ++(1.9,4.8);
+  \draw[->,beavergray,line width=0.6pt,>=stealth] (10.2,5.6) -- (20.6,5.6);
+
+  % --- компонент (UML) ---
+  \draw[draw=beaverred, fill=white, line width=0.6pt] (23.2,6) rectangle (31.2,14);
+  \foreach \y in {8.2,11.2}
+    \draw[draw=beaverred, fill=darkred!12, line width=0.5pt] (22,\y) rectangle ++(2.4,1.6);
+
+  % связи между элементами
+  \draw[beavergray,line width=0.5pt] (8.1,10) -- (11.2,10);
+  \draw[beavergray,line width=0.5pt] (20.6,10) -- (22,10);
+
+  % --- увеличительное стекло: фокус на архитектуре (поверх компонента) ---
+  \fill[darkred!6, opacity=0.45] (27.2,10) circle (4.9);
+  \draw[beavergray, line width=1.3pt] (27.2,10) circle (4.9);
+  \draw[white, line width=0.8pt] (24.3,12.4) arc[start angle=140,end angle=112,radius=4.3];
+  \draw[beavergray, line width=2.6pt, line cap=round] ($(27.2,10)+(-45:4.9)+(-45:0.45)$) -- ($(27.2,10)+(-45:8.2)$);
+
+  % --- надпись ---
+  \node[anchor=west, inner sep=0pt] at (34.6,10)
+    {\fontsize{15.5}{15.5}\selectfont\sffamily\bfseries{\color{darkred}Arch}\,{\color{beavergray}RAG}};
+\end{tikzpicture}
+\end{document}
