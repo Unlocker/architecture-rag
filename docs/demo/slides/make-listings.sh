@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Сокращает эталоны platform/docker/demo/expected/*.json до ключевых полей для слайдов.
-# Исходные файлы не меняются; результат кладётся в build/snippets и подключается через minted.
+# Исходные файлы не меняются; результат кладётся в listings/ (коммитится: изменение эталона видно в диффе) и подключается через minted. Запуск вручную при смене expected/.
 set -euo pipefail
 cd "$(dirname "$0")"
 EXP=../../../platform/docker/demo/expected
-OUT=build/snippets
+OUT=listings
 mkdir -p "$OUT"
 command -v jq >/dev/null || { echo "нужен jq" >&2; exit 1; }
 

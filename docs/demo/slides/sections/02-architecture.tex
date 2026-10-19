@@ -1,0 +1,63 @@
+\section{Архитектура: четыре контура}
+
+\begin{frame}{Четыре контура: пишут три, читает один}
+  \centering
+  \begin{tikzpicture}[node distance=5mm, font=\scriptsize]
+    \node[src] (m) {Мастер-\\системы};
+    \node[box, right=of m] (a) {1. Сбор\\адаптеры};
+    \node[box, right=of a] (j) {2. Журнал и\\идентичность};
+    \node[store, right=of j] (n) {3. Витрина\\Neo4j};
+    \node[ok, right=of n] (x) {4. Доступ\\MCP};
+    \draw[arr] (m) -- (a); \draw[arr] (a) -- (j); \draw[arr] (j) -- (n);
+    \draw[arr] (n) -- (x);
+    \node[box, below=4mm of j, minimum width=3.4cm] (pg) {inbox PostgreSQL, raw S3,\\normalizer, identity, projector};
+    \draw[arr] (a) |- (pg); \draw[arr] (j) -- (pg);
+  \end{tikzpicture}
+
+  \vspace{2mm}
+  \begin{flushleft}\small
+  Контуры 1--3 пишут, контур 4 только читает. Журнал и raw позволяют пересобрать граф. \texttt{access/*} не зависит от \texttt{ingestion/*} и \texttt{adapters/*}. Event backbone в PoC "--- PostgreSQL inbox, Kafka "--- production (ADR 0006).
+  \end{flushleft}
+  \note{ADR 0002 (четыре контура), ADR 0006 (inbox вместо Kafka в PoC), ADR 0039 (webhook "--- только триггер). Диаграммы C4 из \_reversa\_sdd: context, containers, затем components для mcp-server. [Сокр.: context, containers, одна диаграмма mcp-server, 5 мин.]
+
+  Вопросы зала. Почему Neo4j Community? Решение PoC: платных возможностей нет; read-only и разделение reader/writer обеспечивает приложение; в production это один из главных пробелов (gap list 1.2--1.3). Почему PostgreSQL, не Kafka? Для PoC хватает inbox с одним потребителем; ограничения и целевое решение в gap list 1.4. Можно ли пересобрать граф с нуля? Да, из журнала и raw в S3; критерий 4 видения требует эквивалентности после rebuild, где именно проверен "--- в плане не сверялось.}
+\end{frame}
+
+\begin{frame}{Контейнеры демо-стенда (C4, уровень 2)}
+  \centering
+  \begin{tikzpicture}[font=\tiny, x=1cm, y=1cm]
+    \node[box] (agent) at (0,2.4) {Агент\\MCP-клиент};
+    \node[box] (proxy) at (2.3,2.4) {reverse-proxy\\TLS 8443};
+    \node[ok] (mcp) at (4.8,2.4) {mcp-server\\$N$ экз.};
+    \node[store] (neo) at (7.6,2.4) {Neo4j 5\\Community};
+    \node[box] (kc) at (4.8,0.9) {Keycloak\\OIDC};
+    \node[box] (ing) at (7.6,0.9) {ingestion\\1 экз.};
+    \node[box] (adp) at (4.8,-0.5) {адаптеры\\1 на источник};
+    \node[src] (stub) at (2.3,-0.5) {заглушки\\4 источника};
+    \node[store] (pg) at (7.0,-0.5) {Postgre-\\SQL};
+    \node[store] (s3) at (8.7,-0.5) {S3};
+    \draw[arr] (agent) -- (proxy); \draw[arr] (proxy) -- (mcp);
+    \draw[arr] (mcp) -- node[lbl]{reader} (neo);
+    \draw[arr] (mcp) -- (kc);
+    \draw[arr] (ing) -- node[lbl,pos=0.4]{writer} (neo);
+    \draw[arr] (adp) -- (stub); \draw[arr] (adp) -- (pg); \draw[arr] (adp) |- (s3);
+    \draw[arr] (ing) -- (pg);
+  \end{tikzpicture}
+
+  \begin{flushleft}\small
+    Разделение прав записи "--- на уровне учёток приложения; \texttt{mcp-server} масштабируется горизонтально, адаптеры и \texttt{ingestion} "--- по одному.
+  \end{flushleft}
+  \note{Источник: \_reversa\_sdd/c4-containers.md, п. 1 и 3. Схема упрощена: нет admin-console, observability и сетей compose. На вопрос <<сколько экземпляров>>: mcp-server "--- сколько угодно, адаптеры и ingestion "--- по одному (gap list 4.2).}
+\end{frame}
+
+\begin{frame}{Событие в бою: идемпотентность}
+  \begin{itemize}
+    \item Дедупликация по \texttt{source + eventId}: повторная доставка получает статус \texttt{DUPLICATE}.
+    \item \texttt{sourceVersion} ниже применённой "--- \texttt{IGNORED\_OLD\_VERSION}, событие не применяется.
+    \item Checkpoint сдвигается \textbf{только после коммита} транзакции Neo4j.
+    \item Ошибка обработки "--- \texttt{QUARANTINED}/\texttt{RETRYING} с кодом и причиной, не тихая потеря.
+  \end{itemize}
+  \vspace{2mm}
+  \textbf{Подробный показ} "--- сценарий 8 (передеплой) в блоке с демо.
+  \note{Тезис 5 блока 2. Связь с замерами: не-PROJECTED исходы (IGNORED\_OLD\_VERSION 18, DUPLICATE 2) "--- штатная дедупликация повторной доставки webhook и polling, а не ошибки.}
+\end{frame}

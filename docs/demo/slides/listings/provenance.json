@@ -1,0 +1,12 @@
+{
+  "conflictState": "OPEN",
+  "type": "Deployment",
+  "record": {
+    "source": "DEPLOYMAP",
+    "sourceId": "dep-settlement-recon-prod",
+    "authority": "MASTER",
+    "conflictProperties": [
+      "eamSystemId"
+    ]
+  }
+}

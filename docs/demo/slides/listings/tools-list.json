@@ -1,0 +1,6 @@
+{"name":"explain_provenance","readOnly":true,"destructive":false}
+{"name":"find_runtime_footprint","readOnly":true,"destructive":false}
+{"name":"get_asset","readOnly":true,"destructive":false}
+{"name":"ping","readOnly":true,"destructive":false}
+{"name":"search_assets","readOnly":true,"destructive":false}
+{"name":"trace_dependencies","readOnly":true,"destructive":false}

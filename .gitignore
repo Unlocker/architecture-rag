@@ -36,3 +36,17 @@ platform/docker/measurements/
 .claude/skills/reversa/
 .claude/skills/reversa-*
 .reversa/config.user.toml
+
+# docs/demo/slides: артефакты сборки Beamer (PDF не коммитим, кроме логотипа)
+docs/demo/slides/build/
+docs/demo/slides/*.pdf
+docs/demo/slides/*.aux
+docs/demo/slides/*.log
+docs/demo/slides/*.nav
+docs/demo/slides/*.snm
+docs/demo/slides/*.toc
+docs/demo/slides/*.vrb
+docs/demo/slides/*.out
+docs/demo/slides/*.fls
+docs/demo/slides/*.fdb_latexmk
+docs/demo/slides/_minted*/
