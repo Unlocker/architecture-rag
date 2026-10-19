@@ -1,0 +1,40 @@
+name: Slides
+
+on:
+  pull_request:
+    paths:
+      - 'docs/demo/slides/**'
+      - '.github/workflows/slides.yml'
+  push:
+    branches: [develop, main, 'epic/**']
+    paths:
+      - 'docs/demo/slides/**'
+      - '.github/workflows/slides.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: slides-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  slides:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: texlive/texlive:latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: latexminted для minted v3
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends python3-pip
+          pip install --break-system-packages latexminted
+      - run: docs/demo/slides/make-slides.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: arch-rag-slides
+          path: |
+            docs/demo/slides/main.pdf
+            docs/demo/slides/main-notes.pdf
+          if-no-files-found: error
