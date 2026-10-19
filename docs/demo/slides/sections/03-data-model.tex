@@ -1,0 +1,64 @@
+\section{Модель данных и provenance}
+
+\begin{frame}{Идентичность и происхождение}
+  \centering
+  \begin{tikzpicture}[node distance=9mm, font=\scriptsize]
+    \node[src] (ss) {SourceSystem};
+    \node[box, right=of ss] (sr) {SourceRecord\\\texttt{source, sourceType, sourceId}};
+    \node[ok, right=of sr] (nd) {Узел\\\texttt{gid: UUID}};
+    \draw[arr] (ss) -- (sr); \draw[arr] (sr) -- (nd);
+  \end{tikzpicture}
+
+  \vspace{3mm}
+  \begin{flushleft}\small
+  \begin{itemize}
+    \item Внутренний \texttt{gid} на всех узлах; внешний ID "--- не ключ графа, а отдельный \texttt{SourceRecord}; связи \texttt{OWNS\_RECORD} и \texttt{ASSERTS}.
+    \item Авторитет записи: \texttt{MASTER} или \texttt{SUPPLEMENTARY}.
+    \item Совпадение кандидатов не склеивается автоматически: решает оператор (ADR 0019).
+  \end{itemize}
+  \end{flushleft}
+  \note{00-vision.md, <<Идентичность узлов>>, ADR 0003. Вопрос: почему gid, а не ID из EAM? Совпадение значений в разных системах не означает тождество сущностей; внешняя идентичность лежит в SourceRecord. Вопрос: где домен как узел? Его нет: домен "--- текст Domain: \ldots{} в description (dataset.md, п. 8).}
+\end{frame}
+
+\begin{frame}{Мастер определён для каждого поля}
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    \textbf{Сущность / поле} & \textbf{Мастер} \\
+    \midrule
+    ИТ"=система, платформа & EAM \\
+    Сервис, репозиторий & SCM \\
+    Развёртывание (\texttt{Deployment}) & deploy map + Helm \\
+    Хост, ВМ & CMDB \\
+    \texttt{DEPENDS\_ON} & EAM \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{3mm}
+  Конфликт источников \highlighttext{виден}, а не выбирается молча: маркер \texttt{conflicts} и \texttt{conflictState}.
+  \note{Authority matrix на уровне поля, ADR 0008; 02-data-model.md, п. 3. Вопрос: что будет при расхождении значений свойства? Мастер задан матрицей; конфликт значения свойства на текущих мапперах не возникает и покрыт тестом SourceConflictIT; в демо показан конфликт связей. Почему граф не показывает значения конфликтующих свойств? Только имена свойств: значения диссидента из другой системы через MCP не отдаются, детали смотрит человек в консоли.}
+\end{frame}
+
+\begin{frame}{Время жизни и значения вне словаря}
+  \begin{itemize}
+    \item \texttt{firstSeenAt}, \texttt{lastSeenAt}, \texttt{isCurrent}, \texttt{deletedAt}.
+    \item \textbf{Физического удаления нет:} tombstone (ADR 0020); удаление только после полного snapshot.
+    \item Структурные связи временные: закрытая связь получает \texttt{validTo} (ADR 0028).
+    \item Значение вне словаря не теряется: \texttt{criticality=CRITICAL} из EAM лежит в \texttt{criticalityRaw} (ADR 0040).
+  \end{itemize}
+  \note{Тезисы 4--5 блока 3. criticalityRaw демонстрируется в сценарии 1. [Сокр. блока 3 (5 мин): тезисы 1--3, 5 и graph.html с одной карточкой.]}
+\end{frame}
+
+\begin{frame}{Демо-граф: 150 узлов, 282 связи}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}\centering \textbf{по слоям и доменам}\\ \shot[1]{S-01-graph-layers}\end{column}
+    \begin{column}{0.5\textwidth}\centering \textbf{по окружениям}\\ \shot[1]{S-02-graph-envs}\end{column}
+  \end{columns}
+  \note{Показ: открыть docs/demo/graph.html двойным кликом (офлайн, стенд не нужен). Раскладка <<по слоям и доменам>>, затем <<по окружениям>>. Найти Payments Core поиском, открыть карточку с provenance, переключить сценарий 5 (конфликт) и сценарий 9 (закрытый узел). Бейджи: конфликт, stale, удалён, неразрешённая ссылка. Резерв "--- скриншоты S-01--S-05.}
+\end{frame}
+
+\begin{frame}{Карточка узла: \texttt{Payments Core}}
+  \centering
+  \shotfull[0.95]{S-03-card-payments-core}
+  \note{Карточка с provenance: источник EAM / IT\_SYSTEM / 5101, авторитет MASTER, время получения, порог stale P7D, шесть связей. Скриншот S-03 из graph.html.}
+\end{frame}

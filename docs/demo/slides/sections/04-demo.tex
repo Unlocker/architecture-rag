@@ -1,0 +1,134 @@
+\section{Живое демо}
+
+\begin{frame}{Девять сценариев: порядок показа}
+  \scriptsize\renewcommand{\arraystretch}{0.95}
+  \begin{tabular}{@{}cp{3.4cm}p{6cm}@{}}
+    \toprule
+    № & Сценарий & Что говорим \\
+    \midrule
+    1 & Поиск и карточка & один вход находит актив; \texttt{CRITICAL} сохранён в \texttt{criticalityRaw} \\
+    2 & Где развёрнута система & commit на проде и тесте "--- один запрос; общая ВМ из четырёх систем \\
+    3 & Зависимости: trace & стоимость запроса ограничена заранее; усечение "--- \texttt{truncated} \\
+    4 & Impact отказа ВМ & <<железо \ar{} развёртывание \ar{} сервис \ar{} система>> \\
+    5 & Provenance и конфликты & граф не молчит о расхождении \\
+    6 & Свежесть, ссылки & устаревшее помечено, не спрятано \\
+    8 & Передеплой (мутирует) & изменение в источнике доходит до агента \\
+    9 & Логическое удаление (мутирует) & узел закрывается, история остаётся \\
+    10 & Администрирование (мутирует) & слияние решает человек; плохая запись в карантине \\
+    \bottomrule
+  \end{tabular}
+  \note{Сценарии 1--6 только читают; 8--10 мутируют стенд необратимо и идут последними (8, 9, 10). Сценарий 7 (доступ) показывается в блоке 5. После мутирующих базового состояния нет: повтор только через seed.sh demo. Подготовка: чистый seed.sh demo, агент зарегистрирован (agent-setup.sh --register), токен Keycloak живёт около 5 минут "--- обновить перед блоком. Формулировки для агента не проверены на реальном Claude Code: нужна репетиция. Тайминги (полный/сокр., мин): 1: 3/2; 2: 3/нет; 3: 3/нет; 4: 3/3; 5: 3/3; 6: 2/нет; 8: 4/3; 9: 3/нет; 10: 4/нет. Итого 28 / 11. В сокращённом выпадают 2, 3, 6, 9, 10.}
+\end{frame}
+
+\begin{frame}{Как читать ответ MCP}
+  \begin{itemize}
+    \item \texttt{truncated} "--- ответ усечён бюджетом (узлы, пути, размер).
+    \item \texttt{stale} и \texttt{lastSeenAt} "--- свежесть источника.
+    \item \texttt{conflicts} "--- имена свойств с расхождением источников.
+    \item \texttt{sources} "--- кто утверждает узел и с каким авторитетом.
+  \end{itemize}
+  \vspace{2mm}
+  Агент не знает \texttt{gid}: типичная цепочка \texttt{search\_assets} \ar{} целевой tool. Просим показывать вызванные tools "--- это и есть демонстрация.
+  \note{Один раз объяснить, дальше напоминать. Если агент пытается писать Cypher или идти в базу "--- напомнить, что такого tool нет (ADR 0018). Тексты из источников агент получает как данные, не как инструкции. Вопрос: агент ответил иначе, чем скрипт, это баг? Нет: выбор tool и формулировка недетерминированы, детерминирован ответ tool на одинаковые аргументы; контракт держат эталоны и demo-check.sh.}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 1. Поиск и карточка}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \ifshot{S-06-agent-sc1}{%
+      \textbf{search\_assets} (\texttt{EAM-1042})
+      \snippet{search.json}
+      \vspace{1mm}
+      \textbf{get\_asset} (Fraud Screening)
+      \snippet{card.json}}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \shot{X-sc1-search}
+    \end{column}
+  \end{columns}
+  \note{Эталоны: expected/01-search-eam-id.json, 01-card-criticality.json (сокращены до ключевых полей). Критичность CRITICAL вне словаря сохранена в criticalityRaw. Резерв: S-06 (ответ агента), S-07 (раскрытый вызов).}
+\end{frame}
+
+\begin{frame}{Сценарии 2 и 3. Развёртывание и trace}
+  \begin{itemize}
+    \item \textbf{Footprint} \texttt{Payments Core}: \texttt{payments-api} в трёх окружениях с разными commit; общая ВМ \texttt{vm-legacy-app-01} несёт развёртывания четырёх систем.
+    \item Неразрешённая ссылка: \texttt{aml-case-mgmt} без репозитория "--- помечена, не скрыта.
+    \item \textbf{Trace} от \texttt{ib-web}: цепочка \texttt{DEPENDS\_ON} глубиной 7; \texttt{maxDepth} 1..6, граница "--- ошибка, усечение "--- \texttt{truncated}.
+  \end{itemize}
+  \IfFileExists{figures/S-08-agent-footprint.png}{\vspace{2mm}\includegraphics[width=\linewidth,height=3.2cm,keepaspectratio]{figures/S-08-agent-footprint.png}}{}
+  \note{Сценарии 2 и 3 (по 3 мин, выпадают в сокращённом варианте). Эталоны: 02-footprint-*.json, 03-trace-*.json. Вопрос: почему DEPENDS\_ON из EAM всегда stale? Известное ограничение: связь утверждена записью без узла и не несёт sourceFetchedAt; не скрывать, если спросят. Вставка для сокращённого варианта: <<ограничения глубины и путей "--- в блоке 6, свежесть видна в stale каждого ответа>>.}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 4. Impact отказа ВМ}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \ifshot{S-09-agent-impact}{%
+      \textbf{trace\_dependencies}\\(\texttt{mode=impact}, \texttt{vm-risk-02})
+      \snippet{impact.json}}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \shot{X-sc4-impact}
+    \end{column}
+  \end{columns}
+  \note{Путь <<железо, развёртывание, сервис, система>> из четырёх источников; отказ vm-risk-02 поднимается по DEPENDS\_ON до payments-router на глубине 6. Эталоны: 04-impact-risk-vm.json, 04-impact-shared-vm.json. Резерв: S-09.}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 5. Provenance и конфликты}
+  \begin{columns}[T]
+    \begin{column}{0.42\textwidth}
+      \textbf{explain\_provenance}
+      \snippet{provenance.json}
+      {\footnotesize Конфликт \texttt{eamSystemId}:\\ \texttt{dep-settlement-\\recon-prod}}
+    \end{column}
+    \begin{column}{0.56\textwidth}
+      \shot{S-04-conflict}
+    \end{column}
+  \end{columns}
+  \note{Граф не молчит о расхождении и называет мастера по полю. Конфликты: eamSystemId у dep-settlement-recon-prod (Helm 5102, сервис в 5104) и platformId у системы 5303. Эталон: 05-provenance-helm-system.json. Резерв: S-04.}
+\end{frame}
+
+\begin{frame}{Сценарий 6. Свежесть и неразрешённые ссылки}
+  \centering
+  \shot[0.6]{S-05-stale-closed}
+  \note{Stale: sms-dispatcher, dep-sms-dispatcher-dev, vm-dev-legacy-01. Неразрешённые ссылки: partner-gateway (EAM-9999) и его репозиторий. Устаревшее помечено, не спрятано. Эталоны: 06-*.json. Резерв: S-05.}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 8. Передеплой: смена commit}
+  \ifshot{S-10-agent-redeploy}{%
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{До} \snippet{redeploy-before.json}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{После} \snippet{redeploy-after.json}
+    \end{column}
+  \end{columns}}
+  \vspace{2mm}
+  \texttt{card-gateway}: 4.0.2 \ar{} 4.0.3. Прошлое \highlighttext{закрывается}, а не затирается. Мутирует стенд: скрипт \texttt{08-redeploy.sh}.
+  \note{4 мин (сокр. 3). Скрипт запускается в соседнем терминале, <<до>> и <<после>> спрашиваются у агента. Вопрос: можно ли через агента посмотреть прежний commit? Нет, закрытые связи через MCP не отдаются; новый вопрос "--- новый шаблон (ADR 0018). Резерв: S-10 (пара до/после). Эталоны: 08-footprint-before/after.json.}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 9. Логическое удаление и reconcile}
+  \begin{columns}[T]
+    \begin{column}{0.4\textwidth}
+      \snippet{lifecycle-after.json}
+      Удаление "--- \textbf{только после полного snapshot}; узел закрыт (\texttt{isCurrent=false}), история остаётся.
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \shot{X-sc9-closed}
+    \end{column}
+  \end{columns}
+  \note{3 мин, выпадает в сокращённом. На кадре состояние <<до>>: legacy-statements, его репозиторий и развёртывание. Скрипт 09-lifecycle.sh. Эталоны: 09-card-before/after.json, 09-impact-*.json. Резерв: S-05.}
+\end{frame}
+
+\begin{frame}{Сценарий 10. Администрирование: identity и карантин}
+  \begin{itemize}
+    \item Пары для слияния: \texttt{vm-pay-01} и \texttt{cmdb-ci-88014}; \texttt{repo-payments-api} и \texttt{repo-payments-api-legacy}.
+    \item Автослияния нет: кандидата подтверждает \textbf{человек} в консоли.
+    \item Плохое событие (\texttt{dep-card-tokenizer-test-badcommit}) лежит в \texttt{QUARANTINED}, в граф не попало.
+    \item Admin REST "--- не MCP и не наружу; у токена агента нет scope \texttt{architecture.admin}.
+  \end{itemize}
+  \note{4 мин, выпадает в сокращённом. Консоль: http://127.0.0.1:8090, пользователь console-admin, пароль KEYCLOAK\_CONSOLE\_PASSWORD из .env; в hosts запись 127.0.0.1 keycloak. Кадры консоли (S-15, S-16) требуют входа через Keycloak и поднятого стенда: в сборку слайдов не входят, снимаются на репетиции (presentation-plan.md, п. 5). Эталоны: 10-card-merged.json, 10-card-fixed.json.}
+\end{frame}
+
+\IfFileExists{figures/S-15-console-journal.png}{\input{sections/opt-console}}{}

@@ -1,0 +1,66 @@
+\section{Безопасность и MCP изнутри}
+
+\begin{frame}[fragile]{Шесть read-only tools}
+  \ifshot{S-13-inspector-tools}{\snippet[text]{tools-list.json}}
+  \vspace{1mm}
+  \begin{itemize}\small
+    \item Нет записи и нет произвольного Cypher: фиксированные параметризованные шаблоны (ADR 0018).
+    \item Метки и типы связей "--- из allowlist; глубина "--- проверенное число в диапазоне.
+    \item \texttt{readOnlyHint} "--- подсказка клиенту, \textbf{не защита}.
+  \end{itemize}
+  \note{Эталон: expected/tools-list.json: у всех шести tools readOnly=true, destructive=false. В gap list п. 2.3 запись про readOnlyHint=false устарела (см. расхождения в плане, п. 7). Что, если агент подставит Cypher в query? Это обычная строка поиска: параметр, а не часть запроса.}
+\end{frame}
+
+\begin{frame}{Read-only обеспечивает приложение, а не СУБД}
+  \centering
+  \resizebox{\linewidth}{!}{\begin{tikzpicture}[node distance=4mm, font=\tiny]
+    \node[box] (a) {JWT на запрос\\подпись, issuer,\\audience};
+    \node[box, right=of a] (b) {ToolScopeFilter\\нет записи"=\\закрыт};
+    \node[box, right=of b] (c) {Лимиты\\maxDepth 1..6\\limit 1..50};
+    \node[ok, right=of c] (d) {executeRead\\EXPLAIN READ\_ONLY\\archrag\_reader};
+    \draw[arr] (a) -- (b); \draw[arr] (b) -- (c); \draw[arr] (c) -- (d);
+  \end{tikzpicture}}
+
+  \vspace{3mm}
+  \begin{flushleft}\small
+  Ролей в Neo4j Community нет (ADR 0005). У \texttt{mcp-server} \textbf{нет учётных данных writer}. Каждый \texttt{tools/call} пишется в аудит (\texttt{ALLOWED}/\texttt{DENIED\_*}), токены и аргументы не логируются.
+  \end{flushleft}
+  \note{Spring AI MCP starter сам аутентификацию не включает: scope проверяет ToolScopeFilter. Границы "--- ошибки, а не тихое усечение; тело запроса не больше 1 МБ, query не длиннее 200. Аудит: канал archrag.audit.mcp и метрика (ADR 0038). Вопрос: если защиту держит приложение, что мешает ошибке в шаблоне дать запись? Ничего на уровне СУБД: поэтому в коде только executeRead, перед первым выполнением шаблона проверяется EXPLAIN, а учётных данных writer у mcp-server нет; на уровне БД защита появится с Enterprise RBAC (gap list 1.3).}
+\end{frame}
+
+\begin{frame}[fragile]{Сценарий 7: отказы и границы}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \ifshot{S-12-access-script}{\begin{tabular}{@{}ll@{}}
+        \toprule
+        Запрос & Ответ \\
+        \midrule
+        без токена & 401 \\
+        испорченная подпись & 401 \\
+        \texttt{upsert\_asset} & 403 \\
+        валидный токен & 200 \\
+        \bottomrule
+      \end{tabular}}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \ifshot{S-14-inspector-call}{\texttt{maxDepth=7}
+      \snippet{error-depth.json}
+      Ошибка tool "--- HTTP 200 и \texttt{isError=true}.}
+    \end{column}
+  \end{columns}
+  \note{Скрипт demo/07-access.sh (2 мин). Ограничение стенда, которое нужно проговорить: отказ <<токен без нужного scope>> (insufficient\_scope) на стенде получить нельзя, Keycloak всегда выдаёт клиенту archrag-demo scope architecture.read; его проверяют тесты mcp-server, на показе его заменяет 403 для tool без scope. Эталоны: 07-*.json. Резерв: S-12.}
+\end{frame}
+
+\begin{frame}{MCP Inspector и честные оговорки}
+  \begin{itemize}
+    \item \texttt{initialize}: режим \texttt{STATELESS}, \texttt{serverInfo}.
+    \item \texttt{tools/list}: шесть tools, \texttt{inputSchema}, \texttt{annotations}.
+    \item Сырой \texttt{tools/call}: ответ "--- \textbf{строка с JSON} в \texttt{result.content[0].text}.
+    \item Без токена "--- 401 с \texttt{WWW-Authenticate}.
+  \end{itemize}
+  \vspace{2mm}
+  \textbf{Говорим прямо:} фильтра prompt injection на выдаче нет; один scope \texttt{architecture.read} видит весь граф; rate limit нет.
+  \note{Inspector запускается demo/inspector.sh с явно заданной версией (MCP\_INSPECTOR\_VERSION), непиннованный не запускается; версию выбрать и проверить заранее. 3--4 мин. Затем живой вопрос агенту <<Создай в каталоге новый сервис>>: ожидаемо ответит, что подходящего tool нет. Тексты источников недоверенные (gap list 2.6). Может ли один агент видеть всё? Да, разграничения по доменам нет (gap list 2.2). Есть ли rate limit? Нет, защищают только таймауты и бюджеты (2.5). Резерв: S-13, S-14. [Сокр. блока 5 (5 мин): тезисы 1--3, Inspector только tools/list и сырой tools/call.]}
+\end{frame}
+
+\IfFileExists{figures/S-11-mcp-connected.png}{\input{sections/opt-mcp-connected}}{}

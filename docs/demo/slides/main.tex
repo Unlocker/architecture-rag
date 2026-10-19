@@ -1,0 +1,70 @@
+% Презентация Arch RAG (DEMO.7). Структура и тезисы — docs/demo/presentation-plan.md (DEMO.6).
+% Движок pdfLaTeX, сборка: ./make-slides.sh (latexmk -pdf -shell-escape, minted v3 + latexminted).
+% Преамбула владельца подключается без правок; названия, дата и заголовок оглавления переопределены ниже.
+\input{template/00-preamble}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,calc,backgrounds}
+\usepackage{booktabs}
+\usepackage{array}
+
+% --- переопределения владельца (комментарий к DEMO.7 от 2026-10-17) ---
+\title[Arch RAG]{Arch RAG: граф архитектуры для AI-агентов через MCP}
+\subtitle{PoC: данные, сценарии, безопасность}
+\author{Сергей Максимов}
+\institute[Arch RAG]{\includegraphics[height=1cm]{images/archrag-logo.pdf}}
+\date{15 ноября 2026\,г.}
+\AtBeginSection[]{\begin{frame}<beamer>\frametitle{План доклада}
+  \tableofcontents[currentsection,currentsubsection]\end{frame}}
+
+% --- сборка для докладчика: main-notes.tex задаёт \shownotes и подключает этот файл ---
+\ifdefined\shownotes
+  \setbeameroption{show notes on second screen=right}
+  \setbeamerfont{note page}{size=\footnotesize}
+\fi
+
+% --- minted: JSON из эталонов, сокращённый make-listings.sh до ключевых полей (listings/*.json) ---
+\setminted{fontsize=\scriptsize,breaklines,breakanywhere,linenos=false,frame=lines,framesep=2mm}
+\newcommand{\snippet}[2][json]{\inputminted[]{#1}{listings/#2}}
+
+% --- иллюстрации: PNG лежат в figures/ (коммитятся). \shot — кадр graph.html без боковых панелей,
+% \shotfull — кадр целиком. \ifshot{имя}{запасной вариант}: если скриншота S-NN нет, показывается листинг из expected/.
+\newcommand{\shot}[2][0.98]{%
+  \IfFileExists{figures/#2.png}{%
+    \includegraphics[width=#1\linewidth,trim=230bp 110bp 340bp 72bp,clip]{figures/#2.png}}{%
+    \fbox{\parbox{#1\linewidth}{\centering\vspace{1.5cm}Кадр \texttt{#2} не снят: запустите \texttt{make-figures.sh}\vspace{1.5cm}}}}}
+\newcommand{\shotfull}[2][0.98]{%
+  \IfFileExists{figures/#2.png}{%
+    \includegraphics[width=#1\linewidth,trim=230bp 110bp 0bp 72bp,clip]{figures/#2.png}}{%
+    \fbox{\parbox{#1\linewidth}{\centering\vspace{1.5cm}Кадр \texttt{#2} не снят\vspace{1.5cm}}}}}
+\newcommand{\ifshot}[2]{%
+  \IfFileExists{figures/#1.png}{\includegraphics[width=\linewidth,height=5.6cm,keepaspectratio]{figures/#1.png}}{#2}}
+
+\newcommand{\ar}{$\rightarrow$}
+\setbeamerfont{itemize/enumerate body}{size=\large}
+\setbeamerfont{itemize/enumerate subbody}{size=\normalsize}
+\definecolor{bx}{rgb}{0.8,0,0}
+\tikzset{
+  box/.style={draw=bx!70!black, fill=bx!8, rounded corners=2pt, align=center, font=\footnotesize, inner sep=3pt, minimum height=7mm},
+  src/.style={box, fill=gray!15, draw=gray!70},
+  store/.style={box, cylinder, shape border rotate=90, aspect=0.25, minimum height=9mm, fill=bx!14},
+  ok/.style={box, fill=green!12, draw=green!50!black},
+  bad/.style={box, fill=bx!25, draw=bx},
+  arr/.style={-{Stealth[length=2mm]}, thick, draw=black!70},
+  lbl/.style={font=\scriptsize, midway, fill=white, inner sep=1pt},
+}
+
+\begin{document}
+
+\input{sections/00-intro}
+\input{sections/01-problem}
+\input{sections/02-architecture}
+\input{sections/03-data-model}
+\input{sections/04-demo}
+\input{sections/05-security}
+\input{sections/06-metrics}
+\input{sections/07-gap}
+\input{sections/08-next}
+\input{sections/09-questions}
+
+\end{document}
