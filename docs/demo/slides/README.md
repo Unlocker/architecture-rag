@@ -39,4 +39,4 @@ S-07 (раскрытый вызов `search_assets`) слайдом не зан�
 
 ## CI
 
-Job `slides` лежит в `ci-job-slides.yml`, его нужно вставить в `.github/workflows/ci.yml` (у токена агента нет scope `workflow`). Job собирает PDF в контейнере `texlive/texlive` и публикует артефакт `arch-rag-slides`. Не проверен в CI.
+Сборку выполняет отдельный workflow `.github/workflows/slides.yml` (job `slides`): запуск по изменениям в `docs/demo/slides/**` на PR и на push в `develop`, `main`, `epic/**`, а также вручную (`workflow_dispatch`). Он собирает PDF в контейнере `texlive/texlive` (`pip install latexminted`) и публикует артефакт `arch-rag-slides` с `main.pdf` и `main-notes.pdf`.
